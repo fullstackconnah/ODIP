@@ -19,10 +19,19 @@ const STATUS_OPTIONS = INCIDENT_STATUSES.map((s) => ({ value: s, label: INCIDENT
  * mount it for anyone else (the server strips the fields too). The reviewer is the signed-in person and the date is the server's, so the form has
  * no such fields. The status history under it is read from the audit trail.
  */
-export function IncidentReviewCard({ incident, canEdit }: { incident: IncidentDetailDto; canEdit: boolean }) {
+export function IncidentReviewCard({ incident, canEdit, editing: editingProp, onEditingChange, onDirtyChange }: {
+  incident: IncidentDetailDto
+  canEdit: boolean
+  /** The page owns which part is open (one at a time); alone, the card keeps its own state. */
+  editing?: boolean
+  onEditingChange?: (editing: boolean) => void
+  onDirtyChange?: (dirty: boolean) => void
+}) {
   const save = useRecordIncidentReview()
   const history = useIncidentStatusHistory(incident.id)
-  const [editing, setEditing] = useState(false)
+  const [localEditing, setLocalEditing] = useState(false)
+  const editing = editingProp ?? localEditing
+  const setEditing = (v: boolean) => { setLocalEditing(v); onEditingChange?.(v) }
   const [notes, setNotes] = useState('')
   const [actions, setActions] = useState('')
   const [status, setStatus] = useState<string>(incident.status)
@@ -31,6 +40,8 @@ export function IncidentReviewCard({ incident, canEdit }: { incident: IncidentDe
   const triggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => { if (editing) notesRef.current?.focus() }, [editing])
+  const dirty = editing && (notes !== (incident.reviewNotes ?? '') || actions !== (incident.correctiveActions ?? '') || status !== incident.status)
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
 
   const reviewed = incident.reviewedAt != null
   const zone = incident.timeZoneId

@@ -1,19 +1,18 @@
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import type { AxiosError } from 'axios'
 import { useForm, useWatch } from 'react-hook-form'
-import { useCreateIncident, useUpdateIncident, useIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
+import { useCreateIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
 import { apiPost } from '@/api/client'
 import { Info } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { BackButton } from '@/components/BackButton'
-import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/api/types/incidents'
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ReportableClass } from '@/api/types/enums'
-import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, REPORTABLE_CLASS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
+import type { IncidentType, IncidentSeverity } from '@/api/types/enums'
+import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
 import type { BodyRegion, InjuryType } from '@/api/types/enums'
-import { parseEmergencyServices, emergencyServiceEntries } from './incidents/emergencyServices'
+import { emergencyServiceEntries } from './incidents/emergencyServices'
 import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import { usePermissions } from '@/lib/permissions'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -34,15 +33,13 @@ import {
   suggestedIncidentTypeForShiftNote,
   previewRpAuthorisation,
   isRpAuthorisedOn,
-  editedRpAuthorisation,
   isShiftIncidentPrefillState,
   buildShiftIncidentTitleSkeleton,
   buildShiftIncidentDescriptionSkeleton,
   incidentReturnPath,
-  toDatetimeLocalValue,
 } from '@/lib/incidentPrefill'
-import { defaultReportableClass } from './incidents/reportingDue'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
+import { INCIDENT_SERVICE_TYPES, toIncidentBody } from './incidents/incidentEditForm'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
 import { extractErrorMessage } from '@/lib/utils'
@@ -50,38 +47,29 @@ import { formatServiceDate } from '@/lib/format'
 import { unbroken } from '@/lib/intakeBooking'
 import {
   incidentResolver, type IncidentFormData,
-  basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
-  STEP_BASICS_FIELDS, STEP_RESTRICTIVE_PRACTICE_FIELDS, STEP_DETAILS_FIELDS, STEP_WITNESSES_FIELDS, STEP_COMPLIANCE_FIELDS,
+  basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema,
+  STEP_BASICS_FIELDS, STEP_RESTRICTIVE_PRACTICE_FIELDS, STEP_DETAILS_FIELDS, STEP_WITNESSES_FIELDS,
 } from './incidents/incidentFormSchema'
 import { BasicsStep } from './incidents/steps/BasicsStep'
 import { RestrictivePracticeStep } from './incidents/steps/RestrictivePracticeStep'
 import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
 import { WitnessesStep } from './incidents/steps/WitnessesStep'
-import { ComplianceStep } from './incidents/steps/ComplianceStep'
 import type { z } from 'zod'
 import { Callout } from '@/components/Callout'
-import { PageState } from '@/components/PageState'
-import { isNotFoundError } from '@/lib/httpStatus'
-import { retryingAfterError } from '@/lib/queryPhase'
-
-// INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
-// selecting "Trip" is what reveals the trip-select dropdown below.
-const INCIDENT_SERVICE_TYPES = ['None', ...SERVICE_STREAMS] as const
 
 const STEP_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = {
   basics: basicsSchema,
   restrictivePractice: restrictivePracticeSchema,
   details: detailsSchema,
   witnesses: witnessesSchema,
-  compliance: complianceSchema,
 }
 
 // IN-1's central new capability: two of the five real steps are conditionally absent from the
 // step array itself (not just hidden within a fixed step) — restrictivePractice only appears
-// while incidentType === 'RestrictivePracticeUse', compliance only in edit mode. Must be wrapped
+// while incidentType === 'RestrictivePracticeUse'. Must be wrapped
 // in useMemo by the caller (see below) — a fresh array identity on every render trips useWizard's
 // reshuffle-detection heuristic on every keystroke.
-function computeSteps(incidentType: string | undefined, isEdit: boolean): WizardStepDef<IncidentFormData>[] {
+function computeSteps(incidentType: string | undefined): WizardStepDef<IncidentFormData>[] {
   const steps: WizardStepDef<IncidentFormData>[] = [
     { key: 'basics', label: 'Basics', fields: STEP_BASICS_FIELDS },
   ]
@@ -90,80 +78,11 @@ function computeSteps(incidentType: string | undefined, isEdit: boolean): Wizard
   }
   steps.push({ key: 'details', label: 'Incident details', fields: STEP_DETAILS_FIELDS })
   steps.push({ key: 'witnesses', label: 'Witnesses', fields: STEP_WITNESSES_FIELDS })
-  if (isEdit) {
-    steps.push({ key: 'compliance', label: 'Compliance', fields: STEP_COMPLIANCE_FIELDS })
-  }
   return steps
 }
 
-/**
- * Builds react-hook-form's `defaultValues` directly from the persisted incident (edit mode) or
- * the create-mode static defaults — evaluated once, synchronously, at `useForm` construction.
- *
- * This matters beyond tidiness: `IncidentWizardForm` (below) is gated by the outer
- * `IncidentCreatePage` to not mount until `existingIncident` has loaded in edit mode (see that
- * component's doc comment for why) — so `incidentType` is already correct on this component's
- * very FIRST render. That, in turn, is what lets `computeSteps`/`useWizard`'s `initialVisited:
- * 'all'` correctly include a conditional step (e.g. Restrictive Practice) that only exists
- * because of the loaded data, instead of seeding "all steps visited" against the wrong
- * (default-'Other') step list and permanently locking that step's rail button.
- */
-function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto | undefined, currentUserId: string | null) {
-  if (isEdit && existingIncident) {
-    const i = existingIncident
-    return {
-      serviceType: i.serviceType ?? 'None',
-      tripInstanceId: i.tripInstanceId ?? '',
-      incidentType: i.incidentType ?? 'Other',
-      otherTypeSpecify: i.otherTypeSpecify ?? '',
-      restrictivePracticeType: i.restrictivePracticeType ?? '',
-      restrictivePracticeId: i.restrictivePracticeId ?? '',
-      unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? '',
-      // Stored unauthorised with a practice linked: that is what "This use was not authorised" records.
-      usedWithoutAuthorisation: !!i.restrictivePracticeId && i.isRestrictivePracticeAuthorised === false,
-      // Edit never asks; it only carries the stored answer.
-      rpUseVaried: i.restrictivePracticeUseVaried ?? null,
-      severity: i.severity ?? 'Medium',
-      title: i.title ?? '',
-      description: i.description ?? '',
-      reportedByStaffId: i.reportedByStaffId ?? '',
-      incidentDateTime: i.incidentDateTime ? i.incidentDateTime.slice(0, 16) : '',
-      location: i.location ?? '',
-      participantBookingId: i.participantBookingId ?? '',
-      involvedParticipantId: i.involvedParticipantId ?? '',
-      involvedStaffId: i.involvedStaffId ?? '',
-      immediateActionsTaken: i.immediateActionsTaken ?? '',
-      wereEmergencyServicesCalled: i.wereEmergencyServicesCalled ?? false,
-      emergencyServicesDetails: i.emergencyServicesDetails ?? '',
-      emergencyServices: parseEmergencyServices(i.emergencyServices),
-      policeOfficerName: i.policeOfficerName ?? '',
-      policeReference: i.policeReference ?? '',
-      ambulanceOfficerName: i.ambulanceOfficerName ?? '',
-      ambulanceReference: i.ambulanceReference ?? '',
-      fireOfficerName: i.fireOfficerName ?? '',
-      fireReference: i.fireReference ?? '',
-      injuries: (i.injuries ?? []).map((inj) => ({ region: inj.region, injuryType: inj.injuryType, description: inj.description })),
-      // IN-7: existingId carries the persisted witness id forward so Update can match rows by id
-      // and preserve an already-Approved/Declined row's status — see incidentFormSchema's doc
-      // comment on why this is NOT named `id` (useFieldArray reserves that name).
-      witnesses: (i.witnesses ?? []).map((w) => ({ existingId: w.id, witnessUserId: w.witnessUserId, witnessName: w.witnessName })),
-      status: i.status ?? 'Draft',
-      qscReportingStatus: i.qscReportingStatus ?? 'NotRequired',
-      qscReferenceNumber: i.qscReferenceNumber ?? '',
-      qscReportedAt: i.qscReportedAt ? i.qscReportedAt.slice(0, 16) : '',
-      awareAt: i.awareAt ? toDatetimeLocalValue(i.awareAt, i.timeZoneId) : '',
-      reportableClass: i.reportableClass ?? 'None',
-      reportableClassReason: i.reportableClassReason ?? '',
-      isRestrictivePracticeAuthorised: i.isRestrictivePracticeAuthorised ?? null,
-      commissionDetailedReportedAt: i.commissionDetailedReportedAt ? i.commissionDetailedReportedAt.slice(0, 16) : '',
-      commissionFinalReportRequested: i.commissionFinalReportRequested ?? false,
-      commissionFinalReportedAt: i.commissionFinalReportedAt ? i.commissionFinalReportedAt.slice(0, 16) : '',
-      familyNotified: i.familyNotified ?? false,
-      familyNotifiedAt: i.familyNotifiedAt ? i.familyNotifiedAt.slice(0, 16) : '',
-      supportCoordinatorNotified: i.supportCoordinatorNotified ?? false,
-      supportCoordinatorNotifiedAt: i.supportCoordinatorNotifiedAt ? i.supportCoordinatorNotifiedAt.slice(0, 16) : '',
-    }
-  }
+/** The static defaults of a new report; the signed-in user is the default reporter (IN-3), a DEFAULT, not a lock. */
+function buildDefaultValues(currentUserId: string | null) {
   return {
     serviceType: 'None',
     severity: '',
@@ -176,9 +95,6 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
     supportCoordinatorNotified: false,
     injuries: [],
     witnesses: [],
-    // IN-3: defaults to the signed-in user — a DEFAULT, not a lock. The reporter can still pick
-    // someone else. Falls back to '' (today's untouched behaviour) when there's no resolvable
-    // signed-in user id.
     reportedByStaffId: currentUserId ?? '',
   }
 }
@@ -188,75 +104,49 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
  * see lib/permissions.ts's canWrite/canCreateIncidents doc comments. Surface that distinctly from
  * a validation failure, and otherwise fall back to the server's own message when present.
  */
-function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
+function extractIncidentErrorMessage(err: unknown): string {
   const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
   if (axiosErr?.response?.status === 403) {
     return "You don't have permission to file incident reports."
   }
-  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`)
+  return extractErrorMessage(err, 'Failed to create incident report. Please check your input and try again.')
 }
 
-/**
- * Outer gate: `useIncident(id)` is a React Query hook, so `existingIncident` is `undefined` on
- * the first render(s) in real usage (not just in a test's synchronous mock) until the network
- * request resolves. `IncidentWizardForm` below must not mount until then in edit mode — see
- * `buildDefaultValues`'s doc comment for why. Create mode (`isEdit` false) has nothing to wait
- * for and mounts immediately, unchanged from before this gate existed.
- */
 export default function IncidentCreatePage() {
-  const { id } = useParams()
-  const isEdit = !!id
-  const pageQuery = useIncident(id)
-  const { data: existingIncident, isError, error, refetch } = pageQuery
-  if (isEdit && !existingIncident) {
-    if (!isError && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="incident" />
-    return isNotFoundError(error)
-      ? <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
-      : <PageState kind="error" noun="incident" onRetry={() => refetch()} />
-  }
-
-  return <IncidentWizardForm key={id ?? 'new'} id={id} existingIncident={existingIncident} />
+  return <IncidentWizardForm />
 }
 
-function IncidentWizardForm({ id, existingIncident }: { id?: string; existingIncident: IncidentDetailDto | undefined }) {
-  // Recomputed here (not accepted as a separate prop) so TypeScript's aliased-condition control
-  // flow analysis can narrow `id` to `string` wherever this exact `isEdit` check guards it below
-  // (e.g. the Update mutation call) — a boolean prop independent of `id` wouldn't correlate.
-  const isEdit = !!id
+function IncidentWizardForm() {
   const navigate = useNavigate()
   const location = useLocation()
   const createIncident = useCreateIncident()
-  const updateIncident = useUpdateIncident()
-  const mutation = isEdit ? updateIncident : createIncident
+  const mutation = createIncident
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
   const { data: participants = [] } = useParticipants()
   const { id: currentUserId, fullName, isSupportWorker } = usePermissions()
   // The server files a support worker's incident under their own name, so the form shows that instead of a picker a prefill could seed with a colleague.
-  const lockedReporterId = !isEdit && isSupportWorker ? currentUserId : null
+  const lockedReporterId = isSupportWorker ? currentUserId : null
 
   // INC-03: router-state prefill dropped in by RecordAdministrationModal after a
   // refused/withheld/missed/wrong-medication outcome is recorded. Purely informational client
   // state — nothing was persisted to make this incident exist, and nothing is until this form
   // is submitted like any other.
-  const marPrefill = !isEdit && isMarIncidentPrefillState(location.state) ? location.state : null
+  const marPrefill = isMarIncidentPrefillState(location.state) ? location.state : null
   const appliedMarPrefillRef = useRef(false)
 
   // NOTES-02: same router-state prefill idiom, produced by the portal's ShiftNotesSection "file
   // an incident report" banner action instead of the MAR flow. Mutually exclusive with marPrefill
   // — only one producer ever sets location.state per navigation.
-  const shiftNotePrefill = !isEdit && isShiftNoteIncidentPrefillState(location.state) ? location.state : null
+  const shiftNotePrefill = isShiftNoteIncidentPrefillState(location.state) ? location.state : null
   const appliedShiftNotePrefillRef = useRef(false)
   // My shifts: "Anything to report?" on the finish flow. A shift with no note behind it; the worker picks the type.
-  const shiftPrefill = !isEdit && isShiftIncidentPrefillState(location.state) ? location.state : null
+  const shiftPrefill = isShiftIncidentPrefillState(location.state) ? location.state : null
   const appliedShiftPrefillRef = useRef(false)
 
-  // Evaluated once, synchronously, from the (already-loaded, in edit mode) existingIncident —
-  // see buildDefaultValues' own doc comment for why this must be correct on the very first
-  // render rather than arriving later via reset().
   const { register, handleSubmit, reset, control, setValue, getValues, setError, clearErrors, formState: { errors, isDirty } } = useForm<IncidentFormData>({
     resolver: incidentResolver,
-    defaultValues: buildDefaultValues(isEdit, existingIncident, currentUserId),
+    defaultValues: buildDefaultValues(currentUserId),
   })
 
   const serviceType = useWatch({ control, name: 'serviceType' })
@@ -265,8 +155,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const tripInstanceId = useWatch({ control, name: 'tripInstanceId' })
   const wereEmergencyCalled = useWatch({ control, name: 'wereEmergencyServicesCalled' })
   const emergencyServices = useWatch({ control, name: 'emergencyServices' })
-  const familyNotified = useWatch({ control, name: 'familyNotified' })
-  const supportCoordinatorNotified = useWatch({ control, name: 'supportCoordinatorNotified' })
   const involvedParticipantId = useWatch({ control, name: 'involvedParticipantId' })
   // I-3: fetch every practice (active + inactive) for the currently-selected participant so the
   // Review step can resolve a linked practice regardless of whether it's since gone inactive —
@@ -285,18 +173,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   // back via setValue on change.
   const reportedByStaffId = useWatch({ control, name: 'reportedByStaffId' })
   const involvedStaffId = useWatch({ control, name: 'involvedStaffId' })
-  const status = useWatch({ control, name: 'status' })
-  const reportableClass = useWatch({ control, name: 'reportableClass' })
-  const commissionFinalReportRequested = useWatch({ control, name: 'commissionFinalReportRequested' })
-  const awareAtMax = toDatetimeLocalValue(new Date().toISOString(), existingIncident?.timeZoneId)
-
-  // The class follows the default for the form's severity and type until someone moves it: when it still equals the previous default, it moves to the new one.
-  const previousDefaultRef = useRef(defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised, existingIncident?.restrictivePracticeUseVaried))
-  useEffect(() => {
-    const next = defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised, existingIncident?.restrictivePracticeUseVaried)
-    if (isEdit && getValues('reportableClass') === previousDefaultRef.current) setValue('reportableClass', next, { shouldDirty: true })
-    previousDefaultRef.current = next
-  }, [severity, incidentType, isEdit, existingIncident?.isRestrictivePracticeAuthorised, existingIncident?.restrictivePracticeUseVaried, getValues, setValue])
 
   // IN-4/IN-5: switching incidentType away from the type that owns a conditional step's fields
   // clears them, so a later switch back starts clean (rather than resurrecting stale data from a
@@ -308,16 +184,15 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       setValue('restrictivePracticeId', '')
       setValue('unapprovedRestrictivePracticeDetails', '')
       setValue('usedWithoutAuthorisation', false)
-      if (!isEdit) setValue('rpUseVaried', undefined)
+      setValue('rpUseVaried', undefined)
     }
-  }, [incidentType, isEdit, setValue])
+  }, [incidentType, setValue])
 
   // The date is typed after the entry is picked, so the locked "not authorised" tick follows the entry judged on that date.
   const rpLockedRef = useRef(false)
   const tickBeforeLockRef = useRef(false) // a hand tick made before the lock began survives the unlock
   const lockEntryRef = useRef<string | undefined>('')
   useEffect(() => {
-    if (isEdit) return
     const entry = allRestrictivePractices.find((p) => p.id === restrictivePracticeId)
     const locked = !!entry && !isRpAuthorisedOn(entry, incidentDateTime?.slice(0, 10))
     if (locked !== rpLockedRef.current) {
@@ -327,7 +202,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     }
     rpLockedRef.current = locked
     lockEntryRef.current = restrictivePracticeId
-  }, [isEdit, allRestrictivePractices, restrictivePracticeId, incidentDateTime, setValue, getValues])
+  }, [allRestrictivePractices, restrictivePracticeId, incidentDateTime, setValue, getValues])
 
   useEffect(() => {
     if (incidentType !== 'Injury') {
@@ -392,7 +267,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     if (!shiftPrefill || appliedShiftPrefillRef.current) return
     appliedShiftPrefillRef.current = true
     reset({
-      ...buildDefaultValues(false, undefined, currentUserId),
+      ...buildDefaultValues(currentUserId),
       title: buildShiftIncidentTitleSkeleton(shiftPrefill),
       description: buildShiftIncidentDescriptionSkeleton(shiftPrefill),
       involvedParticipantId: shiftPrefill.participantId,
@@ -402,9 +277,9 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   }, [shiftPrefill, reset, currentUserId, lockedReporterId])
 
   // IN-1: the computed, not fixed, step list — wrapped in useMemo so its identity is stable
-  // across renders that don't actually change incidentType/isEdit (useWizard's reshuffle
+  // across renders that don't actually change incidentType (useWizard's reshuffle
   // detection compares the `steps` array by identity, not deep-equality).
-  const steps = useMemo(() => computeSteps(incidentType, isEdit), [incidentType, isEdit])
+  const steps = useMemo(() => computeSteps(incidentType), [incidentType])
   const stepsForRail = useMemo(
     () => [...steps, { key: REVIEW_STEP_KEY, label: 'Review', fields: [] as const }],
     [steps],
@@ -424,7 +299,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
 
   const wizard = useWizard<IncidentFormData>({
     steps,
-    initialVisited: isEdit ? 'all' : 'linear',
+    initialVisited: 'linear',
     validate: validateStep,
     getValues,
     setError: (path, err) => setError(path as keyof IncidentFormData, err),
@@ -433,97 +308,25 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const { currentStep, isReviewStep } = wizard
 
   const onSubmit = async (data: IncidentFormData) => {
-    const isRp = data.incidentType === 'RestrictivePracticeUse'
-    const base: CreateIncidentDto = {
-      serviceType: (data.serviceType || 'None') as CreateIncidentDto['serviceType'],
-      tripInstanceId: data.serviceType === 'Trip' ? data.tripInstanceId || undefined : undefined,
-      reportedByStaffId: data.reportedByStaffId,
-      incidentType: data.incidentType as IncidentType,
-      otherTypeSpecify: data.incidentType === 'Other' ? data.otherTypeSpecify || undefined : undefined,
-      restrictivePracticeType: isRp
-        ? (data.restrictivePracticeType || undefined) as CreateIncidentDto['restrictivePracticeType']
-        : undefined,
-      // IN-4: mutually exclusive — restrictivePracticeId only when linked; the free-text
-      // unapproved-practice field only when nothing was linked. Never both at once.
-      restrictivePracticeId: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() ? data.restrictivePracticeId || undefined : undefined,
-      unapprovedRestrictivePracticeDetails: isRp ? data.unapprovedRestrictivePracticeDetails?.trim() || undefined : undefined,
-      // "This use was not authorised": only with a linked practice. The server also stores a Not authorised entry's use as unauthorised.
-      usedWithoutAuthorisation: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() && !!data.restrictivePracticeId && !!data.usedWithoutAuthorisation,
-      // Asked on create only; the server ignores it on update and stores it only for an authorised use.
-      restrictivePracticeUseVaried: isEdit || !isRp ? undefined : (data.rpUseVaried ?? undefined),
-      severity: data.severity as IncidentSeverity,
-      title: data.title,
-      description: data.description,
-      incidentDateTime: data.incidentDateTime,
-      participantBookingId: data.participantBookingId || undefined,
-      involvedParticipantId: data.involvedParticipantId || undefined,
-      involvedStaffId: data.involvedStaffId || undefined,
-      location: data.location || undefined,
-      immediateActionsTaken: data.immediateActionsTaken || undefined,
-      wereEmergencyServicesCalled: data.wereEmergencyServicesCalled ?? false,
-      emergencyServicesDetails: data.emergencyServicesDetails || undefined,
-      emergencyServices: data.wereEmergencyServicesCalled && data.emergencyServices?.length ? data.emergencyServices.join(', ') : 'None',
-      // The server nulls a service's fields while it is unticked; a blank is simply not sent.
-      policeOfficerName: data.policeOfficerName?.trim() || undefined,
-      policeReference: data.policeReference?.trim() || undefined,
-      ambulanceOfficerName: data.ambulanceOfficerName?.trim() || undefined,
-      ambulanceReference: data.ambulanceReference?.trim() || undefined,
-      fireOfficerName: data.fireOfficerName?.trim() || undefined,
-      fireReference: data.fireReference?.trim() || undefined,
-      injuries: data.incidentType === 'Injury' ? (data.injuries as CreateIncidentDto['injuries']) : [],
-      // IN-7: existingId (set only for a row echoed back from a persisted incident) becomes the
-      // wire-format `id` the backend matches on to preserve an already-Approved/Declined row —
-      // see incidentFormSchema's doc comment for why the form field isn't itself named `id`.
-      witnesses: (data.witnesses ?? []).map((w) => ({
-        id: w.existingId,
-        witnessUserId: w.witnessUserId,
-        witnessName: w.witnessName,
-      })),
-      // Connection map: a create-mode submission takes these from the router-state hand-off it started from
-      // (marPrefill/shiftNotePrefill are both hard-gated on !isEdit). UpdateIncident sets all three from the body,
-      // so an edit sends the stored links back, or saving any change would clear them.
-      medicationAdministrationId: isEdit ? existingIncident?.medicationAdministrationId ?? undefined : marPrefill?.medicationAdministrationId,
-      shiftId: isEdit ? existingIncident?.shiftId ?? undefined : shiftNotePrefill?.shiftId ?? shiftPrefill?.shiftId,
-      shiftNoteId: isEdit ? existingIncident?.shiftNoteId ?? undefined : shiftNotePrefill?.shiftNoteId,
-    }
+    // Connection map: a submission takes the source links from the router-state hand-off it started from.
+    const base = toIncidentBody(data, {
+      medicationAdministrationId: marPrefill?.medicationAdministrationId,
+      shiftId: shiftNotePrefill?.shiftId ?? shiftPrefill?.shiftId,
+      shiftNoteId: shiftNotePrefill?.shiftNoteId,
+    }, true)
 
     try {
-      if (isEdit) {
-        const updateData: UpdateIncidentDto = {
-          ...base,
-          status: (data.status || 'Draft') as IncidentStatus,
-          qscReportingStatus: (data.qscReportingStatus || 'NotRequired') as QscReportingStatus,
-          qscReportedAt: data.qscReportedAt || undefined,
-          awareAtLocal: data.awareAt || undefined,
-          reportableClass: (data.reportableClass || undefined) as ReportableClass | undefined,
-          reportableClassReason: data.reportableClassReason?.trim() || undefined,
-          commissionDetailedReportedAt: data.commissionDetailedReportedAt || undefined,
-          commissionFinalReportRequested: data.commissionFinalReportRequested ?? false,
-          commissionFinalReportedAt: data.commissionFinalReportedAt || undefined,
-          qscReferenceNumber: data.qscReferenceNumber || undefined,
-          familyNotified: data.familyNotified ?? false,
-          familyNotifiedAt: data.familyNotifiedAt || undefined,
-          supportCoordinatorNotified: data.supportCoordinatorNotified ?? false,
-          supportCoordinatorNotifiedAt: data.supportCoordinatorNotifiedAt || undefined,
+      const res = await createIncident.mutateAsync(base)
+      if (res.success) {
+        // NOTES-02: closing the loop on a shift-note-sourced filing — fire-and-forget, error
+        // tolerant (the incident is already filed by this point).
+        if (shiftNotePrefill) {
+          apiPost(`/portal/notes/${shiftNotePrefill.shiftNoteId}/acknowledge-flags`).catch(() => {
+            console.error('Failed to acknowledge shift note flags after filing an incident report.')
+          })
         }
-        const res = await updateIncident.mutateAsync({ id, data: updateData })
-        if (res.success) {
-          flushSync(() => reset(data))
-          navigate('/incidents', { replace: true })
-        }
-      } else {
-        const res = await createIncident.mutateAsync(base)
-        if (res.success) {
-          // NOTES-02: closing the loop on a shift-note-sourced filing — fire-and-forget, error
-          // tolerant (the incident is already filed by this point).
-          if (shiftNotePrefill) {
-            apiPost(`/portal/notes/${shiftNotePrefill.shiftNoteId}/acknowledge-flags`).catch(() => {
-              console.error('Failed to acknowledge shift note flags after filing an incident report.')
-            })
-          }
-          flushSync(() => reset(data))
-          navigate(incidentReturnPath(location.state), { replace: true })
-        }
+        flushSync(() => reset(data))
+        navigate(incidentReturnPath(location.state), { replace: true })
       }
     } catch {
       // error handled by mutation state
@@ -536,30 +339,13 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const staffName = (staffId: string | null | undefined) =>
     (staffId && staffId === lockedReporterId ? fullName : null) ?? staff.find((s) => s.id === staffId)?.fullName ?? '—'
   const tripName = (tripId: string | null | undefined) => trips.find((t) => t.id === tripId)?.tripName ?? '—'
-  // I1 (final review): the client-side lookup lists are server-capped (participants at 50), so a
-  // participant/practice past the cap silently resolves to '—' even though the loaded incident
-  // already carries the resolved name/description. Prefer that DTO value whenever we're editing an
-  // existing incident and the currently-selected id still matches what's on the record; fall back
-  // to the (usually sufficient) lookup otherwise.
-  const participantName = (participantId: string | null | undefined) =>
-    (isEdit && existingIncident && existingIncident.involvedParticipantId === participantId
-      ? existingIncident.involvedParticipantName
-      : participants.find((p) => p.id === participantId)?.fullName) ?? '—'
-  const practiceLabel = (practiceId: string | null | undefined) =>
-    (isEdit && existingIncident && existingIncident.restrictivePracticeId === practiceId
-      ? existingIncident.restrictivePracticeDescription
-      : allRestrictivePractices.find((p) => p.id === practiceId)?.description) ?? '—'
+  const participantName = (participantId: string | null | undefined) => participants.find((p) => p.id === participantId)?.fullName ?? '—'
+  const practiceLabel = (practiceId: string | null | undefined) => allRestrictivePractices.find((p) => p.id === practiceId)?.description ?? '—'
 
-  // The same state the Restrictive practice step shows: the live preview when reporting, the stored determination when editing (which
-  // "This use was not authorised" can only lower).
-  const editedAuthorisation = editedRpAuthorisation(existingIncident?.isRestrictivePracticeAuthorised, !!existingIncident?.unapprovedRestrictivePracticeDetails?.trim(), {
-    restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation,
-  })
-  const rpAuthorisation = isEdit
-    ? editedAuthorisation === null ? '—' : editedAuthorisation ? 'Authorised' : 'Not authorised'
-    : { authorised: 'Authorised', unauthorised: 'Not authorised', unknown: '—' }[previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, allRestrictivePractices, {
-      restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
-    }, incidentDateTime?.slice(0, 10))]
+  // The live preview of the authorisation this report will be filed with.
+  const rpAuthorisation = { authorised: 'Authorised', unauthorised: 'Not authorised', unknown: '—' }[previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, allRestrictivePractices, {
+    restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
+  }, incidentDateTime?.slice(0, 10))]
 
   const reviewGroups: ReviewGroup[] = [
     {
@@ -614,15 +400,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         },
       ],
     },
-    ...(isEdit ? [{
-      stepKey: 'compliance',
-      rows: [
-        { label: 'Status', value: status ? (INCIDENT_STATUS_LABELS[status as IncidentStatus] ?? status) : '—' },
-        { label: 'Reporting deadline', value: reportableClass ? (REPORTABLE_CLASS_LABELS[reportableClass as ReportableClass] ?? reportableClass) : '—' },
-        { label: 'Family Notified', value: familyNotified ? 'Yes' : 'No' },
-        { label: 'Support Coordinator Notified', value: supportCoordinatorNotified ? 'Yes' : 'No' },
-      ],
-    }] : []),
   ]
 
   return (
@@ -633,7 +410,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         <div className="flex h-[26px] items-center md:h-[30px]">
           <BackButton to="/incidents" label="incidents" variant="icon" />
         </div>
-        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit incident report' : 'Report incident'} /></div>
+        <div className="flex-1 min-w-0"><PageHeader title="Report incident" /></div>
       </div>
 
       {marPrefill && (
@@ -687,7 +464,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       )}
 
       {mutation.isError && (
-        <Callout tone="error">{extractIncidentErrorMessage(mutation.error, isEdit)}</Callout>
+        <Callout tone="error">{extractIncidentErrorMessage(mutation.error)}</Callout>
       )}
 
       <WizardStepRail
@@ -735,8 +512,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             rpUseVaried={rpUseVaried}
             description={description}
             incidentDateTime={incidentDateTime}
-            isEdit={isEdit}
-            existingIncident={existingIncident}
+            isEdit={false}
+            existingIncident={undefined}
           />
         )}
 
@@ -758,26 +535,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             errors={errors}
             reportedByStaffId={reportedByStaffId}
             staff={staff}
-            existingWitnesses={existingIncident?.witnesses ?? []}
-            isEdit={isEdit}
-          />
-        )}
-
-        {!isReviewStep && currentStep.key === 'compliance' && (
-          <ComplianceStep
-            register={register}
-            setValue={setValue}
-            status={status}
-            errors={errors}
-            awareAtMax={awareAtMax}
-            severity={severity}
-            incidentType={incidentType}
-            isRestrictivePracticeAuthorised={existingIncident?.isRestrictivePracticeAuthorised}
-            restrictivePracticeUseVaried={existingIncident?.restrictivePracticeUseVaried}
-            reportableClass={reportableClass}
-            commissionFinalReportRequested={commissionFinalReportRequested}
-            familyNotified={familyNotified}
-            supportCoordinatorNotified={supportCoordinatorNotified}
+            existingWitnesses={[]}
+            isEdit={false}
           />
         )}
 
@@ -804,8 +563,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           isReviewStep={isReviewStep}
           secondaryActions={[]}
           cancelTo="/incidents"
-          submitReserve={isEdit ? 'Saving…' : 'Submit incident report'}
-          submitLabel={mutation.isPending ? (isEdit ? 'Saving…' : 'Submitting…') : (isEdit ? 'Save' : 'Submit incident report')}
+          submitReserve="Submit incident report"
+          submitLabel={mutation.isPending ? 'Submitting…' : 'Submit incident report'}
           isSubmitting={mutation.isPending}
         />
       </form>

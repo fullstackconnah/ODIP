@@ -468,7 +468,7 @@ const tasks = [
     ownerId: 's-0002', ownerName: 'Priya Nadarajah', priority: 'High',
     dueDate: '2026-07-13', status: 'Overdue', completedDate: null,
     notes: 'QSC reporting window closes 72h after the incident.',
-    linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
+    linkTo: '/incidents/inc-0002', incidentReportId: 'inc-0002',
   },
   // The dashboard's Tasks due group: an Admin-only review of an emergency over budget, overdue (the oldest due, so it is among the group's first five
   // rows), and a task due today (the provider's day).

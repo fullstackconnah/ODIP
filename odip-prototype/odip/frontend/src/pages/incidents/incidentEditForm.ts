@@ -1,5 +1,6 @@
 import type { CreateIncidentDto, IncidentDetailDto, UpdateIncidentDto } from '@/api/types/incidents'
 import type { IncidentSeverity, IncidentStatus, IncidentType, QscReportingStatus, ReportableClass } from '@/api/types/enums'
+import { SERVICE_STREAMS } from '@/api/types/enums'
 import { toDatetimeLocalValue } from '@/lib/incidentPrefill'
 import { parseEmergencyServices } from './emergencyServices'
 import { defaultReportableClass } from './reportingDue'
@@ -29,6 +30,9 @@ export const GROUP_LABELS: Record<GroupKey, string> = {
   witnesses: 'witnesses',
   compliance: 'compliance',
 }
+
+// INC-01: the service-type dropdown offers the business streams plus "None" (untagged); "Trip" is what reveals the trip select.
+export const INCIDENT_SERVICE_TYPES = ['None', ...SERVICE_STREAMS] as const
 
 const minute = (v: string | null | undefined) => (v ? v.slice(0, 16) : '')
 

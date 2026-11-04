@@ -35,7 +35,7 @@ export type WitnessesStepProps = {
 type WitnessRow = { existingId?: string; witnessUserId: string | null; witnessName: string }
 
 // Staff and External are categories of witness, not states: info and neutral.
-const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 'neutral' }
+export const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 'neutral' }
 
 /**
  * IN-7 — wizard step "Witnesses". A single `witnesses[]` field array holds both staff (approvable

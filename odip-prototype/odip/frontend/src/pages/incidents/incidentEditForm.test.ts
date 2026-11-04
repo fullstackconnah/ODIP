@@ -78,7 +78,7 @@ describe('incidentEditForm', () => {
   it('type away from Injury sends injuries [] and away from RP sends no RP fields', () => {
     const inj = seed({ incidentType: 'Injury' })
     expect(toUpdateBody(inj, { ...buildEditValues(inj), incidentType: 'Other' }, 'basics').injuries).toEqual([])
-    const rp = seed({ incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Physical', unapprovedRestrictivePracticeDetails: 'Held arm' })
+    const rp = seed({ incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'PhysicalRestraint', unapprovedRestrictivePracticeDetails: 'Held arm' })
     const b = toUpdateBody(rp, { ...buildEditValues(rp), incidentType: 'Other' }, 'basics')
     expect([b.restrictivePracticeType, b.restrictivePracticeId, b.unapprovedRestrictivePracticeDetails]).toEqual([undefined, undefined, undefined])
   })

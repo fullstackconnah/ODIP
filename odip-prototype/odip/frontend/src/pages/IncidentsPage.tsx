@@ -15,7 +15,7 @@ import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Pencil, Archive, ArchiveRestore, ChevronRight } from 'lucide-react'
+import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Archive, ArchiveRestore, ChevronRight } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import { formatAge, plural } from '@/lib/format'
@@ -206,7 +206,6 @@ export default function IncidentsPage() {
     archiveVia: 'status',
     archiveStatus: 'Closed',
     restoreData: () => ({ status: 'Draft' }),   // the hook builds the rest of the body from the stored incident
-    editPath: (i) => `/incidents/${i.id}/edit`,
   })
 
   const queryParams: Record<string, string> = { ...params, page: String(page), pageSize: String(INCIDENTS_PAGE_SIZE) }
@@ -242,7 +241,6 @@ export default function IncidentsPage() {
   // The menu a row offers, once: icon buttons on a mouse, one ⋯ on the phone card. Archive is undoable (a confirm, then Closed), so it is never red.
   const rowItems = (i: IncidentListDto): RowMenuItem[] => canWrite
     ? [
-        { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/incidents/${i.id}/edit` },
         showArchived
           ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(i) }
           : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(i) },

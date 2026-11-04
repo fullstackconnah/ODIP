@@ -10,6 +10,7 @@ import type { AxiosAdapter } from 'axios'
 import { apiClient } from '@/api/client'
 import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 import { navLeaves } from '@/components/layout/navConfig'
+import IncidentEditRedirect from '@/pages/incidents/IncidentEditRedirect'
 
 /**
  * UI standard 6 (the UI survey, section 10): every routed page renders ONE `h1` (its PageHeader) and names the browser tab.
@@ -87,7 +88,6 @@ const ROUTES: Route[] = [
   { path: '/tasks/:id/edit', url: `/tasks/${ID}/edit`, load: () => import('@/pages/TaskCreatePage') },
   { path: '/incidents', url: '/incidents', load: () => import('@/pages/IncidentsPage') },
   { path: '/incidents/new', url: '/incidents/new', load: () => import('@/pages/IncidentCreatePage') },
-  { path: '/incidents/:id/edit', url: `/incidents/${ID}/edit`, load: () => import('@/pages/IncidentCreatePage') },
   { path: '/incidents/:id', url: `/incidents/${ID}`, load: () => import('@/pages/IncidentDetailPage') },
   { path: '/complaints', url: '/complaints', load: () => import('@/pages/ComplaintsPage') },
   { path: '/complaints/new', url: '/complaints/new', load: () => import('@/pages/ComplaintFormPage') },
@@ -132,6 +132,7 @@ const ALLOWED: Record<string, string> = {
   '/inquiries': 'redirect to /participants?tab=enquiries',
   '/onboarding': 'redirect to /participants?tab=onboarding',
   '/participants/:id/edit': 'redirect to the profile wizard',
+  '/incidents/:id/edit': 'redirect to the full view (its own test below)',
   '/account': 'redirect to /settings/profile',
   '/signin/microsoft': 'pre-auth Microsoft landing: a status line that posts once then navigates; outside the app layout',
 }
@@ -210,6 +211,16 @@ describe('every routed page has one h1 and a tab title (UI standard 6)', () => {
     },
     20_000,
   )
+
+  it('sends /incidents/:id/edit to the detail page', () => {
+    const router = createMemoryRouter(
+      [{ path: '/incidents/:id/edit', element: <IncidentEditRedirect /> }, { path: '/incidents/:id', element: <p>the full view</p> }],
+      { initialEntries: [`/incidents/${ID}/edit`] },
+    )
+    render(<RouterProvider router={router} />)
+    expect(screen.getByText('the full view')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe(`/incidents/${ID}`)
+  })
 
   it('titles the trip create page "New trip", like the Trips header action', async () => {
     await renderAt(ROUTES.find(r => r.url === '/trips/new')!)
