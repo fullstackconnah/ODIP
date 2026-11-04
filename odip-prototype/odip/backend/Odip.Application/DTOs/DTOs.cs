@@ -2449,6 +2449,8 @@ public record IncidentWitnessDto
 
 public record UpdateIncidentDto : CreateIncidentDto
 {
+    /// <summary>The UpdatedAt the editor's form was loaded from; a different stored one is a 409. Null skips the check (restore, older clients).</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
     public IncidentStatus Status { get; init; }
     /// <summary>Ignored: the status is derived from the class and the report date. Kept so older clients do not get a 400.</summary>
     public QscReportingStatus QscReportingStatus { get; init; }
