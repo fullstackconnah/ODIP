@@ -156,6 +156,18 @@ public class RosteringController : ControllerBase
 
         var weekWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, start, end, ct);
 
+        // The picker's "Available that day": whole days marked Available or Preferred with nothing against them. One day past the week, so a Sunday overnight shift can be checked; weekWindows itself stays the week (it feeds the leave bars).
+        var availabilityRows = await _db.StaffAvailabilities
+            .Where(a => staffIds.Contains(a.UserId)   // tenant scope: staffIds come from the filtered Users (StaffAvailability has no tenant filter)
+                        && (a.AvailabilityType == AvailabilityType.Available || a.AvailabilityType == AvailabilityType.Preferred)
+                        && a.StartDateTime < end.AddDays(2).ToDateTime(TimeOnly.MinValue)
+                        && a.EndDateTime > start.ToDateTime(TimeOnly.MinValue))
+            .ToListAsync(ct);
+        var dayAfterWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, end.AddDays(1), end.AddDays(1), ct);
+        var availableDays = AvailableDays.For(availabilityRows, weekWindows.Concat(dayAfterWindows), start, end.AddDays(1))
+            .Select(d => new StaffAvailableDayDto { StaffId = d.UserId, Date = d.Date, Preferred = d.Preferred })
+            .ToList();
+
         // PUBLIC_HOLIDAY (connection-map item 8): loaded once for the whole week and reused for
         // every shift's context below, same as weekShifts/weekTripAssignments/weekWindows — avoids
         // one PublicHolidays query per shift on the board.
@@ -355,7 +367,7 @@ public class RosteringController : ControllerBase
             board = new RosterBoardDto
             {
                 WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Participant,
-                ParticipantRows = participantRows, Exceptions = exceptions,
+                ParticipantRows = participantRows, Exceptions = exceptions, StaffAvailableDays = availableDays,
                 PendingAgreements = await PendingAgreementsAsync(ct),
                 // The leave the findings already loaded (weekWindows): leave requests only; recurring and legacy unavailability stay findings of the assign.
                 StaffLeave = weekWindows
@@ -423,7 +435,7 @@ public class RosteringController : ControllerBase
             board = new RosterBoardDto
             {
                 WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Staff,
-                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions
+                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions, StaffAvailableDays = availableDays
             };
         }
 
