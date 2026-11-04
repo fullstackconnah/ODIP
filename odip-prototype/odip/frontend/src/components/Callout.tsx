@@ -121,7 +121,7 @@ export function Callout({ tone, title, children, icon, actions, className, annou
         {title && <p className="font-medium leading-snug">{title}</p>}
         {children && <div className="leading-snug">{children}</div>}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 max-w-full shrink-0">{actions}</div>}
     </div>
   )
 }
