@@ -46,8 +46,10 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
             return new AutoRosterWorker(u.Id, u.FullName, goal, isDefault, rostered.GetValueOrDefault(u.Id));
         }).ToList();
 
+        // The organisation's reach, from the same row SettingsController.Get picks; no row means 3, today's behaviour.
+        var reach = Math.Clamp(await db.AppSettings.AsNoTracking().Where(s => s.TenantId == tenantId).OrderBy(s => s.Id).Select(s => (int?)s.AutoRosterReach).FirstOrDefaultAsync(ct) ?? 3, 0, 3);
         var plan = AutoRosterPlanner.Plan(new AutoRosterInput(open, workers, regulars,
-            ranks.Where(c => poolIds.Contains(c.UserId)).ToDictionary(c => (c.UserId, c.ParticipantId), c => (c.Level, c.Rank)), notReady), new SnapshotAutoRosterOracle(snapshot));
+            ranks.Where(c => poolIds.Contains(c.UserId)).ToDictionary(c => (c.UserId, c.ParticipantId), c => (c.Level, c.Rank)), notReady, reach), new SnapshotAutoRosterOracle(snapshot));
 
         var shiftsById = open.ToDictionary(s => s.Id);
         var names = workers.ToDictionary(w => w.Id, w => w.Name);
@@ -69,9 +71,9 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
                 return new AutoRosterChangeDto
                 {
                     ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime,
-                    StaffId = p.StaffId, StaffName = names[p.StaffId], Pick = p.Pick, Rank = RankOf(p.Rank), UnderGoal = p.UnderGoal, RegularAway = p.RegularAway,
+                    StaffId = p.StaffId, StaffName = names[p.StaffId], Pick = p.Pick, Rank = RankOf(p.Rank), UnderGoal = p.UnderGoal, RegularAway = p.RegularAway, NeedsLook = p.NeedsLook,
                     Warnings = p.Warnings.Select(RosterGate.ToFindingDto).ToList(),
-                    Alternates = p.Alternates.Select(a => new AutoRosterAlternateDto { StaffId = a.StaffId, StaffName = names[a.StaffId], Pick = a.Pick, Rank = RankOf(a.Rank) }).ToList(),
+                    Alternates = p.Alternates.Select(a => new AutoRosterAlternateDto { StaffId = a.StaffId, StaffName = names[a.StaffId], Pick = a.Pick, Rank = RankOf(a.Rank), NeedsLook = a.NeedsLook }).ToList(),
                 };
             }).ToList(),
             Hours = workers.OrderBy(w => w.Name, StringComparer.OrdinalIgnoreCase).ThenBy(w => w.Id).Select(w => new AutoRosterHoursDto
@@ -84,7 +86,7 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
                 var s = shiftsById[x.ShiftId];
                 return new AutoRosterSplitDto
                 {
-                    ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, CutAt = x.CutAt,
+                    ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, CutAt = x.CutAt, NeedsLook = x.NeedsLook,
                     First = new AutoRosterSegmentDto { StaffId = x.FirstStaffId, StaffName = names[x.FirstStaffId] },
                     Second = new AutoRosterSegmentDto { StaffId = x.SecondStaffId, StaffName = names[x.SecondStaffId] },
                 };

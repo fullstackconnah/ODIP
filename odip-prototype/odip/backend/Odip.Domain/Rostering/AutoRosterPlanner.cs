@@ -31,12 +31,14 @@ public sealed record AutoRosterInput(
     IReadOnlyList<AutoRosterWorker> Pool,
     IReadOnlyDictionary<Guid, Guid> RegularByPattern,
     IReadOnlyDictionary<(Guid UserId, Guid ParticipantId), (CompatibilityLevel Level, int Rank)> Compatibility,
-    IReadOnlySet<Guid> NotReadyParticipants);
+    IReadOnlySet<Guid> NotReadyParticipants,
+    int ReachTier = 3);
 
-public sealed record AutoRosterAlternate(Guid StaffId, AutoRosterPick Pick, int Rank);
+/// <summary><c>NeedsLook</c> on a placement, alternate or split: a non-regular pick whose tier is past the input's reach. The flag never changes who is proposed.</summary>
+public sealed record AutoRosterAlternate(Guid StaffId, AutoRosterPick Pick, int Rank, bool NeedsLook = false);
 
 public sealed record AutoRosterPlacement(Guid ShiftId, Guid StaffId, AutoRosterPick Pick, int Rank, bool UnderGoal, string? RegularAway,
-    IReadOnlyList<RosterFinding> Warnings, IReadOnlyList<AutoRosterAlternate> Alternates);
+    IReadOnlyList<RosterFinding> Warnings, IReadOnlyList<AutoRosterAlternate> Alternates, bool NeedsLook = false);
 
 public enum AutoRosterRecommendationKind { OverGoal, Override, Soft, Other }
 
@@ -45,7 +47,7 @@ public sealed record AutoRosterRecommendation(AutoRosterRecommendationKind Kind,
 public sealed record AutoRosterUncovered(Guid ShiftId, UncoveredReason Reason, IReadOnlyList<AutoRosterRecommendation> Recommendations);
 
 /// <summary>A shift two people cover: <see cref="FirstStaffId"/> from the shift's start to <see cref="CutAt"/>, <see cref="SecondStaffId"/> from there to its end (R7 PR3, D9).</summary>
-public sealed record AutoRosterSplit(Guid ShiftId, TimeOnly CutAt, Guid FirstStaffId, Guid SecondStaffId);
+public sealed record AutoRosterSplit(Guid ShiftId, TimeOnly CutAt, Guid FirstStaffId, Guid SecondStaffId, bool NeedsLook = false);
 
 public sealed record AutoRosterPlan(IReadOnlyList<AutoRosterPlacement> Placements, IReadOnlyList<AutoRosterUncovered> Uncovered, IReadOnlyList<AutoRosterSplit> Splits);
 
@@ -94,6 +96,7 @@ public static class AutoRosterPlanner
             return Result(hard.All(f => HoursCodes.Contains(f.Code)) ? Kind.Hours : hard.All(f => SoftRefusalCodes.Contains(f.Code)) ? Kind.Soft : Kind.Other, findings, hard);
         }
 
+        bool Past(Candidate c) => c.Tier > input.ReachTier;
         decimal HoursOf(AutoRosterWorker w) => w.RosteredHours + draft[w.Id];
         bool UnderGoal(AutoRosterWorker w, Shift s) => HoursOf(w) + s.DurationHours <= w.Goal;
         decimal Load(AutoRosterWorker w) => w.Goal <= 0 ? (HoursOf(w) > 0 ? decimal.MaxValue : 0m) : HoursOf(w) / w.Goal;
@@ -108,7 +111,7 @@ public static class AutoRosterPlanner
             draft[c.Worker.Id] += shift.DurationHours;
             placements.Add(new AutoRosterPlacement(shift.Id, c.Worker.Id, pick, c.Rank == int.MaxValue ? 0 : c.Rank, under, regularAway,
                 warnings.OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).ToList(),
-                alternates.Select(a => new AutoRosterAlternate(a.Worker.Id, PickOf(a.Level), a.Rank == int.MaxValue ? 0 : a.Rank)).ToList()));
+                alternates.Select(a => new AutoRosterAlternate(a.Worker.Id, PickOf(a.Level), a.Rank == int.MaxValue ? 0 : a.Rank, Past(a))).ToList(), pick != AutoRosterPick.Regular && Past(c)));
         }
 
         // Pass 1: the regular keeps their shift when free; hours never displace them. A regular the gate would stop goes to the uncovered list with the reason.
@@ -201,7 +204,7 @@ public static class AutoRosterPlanner
                 draft[c.Worker.Id] += part.DurationHours;
             }
 
-            splits.Add(new AutoRosterSplit(shift.Id, at, a.Worker.Id, b.Worker.Id));
+            splits.Add(new AutoRosterSplit(shift.Id, at, a.Worker.Id, b.Worker.Id, Past(a) || Past(b)));
             uncovered.RemoveAll(u => u.ShiftId == shift.Id);
         }
 

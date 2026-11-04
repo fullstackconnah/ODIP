@@ -12,20 +12,24 @@ const PARTICIPANTS = [['p-1', 'Mia Chen'], ['p-2', 'Dan Osei'], ['p-3', 'Eli For
 const PICKS = ['Regular', 'Preferred', 'Preferred', 'Backup', 'Allowed', 'Emergency']
 const SLOTS = [['07:00:00', '13:00:00'], ['09:00:00', '15:00:00'], ['13:00:00', '19:00:00'], ['19:00:00', '07:00:00']]
 
-function draftFor(weekStart, name) {
+// The tier of a pick, as the server's CompatibilityOrder; a Regular is never flagged.
+const TIER = { Preferred: 0, Backup: 1, Emergency: 2, Allowed: 3 }
+const past = (pick, reach) => pick !== 'Regular' && TIER[pick] > reach
+
+function draftFor(weekStart, name, reach = 3) {
   const full = name === 'full'
   const changes = Array.from({ length: 14 }, (_, i) => {
     const [staffId, staffName] = WORKERS[i === 5 ? 5 : i % 5]
     const [pid, participantName] = PARTICIPANTS[i % 4]
     const [startTime, endTime] = SLOTS[(i >> 2) % 4]
     const pick = PICKS[i % PICKS.length]
-    const alternates = WORKERS.filter(([id]) => id !== staffId).slice(i % 3, (i % 3) + 3).map(([id, n], k) => ({ staffId: id, staffName: n, pick: PICKS[(i + k + 1) % PICKS.length], rank: null }))
+    const alternates = WORKERS.filter(([id]) => id !== staffId).slice(i % 3, (i % 3) + 3).map(([id, n], k) => ({ staffId: id, staffName: n, pick: PICKS[(i + k + 1) % PICKS.length], rank: null, ...(past(PICKS[(i + k + 1) % PICKS.length], reach) && { needsLook: true }) }))
     return {
       shiftId: `auto-shift-${i + 1}`, participantId: pid, participantName, serviceDate: addDays(weekStart, i % 4), startTime, endTime, staffId, staffName, pick,
       rank: pick === 'Preferred' ? i % 3 + 1 : null, underGoal: i % 4 === 1,
       regularAway: i === 3 ? 'Sam Lee is away: on approved leave' : null,
       warnings: i === 6 ? [{ code: 'PUBLIC_HOLIDAY', severity: 'Warning', message: 'Public holiday: penalty rates apply.', requiresReason: false }] : [],
-      alternates,
+      alternates, ...(past(pick, reach) && { needsLook: true }),
     }
   })
   const hours = WORKERS.map(([staffId, staffName], i) => ({
@@ -48,8 +52,9 @@ function draftFor(weekStart, name) {
 }
 
 const post = [
-  ['rostering/weeks/:id/auto-roster', (weekStart, _body, searchParams) => draftFor(weekStart, searchParams && searchParams.get('fixture'))],
+  ['rostering/weeks/:id/auto-roster', (weekStart, _body, searchParams) => draftFor(weekStart, searchParams && searchParams.get('fixture'), module.exports.reach())],
   ['rostering/weeks/:id/auto-roster/apply', (_weekStart, body) => ({ applied: [...((body && body.rows) || []), ...((body && body.splits) || [])].map((r) => r.shiftId), skipped: [] })],
 ]
 
-module.exports = { post, draftFor }
+// server.js points reach at the mock settings; the default is the shipped 3.
+module.exports = { post, draftFor, reach: () => 3 }
