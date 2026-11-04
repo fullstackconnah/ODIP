@@ -216,6 +216,12 @@ describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
     expect(document.getElementById('main')?.tagName).toBe('MAIN')
   })
 
+  it('a fit-screen page gets the viewport height on main, so the footer flows below the fold', () => {
+    renderAt('/trips')
+    expect(document.getElementById('main')?.className).toContain('lg:has-[[data-fit-screen]]:h-[calc(100dvh-3rem-var(--safe-top))]')
+    expect(document.querySelector('.group\\/shell')?.className).not.toContain('h-dvh')
+  })
+
   it('gives the sidebar nav and the mobile bottom nav distinct aria-labels', () => {
     renderAt('/trips')
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()

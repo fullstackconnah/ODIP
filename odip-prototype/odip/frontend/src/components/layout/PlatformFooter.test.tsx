@@ -116,13 +116,8 @@ describe('PlatformFooter', () => {
     expect(renderFooter('shell', NONE)).toHaveClass('pb-[calc(var(--mobile-nav-h)+0.75rem)]', 'lg:pb-3')
   })
 
-  it('shell: shrinks to one thin line from lg on a fit-screen page, and the public variant has no such rule', () => {
-    const shell = renderFooter('shell', NONE)
-    expect(shell.className).toContain('lg:group-has-[[data-fit-screen]]/shell:pb-0')
-    expect(shell.innerHTML).toContain('lg:group-has-[[data-fit-screen]]/shell:hidden')
-    expect(shell.innerHTML).toContain('lg:group-has-[[data-fit-screen]]/shell:pt-0.5')
-    document.body.innerHTML = ''
-    expect(renderFooter('public', NONE).outerHTML).not.toContain('group-has')
+  it('shell: looks the same on a fit-screen page as on any other, the footer sits below the fold rather than squeezed', () => {
+    expect(renderFooter('shell', NONE).outerHTML).not.toContain('group-has')
   })
 
   it('public: one centred column, padded for the safe area only', () => {
