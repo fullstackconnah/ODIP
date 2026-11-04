@@ -14,6 +14,7 @@ export function completionFlags(item: CompletionQueueItemDto): Array<{ label: st
   if (item.incidentCount > 0) flags.push({ label: plural(item.incidentCount, 'incident'), tone: 'danger' })
   if (item.dosesWithoutOutcome > 0) flags.push({ label: `${plural(item.dosesWithoutOutcome, 'dose')} unrecorded`, tone: 'warning' })
   if (item.isOutlierVariance) flags.push({ label: 'Outlier time', tone: 'warning' })
+  if (item.offRoster) flags.push({ label: 'Off roster', tone: 'warning' })
   if (item.startWasManual) flags.push({ label: 'Manual start', tone: 'warning' })
   if (item.timesAdjusted) flags.push({ label: 'Times adjusted', tone: 'info' })
   return flags

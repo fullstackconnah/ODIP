@@ -50,6 +50,11 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>UTC. The Start stamp the check ran at.</summary>
     public DateTime? LocationCheckedAt { get; set; }
 
+    /// <summary>Why the worker started more than <see cref="ShiftTimeRules.OffRosterMinutes"/> minutes off the roster (optional, trimmed, max 500). Null: none given or not off roster.</summary>
+    public string? StartTimeReason { get; set; }
+    /// <summary>Why the worker finished more than <see cref="ShiftTimeRules.OffRosterMinutes"/> minutes off the roster (optional, trimmed, max 500). A re-Finish after a Return replaces it.</summary>
+    public string? FinishTimeReason { get; set; }
+
     /// <summary>True when Finish supplied ActualStart because Start was skipped.</summary>
     public bool StartWasManual { get; set; }
 
@@ -125,6 +130,24 @@ public class ShiftCompletion : ITenantEntity
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>The fixed off-roster line and the worker's time-reason rules (separate from the organisation's VarianceReviewMinutes).</summary>
+public static class ShiftTimeRules
+{
+    /// <summary>A start or finish more than this many whole minutes either side of the roster is "off roster". Fixed, separate from the org's VarianceReviewMinutes.</summary>
+    public const int OffRosterMinutes = 5;
+    public const int MaxReasonLength = 500;
+
+    public static bool IsOffRoster(int varianceMinutes) => Math.Abs(varianceMinutes) > OffRosterMinutes;
+
+    /// <summary>The worker's typed reason: trimmed, empty is none, cut to the column length (never a 400 on Start or Finish).</summary>
+    public static string? CleanReason(string? reason)
+    {
+        var trimmed = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        return trimmed.Length > MaxReasonLength ? trimmed[..MaxReasonLength] : trimmed;
+    }
 }
 
 /// <summary>

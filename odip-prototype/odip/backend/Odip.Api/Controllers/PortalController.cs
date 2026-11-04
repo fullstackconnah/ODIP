@@ -415,6 +415,7 @@ public class PortalController : ControllerBase
             LocationAccuracyMetres = check.AccuracyMetres,
             LocationReason = typedReason ?? check.DefaultReason,
             LocationCheckedAt = startStamp,
+            StartTimeReason = ShiftTimeRules.CleanReason(dto.StartTimeReason),
             StartWasManual = false,
             SubmittedByUserId = shift.UserId!.Value,
             StartedAt = now,
@@ -671,6 +672,9 @@ public class PortalController : ControllerBase
         completion.ActualStart = actualStart;
         completion.ActualEnd = actualEnd;
         completion.TimeAdjustmentReason = startMoved || endMoved ? reason : null;
+        // Optional notes on a start or finish more than 5 minutes off the roster: never a 400, and a re-Finish replaces the finish note.
+        completion.FinishTimeReason = ShiftTimeRules.CleanReason(dto.FinishTimeReason);
+        completion.StartTimeReason ??= ShiftTimeRules.CleanReason(dto.StartTimeReason);
         completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round((decimal)kmIn, 1, MidpointRounding.AwayFromZero) : null;
         completion.PreShiftTravelMinutes = TravelMinutes(dto.PreShiftTravelMinutes);
         completion.PreShiftTravelKilometres = TravelKm(dto.PreShiftTravelKilometres);

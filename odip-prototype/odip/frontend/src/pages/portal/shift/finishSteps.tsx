@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Flag } from 'lucide-react'
 import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/hooks'
 import { useQueueRecords } from '@/api/hooks/portal'
@@ -12,7 +12,7 @@ import { formatWithTimeZone } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
-import { rosteredInstants } from '../lib/portal'
+import { minutesWords, rosteredInstants } from '../lib/portal'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { breaksLabel, clockLabel, FINISH_STEPS, unpaidBreakMinutes, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
@@ -20,7 +20,7 @@ import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } 
 import { Fold, WaitingToSend } from './ui'
 import { plural } from '@/lib/format'
 import type { DoseTarget } from './DoseSheet'
-import type { EndDraft } from './endDraft'
+import { timeQuestions, type EndDraft } from './endDraft'
 import type { PortalFinishBlockerDto, PortalShiftDetailDto, ShiftBreakDto, ShiftNoteDto } from '@/api/types'
 
 const HANDOVER_MAX = 2000
@@ -201,6 +201,15 @@ function TravelLeg({ id, legend, help, draft, set, invalid, message }: {
   )
 }
 
+const early = (m: number) => (m < 0 ? 'early' : 'late')
+
+/** The label for the one box: the start question, the finish question, or both. */
+function timeQuestionLabel({ start, finish }: { start: number | null; finish: number | null }) {
+  // A start question (a manual or moved start) takes the general wording; a finish alone names how far off it is.
+  if (start !== null || finish === null) return 'Why are your times off roster? (optional)'
+  return `Why are you finishing ${minutesWords(finish)} ${early(finish)}? (optional)`
+}
+
 /** Step 1, Your times (SHAPE §4): change either time by up to 15 minutes with a reason, correct the breaks, add kilometres. */
 export function TimesStep({ shift, online, now, draft, set, invalid, invalidMessage }: {
   shift: PortalShiftDetailDto; online: boolean; now: Date; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; invalidMessage?: string
@@ -217,6 +226,11 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
   const worked = startIso ? Math.max(0, minutesBetween(startIso, endIso) - breakMinutes) : 0
   const say = (local: string) => clockLabel(`${local}:00`)
   const muted = 'text-xs text-[var(--color-muted-foreground)]'
+  const asks = timeQuestions(shift, draft, now)
+  const asking = asks.start !== null || asks.finish !== null
+  // Remember whether step 1 was asking about the finish, so Submit nudges only for a finish that drifted off roster after this step.
+  const finishAsked = asks.finish !== null
+  useEffect(() => { if (draft.finishAsked !== finishAsked) set({ finishAsked }) }, [draft.finishAsked, finishAsked, set])
 
   return (
     <div className="space-y-4">
@@ -244,6 +258,17 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
             aria-invalid={invalid === 'reason' || undefined} value={draft.adjustmentReason} onChange={e => set({ adjustmentReason: e.target.value })}
           />
           <p className={muted}>{draft.adjustmentReason.length} of {REASON_MAX}</p>
+        </div>
+      )}
+      {asking && (
+        <div className="space-y-1">
+          <label htmlFor="finish-time-reason" className="text-sm font-medium">{timeQuestionLabel(asks)}</label>
+          <p id="finish-time-reason-help" className={muted}>Your coordinator sees this.</p>
+          <textarea
+            id="finish-time-reason" rows={3} maxLength={REASON_MAX} className={fieldClass} aria-describedby="finish-time-reason-help"
+            value={draft.timeReason} onChange={e => set({ timeReason: e.target.value })}
+          />
+          <p className={muted}>{draft.timeReason.length} of {REASON_MAX}</p>
         </div>
       )}
       <section aria-labelledby="finish-breaks" className="space-y-2">
@@ -395,7 +420,7 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
 
 /** Step 5, Check and submit (SHAPE §4): what will be sent, grouped by step with a way back to each, then the server's answer if it refused. */
 export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, kilometres, travel, drifted, onUseSubmitTime, onChangeTimes }: {
-  shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey) => void
+  shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey, focusId?: string) => void
   moved: { start: string | null; end: string | null }; kilometres: number | null; travel: Record<TravelField, number | null>; drifted: boolean; onUseSubmitTime: () => void; onChangeTimes: () => void
 }) {
   const tz = shift.timeZoneId
@@ -425,8 +450,20 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       { label: 'Handover', value: draft.nothingToHandOver || !handover ? 'Nothing to hand over' : handover.split('\n')[0] },
     ] },
   ]
+  const finishOff = timeQuestions(shift, { ...draft, endOverride: moved.end ? utcInstantToProviderLocal(moved.end, tz) : null }, now).finish
   return (
     <div className="space-y-4">
+      {finishOff !== null && !draft.finishAsked && !draft.timeReason.trim() && (
+        <Callout
+          tone="info"
+          title={(
+            <>
+              {`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}.`}
+              <Button variant="ghost" size="lg" className="underline" onClick={() => go('times', 'finish-time-reason')}>Add a reason</Button>
+            </>
+          )}
+        />
+      )}
       {drifted && (
         <Callout
           tone="warning"

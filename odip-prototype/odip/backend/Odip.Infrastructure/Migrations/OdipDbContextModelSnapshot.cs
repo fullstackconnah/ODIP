@@ -6857,6 +6857,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("FinishTimeReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<bool>("GeolocationDeclined")
                         .HasColumnType("boolean");
 
@@ -6931,6 +6935,10 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("ShiftId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("StartTimeReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<bool>("StartWasManual")
                         .HasColumnType("boolean");
