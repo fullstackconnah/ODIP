@@ -2488,7 +2488,10 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.keyboard('{ArrowLeft}')
     expect(probe().path).toBe('?tab=health&section=behaviour-and-communication')
     await user.keyboard('{Home}')
+    // Medical holds 3 sections, so the section line sits between the strip and the panel: its three links, then the panel.
     await user.tab()
+    expect(screen.getByRole('navigation', { name: 'Sections on this page' })).toContainElement(document.activeElement as HTMLElement)
+    await user.tab(); await user.tab(); await user.tab()
     expect(screen.getByRole('tabpanel')).toContainElement(document.activeElement as HTMLElement)
     expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', subTab('Medical').id)
   })
@@ -2514,5 +2517,104 @@ describe('ParticipantDetailPage — sub-tabs', () => {
       vi.unstubAllGlobals()
       Reflect.deleteProperty(window, 'scrollY')
     }
+  })
+})
+
+describe('ParticipantDetailPage — surfacing (section line, In this profile)', () => {
+  const sectionLine = () => screen.queryByRole('navigation', { name: 'Sections on this page' })
+  const mapCard = () => screen.getByRole('list', { name: 'In this profile' })
+  const mapLines = () => within(mapCard()).getAllByRole('listitem')
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockNotes.mockReturnValue({ data: [] })
+    mockRisks.mockReturnValue({ data: [] })
+  })
+
+  it('shows the section line only on chips of 3 or more sections, linking each by hash', () => {
+    setUserRole('Admin')
+    const shown: [string, string | undefined, string[]][] = [
+      ['about', undefined, ['Identity', 'Address & Living Arrangements', 'Key Identifiers', 'Cultural Background', 'About Me']],
+      ['health', undefined, ['Emergency', 'Medical', 'Health conditions']],
+      ['daily', undefined, ['Support needs', 'Mobility and personal care', 'Equipment and overnight', 'Daily living', 'Transport and travel']],
+    ]
+    for (const [tab, section, titles] of shown) {
+      const { unmount } = renderAtTab('participant-1', tab, section)
+      expect(within(sectionLine()!).getAllByRole('link').map(a => a.textContent!.replace(/, not recorded$/, '')), tab).toEqual(titles)
+      unmount()
+    }
+    for (const [tab, section] of [['about', 'ndis-plan'], ['health', 'medications'], ['daily', 'routines'], ['people', undefined], ['records', undefined], ['funding', undefined]] as const) {
+      const { unmount } = renderAtTab('participant-1', tab, section)
+      expect(sectionLine(), `${tab}/${section}`).toBeNull()
+      unmount()
+    }
+  })
+
+  it('targets the hash of each section on the same tab, and the Typical day joins the Routines line only in the community stream', () => {
+    setUserRole('Admin')
+    renderAtTab('participant-1', 'health')
+    expect(within(sectionLine()!).getByRole('link', { name: /^Medical/ }).getAttribute('href')).toContain('?tab=health#medical')
+    cleanup()
+    renderAtTab('participant-1', 'daily', 'routines')
+    expect(sectionLine()).toBeNull()
+    cleanup()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving' }), isLoading: false })
+    renderAtTab('participant-1', 'daily', 'routines')
+    expect(within(sectionLine()!).getAllByRole('link').map(a => a.textContent!.replace(/, not recorded$/, ''))).toEqual(['Routines', 'Meals & Diet', 'Typical day'])
+  })
+
+  it('labels an empty section in the line as not recorded', () => {
+    setUserRole('Admin')
+    renderAtTab('participant-1', 'about')
+    const line = within(sectionLine()!)
+    expect(line.getByRole('link', { name: /^Cultural Background\s*, not recorded$/ })).toBeInTheDocument()
+    expect(line.getByRole('link', { name: 'Identity' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Admin', ['About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Agreements', 'Notes & records']],
+    ['Coordinator', ['About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Agreements', 'Notes & records']],
+    ['SupportWorker', ['About', 'Health & safety', 'Daily support', 'People & roster', 'Notes & records']],
+  ])('lists the tabs %s can see on Overview, and no others', (role, labels) => {
+    setUserRole(role)
+    renderAt('participant-1')
+    const visible = within(screen.getByRole('tablist', { name: 'Participant sections' })).getAllByRole('tab').map(t => t.textContent!.replace(/,\s.*$/, '').replace(/\d+$/, '')).filter(l => l !== 'Overview')
+    expect(visible).toEqual(labels)
+    const lines = mapLines().map(li => li.textContent!.replace(/\d+$/, '').replace(/,\s?not recorded/g, ''))
+    labels.forEach((label, i) => expect(lines[i], label).toContain(label.startsWith('Agreements') ? 'Agreements' : label))
+    expect(lines).toHaveLength(labels.length)
+  })
+
+  it('links the chips a role can see, and not the gated ones', () => {
+    setUserRole('SupportWorker')
+    renderAt('participant-1')
+    const hrefs = within(mapCard()).getAllByRole('link').map(a => a.getAttribute('href')!)
+    expect(hrefs.some(h => h.includes('#contacts'))).toBe(true)
+    expect(hrefs.some(h => h.includes('#roster') || h.includes('#history'))).toBe(false)
+    cleanup()
+    setUserRole('Admin')
+    renderAt('participant-1')
+    const adminHrefs = within(mapCard()).getAllByRole('link').map(a => a.getAttribute('href')!)
+    expect(adminHrefs.some(h => h.includes('#roster'))).toBe(true)
+    expect(adminHrefs.some(h => h.includes('#history'))).toBe(true)
+  })
+
+  it('shows counts equal to the tab badges', () => {
+    setUserRole('Admin')
+    mockRisks.mockReturnValue({ data: [{ isActive: true }, { isActive: true }, { isActive: false }] })
+    mockNotes.mockReturnValue({ data: [{ isArchived: false }, { isArchived: false }, { isArchived: false }, { isArchived: true }] })
+    renderAt('participant-1')
+    const badge = (name: string) => within(screen.getByRole('tab', { name: new RegExp(`^${name}`) })).queryByText(/^\d+$/)?.textContent
+    const shown = (label: string) => mapLines().find(li => li.textContent!.startsWith(label))!.querySelector('span.tabular-nums')?.firstChild?.textContent
+    expect(badge('Health & safety')).toBe('2')
+    expect(shown('Health & safety')).toBe('2')
+    expect(badge('Notes & records')).toBe('3')
+    expect(shown('Notes & records')).toBe('3')
+    // The count is spoken with its noun, as the tab badge's screen-reader text is.
+    expect(mapLines().find(li => li.textContent!.startsWith('Health & safety'))!.textContent).toContain('2 active risks')
+    expect(mapLines().find(li => li.textContent!.startsWith('Notes & records'))!.textContent).toContain('3 notes')
+    expect(badge('Daily support')).toBeUndefined()
+    expect(shown('Daily support')).toBeUndefined()
   })
 })

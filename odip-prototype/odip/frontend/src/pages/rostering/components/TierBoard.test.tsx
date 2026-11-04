@@ -162,4 +162,30 @@ describe('TierBoard', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.getByText('Ava Hill')).toBeInTheDocument()
   })
+
+  describe('compact', () => {
+    const renderCompact = () => render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TierBoard participantId="p5" participantName="Noah Fraser" compact />
+      </QueryClientProvider>,
+    )
+
+    it('stacks the columns at every width and needs no No handlers', async () => {
+      renderCompact()
+      await screen.findByText('Knows the routine')
+      expect(column('Preferred').parentElement).toHaveClass('grid-cols-1')
+      expect(column('Preferred').parentElement?.className).not.toContain('sm:grid-cols')
+    })
+
+    it('keeps No read-only: no menu on a No chip, no + Mark No, and no Mark No on a ranked chip', async () => {
+      const user = userEvent.setup()
+      renderCompact()
+      await screen.findByText('Knows the routine')
+      expect(within(column('No')).getByText('Eli Fox')).toBeInTheDocument()
+      expect(within(column('No')).queryByRole('button')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Options for Ava Hill' }))
+      expect(screen.queryByRole('option', { name: /Mark No/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Remove from list' })).toBeInTheDocument()
+    })
+  })
 })
