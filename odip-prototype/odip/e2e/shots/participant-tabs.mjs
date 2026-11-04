@@ -66,6 +66,9 @@ try {
     // Captures: every tab for this role (the numeric checks below run for the Admin only).
     for (const tab of TABS) {
       await goto(page, `/participants/p-0001?tab=${tab}`)
+      // The page never scrolls sideways (check 6), so a shifted fullPage frame is a capture artefact: reset the scroll, then wait a frame, before the shot.
+      await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('main, body, html').forEach((e) => { e.scrollLeft = 0 }) })
+      await page.waitForTimeout(200)
       await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-${tab}.png`), fullPage: vp.name === '1280' })
     }
     if (role !== 'Admin') { await context.close(); continue }
@@ -84,7 +87,7 @@ try {
     await goto(page, '/participants/p-0001?tab=agreements')
     check(`${vp.name} 1 agreements has no sub-strip`, await chipLabels(page), (await chipLabels(page)) === null)
 
-    // 5. Health and Daily (1280; a column ending short above a full-width list is a ragged end, so only same-width cards count): on every chip no card is followed by more than 32px of empty space in its column, and no bare "Not recorded:" text.
+    // 5. Health and Daily (1280; a column ending short above a full-width list is a ragged end, so only same-width cards count): on every chip each CSS-column run has its columns ending within one card height of each other, and no bare "Not recorded:" text.
     if (vp.name === '1280') for (const tab of ['health', 'daily']) {
       await goto(page, `/participants/p-0001?tab=${tab}`)
       const n = (await chipLabels(page)).length
@@ -97,18 +100,45 @@ try {
         const r = await page.evaluate(() => {
           const panel = document.querySelector('[role="tabpanel"]')
           const secs = [...panel.querySelectorAll('section[id]')].filter((s) => !s.parentElement.closest('section[id]')).map((s) => s.getBoundingClientRect())
+          // Each CSS-column run: the last cards of its columns end within the tallest card height of each other.
           let worst = 0
-          for (const a of secs) {
-            const below = secs.filter((b) => b !== a && Math.abs(b.left - a.left) < 4 && b.top >= a.bottom - 1).sort((x, y) => x.top - y.top)[0]
-            if (below && Math.abs(below.width - a.width) < 4) worst = Math.max(worst, Math.round(below.top - a.bottom))
+          for (const run of panel.querySelectorAll('[class*="columns:"]')) {
+            const rs = [...run.querySelectorAll('section[id]')].filter((x) => x.parentElement.closest('section[id]') == null).map((x) => x.getBoundingClientRect())
+            const ends = {}
+            for (const r of rs) ends[Math.round(r.left)] = Math.max(ends[Math.round(r.left)] ?? 0, r.bottom)
+            const v = Object.values(ends)
+            if (v.length > 1) worst = Math.max(worst, Math.round(Math.max(...v) - Math.min(...v)) - Math.round(Math.max(...rs.map((r) => r.height))))
           }
           const w = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT)
           let bare = 0
           for (let t = w.nextNode(); t; t = w.nextNode()) if (/Not recorded:/.test(t.textContent) && !t.parentElement.closest('.rounded-md')) bare++
           return { worst, bare }
         })
-        check(`${vp.name} 5 ${tab} chip ${i} gap under a card`, r.worst, r.worst <= 32)
+        check(`${vp.name} 5 ${tab} chip ${i} column ends within a card height (excess over it)`, r.worst, r.worst <= 0)
         check(`${vp.name} 5 ${tab} chip ${i} bare Not recorded`, r.bare, r.bare === 0)
+      }
+    }
+
+    // 6. Nothing but the chip strip scrolls sideways: after load and after each chip, the page, <main> and every ancestor of <main> sit at scrollLeft 0.
+    for (const tab of Object.keys(CHIPS)) {
+      await goto(page, `/participants/p-0001?tab=${tab}`)
+      await page.waitForTimeout(500)
+      const sideways = () => page.evaluate(() => {
+        const bad = document.scrollingElement.scrollLeft ? ['page=' + document.scrollingElement.scrollLeft] : []
+        for (let e = document.querySelector('main'); e; e = e.parentElement) if (e.scrollLeft) bad.push(`${e.tagName}.${String(e.className).slice(0, 30)}=${e.scrollLeft}`)
+        return bad
+      })
+      const s0 = await sideways()
+      check(`${vp.name} 6 ${tab} load scrollLeft`, s0, s0.length === 0)
+      const n = (await chipLabels(page))?.length ?? 0
+      for (let i = 0; i < n; i++) {
+        await page.evaluate((i) => {
+          const strip = [...document.querySelectorAll('[role="tablist"]')].find((l) => l.getAttribute('aria-label') !== 'Participant sections')
+          strip.querySelectorAll('[role="tab"]')[i].click()
+        }, i)
+        await page.waitForTimeout(400)
+        const s = await sideways()
+        check(`${vp.name} 6 ${tab} chip ${i} scrollLeft`, s, s.length === 0)
       }
     }
 
