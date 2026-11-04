@@ -413,6 +413,7 @@ export function RestrictivePracticeStep({
           </p>
         </div>
       )}
+      {isEdit && <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">Authorisation and behaviour support plan: set when reported.</p>}
     </Card>
   )
 }

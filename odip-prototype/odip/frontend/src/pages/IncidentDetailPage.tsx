@@ -1,62 +1,42 @@
-import { useParams, Link } from 'react-router-dom'
-import { Pill, CalendarClock, FileText } from 'lucide-react'
-import { useIncident } from '@/api/hooks'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useParams } from 'react-router-dom'
+import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
+import type { AxiosError } from 'axios'
+import { useIncident, useStaff, useTrips, useUpdateIncident } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
-import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { PageState } from '@/components/PageState'
-import { isNotFoundError } from '@/lib/httpStatus'
-import { FactList } from '@/components/FactList'
+import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
-import { formatWallClock } from '@/lib/wallClock'
-import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
-import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
-import { IncidentReviewCard } from './incidents/IncidentReviewCard'
-import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
+import { isNotFoundError } from '@/lib/httpStatus'
+import { extractErrorMessage } from '@/lib/utils'
+import { toDatetimeLocalValue } from '@/lib/incidentPrefill'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS } from '@/api/types/enums'
 import type { IncidentDetailDto } from '@/api/types/incidents'
 import { retryingAfterError } from '@/lib/queryPhase'
-import { reportingDueLines } from './incidents/reportingDue'
-import { emergencyServiceEntries, parseEmergencyServices } from './incidents/emergencyServices'
+import { IncidentReviewCard } from './incidents/IncidentReviewCard'
+import { BasicsCards, ComplianceCard, DetailsCards, LinkedRecordsCard, PageFoot, RpCard, WitnessesCard, type CardEdit } from './incidents/IncidentViewCards'
+import { incidentResolver, type IncidentFormData } from './incidents/incidentFormSchema'
+import {
+  GROUP_LABELS, INCIDENT_SERVICE_TYPES, STEP_FIELDS, buildEditValues, stepsFor, toUpdateBody, typeChangeNote,
+  type GroupKey, type StepKey,
+} from './incidents/incidentEditForm'
+import { BasicsStep } from './incidents/steps/BasicsStep'
+import { RestrictivePracticeStep } from './incidents/steps/RestrictivePracticeStep'
+import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
+import { WitnessesStep } from './incidents/steps/WitnessesStep'
+import { ComplianceStep } from './incidents/steps/ComplianceStep'
 
-/**
- * Connection map: a small local chip for a shift note's flagged categories — the portal's own
- * ShiftNotesSection/ShiftSlideOver only ever render this as a joined text sentence
- * (formatFlaggedCategoryList), not as a reusable exported chip component, so this is a
- * purpose-built one rather than an import from the portal (which owns different, larger,
- * page-specific components not meant to be imported cross-domain).
- */
-function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
-  return (
-    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] capitalize">
-      {SHIFT_NOTE_FLAG_LABELS[category]}
-    </span>
-  )
-}
-
-/** One line per service that attended ("Police · Sgt Jane Doe · Ref 2611-0042"), then the other details; an older report with no services shows its text, or "Called". */
-function EmergencyServicesValue({ incident }: { incident: IncidentDetailDto }) {
-  const lines = emergencyServiceEntries(parseEmergencyServices(incident.emergencyServices), incident)
-  const details = incident.emergencyServicesDetails?.trim()
-  if (!lines.length && !details) return <>Called</>
-  return (
-    <div className="flex flex-col gap-1">
-      {lines.map((e) => <span key={e.service}>{[e.service, e.name].filter(Boolean).join(' · ')}{e.ref && <>{' · '}<span className="whitespace-nowrap">Ref {e.ref}</span></>}</span>)}
-      {details && <span className="whitespace-pre-wrap">{details}</span>}
-    </div>
-  )
-}
+type Editing = GroupKey | 'review' | null
 
 export default function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const pageQuery = useIncident(id)
   const { data: incident, isLoading, isError, error, refetch } = pageQuery
-  // PUT /incidents/:id is Admin, Coordinator and SuperAdmin only, the roles canWrite admits.
-  const { canWrite, canReadIncidentReview, canWriteIncidentReview } = usePermissions()
 
   if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="incident" />
   if (!incident) {
@@ -64,12 +44,92 @@ export default function IncidentDetailPage() {
       ? <PageState kind="error" noun="incident" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
   }
+  return <IncidentView incident={incident} fetching={pageQuery.isFetching} onStale={() => { void refetch() }} />
+}
 
-  const hasContext = !!(incident.medicationContext || incident.shiftContext || incident.shiftNoteContext)
-  const shiftNoteFlags = incident.shiftNoteContext ? incident.shiftNoteContext.flaggedCategories : []
+/** Mounted only while a part is open, so a page that is only being read needs no data router. */
+function LeaveGuard({ when }: { when: boolean }) {
+  return useUnsavedChangesWarning(when).dialog
+}
+
+/**
+ * The whole incident, top to bottom. Admins and Coordinators (PUT /incidents/:id is Admin, Coordinator and SuperAdmin, the roles canWrite admits)
+ * edit one part at a time: the part's cards are swapped in place for the wizard's own step components, fed by one form seeded from the incident
+ * as it is now, with a Save of their own. Every save sends the full incident (toUpdateBody) with the `updatedAt` the part was opened on.
+ */
+function IncidentView({ incident, fetching, onStale }: { incident: IncidentDetailDto; fetching: boolean; onStale: () => void }) {
+  // IC7: Admin writes the review, Coordinator reads it, nobody else gets the section (the server strips the fields too).
+  const { canWrite, canReadIncidentReview, canWriteIncidentReview } = usePermissions()
+  const form = useForm<IncidentFormData>({ resolver: incidentResolver, defaultValues: buildEditValues(incident) })
+  const [editing, setEditing] = useState<Editing>(null)
+  // The incident as the open part was seeded from: its updatedAt is the save's stale-form token, so a retry after a 409 fails again until reopened.
+  const [seed, setSeed] = useState(incident)
+  const [saving, setSaving] = useState(false)
+  const [reviewDirty, setReviewDirty] = useState(false)
+  const [switchTo, setSwitchTo] = useState<{ target: Editing; card: string } | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+  const openerCard = useRef('')
+  const focusBack = useRef('')
+
+  const type = useWatch({ control: form.control, name: 'incidentType' })
+  const participant = useWatch({ control: form.control, name: 'involvedParticipantId' })
+  const dirty = editing === 'review' ? reviewDirty : editing !== null && form.formState.isDirty
+  const busy = saving || fetching
+  const steps: StepKey[] = editing && editing !== 'review' ? stepsFor(editing, seed, { incidentType: type, involvedParticipantId: participant }) : []
+
+  const begin = (target: Editing, card: string) => {
+    openerCard.current = card
+    if (target && target !== 'review') {
+      setSeed(incident)
+      form.reset(buildEditValues(incident))
+    }
+    setEditing(target)
+  }
+  // Another part is already open: with changes it asks first, without it just swaps.
+  const request = (target: Editing, card: string) => {
+    if (editing && dirty) setSwitchTo({ target, card })
+    else begin(target, card)
+  }
+  const close = (saved: boolean) => {
+    if (saved && editing && editing !== 'review') {
+      const label = GROUP_LABELS[editing]
+      setAnnouncement(`${label.charAt(0).toUpperCase()}${label.slice(1)} saved.`)
+    }
+    focusBack.current = openerCard.current
+    setEditing(null)
+  }
+
+  // Focus goes back to the Edit that opened the part, once it is enabled again (it stays disabled until the refetch lands).
+  useEffect(() => {
+    if (editing !== null || busy || !focusBack.current) return
+    document.querySelector<HTMLElement>(`[data-edit-card="${focusBack.current}"]`)?.focus()
+    focusBack.current = ''
+  }, [editing, busy])
+
+  const edit: CardEdit = { canEdit: canWrite, busy: busy || editing === 'review', onEdit: (group, card) => request(group, card) }
+  const region = editing && editing !== 'review' && (
+    <IncidentEditRegion key={editing} incident={incident} seed={seed} group={editing} steps={steps} form={form} onClose={close} onSavingChange={setSaving} onStale={onStale} />
+  )
+  // The steps are in page order and contiguous, so the region takes the first one's place and the rest drop out.
+  const slot = (key: StepKey, view: ReactNode) => (!steps.includes(key) ? view : key === steps[0] ? region : null)
+
+  const switchLabel = editing === 'review' ? 'the review' : editing ? GROUP_LABELS[editing] : ''
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {editing && <LeaveGuard when={dirty} />}
+      <p role="status" className="sr-only">{announcement}</p>
+      <ConfirmDialog
+        open={switchTo !== null}
+        title="Discard your changes?"
+        message={`Your changes to ${switchLabel} haven't been saved.`}
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        focusCancel
+        onConfirm={() => { if (switchTo) begin(switchTo.target, switchTo.card); setSwitchTo(null) }}
+        onCancel={() => setSwitchTo(null)}
+      />
+
       <div className="flex items-start gap-2">
         <BackButton to="/incidents" label="incidents" variant="icon" className="mt-1" />
         <div className="flex-1 min-w-0">
@@ -85,125 +145,135 @@ export default function IncidentDetailPage() {
                 </span>
               </div>
             }
-            action={canWrite && (
-              <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
-                Edit
-              </Button>
-            )}
           />
         </div>
       </div>
 
-      <Card>
-        <FactList
-          items={[
-            { label: 'Date & time', value: <span className="tabular-nums">{formatWallClock(incident.incidentDateTime, { dateStyle: 'medium', timeStyle: 'short' })}</span> },
-            { label: 'Location', value: incident.location || '—' },
-            { label: 'Reported by', value: incident.reportedByName || '—' },
-            ...(incident.tripInstanceId && incident.tripName ? [{ label: 'Trip', value: <Link to={`/trips/${incident.tripInstanceId}`} className="underline">{incident.tripName}</Link> }] : []),
-            { label: 'NDIS Commission', value: <ReportingDue incident={incident} /> },
-            ...(incident.qscReferenceNumber ? [{ label: 'NDIS Commission reference', value: incident.qscReferenceNumber }] : []),
-            ...(incident.wereEmergencyServicesCalled ? [{ label: 'Emergency services', value: <EmergencyServicesValue incident={incident} /> }] : []),
-            { label: 'Description', value: <span className="whitespace-pre-wrap">{incident.description}</span> },
-          ]}
+      {slot('details', <DetailsCards incident={incident} edit={edit} />)}
+      {slot('basics', <BasicsCards incident={incident} edit={edit} />)}
+      {slot('rp', incident.incidentType === 'RestrictivePracticeUse' && <RpCard incident={incident} edit={edit} />)}
+      {slot('witnesses', <WitnessesCard incident={incident} edit={edit} />)}
+      {slot('compliance', <ComplianceCard incident={incident} edit={edit} />)}
+
+      {canReadIncidentReview && (
+        <IncidentReviewCard
+          incident={incident}
+          canEdit={canWriteIncidentReview && !busy}
+          editing={editing === 'review'}
+          onEditingChange={(open) => (open ? request('review', 'Review') : setEditing(null))}
+          onDirtyChange={setReviewDirty}
         />
-      </Card>
-
-      {/* IC7: Admin writes the review, Coordinator reads it, nobody else gets the section (the server strips the fields too). */}
-      {canReadIncidentReview && <IncidentReviewCard incident={incident} canEdit={canWriteIncidentReview} />}
-
-      {/* Read-only: the practice as the incident recorded it, and the authorisation determined when it was reported (or lowered since). */}
-      {incident.incidentType === 'RestrictivePracticeUse' && (
-        <Card title="Restrictive practice">
-          <FactList
-            items={[
-              { label: 'Type', value: incident.restrictivePracticeType ? RESTRICTIVE_PRACTICE_TYPE_LABELS[incident.restrictivePracticeType] : '—' },
-              incident.restrictivePracticeId
-                ? { label: 'Linked practice', value: incident.restrictivePracticeDescription || '—' }
-                : { label: 'Practice not on the register', value: <span className="whitespace-pre-wrap">{incident.unapprovedRestrictivePracticeDetails || '—'}</span> },
-              { label: 'Authorisation', value: incident.isRestrictivePracticeAuthorised == null ? 'Not determined' : <RpAuthorisationBadge authorised={incident.isRestrictivePracticeAuthorised} /> },
-              ...(incident.restrictivePracticeUseVaried == null ? [] : [{ label: 'Behaviour support plan', value: incident.restrictivePracticeUseVaried ? 'Varied from the behaviour support plan' : 'Used as set out in the behaviour support plan' }]),
-            ]}
-          />
-        </Card>
       )}
 
-      {/* Connection map: only rendered when the incident is actually linked to a medication
-          administration, a shift, or a shift note — a bare incident (the common case) shows no
-          empty panel. */}
-      {hasContext && (
-        <Card className="space-y-3">
-          <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Context</h2>
-
-          {incident.medicationContext && (
-            <div className="flex items-start gap-3">
-              <Pill className="w-5 h-5 text-[var(--color-muted-foreground)] shrink-0 mt-0.5" aria-hidden="true" />
-              <div className="space-y-0.5 text-sm">
-                <p className="font-medium text-[var(--color-foreground)]">
-                  {incident.medicationContext.medicationName} · {ADMIN_STATUS_LABELS[incident.medicationContext.status]}
-                </p>
-                <p className="text-[var(--color-muted-foreground)]">
-                  {incident.medicationContext.administeredAt
-                    ? formatWithTimeZone(incident.medicationContext.administeredAt, null, { dateStyle: 'medium', timeStyle: 'short' })
-                    : 'Not administered'}
-                  {incident.medicationContext.recordedByName ? ` · ${incident.medicationContext.recordedByName}` : ''}
-                </p>
-                {incident.involvedParticipantId && (
-                  <Link
-                    to={`/participants/${incident.involvedParticipantId}?tab=medications`}
-                    className="inline-block text-sm font-medium text-[var(--color-primary)] hover:underline"
-                  >
-                    Open medications
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          {incident.shiftContext && (
-            <div className="flex items-start gap-3">
-              <CalendarClock className="w-5 h-5 text-[var(--color-muted-foreground)] shrink-0 mt-0.5" aria-hidden="true" />
-              <div className="space-y-0.5 text-sm">
-                <p className="font-medium text-[var(--color-foreground)]">
-                  <span className="tabular-nums">{formatDateAu(incident.shiftContext.date)} · {incident.shiftContext.startTime}–{incident.shiftContext.endTime}</span>
-                </p>
-                <p className="text-[var(--color-muted-foreground)]">
-                  {incident.shiftContext.participantName}
-                  {incident.shiftContext.staffName ? ` · ${incident.shiftContext.staffName}` : ''}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {incident.shiftNoteContext && (
-            <div className="flex items-start gap-3">
-              <FileText className="w-5 h-5 text-[var(--color-muted-foreground)] shrink-0 mt-0.5" aria-hidden="true" />
-              <div className="space-y-1.5 text-sm">
-                <p className="text-[var(--color-foreground)]">"{incident.shiftNoteContext.excerpt}"</p>
-                {shiftNoteFlags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {shiftNoteFlags.map((c) => <FlagChip key={c} category={c} />)}
-                  </div>
-                )}
-                <p className="tabular-nums text-[var(--color-muted-foreground)]">{formatDateAu(incident.shiftNoteContext.createdAt)}</p>
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
+      <LinkedRecordsCard incident={incident} />
+      <PageFoot incident={incident} />
     </div>
   )
 }
 
-/** The due lines, worked out at render from the stored instants (no timers); overdue is words plus the danger colour, never colour alone. */
-function ReportingDue({ incident }: { incident: IncidentDetailDto }) {
-  const lines = reportingDueLines(incident, new Date())
-  if (lines.length === 0) return <span role="img" aria-label="No reporting deadline">{'\u2014'}</span>
+function saveErrorMessage(err: unknown, label: string): string {
+  if ((err as AxiosError)?.response?.status === 403) return "You don't have permission to change this incident."
+  return extractErrorMessage(err, `Couldn't save ${label}. Try again.`)
+}
+
+/** The open part: its step components, the error line and the Save row, in place of its view cards. */
+function IncidentEditRegion({ incident, seed, group, steps, form, onClose, onSavingChange, onStale }: {
+  incident: IncidentDetailDto
+  seed: IncidentDetailDto
+  group: GroupKey
+  steps: StepKey[]
+  form: UseFormReturn<IncidentFormData>
+  onClose: (saved: boolean) => void
+  onSavingChange: (saving: boolean) => void
+  onStale: () => void
+}) {
+  const update = useUpdateIncident()
+  const { data: staff = [] } = useStaff()
+  const { data: trips = [] } = useTrips()
+  const regionRef = useRef<HTMLFormElement>(null)
+  const { control, register, setValue, getValues, formState: { errors } } = form
+  const w = useWatch({ control }) as Partial<IncidentFormData>
+
+  useEffect(() => {
+    regionRef.current?.querySelector<HTMLElement>('input:not([type=hidden]), textarea, select, button')?.focus()
+    regionRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [])
+  useEffect(() => { onSavingChange(update.isPending); return () => onSavingChange(false) }, [update.isPending, onSavingChange])
+
+  const save = async () => {
+    const fields = [...new Set(steps.flatMap((s) => STEP_FIELDS[s]))]
+    if (!(await form.trigger(fields, { shouldFocus: true }))) return
+    try {
+      const res = await update.mutateAsync({ id: seed.id, data: toUpdateBody(seed, getValues(), group) })
+      if (res.success) onClose(true)
+    } catch (err) {
+      // Someone else saved first: fetch their version so reopening shows it. The form keeps what was typed.
+      if ((err as AxiosError)?.response?.status === 409) onStale()
+    }
+  }
+
   return (
-    <div className="space-y-0.5">
-      {lines.map((l) => (
-        <p key={l.text} className={l.tone === 'overdue' ? 'text-[var(--color-destructive)] font-medium' : l.tone === 'muted' ? 'text-xs text-[var(--color-muted-foreground)]' : undefined}>{l.text}</p>
-      ))}
-    </div>
+    <form
+      ref={regionRef}
+      data-editing
+      data-group={group}
+      noValidate
+      onSubmit={(e) => { e.preventDefault(); void save() }}
+      className="flex flex-col gap-[var(--section-gap)]"
+    >
+      {steps.map((s) => {
+        switch (s) {
+          case 'details':
+            return (
+              <IncidentDetailsStep
+                key={s} register={register} control={control} setValue={setValue} errors={errors}
+                incidentType={w.incidentType} wereEmergencyServicesCalled={w.wereEmergencyServicesCalled} emergencyServices={w.emergencyServices}
+              />
+            )
+          case 'basics':
+            return (
+              <BasicsStep
+                key={s} register={register} errors={errors} setValue={setValue}
+                serviceType={w.serviceType} incidentType={w.incidentType} severity={w.severity} tripInstanceId={w.tripInstanceId}
+                involvedParticipantId={w.involvedParticipantId} reportedByStaffId={w.reportedByStaffId} involvedStaffId={w.involvedStaffId}
+                trips={trips} staff={staff} incidentServiceTypes={INCIDENT_SERVICE_TYPES}
+                typeNote={typeChangeNote(seed, { incidentType: w.incidentType })}
+              />
+            )
+          case 'rp':
+            return (
+              <RestrictivePracticeStep
+                key={s} getValues={getValues} setValue={setValue} errors={errors}
+                involvedParticipantId={w.involvedParticipantId} restrictivePracticeType={w.restrictivePracticeType} restrictivePracticeId={w.restrictivePracticeId}
+                unapprovedRestrictivePracticeDetails={w.unapprovedRestrictivePracticeDetails} usedWithoutAuthorisation={w.usedWithoutAuthorisation}
+                rpUseVaried={w.rpUseVaried} description={w.description} incidentDateTime={w.incidentDateTime} isEdit existingIncident={seed}
+              />
+            )
+          case 'witnesses':
+            return (
+              <WitnessesStep
+                key={s} control={control} errors={errors} reportedByStaffId={w.reportedByStaffId} staff={staff}
+                existingWitnesses={seed.witnesses} isEdit addedHint="Will be asked to approve after you save" confirmRemoveAnswered
+              />
+            )
+          case 'compliance':
+            return (
+              <ComplianceStep
+                key={s} register={register} setValue={setValue} errors={errors} status={w.status}
+                awareAtMax={toDatetimeLocalValue(new Date().toISOString(), incident.timeZoneId)} severity={w.severity} incidentType={w.incidentType}
+                isRestrictivePracticeAuthorised={seed.isRestrictivePracticeAuthorised} restrictivePracticeUseVaried={seed.restrictivePracticeUseVaried}
+                reportableClass={w.reportableClass} commissionFinalReportRequested={w.commissionFinalReportRequested}
+                familyNotified={w.familyNotified} supportCoordinatorNotified={w.supportCoordinatorNotified}
+              />
+            )
+        }
+      })}
+
+      {update.isError && <Callout tone="error">{saveErrorMessage(update.error, GROUP_LABELS[group])}</Callout>}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button variant="ghost" size="md" onClick={() => onClose(false)} disabled={update.isPending} className="w-full sm:w-auto">Cancel</Button>
+        <Button type="submit" size="md" disabled={update.isPending} className="w-full sm:w-auto">{update.isPending ? 'Saving…' : 'Save'}</Button>
+      </div>
+    </form>
   )
 }

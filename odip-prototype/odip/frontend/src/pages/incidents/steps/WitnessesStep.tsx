@@ -10,10 +10,11 @@ import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { StaffListDto } from '@/api/types/staff'
 import type { IncidentWitnessDto } from '@/api/types/incidents'
 import type { IncidentFormData } from '../incidentFormSchema'
-import type { Tone } from '@/lib/tone'
+import { WITNESS_TYPE_COLOR_MAP } from '../witnessColors'
 import { X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export type WitnessesStepProps = {
   control: Control<IncidentFormData>
@@ -25,12 +26,13 @@ export type WitnessesStepProps = {
    * sends WitnessStatus back — see incidentFormSchema's witnesses[] shape). */
   existingWitnesses: IncidentWitnessDto[]
   isEdit: boolean
+  /** What an added staff row says in the status column; the create wizard's default is about submitting the report. */
+  addedHint?: string
+  /** Ask before removing a staff witness who has answered: saving deletes their response and statement for good. */
+  confirmRemoveAnswered?: boolean
 }
 
 type WitnessRow = { existingId?: string; witnessUserId: string | null; witnessName: string }
-
-// Staff and External are categories of witness, not states: info and neutral.
-const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 'neutral' }
 
 /**
  * IN-7 — wizard step "Witnesses". A single `witnesses[]` field array holds both staff (approvable
@@ -42,12 +44,13 @@ const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 
  * something the WITNESS supplies themself when they respond on the portal, never something the
  * reporter fills in at creation/edit time (see PortalWitnessApprovalsPage).
  */
-export function WitnessesStep({ control, errors, reportedByStaffId, staff, existingWitnesses, isEdit }: WitnessesStepProps) {
+export function WitnessesStep({ control, errors, reportedByStaffId, staff, existingWitnesses, isEdit, addedHint = 'Will be asked to approve after this report is submitted', confirmRemoveAnswered }: WitnessesStepProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'witnesses' })
 
   const [mode, setMode] = useState<'staff' | 'external'>('staff')
   const [staffId, setStaffId] = useState('')
   const [externalName, setExternalName] = useState('')
+  const [removing, setRemoving] = useState<number | null>(null)
 
   // A witness can't approve their own report they filed — exclude the reporter from the picker.
   const staffItems = staff
@@ -68,6 +71,16 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
     }
   }
 
+  const answered = (index: number) => {
+    const w = existingWitnesses.find((e) => e.id === (fields[index] as WitnessRow).existingId)
+    return w && (w.witnessStatus === 'Approved' || w.witnessStatus === 'Declined') ? w : undefined
+  }
+  const requestRemove = (index: number) => {
+    if (confirmRemoveAnswered && answered(index)) setRemoving(index)
+    else remove(index)
+  }
+  const pending = removing === null ? undefined : answered(removing)
+
   const rows = fields as (WitnessRow & { id: string })[]
 
   const columns: Column<WitnessRow & { id: string }>[] = [
@@ -87,7 +100,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
         // on why the two are deliberately different fields).
         const persisted = isEdit && row.existingId ? existingWitnesses.find((w) => w.id === row.existingId) : undefined
         if (!persisted) {
-          return <span className="text-xs text-[var(--color-muted-foreground)]">Will be asked to approve after this report is submitted</span>
+          return <span className="text-xs text-[var(--color-muted-foreground)]">{addedHint}</span>
         }
         return (
           <div className="flex flex-col gap-1">
@@ -104,7 +117,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
       header: '',
       align: 'right',
       render: (_row, rowIndex) => (
-        <Button variant="ghost-danger" iconOnly onClick={() => remove(rowIndex)} aria-label="Remove witness">
+        <Button variant="ghost-danger" iconOnly onClick={() => requestRemove(rowIndex)} aria-label="Remove witness">
           <X className="w-4 h-4" aria-hidden />
         </Button>
       ),
@@ -160,6 +173,17 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
           emptyMessage="No witnesses added yet"
         />
       </Card>
+      <ConfirmDialog
+        open={pending !== undefined}
+        variant="danger"
+        title={`Remove ${pending?.witnessName}?`}
+        message={`${pending?.witnessName} has ${pending?.witnessStatus === 'Declined' ? 'declined' : 'approved'} this report. Removing them deletes their response and statement when you save. This can't be undone.`}
+        confirmLabel="Remove witness"
+        cancelLabel="Keep witness"
+        focusCancel
+        onConfirm={() => { if (removing !== null) remove(removing); setRemoving(null) }}
+        onCancel={() => setRemoving(null)}
+      />
     </div>
   )
 }
