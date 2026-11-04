@@ -17,7 +17,7 @@ const { mockUseStaff, mockUseSettings, providerSettings, mockMutate, mockApiGet,
 vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGet: mockApiGet }))
 vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
-  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false }),
   useStaff: mockUseStaff,
   useUnclaimedShifts: () => ({ count: 0, participants: 0, loading: false, error: false }),
   useSettings: mockUseSettings,
