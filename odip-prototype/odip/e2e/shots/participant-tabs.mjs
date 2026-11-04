@@ -69,7 +69,7 @@ try {
       // The page never scrolls sideways (check 6), so a shifted fullPage frame is a capture artefact: reset the scroll, then wait a frame, before the shot.
       await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('main, body, html').forEach((e) => { e.scrollLeft = 0 }) })
       await page.waitForTimeout(200)
-      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-${tab}.png`), fullPage: vp.name === '1280' })
+      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-${tab}.png`), fullPage: false })
     }
     if (role !== 'Admin') { await context.close(); continue }
 
@@ -119,6 +119,7 @@ try {
       }
     }
 
+    const geos = []
     // 6. Nothing but the chip strip scrolls sideways: after load and after each chip, the page, <main> and every ancestor of <main> sit at scrollLeft 0.
     for (const tab of Object.keys(CHIPS)) {
       await goto(page, `/participants/p-0001?tab=${tab}`)
@@ -130,6 +131,13 @@ try {
       })
       const s0 = await sideways()
       check(`${vp.name} 6 ${tab} load scrollLeft`, s0, s0.length === 0)
+      // 7. Live geometry (not from the image): h1 left, main left, first tab left, scrollWidth, clientWidth; every tab and chip must match.
+      const geo = () => page.evaluate(() => {
+        const l = (e) => (e ? Math.round(e.getBoundingClientRect().left * 10) / 10 : null)
+        const el = document.documentElement
+        return { h1: l(document.querySelector('h1')), main: l(document.querySelector('main')), tab: l(document.querySelector('[role="tab"]')), sw: el.scrollWidth, cw: el.clientWidth }
+      })
+      if (vp.name === '1280') { const g = await geo(); geos.push(g); check(`${vp.name} 7 ${tab} load geometry`, g, g.sw === g.cw) }
       const n = (await chipLabels(page))?.length ?? 0
       for (let i = 0; i < n; i++) {
         await page.evaluate((i) => {
@@ -139,8 +147,11 @@ try {
         await page.waitForTimeout(400)
         const s = await sideways()
         check(`${vp.name} 6 ${tab} chip ${i} scrollLeft`, s, s.length === 0)
+        if (vp.name === '1280') { const g = await geo(); geos.push(g); check(`${vp.name} 7 ${tab} chip ${i} geometry`, g, g.sw === g.cw) }
       }
     }
+
+    if (vp.name === '1280') check(`${vp.name} 7 h1 left identical on every tab and chip (within 1 px)`, [...new Set(geos.map((g) => g.h1))], geos.length > 0 && Math.max(...geos.map((g) => g.h1 ?? NaN).filter(Number.isFinite)) - Math.min(...geos.map((g) => g.h1 ?? NaN).filter(Number.isFinite)) <= 1)
 
     // 2. A nested section= selects the merged chip, keeps the URL as written, and brings the card into view.
     const nested = [
