@@ -272,7 +272,7 @@ export default function RosterBoardPage() {
   useEffect(() => {
     if (!selecting) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role="alertdialog"], [role="dialog"]')) return
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role=alertdialog], [role=dialog]')) return
       returnFocusToSelect.current = true
       setSelection(null)
     }
@@ -751,14 +751,15 @@ export default function RosterBoardPage() {
       {plural(waiting.length, 'agreement')} waiting
     </Button>
   )
-  const publishButton = canWrite && publishable.length > 0 && <Button size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
+  const publishButton = canWrite && publishable.length > 0 && <Button key="publish-week" size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
   const selectButton = canWrite && publishable.length >= 2 && <Button ref={focusSelectButton} variant="secondary" size="md" onClick={() => setSelection({ key: toolbarKey, ids: new Set() })}>Select shifts</Button>
   const allChosen = chosen.length === publishable.length
   const selectActions = (
     <>
       <Button variant="ghost" size="md" onClick={() => setSelection(prev => (prev ? { ...prev, ids: allChosen ? new Set() : new Set(publishable.map(s => s.id)) } : prev))}>{allChosen ? 'Clear' : 'Select all'}</Button>
       <Button variant="ghost" size="md" onClick={leaveSelecting}>Cancel</Button>
-      <Button size="md" disabled={chosen.length === 0} onClick={() => setPublishOpen(true)}>{chosen.length === 0 ? 'Publish' : `Publish ${plural(chosen.length, 'shift')}`}</Button>
+      {/* Own key: the dialog hands focus back to its opener, and without it React would reuse this very button node for "Publish week" once the selection closes, stealing focus from the week heading. */}
+      <Button key="publish-chosen" size="md" disabled={chosen.length === 0} onClick={() => setPublishOpen(true)}>{chosen.length === 0 ? 'Publish' : `Publish ${plural(chosen.length, 'shift')}`}</Button>
     </>
   )
   // The drafts banner is the Publish bar (owner, 2026-11-04): the foot of the page, pinned, so Publish week stays in reach while the board scrolls. A reader sees it without the button. It sits in the page flow after the board, so it never covers the last row; bg-background because rows scroll under it.
