@@ -426,11 +426,15 @@ public class IncidentsController : ControllerBase
         return Ok(ApiResponse<PagedResult<IncidentListDto>>.Ok(result));
     }
 
+    /// <summary>Who may read the review fields: the office roles. Support workers and read-only users never get them.</summary>
+    private bool CanReadReview => User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true;
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<IncidentDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
         var tenantId = await _db.IncidentReports.Where(x => x.Id == id).Select(x => x.TenantId).FirstOrDefaultAsync(ct);
         var clock = await ProviderClockAsync(tenantId, ct);
+        var seesReview = CanReadReview;
         var item = await _db.IncidentReports
             .Include(i => i.TripInstance)
             .Include(i => i.ReportedByUser)
@@ -520,12 +524,13 @@ public class IncidentsController : ControllerBase
                 CommissionFinalReportRequested = i.CommissionFinalReportRequested,
                 CommissionFinalReportedAt = i.CommissionFinalReportedAt,
                 TimeZoneId = clock.Tz.Id,
-                ReviewedByStaffId = i.ReviewedByUserId,
-                ReviewedByName = i.ReviewedByUser != null
+                // IC7: the review is office-only; the server strips it for everyone else, the page's own check is only cosmetic.
+                ReviewedByStaffId = seesReview ? i.ReviewedByUserId : null,
+                ReviewedByName = seesReview && i.ReviewedByUser != null
                     ? (i.ReviewedByUser.FirstName + " " + i.ReviewedByUser.LastName).Trim() : null,
-                ReviewedAt = i.ReviewedAt,
-                ReviewNotes = i.ReviewNotes,
-                CorrectiveActions = i.CorrectiveActions,
+                ReviewedAt = seesReview ? i.ReviewedAt : null,
+                ReviewNotes = seesReview ? i.ReviewNotes : null,
+                CorrectiveActions = seesReview ? i.CorrectiveActions : null,
                 ResolvedAt = i.ResolvedAt,
                 FamilyNotified = i.FamilyNotified,
                 FamilyNotifiedAt = i.FamilyNotifiedAt,
@@ -563,6 +568,13 @@ public class IncidentsController : ControllerBase
             }).FirstOrDefaultAsync(ct);
 
         if (item == null) return NotFound(ApiResponse<IncidentDetailDto>.Fail("Incident not found"));
+        // A SuperAdmin reviewer has no organisation, so the filtered navigation above comes back empty; read the name alone past the Tenant filter.
+        if (item.ReviewedByStaffId is { } reviewerId && item.ReviewedByName == null)
+        {
+            var reviewer = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Where(u => u.Id == reviewerId)
+                .Select(u => new { u.FirstName, u.LastName }).FirstOrDefaultAsync(ct);
+            if (reviewer != null) item.ReviewedByName = (reviewer.FirstName + " " + reviewer.LastName).Trim();
+        }
         return Ok(ApiResponse<IncidentDetailDto>.Ok(item));
     }
 
@@ -766,8 +778,6 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
-        if (!await IsValidUserRefAsync(dto.ReviewedByStaffId, ct))
-            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reviewed-by staff member not found."));
         var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
         if (rpLinkError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
@@ -883,9 +893,6 @@ public class IncidentsController : ControllerBase
         i.CommissionDetailedReportedAt = dto.CommissionDetailedReportedAt;
         i.CommissionFinalReportRequested = dto.CommissionFinalReportRequested ?? i.CommissionFinalReportRequested;
         i.CommissionFinalReportedAt = dto.CommissionFinalReportedAt;
-        i.ReviewedByUserId = dto.ReviewedByStaffId;
-        i.ReviewNotes = dto.ReviewNotes;
-        i.CorrectiveActions = dto.CorrectiveActions;
         i.FamilyNotified = dto.FamilyNotified;
         i.FamilyNotifiedAt = dto.FamilyNotifiedAt;
         i.SupportCoordinatorNotified = dto.SupportCoordinatorNotified;
@@ -895,10 +902,6 @@ public class IncidentsController : ControllerBase
         // Set resolved timestamp when status changes to Resolved
         if (dto.Status == IncidentStatus.Resolved && i.ResolvedAt == null)
             i.ResolvedAt = DateTime.UtcNow;
-
-        // Set reviewed timestamp when reviewer is assigned
-        if (dto.ReviewedByStaffId.HasValue && i.ReviewedAt == null)
-            i.ReviewedAt = DateTime.UtcNow;
 
         // IN-5: full-replace the injuries collection — the form always sends the complete list
         // (same "form owns the full list" contract as RiskEntries), so this is a straightforward
@@ -967,6 +970,86 @@ public class IncidentsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(i.Id, ct)));
+    }
+
+    /// <summary>IC7: the Admin review. The reviewer is the caller and the date is the server clock, so neither can be forged from the body.</summary>
+    [HttpPut("{id:guid}/review")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<IncidentListDto>>> RecordReview(Guid id, [FromBody] RecordIncidentReviewDto dto, CancellationToken ct)
+    {
+        var notes = dto.ReviewNotes?.Trim();
+        if (string.IsNullOrEmpty(notes) || notes.Length > 4000)
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Add review notes (up to 4000 characters)."));
+        if (!Enum.IsDefined(dto.Status))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Status is not valid."));
+        if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId)
+            // A SuperAdmin has no organisation, so the Tenant filter would hide their own account while viewing as a tenant.
+            || !await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == callerId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Your user account could not be found."));
+
+        var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        i.ReviewedByUserId = callerId;
+        i.ReviewedAt = now;
+        i.ReviewNotes = notes;
+        i.CorrectiveActions = string.IsNullOrWhiteSpace(dto.CorrectiveActions) ? null : dto.CorrectiveActions.Trim();
+        i.Status = dto.Status;
+        if (dto.Status == IncidentStatus.Resolved && i.ResolvedAt == null) i.ResolvedAt = now;
+        i.UpdatedAt = now;
+
+        // A status change keeps the obligation tasks in step, exactly as Update does.
+        var zone = (await ProviderClockAsync(i.TenantId, ct)).Tz.Zone;
+        await RaiseOrCompleteQscTaskAsync(i, zone, ct);
+        var detailedKey = $"incident-detailed-report:{i.Id}";
+        var hadTask = await _db.BookingTasks.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(t => t.SourceKey == detailedKey && t.TenantId == i.TenantId, ct);
+        await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct, mayRaise: hadTask && i.Status != IncidentStatus.Closed);
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(i.Id, ct)));
+    }
+
+    /// <summary>
+    /// IC7: who moved the status, from the audit trail. Found through the tenant-filtered table first (AuditLog has no organisation column), and only the Status field is
+    /// read out of each row: the raw Changes JSON also holds the review notes, which a Coordinator reads only on the incident itself.
+    /// </summary>
+    [HttpGet("{id:guid}/status-history")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<List<IncidentStatusChangeDto>>>> GetStatusHistory(Guid id, CancellationToken ct)
+    {
+        if (!await _db.IncidentReports.AnyAsync(x => x.Id == id, ct))
+            return NotFound(ApiResponse<List<IncidentStatusChangeDto>>.Fail("Incident not found"));
+
+        var rows = await _db.AuditLogs
+            .Where(a => a.EntityType == nameof(IncidentReport) && a.EntityId == id)
+            .OrderByDescending(a => a.ChangedAt)
+            .Select(a => new { a.ChangedAt, a.ChangedByName, a.Changes })
+            .ToListAsync(ct);
+
+        var items = new List<IncidentStatusChangeDto>();
+        foreach (var row in rows)
+            if (StatusChangeIn(row.Changes) is { } s) items.Add(new IncidentStatusChangeDto(row.ChangedAt.UtcDateTime, row.ChangedByName, s.From, s.To));
+        return Ok(ApiResponse<List<IncidentStatusChangeDto>>.Ok(items));
+    }
+
+    private static (IncidentStatus? From, IncidentStatus To)? StatusChangeIn(string changesJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(changesJson);
+            foreach (var c in doc.RootElement.EnumerateArray())
+            {
+                if (c.GetProperty("Field").GetString() != nameof(IncidentReport.Status)) continue;
+                if (!Enum.TryParse<IncidentStatus>(c.GetProperty("New").GetString(), out var to)) return null;
+                IncidentStatus? from = Enum.TryParse<IncidentStatus>(c.GetProperty("Old").GetString(), out var f) ? f : null;
+                return (from, to);
+            }
+        }
+        catch (System.Text.Json.JsonException) { }
+        catch (KeyNotFoundException) { }
+        catch (InvalidOperationException) { }
+        return null;
     }
 
     [HttpDelete("{id:guid}")]

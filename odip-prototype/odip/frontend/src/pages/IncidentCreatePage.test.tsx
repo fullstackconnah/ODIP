@@ -1104,36 +1104,6 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
 
     expect(involvedStaff).toHaveValue('Alex Rivera')
   })
-
-  it('selects Reviewed By via keyboard only (ArrowDown + Enter) on the edit form\'s Compliance step', async () => {
-    mockUseIncident.mockReturnValue({
-      data: {
-        id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
-        severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
-        location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
-        involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
-        participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
-        immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-        witnessNames: null, witnessStatements: null, injuries: [], qscReportedAt: null, qscReferenceNumber: null,
-        reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
-        resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
-        supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
-      },
-    })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
-    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
-    expect(screen.queryByText(/Review & compliance/)).not.toBeInTheDocument()
-
-    const reviewedBy = await screen.findByLabelText('Reviewed By')
-    await user.click(reviewedBy)
-    // First enabled option is 'Not reviewed' (value '') — one more ArrowDown reaches staff-1.
-    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
-
-    expect(reviewedBy).toHaveValue('Alex Rivera')
-  })
 })
 
 // IN-3: reportedByStaffId defaults to the signed-in user (odip_user in localStorage) — a
@@ -1411,11 +1381,11 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       expect(payload.title).toBe('Edited title')
       expect(Object.keys(payload).sort()).toEqual([
         'ambulanceOfficerName', 'ambulanceReference',
-        'awareAtLocal', 'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'correctiveActions', 'description', 'emergencyServices', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt', 'fireOfficerName', 'fireReference',
+        'awareAtLocal', 'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'description', 'emergencyServices', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt', 'fireOfficerName', 'fireReference',
         'immediateActionsTaken', 'incidentDateTime', 'incidentType', 'injuries', 'involvedParticipantId',
         'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId', 'policeOfficerName', 'policeReference',
         'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportableClass', 'reportableClassReason', 'reportedByStaffId', 'restrictivePracticeId',
-        'restrictivePracticeType', 'restrictivePracticeUseVaried', 'reviewNotes', 'reviewedByStaffId', 'serviceType', 'severity', 'shiftId',
+        'restrictivePracticeType', 'restrictivePracticeUseVaried', 'serviceType', 'severity', 'shiftId',
         'shiftNoteId', 'status', 'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt', 'title',
         'tripInstanceId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation',
         'wereEmergencyServicesCalled', 'witnesses',
@@ -1473,7 +1443,7 @@ describe('IncidentCreatePage — editing', () => {
     title: 'Existing incident', incidentDateTime: '2026-08-01T09:00', location: null, reportedByStaffId: 'staff-1', description: 'Existing description',
     participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, immediateActionsTaken: null, wereEmergencyServicesCalled: false,
     emergencyServicesDetails: null, injuries: [], witnesses: [], qscReportingStatus: 'NotRequired', qscReportedAt: null, qscReferenceNumber: null,
-    reviewedByStaffId: null, reviewNotes: null, correctiveActions: null, familyNotified: false, familyNotifiedAt: null,
+    familyNotified: false, familyNotifiedAt: null,
     supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
   }
 

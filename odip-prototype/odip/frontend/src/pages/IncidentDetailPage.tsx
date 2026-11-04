@@ -15,6 +15,7 @@ import { formatWallClock } from '@/lib/wallClock'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
+import { IncidentReviewCard } from './incidents/IncidentReviewCard'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS } from '@/api/types/enums'
 import type { IncidentDetailDto } from '@/api/types/incidents'
@@ -55,7 +56,7 @@ export default function IncidentDetailPage() {
   const pageQuery = useIncident(id)
   const { data: incident, isLoading, isError, error, refetch } = pageQuery
   // PUT /incidents/:id is Admin, Coordinator and SuperAdmin only, the roles canWrite admits.
-  const { canWrite } = usePermissions()
+  const { canWrite, canReadIncidentReview, canWriteIncidentReview } = usePermissions()
 
   if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="incident" />
   if (!incident) {
@@ -107,6 +108,9 @@ export default function IncidentDetailPage() {
           ]}
         />
       </Card>
+
+      {/* IC7: Admin writes the review, Coordinator reads it, nobody else gets the section (the server strips the fields too). */}
+      {canReadIncidentReview && <IncidentReviewCard incident={incident} canEdit={canWriteIncidentReview} />}
 
       {/* Read-only: the practice as the incident recorded it, and the authorisation determined when it was reported (or lowered since). */}
       {incident.incidentType === 'RestrictivePracticeUse' && (
