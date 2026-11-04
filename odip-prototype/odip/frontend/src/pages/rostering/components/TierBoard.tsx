@@ -23,13 +23,15 @@ const TRIGGER = 'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-cen
  * One participant's compatibility as four columns: Preferred, Backup and Emergency are ranked, No is a plain list. Every write goes
  * through the matrix's own useUpsertCompatibility; the server places the row and renumbers the tier. Marking No needs the reason
  * dialog, which the page owns, so the board hands it the person (or null when the person is still to be picked).
+ * `compact` is the participant card's board: columns always stacked, and No is read-only (no handlers, no dialog).
  */
-export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, onRemoveNo }: {
+export function TierBoard({ participantId, participantName, compact = false, onMarkNo, onEditNo, onRemoveNo }: {
   participantId: string
   participantName: string
-  onMarkNo: (staffId: string | null) => void
-  onEditNo: (row: CompatibilityRowDto) => void
-  onRemoveNo: (row: CompatibilityRowDto) => void
+  compact?: boolean
+  onMarkNo?: (staffId: string | null) => void
+  onEditNo?: (row: CompatibilityRowDto) => void
+  onRemoveNo?: (row: CompatibilityRowDto) => void
 }) {
   const { canWrite } = usePermissions()
   const compat = useCompatibility(participantId)
@@ -86,16 +88,16 @@ export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, 
       { value: 'up', label: 'Move up', disabled: i === 0 },
       { value: 'down', label: 'Move down', disabled: i === count - 1 },
       ...RANKED_LEVELS.filter(l => l !== row.level).map(l => ({ value: l, label: `Move to ${l}` })),
-      { value: 'no', label: 'Mark No…' },
+      ...(compact ? [] : [{ value: 'no', label: 'Mark No…' }]),
       { value: 'remove', label: 'Remove from list' },
     ]
   }
 
   function choose(row: CompatibilityRowDto, i: number, value: string) {
     const base = { staffId: row.staffId, participantId }
-    if (value === 'edit') return onEditNo(row)
-    if (value === 'remove-no') return onRemoveNo(row)
-    if (value === 'no') return onMarkNo(row.staffId)
+    if (value === 'edit') return onEditNo?.(row)
+    if (value === 'remove-no') return onRemoveNo?.(row)
+    if (value === 'no') return onMarkNo?.(row.staffId)
     if (value === 'remove') return save({ ...base, level: 'Allowed', reason: null }, `${row.staffName} is no longer listed.`)
     if (value === 'up' || value === 'down') {
       const rank = value === 'up' ? i : i + 2
@@ -112,7 +114,7 @@ export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, 
         <div className="flex items-start gap-2">
           {ranked && <span data-rank className="w-5 shrink-0 pt-2.5 text-sm tabular-nums text-muted-foreground">{i + 1}</span>}
           <p data-name className="min-w-0 flex-1 py-2.5 text-sm font-medium [overflow-wrap:anywhere]">{row.staffName}</p>
-          {canWrite && (
+          {canWrite && !(compact && !ranked) && (
             <span data-person={row.staffId}>
               <Dropdown
                 variant="icon"
@@ -146,7 +148,7 @@ export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, 
         </Callout>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
+      <div className={compact ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]'}>
         {[...RANKED_LEVELS, 'Excluded' as const].map(level => {
           const tier = inLevel(level)
           const name = level === 'Excluded' ? 'No' : level
@@ -162,12 +164,15 @@ export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, 
               ) : (
                 <List aria-busy={busy} className="space-y-2">{tier.map((row, i) => chip(row, i, tier.length))}</List>
               )}
-              {canWrite && (
+              {compact && level === 'Excluded' && (
+                <p className="text-xs text-muted-foreground">Mark or change a No on the Compatibility page.</p>
+              )}
+              {canWrite && !(compact && level === 'Excluded') && (
                 <Button
                   variant="ghost"
                   className="min-h-11 w-full"
                   aria-label={level === 'Excluded' ? undefined : `Add to ${level}`}
-                  onClick={() => (level === 'Excluded' ? onMarkNo(null) : setAdding(level))}
+                  onClick={() => (level === 'Excluded' ? onMarkNo?.(null) : setAdding(level))}
                 >
                   {level === 'Excluded' ? '+ Mark No' : '+ Add'}
                 </Button>
