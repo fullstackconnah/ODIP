@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { BudgetWarningDto, StartWeekResultDto } from '@/api/types'
 import { makeShift } from '../test-fixtures'
 import {
-  alreadyInWeekLine, bannerBlockedLine, bannerTitle, leaveMessage, regularConfirm, regularDone, startBudgetWarnings, startResultBody, startResultTitle,
+  alreadyInWeekLine, bannerBlockedLine, bannerTitle, leaveMessage, selectionTitle, regularConfirm, regularDone, startBudgetWarnings, startResultBody, startResultTitle,
 } from './rosterWeek'
 
 const result = (o: Partial<StartWeekResultDto> = {}): StartWeekResultDto => ({ weekStart: '2026-10-13', created: 0, assignedToRegulars: 0, regularAway: 0, skipped: [], ...o })
@@ -17,6 +17,12 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
   it('bannerTitle', () => {
     expect(bannerTitle(1)).toBe('1 shift not visible to staff yet')
     expect(bannerTitle(128)).toBe('128 shifts not visible to staff yet')
+  })
+
+  it('selectionTitle', () => {
+    expect(selectionTitle(0)).toBe('Select the shifts to publish')
+    expect(selectionTitle(1)).toBe('1 shift selected')
+    expect(selectionTitle(3)).toBe('3 shifts selected')
   })
 
   it('bannerBlockedLine: nothing when none is blocked; one line with the count, singular and plural', () => {

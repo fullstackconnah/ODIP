@@ -15,7 +15,6 @@ import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { breaksSignature, clockLabel, FINISH_STEPS, handoverForward, movedTimes, offlineDueDoses, parseKilometres, parseTravelMinutes, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput, type TravelField } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
-import { requestGeolocation } from './geolocation'
 import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
 import { joinList, plural } from '@/lib/format'
@@ -196,11 +195,9 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     setNetworkError(false)
     setSubmitting(true)
     try {
-      const geo = await requestGeolocation()
       await finish.mutateAsync({
         id: shift.id,
         data: {
-          ...geo,
           actualStart: sent.start,
           actualEnd: sent.end,
           timeAdjustmentReason: sent.start || sent.end ? d.adjustmentReason.trim() : null,

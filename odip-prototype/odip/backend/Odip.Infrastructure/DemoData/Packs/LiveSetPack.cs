@@ -316,11 +316,6 @@ public sealed class LiveSetPack : IDemoPack
                 CreatedAt = actualStart,
                 UpdatedAt = actualStart,
             };
-            if (geo >= 2)
-            {
-                completion.StartLatitude = -33.8688m + DemoIds.Pick(id, "lat-start", -30, 30) / 1000m;
-                completion.StartLongitude = 151.2093m + DemoIds.Pick(id, "lon-start", -30, 30) / 1000m;
-            }
             return completion;
         }
 
@@ -643,11 +638,6 @@ public sealed class LiveSetPack : IDemoPack
             completion.HandoverText = LiveSetCatalog.HandoverOf(live.Story, live.Date);
             completion.NothingToHandOver = false;
             completion.NothingToNoteConfirmed = !hasNote;
-            if (completion.StartLatitude is not null)
-            {
-                completion.EndLatitude = completion.StartLatitude + DemoIds.Pick(completion.Id, "lat-end", -3, 3) / 1000m;
-                completion.EndLongitude = completion.StartLongitude + DemoIds.Pick(completion.Id, "lon-end", -3, 3) / 1000m;
-            }
             completion.UpdatedAt = submittedAt;
 
             shift.Status = ShiftStatus.PendingReview;

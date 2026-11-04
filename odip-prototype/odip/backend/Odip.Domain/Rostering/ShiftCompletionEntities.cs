@@ -36,11 +36,19 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>IANA id used to compute variance — resolved once at Start from <see cref="StateTimeZoneMap"/>.</summary>
     public string TimeZoneId { get; set; } = string.Empty;
 
-    public decimal? StartLatitude { get; set; }
-    public decimal? StartLongitude { get; set; }
-    public decimal? EndLatitude { get; set; }
-    public decimal? EndLongitude { get; set; }
+    /// <summary>"No fix, for any reason" at Start. No worker coordinate is kept anywhere (owner, 2026-11-04); only the result below.</summary>
     public bool GeolocationDeclined { get; set; }
+
+    /// <summary>The Start check against the shift's service location; null when it was not checked (rows before the check, a manual start through Finish).</summary>
+    public LocationCheckStatus? LocationCheck { get; set; }
+    /// <summary>Whole metres from the place, set for AtLocation and NotAtLocation.</summary>
+    public int? LocationDistanceMetres { get; set; }
+    /// <summary>The phone's reported accuracy in whole metres, when it gave one.</summary>
+    public int? LocationAccuracyMetres { get; set; }
+    /// <summary>The worker's reason (max 300), or "Started offline".</summary>
+    public string? LocationReason { get; set; }
+    /// <summary>UTC. The Start stamp the check ran at.</summary>
+    public DateTime? LocationCheckedAt { get; set; }
 
     /// <summary>True when Finish supplied ActualStart because Start was skipped.</summary>
     public bool StartWasManual { get; set; }

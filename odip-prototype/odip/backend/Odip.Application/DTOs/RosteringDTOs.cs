@@ -440,6 +440,12 @@ public record PublishWeekResultDto
     public int Skipped { get; init; }
 }
 
+/// <summary>Optional body of <c>POST /weeks/{weekStart}/publish</c> (R3, 2026-11-04): the Drafts to publish. No body, or a null list, publishes the whole week; an empty list is refused.</summary>
+public record PublishShiftsRequest
+{
+    public List<Guid>? ShiftIds { get; init; }
+}
+
 /// <summary>What Start rostering made (2026-10-16, L4).</summary>
 public record StartWeekResultDto
 {

@@ -19,6 +19,9 @@ export const alreadyInWeekLine = (n: number) => `${plural(n, 'shift')} already i
 
 export const bannerTitle = (n: number) => `${plural(n, 'shift')} not visible to staff yet`
 
+/** The Publish bar's title in select mode (R3). */
+export const selectionTitle = (n: number) => (n === 0 ? 'Select the shifts to publish' : `${plural(n, 'shift')} selected`)
+
 /** The status line's body: only when some drafts can't be published (a rule that can't be overridden blocks them). */
 export const bannerBlockedLine = (blocked: number): string | null =>
   blocked === 0 ? null : `${blocked} ${either(blocked, "can't be published until its worker changes.", "can't be published until their workers change.")}`

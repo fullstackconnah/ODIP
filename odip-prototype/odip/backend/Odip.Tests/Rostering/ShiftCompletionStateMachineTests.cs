@@ -449,8 +449,252 @@ public class ShiftCompletionStateMachineTests
         Assert.IsType<OkObjectResult>(result.Result);
         var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
         Assert.True(completion.GeolocationDeclined);
-        Assert.Null(completion.StartLatitude);
-        Assert.Null(completion.StartLongitude);
+        Assert.Equal(LocationCheckStatus.NoLocationSet, completion.LocationCheck);   // no place on the shift: nothing to compare with
+    }
+
+    // ── Location check at Start (location PR2) ──
+
+    private const decimal PinLat = -33.8688m;
+    private const decimal PinLon = 151.2093m;
+
+    private static (OdipDbContext Db, PortalController Controller, Shift Shift) SeedPlacedShift(bool withPlace = true)
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, user.Id);
+        if (withPlace)
+        {
+            var place = Seed(db, new ServiceLocation { Id = Guid.NewGuid(), Name = "Southside Library", Latitude = PinLat, Longitude = PinLon, RadiusMetres = 200 });
+            shift.ServiceLocationId = place.Id;
+            db.SaveChanges();
+        }
+        return (db, MakeController(db, tenant.Object, user.Id), shift);
+    }
+
+    [Fact]
+    public async Task StartShift_AtThePlace_SavesAtLocationWithDistanceAndAccuracy()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat + 0.00036m, Longitude = PinLon, AccuracyMetres = 15 }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.AtLocation, completion.LocationCheck);
+        Assert.InRange(completion.LocationDistanceMetres!.Value, 39, 41);
+        Assert.Equal(15, completion.LocationAccuracyMetres);
+        Assert.Null(completion.LocationReason);
+        Assert.Equal(completion.ActualStart, completion.LocationCheckedAt);
+        Assert.Equal(LocationCheckStatus.AtLocation, body.Data!.Completion!.LocationCheck);   // the phone reads the answer back
+    }
+
+    [Fact]
+    public async Task StartShift_FarFromThePlace_SavesNotAtLocationAndStillStarts()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat + 0.00764m, Longitude = PinLon, AccuracyMetres = 12 }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.NotAtLocation, completion.LocationCheck);
+        Assert.InRange(completion.LocationDistanceMetres!.Value, 845, 855);
+        Assert.Equal(ShiftStatus.InProgress, (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status);
+    }
+
+    [Fact]
+    public async Task StartShift_DeclinedWithAReason_SavesUnavailableAndTheReason()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        await controller.StartShift(shift.Id, new StartShiftDto { GeolocationDeclined = true, LocationReason = "  Phone location is off  " }, CancellationToken.None);
+
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.Unavailable, completion.LocationCheck);
+        Assert.Equal("Phone location is off", completion.LocationReason);
+        Assert.Null(completion.LocationDistanceMetres);
+    }
+
+    [Fact]
+    public async Task StartShift_DeclinedWithNoReason_SavesUnavailableWithoutOne()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        await controller.StartShift(shift.Id, new StartShiftDto { GeolocationDeclined = true }, CancellationToken.None);
+
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.Unavailable, completion.LocationCheck);
+        Assert.Null(completion.LocationReason);
+    }
+
+    [Fact]
+    public async Task StartShift_NoPlaceOnTheShift_SavesNoLocationSetAndIgnoresCoordinates()
+    {
+        var (db, controller, shift) = SeedPlacedShift(withPlace: false);
+
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat, Longitude = PinLon, AccuracyMetres = 5, LocationReason = "ignored" }, CancellationToken.None);
+
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.NoLocationSet, completion.LocationCheck);
+        Assert.Null(completion.LocationDistanceMetres);
+        Assert.Null(completion.LocationReason);
+    }
+
+    [Fact]
+    public async Task StartShift_QueuedTap_IsUnavailableStartedOfflineAndIgnoresCoordinates()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3), Latitude = PinLat, Longitude = PinLon, AccuracyMetres = 5 }, CancellationToken.None);
+
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.Unavailable, completion.LocationCheck);
+        Assert.Equal("Started offline", completion.LocationReason);
+        Assert.Null(completion.LocationDistanceMetres);
+    }
+
+    [Fact]
+    public async Task StartShift_OversizeReasonAndAccuracy_StillStartsTruncatedAndClamped()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        var result = await controller.StartShift(shift.Id,
+            new StartShiftDto { Latitude = PinLat + 0.00764m, Longitude = PinLon, AccuracyMetres = 1e15, LocationReason = new string('x', 900) }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(100000, completion.LocationAccuracyMetres);
+        Assert.Equal(LocationCheckStatus.AtLocation, completion.LocationCheck);   // 100 km of accuracy covers any distance: the ruling is worker-favouring
+    }
+
+    [Fact]
+    public async Task StartShift_OversizeReasonWithNoFix_IsCutTo300()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto { GeolocationDeclined = true, LocationReason = new string('x', 900) }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(300, (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason!.Length);
+    }
+
+    [Fact]
+    public async Task StartShift_ReplayOfAStartedShift_DoesNotCheckAgain()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { GeolocationDeclined = true }, CancellationToken.None);
+
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat, Longitude = PinLon }, CancellationToken.None);
+
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        Assert.Equal(LocationCheckStatus.Unavailable, completion.LocationCheck);
+    }
+
+    [Fact]
+    public async Task StartShift_KnownCoordinates_AreNotSavedOnAnyEntity()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        const decimal latitude = -27.46977m;
+        const decimal longitude = 153.02512m;
+
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = latitude, Longitude = longitude, AccuracyMetres = 20 }, CancellationToken.None);
+        await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);   // reload
+
+        foreach (var entry in db.ChangeTracker.Entries())
+            foreach (var property in entry.Properties)
+            {
+                var shown = Convert.ToString(property.CurrentValue, CultureInfo.InvariantCulture) ?? string.Empty;
+                Assert.DoesNotContain("27.46977", shown);
+                Assert.DoesNotContain("153.02512", shown);
+            }
+    }
+
+    [Fact]
+    public async Task FinishShift_IgnoresCoordinatesAndSavesNone()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { GeolocationDeclined = true }, CancellationToken.None);
+        AddNote(db, shift.Id, shift.UserId!.Value);
+
+        var result = await controller.FinishShift(shift.Id, new FinishShiftDto { Latitude = -27.46977m, Longitude = 153.02512m }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        foreach (var entry in db.ChangeTracker.Entries())
+            foreach (var property in entry.Properties)
+                Assert.DoesNotContain("153.02512", Convert.ToString(property.CurrentValue, CultureInfo.InvariantCulture) ?? string.Empty);
+    }
+
+    // ── location-reason (the off-site reason, asked after Start because only the server knows the distance) ──
+
+    private static async Task<(OdipDbContext Db, PortalController Controller, Shift Shift)> StartedFarAway()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat + 0.00764m, Longitude = PinLon, AccuracyMetres = 12 }, CancellationToken.None);
+        return (db, controller, shift);
+    }
+
+    [Fact]
+    public async Task LocationReason_AfterAnOffSiteStart_IsSavedAndAgainOverwrites()
+    {
+        var (db, controller, shift) = await StartedFarAway();
+
+        var first = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = " Road works, parked round the corner " }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(first.Result);
+        Assert.Equal("Road works, parked round the corner", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+
+        await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = "Second thought" }, CancellationToken.None);
+        Assert.Equal("Second thought", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Fact]
+    public async Task LocationReason_IsCutTo300()
+    {
+        var (db, controller, shift) = await StartedFarAway();
+
+        await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = new string('y', 700) }, CancellationToken.None);
+
+        Assert.Equal(300, (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason!.Length);
+    }
+
+    [Fact]
+    public async Task LocationReason_AtTheLocation_Is409NotNeeded()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat, Longitude = PinLon }, CancellationToken.None);
+
+        var result = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = "Hello" }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(ShiftErrorCodes.ShiftLocationReasonNotNeeded, Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value).Code);
+        Assert.Null((await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Fact]
+    public async Task LocationReason_ShiftNotInProgress_Is409()
+    {
+        var (_, controller, shift) = SeedPlacedShift();   // Published, never started
+
+        var result = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = "Hello" }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(ShiftErrorCodes.ShiftNotInProgress, Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value).Code);
+    }
+
+    [Fact]
+    public async Task LocationReason_AnotherWorker_Gets404AndNothingChanges()
+    {
+        var (db, _, shift) = await StartedFarAway();
+        var other = SeedUser(db);
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var stranger = MakeController(db, tenant.Object, other.Id);
+
+        var result = await stranger.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = "Not mine" }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Null((await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
     }
 
     // ══════════════════════════════════════════════════════════════
