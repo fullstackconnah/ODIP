@@ -1369,11 +1369,13 @@ public record StaffListDto
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
     public bool IsFirstAidQualified { get; init; }
+    public bool IsCprQualified { get; init; }
     public bool IsMedicationCompetent { get; init; }
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public bool IsActive { get; init; }
     public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? CprExpiryDate { get; init; }
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
@@ -1481,12 +1483,14 @@ public record CreateStaffDto
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
     public bool IsFirstAidQualified { get; init; }
+    public bool IsCprQualified { get; init; }
     public bool IsMedicationCompetent { get; init; }
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public bool IsActive { get; init; } = true;
     public string? Notes { get; init; }
     public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? CprExpiryDate { get; init; }
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
@@ -2521,10 +2525,12 @@ public record AdminUserDto
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
     public bool IsFirstAidQualified { get; init; }
+    public bool IsCprQualified { get; init; }
     public bool IsMedicationCompetent { get; init; }
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? CprExpiryDate { get; init; }
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
@@ -2559,10 +2565,12 @@ public record CreateAdminUserDto
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
     public bool IsFirstAidQualified { get; init; }
+    public bool IsCprQualified { get; init; }
     public bool IsMedicationCompetent { get; init; }
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public DateOnly? FirstAidExpiryDate { get; init; }
+    public DateOnly? CprExpiryDate { get; init; }
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }

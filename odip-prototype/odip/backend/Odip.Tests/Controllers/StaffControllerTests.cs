@@ -265,4 +265,56 @@ public class StaffControllerTests
         var body = Assert.IsType<ApiResponse<StaffDetailDto>>(conflict.Value);
         Assert.Equal("A user with this email already exists.", body.Errors![0]);
     }
+
+    [Fact]
+    public async Task Cpr_RoundTripsThroughUpdateAndGet_AndAnExpiredCprAloneFlagsTheListAndDetail()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+        var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(
+            new CreateStaffDto { FirstName = "Cora", LastName = "Pulse", Email = "cora.pulse@example.com", Position = Position.SupportWorker, IsActive = true },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.False(created.IsCprQualified);
+
+        var current = new DateOnly(2027, 2, 1);
+        var updated = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Id,
+            new UpdateStaffDto { FirstName = "Cora", LastName = "Pulse", Email = "cora.pulse@example.com", Position = Position.SupportWorker, IsActive = true, IsCprQualified = true, CprExpiryDate = current },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.True(updated.IsCprQualified);
+        var fetched = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(created.Id, CancellationToken.None)).Result).Value).Data!;
+        Assert.Equal((true, current), (fetched.IsCprQualified, fetched.CprExpiryDate!.Value));
+        Assert.False(fetched.HasExpiredQualifications);
+
+        // Only the CPR has lapsed: the list's inline rule and the detail must both flag it.
+        var user = await db.Users.SingleAsync(u => u.Id == created.Id);
+        user.CprExpiryDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3);
+        await db.SaveChangesAsync();
+        var listed = Assert.IsType<ApiResponse<List<StaffListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, CancellationToken.None)).Result).Value);
+        Assert.True(Assert.Single(listed.Data!, s => s.LastName == "Pulse").HasExpiredQualifications);
+        var detail = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(created.Id, CancellationToken.None)).Result).Value).Data!;
+        Assert.True(detail.HasExpiredQualifications);
+    }
+
+    [Fact]
+    public async Task Update_BuiltFromTheGetResponse_KeepsCprWhenOnlyAnotherExpiryChanges()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+        var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(
+            new CreateStaffDto { FirstName = "Cora", LastName = "Pulse", Email = "cora.pulse@example.com", Position = Position.SupportWorker, IsActive = true, IsCprQualified = true, CprExpiryDate = new DateOnly(2027, 2, 1) },
+            CancellationToken.None)).Result).Value).Data!;
+        var got = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(created.Id, CancellationToken.None)).Result).Value).Data!;
+
+        // The edit forms rebuild the whole update from the row they loaded and change one field.
+        await controller.Update(created.Id, new UpdateStaffDto
+        {
+            FirstName = got.FirstName, LastName = got.LastName, Email = got.Email, Position = got.Position, IsActive = got.IsActive,
+            IsCprQualified = got.IsCprQualified, CprExpiryDate = got.CprExpiryDate, ManualHandlingExpiryDate = new DateOnly(2028, 1, 1),
+        }, CancellationToken.None);
+
+        var saved = await db.Users.SingleAsync(u => u.Id == created.Id);
+        Assert.True(saved.IsCprQualified);
+        Assert.Equal(new DateOnly(2027, 2, 1), saved.CprExpiryDate);
+        Assert.Equal(new DateOnly(2028, 1, 1), saved.ManualHandlingExpiryDate);
+    }
 }

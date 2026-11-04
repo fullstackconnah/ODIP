@@ -1269,4 +1269,34 @@ public class RosterConflictServiceTests
 
         Assert.Empty(findings);
     }
+
+    [Fact]
+    public void Expired_cpr_certificate_fires_one_credential_expired_warning_with_its_date()
+    {
+        var staff = CompliantStaff();
+        staff.IsCprQualified = true;
+        staff.CprExpiryDate = new DateOnly(2026, 1, 1);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.CredentialExpired);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.Equal($"{staff.FullName}'s CPR certificate expired 1 Jan 2026.", finding.Message);
+    }
+
+    [Fact]
+    public void Current_cpr_certificate_does_not_fire_credential_expired()
+    {
+        var staff = CompliantStaff();
+        staff.IsCprQualified = true;
+        staff.CprExpiryDate = ServiceDate.AddDays(1);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.CredentialExpired));
+    }
 }

@@ -128,6 +128,7 @@ public class AdminUsersControllerTests
         {
             FirstName = "New", LastName = "User", Email = "new.user@test.example.com",
             Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1234!",
+            IsCprQualified = true, CprExpiryDate = new DateOnly(2027, 2, 1),
         };
 
         var result = await controller.Create(dto, CancellationToken.None);
@@ -135,6 +136,10 @@ public class AdminUsersControllerTests
         var created = Assert.IsType<CreatedAtActionResult>(result);
         var body = Assert.IsType<ApiResponse<AdminUserDto>>(created.Value);
         Assert.True(body.Success);
+        Assert.True(body.Data!.IsCprQualified);
+        Assert.Equal(new DateOnly(2027, 2, 1), body.Data.CprExpiryDate);
+        var savedCpr = await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Email == "new.user@test.example.com");
+        Assert.Equal((true, new DateOnly(2027, 2, 1)), (savedCpr.IsCprQualified, savedCpr.CprExpiryDate!.Value));
 
         var saved = await db.Users.IgnoreQueryFilters().Where(u => u.Email == "new.user@test.example.com").ToListAsync();
         Assert.Single(saved);

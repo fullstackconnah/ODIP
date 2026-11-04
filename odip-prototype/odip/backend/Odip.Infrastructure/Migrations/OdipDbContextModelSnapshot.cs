@@ -5363,6 +5363,9 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("CprExpiryDate")
+                        .HasColumnType("date");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -5396,6 +5399,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsCprQualified")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsDriverEligible")
