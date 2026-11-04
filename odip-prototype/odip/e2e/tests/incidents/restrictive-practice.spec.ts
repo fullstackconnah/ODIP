@@ -91,8 +91,8 @@ test('a coordinator sees which practices are authorised, adds a "None of these" 
   expect(incident.data.unapprovedRestrictivePracticeDetails ?? null).toBeNull();
 
   await page.goto(`/incidents/${listed.id}`);
-  // The card: the heading sits in its title row.
-  const block = page.getByRole('heading', { name: 'Restrictive practice', exact: true }).locator('xpath=../..');
+  // The card: the heading sits in its title row (the full view titles it "Restrictive practice details").
+  const block = page.getByRole('heading', { name: 'Restrictive practice details', exact: true }).locator('xpath=../..');
   await expect(block.getByText('Held both arms at the kerb to stop him running onto the road.')).toBeVisible();
   await expect(block.getByText('Not authorised', { exact: true })).toBeVisible();
   await desk('incident-detail');
