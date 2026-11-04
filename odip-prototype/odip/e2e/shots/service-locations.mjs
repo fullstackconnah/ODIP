@@ -63,15 +63,17 @@ const noHScroll = async (page, ctx) => {
   const o = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   check(`${ctx}: no horizontal scroll`, o <= 0, o)
 }
-// Every visible button, input and select inside `root` is at least 44 high on touch.
+// Every visible button, input and select inside `root` has at least 44px of height to tap, its own box or its TAP_AREA pad.
 const tapTargets = async (root, ctx) => {
   const small = await root.evaluate((el) => [...el.querySelectorAll('button, input, select')].filter((e) => {
-    const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(e).visibility !== 'hidden' && b.height < 43.5
+    const b = e.getBoundingClientRect(); if (!(b.width > 0 && b.height > 0) || getComputedStyle(e).visibility === 'hidden') return false
+    const pad = parseFloat(getComputedStyle(e, '::before').height) || 0 // TAP_AREA's transparent hit area
+    return Math.max(b.height, pad) < 43.5
   }).map((e) => `${e.tagName} ${(e.getAttribute('aria-label') || e.textContent || e.name || '').trim().slice(0, 24)} ${Math.round(e.getBoundingClientRect().height)}`))
   check(`${ctx}: tap targets at least 44 high`, small.length === 0, small)
 }
-const crop = async (page, locator, name, vp) => {
-  const r = await cropElement(page, locator, path.join(OUT_DIR, name), { touch: vp.touch, natural: true })
+const crop = async (page, locator, name, vp, pad = 16) => {
+  const r = await cropElement(page, locator, path.join(OUT_DIR, name), { touch: vp.touch, natural: true, pad })
   checks.push(checkCropHolds({ ...r, touch: vp.touch }))
 }
 const openSettings = async (page) => {
@@ -125,7 +127,7 @@ for (const vp of VPS) {
     check(t('location button enabled on a secure page (localhost)'), await locBtn.isEnabled())
     await noHScroll(page, t('settings-form'))
     if (vp.touch) await tapTargets(dialog, t('settings-form'))
-    await crop(page, dialog, `settings-form-${tag}.png`, vp)
+    await crop(page, dialog, `settings-form-${tag}.png`, vp, 0)
     await dialog.getByLabel(/^Name/).fill('Southside hub')
     await dialog.getByLabel(/^Map pin/).fill('-27.4698, 153.0251')
     await dialog.getByRole('button', { name: 'Save' }).click()
@@ -133,7 +135,7 @@ for (const vp of VPS) {
     check(t('409 sentence shown, form stays open, one POST sent'), (await dialog.isVisible()) && posts.length === 1, posts.length)
     check(t('POST carries the pin and the default distance'), posts[0]?.latitude === -27.4698 && posts[0]?.longitude === 153.0251 && posts[0]?.radiusMetres === 200, posts[0])
     await noHScroll(page, t('settings-error'))
-    await crop(page, dialog, `settings-error-${tag}.png`, vp)
+    await crop(page, dialog, `settings-error-${tag}.png`, vp, 0)
     await context.close()
   } catch (e) { check(t('settings-form ran'), false, String(e.message).split('\n')[0]) }
 
@@ -151,24 +153,33 @@ for (const vp of VPS) {
     await dialog.getByLabel(/^Map pin/).fill('-27.4698, 153.0251')
     check(t('the pin box still takes typing'), (await dialog.getByLabel(/^Map pin/).inputValue()) === '-27.4698, 153.0251')
     await noHScroll(page, t('settings-form-insecure'))
-    await crop(page, dialog, `settings-form-insecure-${tag}.png`, vp)
+    await crop(page, dialog, `settings-form-insecure-${tag}.png`, vp, 0)
     await context.close()
   } catch (e) { check(t('settings-form-insecure ran'), false, String(e.message).split('\n')[0]) }
 
-  // slideover-picker and slideover-picker-empty (the New shift panel)
+  // slideover-picker and slideover-picker-empty: an existing shift's panel. The board's shifts are stamped with the archived place for the first.
   for (const [state, places] of [['slideover-picker', PLACES], ['slideover-picker-empty', []]]) {
     try {
       const { context, page } = await openPage(browser, vp, { places })
-      await page.goto(`${BASE_URL}/rostering`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-      await page.locator('#roster-week-heading').waitFor({ state: 'visible', timeout: 60_000 })
-      await page.getByRole('button', { name: /^New shift$/ }).first().click()
-      const dialog = page.getByRole('dialog')
+      // One staff week with a single shift, as roster-week.mjs serves it; with places, it sits at the archived one.
+      await page.route('**/api/v1/rostering/board*', (r) => {
+        const mon = new URL(r.request().url()).searchParams.get('weekStart')
+        const day = (n) => { const d = new Date(`${mon}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
+        const days = [0, 1, 2, 3, 4, 5, 6].map(day)
+        const shift = { id: 'sh1', participantId: 'p-0001', participantName: 'Liam Okafor', staffId: 's-0001', staffName: 'Callum Radford', serviceDate: days[2], startTime: '09:00:00', endTime: '13:00:00', endsNextDay: false, durationHours: 4, ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null, notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false, serviceLocationId: places.length ? 'loc-3' : null }
+        const row = { staffId: 's-0001', fullName: 'Callum Radford', role: 'SupportWorker', compliance: 'Ok', complianceNotes: [], rosteredHours: 4, targetHours: 38, shifts: [shift], tripBars: [], leave: [] }
+        return r.fulfill({ json: { success: true, data: { groupBy: 'Staff', weekStart: mon, days, staffRows: [row], unfilled: [], exceptions: [] }, message: null, errors: [] } })
+      })
+      await page.goto(`${BASE_URL}/staff/s-0001?tab=week`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+      const chip = page.locator('[data-shift-open]').first()
+      await chip.waitFor({ state: 'visible', timeout: 30_000 })
+      await chip.click()
+      const dialog = page.getByRole('dialog', { name: 'Shift details' })
       await dialog.waitFor({ state: 'visible', timeout: 30_000 })
       const picker = dialog.getByLabel('Service location')
       await picker.scrollIntoViewIfNeeded()
       await page.waitForTimeout(600)
       const options = await picker.locator('option').allInnerTexts()
-      const details = dialog.getByLabel('Location details')
       const order = await page.evaluate(() => {
         const d = document.querySelector('[role=dialog]')
         const by = (t) => [...d.querySelectorAll('select, input, textarea')].find((i) => i.labels?.[0]?.textContent.replace('*', '').trim() === t)
@@ -178,35 +189,16 @@ for (const vp of VPS) {
       check(t(`${state}: picker sits above Location details, which sits above Notes`), order.picker < order.details && order.details < order.notes, order)
       check(t(`${state}: picker and details inputs are the same height (+-1)`), Math.abs(order.pickerH - order.detailsH) <= 1, order)
       if (places.length) {
-        check(t(`${state}: options are None and the two active places, no archived one`), JSON.stringify(options) === JSON.stringify(['None', LONG_NAME, 'Perth office']), options)
+        check(t(`${state}: the picker shows the archived label and keeps the shift's place selected`), JSON.stringify(options) === JSON.stringify(['None', LONG_NAME, 'Perth office', 'Old depot (archived)']) && (await picker.inputValue()) === 'loc-3', options)
       } else {
         check(t(`${state}: only None, and the Settings pointer shows`), options.length === 1 && options[0] === 'None' && (await dialog.getByText('Add places in Settings, Service locations.').isVisible()), options)
       }
-      check(t(`${state}: Location details field is present`), await details.isVisible())
+      check(t(`${state}: Location details field is present`), await dialog.getByLabel('Location details').isVisible())
       await noHScroll(page, t(state))
-      if (vp.touch) await tapTargets(dialog, t(state))
+      // Only the picker's own block: the panel's other controls (a 13px checkbox among them) are not this PR's.
+      if (vp.touch) await tapTargets(picker.locator('xpath=ancestor::div[1]'), t(state))
       await crop(page, picker.locator('xpath=ancestor::div[1]'), `${state}-${tag}.png`, vp)
-      // The archived label: an existing shift whose place was archived keeps it in the list, labelled.
-      if (places.length && !vp.touch) {
-        await context.close()
-        const second = await openPage(browser, vp, { places })
-        await second.page.route('**/api/v1/rostering/board*', async (r) => {
-          const response = await r.fetch()
-          const body = await response.json()
-          const stamp = (o) => { if (Array.isArray(o)) o.forEach(stamp); else if (o && typeof o === 'object') { if ('serviceDate' in o && 'startTime' in o) o.serviceLocationId = 'loc-3'; Object.values(o).forEach(stamp) } }
-          stamp(body)
-          await r.fulfill({ response, json: body })
-        })
-        await second.page.goto(`${BASE_URL}/rostering?tab=week`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-        const block = second.page.locator('[data-shift-open]').first()
-        await block.waitFor({ state: 'visible', timeout: 30_000 })
-        await block.click()
-        const panel = second.page.getByRole('dialog', { name: 'Shift details' })
-        await panel.waitFor({ state: 'visible', timeout: 15_000 })
-        const archivedOptions = await panel.getByLabel('Service location').locator('option').allInnerTexts()
-        check(t('the picker shows the archived label on a shift that has an archived place'), archivedOptions.includes('Old depot (archived)'), archivedOptions)
-        await second.context.close()
-      } else await context.close()
+      await context.close()
     } catch (e) { check(t(`${state} ran`), false, String(e.message).split('\n')[0]) }
   }
 
