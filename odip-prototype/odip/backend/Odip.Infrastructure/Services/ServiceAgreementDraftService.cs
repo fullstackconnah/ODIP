@@ -384,11 +384,12 @@ public sealed class ServiceAgreementDraftService
     public async Task<(AgreementPdf? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
     {
         // The blocks too: the PDF prints the weekly schedule from them. Two collections, so two queries and not their cross product.
-        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
+        // Id, participant and tenant are all matched explicitly, so the tenant filter is off: the emailed-link PDF has no signed-in tenant.
+        var draft = await _db.ServiceAgreementDrafts.IgnoreQueryFilters([TenantFilter.Name]).Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
             .SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null) return (null, "Draft not found.");
         // Who it is from: the organisation's own settings, named by tenant (a SuperAdmin's context has no query filter, so it could hand back another organisation's).
-        var provider = AgreementProvider.From(await _db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, ct));
+        var provider = AgreementProvider.From(await _db.ProviderSettings.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, ct));
         return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft, provider, await CategoriesAsync(draft, ct)), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
     }
 

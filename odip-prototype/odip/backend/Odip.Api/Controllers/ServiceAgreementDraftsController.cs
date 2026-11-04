@@ -31,8 +31,9 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly ServiceAgreementApprovalService _approval;
     private readonly AgreementPatternChangeService _patternChange;
     private readonly AgreementRenewalService _renewal;
+    private readonly AgreementShareService _share;
     public const string SaveBusyMessage = "Another plan is already being saved for your organisation. Try again in a moment.";
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null, AgreementPatternChangeService? patternChange = null, AgreementRenewalService? renewal = null)
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null, AgreementPatternChangeService? patternChange = null, AgreementRenewalService? renewal = null, AgreementShareService? share = null)
     {
         _saveLimiter = saveLimiter;
         _approval = approval ?? new ServiceAgreementApprovalService(db, new Odip.Api.Services.RosterPlacementGate());
@@ -41,6 +42,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
         _configuration = configuration ?? new ConfigurationBuilder().Build();
+        _share = share ?? new AgreementShareService(db, service, new Odip.Infrastructure.Notifications.IntakeInviteSender([], Microsoft.Extensions.Logging.Abstractions.NullLogger<Odip.Infrastructure.Notifications.IntakeInviteSender>.Instance), _configuration);
     }
 
     // Every GET here returns money (unit prices, totals, the pricing answer, the PDF's figures), and money is never visible to SupportWorker or ReadOnly: Claims and Billing refuse them for every
@@ -149,7 +151,8 @@ public class ServiceAgreementDraftsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Approve(Guid participantId, Guid id, ApproveDraftDto? dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
-        var outcome = await _approval.ApproveAsync(tenantId, participantId, id, dto?.AcknowledgeOverlaps ?? false, Caller(), ct);
+        var outcome = await _approval.ApproveAsync(tenantId, participantId, id, dto?.AcknowledgeOverlaps ?? false, Caller(), ct,
+            dto is null || (dto.AgreedByPersonId is null && dto.AgreedByName is null && dto.AgreedHow is null) ? null : new ServiceAgreementApprovalService.ApprovalAgreed(dto.AgreedByPersonId, dto.AgreedByName, dto.AgreedHow));
         switch (outcome.Status)
         {
             case ApprovalStatus.NotFound:
@@ -323,6 +326,43 @@ public class ServiceAgreementDraftsController : ControllerBase
         return File(pdf!.Content, "application/pdf", pdf.FileName);
     }
 
+    /// <summary>
+    /// Who the agreement can be sent to and what has been sent (newest first, at most 20): never a link or its hash. A send that did not go carries its error and is never shown as sent.
+    /// The same roles as every read here (it holds contacts' emails and the figures of a plan).
+    /// </summary>
+    [HttpGet("{id:guid}/sharing")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<AgreementSharingDto>>> Sharing(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<AgreementSharingDto>.Fail("A tenant context is required."));
+        if (!await _db.ServiceAgreementDrafts.AnyAsync(x => x.Id == id && x.ParticipantId == participantId && x.TenantId == tenantId, ct))
+            return NotFound(ApiResponse<AgreementSharingDto>.Fail("Draft not found."));
+        return Ok(ApiResponse<AgreementSharingDto>.Ok(await _share.SharingAsync(tenantId, participantId, id, ct)));
+    }
+
+    /// <summary>
+    /// Emails the revision to a contact as a link. 200 <c>{ sent, error }</c> (error NotConfigured or Failed when it did not go; the row is kept and older links stay live);
+    /// 400 for a person who is not a contact or has no usable email; 403 for a role the organisation does not let approve; 404; 409 for a stale version, a revision that is approved,
+    /// replaced or ended, or an organisation with no contact email or phone.
+    /// </summary>
+    [HttpPost("{id:guid}/send")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(4_096)]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<SendAgreementResultDto>>> Send(Guid participantId, Guid id, SendAgreementDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<SendAgreementResultDto>.Fail("A tenant context is required."));
+        var outcome = await _share.SendAsync(tenantId, participantId, id, dto, Caller(), ct);
+        return outcome.Status switch
+        {
+            AgreementSendStatus.NotFound => NotFound(ApiResponse<SendAgreementResultDto>.Fail("Draft not found.")),
+            AgreementSendStatus.NotAnApprover => StatusCode(StatusCodes.Status403Forbidden, ApiResponse<SendAgreementResultDto>.Fail(outcome.Message!)),
+            AgreementSendStatus.Stale or AgreementSendStatus.NotSendable or AgreementSendStatus.NoOrganisationContact => Conflict(ApiResponse<SendAgreementResultDto>.Fail(outcome.Message!)),
+            AgreementSendStatus.BadRecipient => BadRequest(ApiResponse<SendAgreementResultDto>.Fail(outcome.Message!)),
+            _ => Ok(ApiResponse<SendAgreementResultDto>.Ok(new SendAgreementResultDto { Sent = outcome.Error is null, Error = outcome.Error })),
+        };
+    }
+
     [HttpPost("signing-snapshots")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ElectronicSigningSnapshotDto>>> CreateSigningSnapshot(Guid participantId, CreateElectronicSigningSnapshotDto dto, CancellationToken ct)
@@ -374,6 +414,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         ApprovedAt = approval.ApprovedAt, ApprovedByName = approval.ApprovedByName,
         PatternsCreated = approval.PatternsCreated, PatternsEnded = approval.PatternsEnded, ShiftsCreated = approval.ShiftsCreated,
         HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
+        AgreedByName = approval.AgreedByName, AgreedHow = approval.AgreedHow,
     };
 
     /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>

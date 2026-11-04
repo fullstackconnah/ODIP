@@ -271,6 +271,8 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationRaiser, Odip
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmtpEmailChannel>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
 builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
+// Send agreement to contact: the emailed link and its public read (needs the sender above and Notifications:PublicBaseUrl).
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementShareService>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
 // ── Report a problem (sidebar foot → Work Board card) ──────────────────

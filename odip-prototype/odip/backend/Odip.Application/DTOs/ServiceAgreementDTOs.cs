@@ -211,6 +211,12 @@ public record ApproveDraftDto
 {
     /// <summary>Required (true) when hand-made patterns of the participant overlap the ones this approval makes: they are never ended or changed, and approving without saying so is refused.</summary>
     public bool AcknowledgeOverlaps { get; init; }
+    /// <summary>Optional: the contact (of this participant) who agreed to it. The name stored is theirs, copied at approval; a person who is not a contact of the participant is refused.</summary>
+    public Guid? AgreedByPersonId { get; init; }
+    /// <summary>Optional: who agreed, when they are not on the contact list. Trimmed, at most 200 characters. Ignored for the name when <see cref="AgreedByPersonId"/> is set.</summary>
+    [StringLength(200)] public string? AgreedByName { get; init; }
+    /// <summary>Optional: how they agreed. An undefined value is refused.</summary>
+    public Odip.Domain.Enums.AgreementAgreedHow? AgreedHow { get; init; }
 }
 
 /// <summary>The record of an approval: who, when and what it did. Never changed afterwards; there is no un-approving.</summary>
@@ -228,6 +234,10 @@ public record DraftApprovalDto
     public DateOnly? HorizonEnd { get; init; }
     /// <summary>The first day it made a shift for; absent when it made none.</summary>
     public DateOnly? FirstShiftDate { get; init; }
+    /// <summary>Who agreed to it, when the approver said (a contact's name as it was at approval, or a typed name). Absent otherwise.</summary>
+    public string? AgreedByName { get; init; }
+    /// <summary>How they agreed. Absent when not said.</summary>
+    public Odip.Domain.Enums.AgreementAgreedHow? AgreedHow { get; init; }
 }
 
 /// <summary>
