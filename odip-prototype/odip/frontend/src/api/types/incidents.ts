@@ -245,6 +245,8 @@ export interface CreateIncidentDto {
 
 export interface UpdateIncidentDto extends CreateIncidentDto {
   status: IncidentStatus
+  /** The `updatedAt` string the form was loaded from, sent back untouched; a different stored one is a 409. Omit to skip the check (restore). */
+  expectedUpdatedAt?: string
   qscReportingStatus: QscReportingStatus
   /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   qscReportedAt?: string

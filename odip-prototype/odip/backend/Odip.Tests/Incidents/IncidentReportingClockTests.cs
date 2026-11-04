@@ -150,14 +150,14 @@ public class IncidentReportingClockTests
         // 02:30:30 AEST on 5 Apr 2026, the second 02:30 of the night the clocks go back.
         created.AwareAt = new DateTime(2026, 4, 4, 16, 30, 30, DateTimeKind.Utc);
         await db.SaveChangesAsync();
-        var notify = created.NotifyDueAt;
 
         var result = await controller.Update(created.Id, UpdateDto(created) with { AwareAtLocal = new DateTime(2026, 4, 5, 2, 30, 0) }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
         var saved = await db.IncidentReports.SingleAsync();
         Assert.Equal(new DateTime(2026, 4, 4, 16, 30, 30, DateTimeKind.Utc), saved.AwareAt);
-        Assert.Equal(notify, saved.NotifyDueAt);
+        // The dues are worked out from the kept aware time: a Critical incident is due 24 hours after it.
+        Assert.Equal(saved.AwareAt!.Value.AddHours(24), saved.NotifyDueAt);
     }
 
     [Fact]
