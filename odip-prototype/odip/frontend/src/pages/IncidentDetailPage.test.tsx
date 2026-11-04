@@ -11,6 +11,9 @@ const { mockUseIncident } = vi.hoisted(() => ({
 
 vi.mock('@/api/hooks', () => ({
   useIncident: mockUseIncident,
+  // The Admin review card, which these tests do not exercise (IncidentReviewCard.test.tsx does).
+  useIncidentStatusHistory: () => ({ data: [], isLoading: false, isError: false }),
+  useRecordIncidentReview: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, isError: false }),
 }))
 
 function renderPage(id = 'inc-1') {

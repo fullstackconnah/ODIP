@@ -149,36 +149,6 @@ public class SameTenantWritePathTests
         Assert.Contains("reported-by", body.Errors![0], StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task Incidents_ReviewedByStaffFromAnotherTenant_ReturnsBadRequest()
-    {
-        var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
-        var reporter = SeedUserInTenant(db, tenantAId, "Own", "Reporter");
-        var foreignReviewer = SeedUserInTenant(db, tenantBId, "Foreign", "Reviewer");
-        var trip = SeedTrip(db, tenantAId);
-        var controller = new IncidentsController(db);
-
-        var createDto = new CreateIncidentDto
-        {
-            TripInstanceId = trip.Id, ReportedByStaffId = reporter.Id,
-            IncidentType = IncidentType.Other, OtherTypeSpecify = "Other specify", Severity = IncidentSeverity.Low, Title = "T", Description = "D",
-        };
-        var created = await controller.Create(createDto, CancellationToken.None);
-        var incidentId = Assert.IsType<ApiResponse<IncidentListDto>>(
-            Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
-
-        var updateDto = new UpdateIncidentDto
-        {
-            TripInstanceId = trip.Id, ReportedByStaffId = reporter.Id, ReviewedByStaffId = foreignReviewer.Id,
-            IncidentType = IncidentType.Other, OtherTypeSpecify = "Other specify", Severity = IncidentSeverity.Low, Title = "T", Description = "D",
-        };
-        var result = await controller.Update(incidentId, updateDto, CancellationToken.None);
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<IncidentListDto>>(badRequest.Value);
-        Assert.Contains("reviewed-by", body.Errors![0], StringComparison.OrdinalIgnoreCase);
-    }
-
     // ── Incidents: INC-01 trip linkage ──────────────────────────────────
 
     [Fact]

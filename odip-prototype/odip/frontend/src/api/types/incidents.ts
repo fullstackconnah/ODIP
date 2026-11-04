@@ -259,9 +259,6 @@ export interface UpdateIncidentDto extends CreateIncidentDto {
   /** Omitted keeps the stored flag. */
   commissionFinalReportRequested?: boolean
   commissionFinalReportedAt?: string
-  reviewedByStaffId?: string
-  reviewNotes?: string
-  correctiveActions?: string
   familyNotified: boolean
   /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   familyNotifiedAt?: string
@@ -324,9 +321,6 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     commissionDetailedReportedAt: i.commissionDetailedReportedAt ?? undefined,
     commissionFinalReportRequested: i.commissionFinalReportRequested,
     commissionFinalReportedAt: i.commissionFinalReportedAt ?? undefined,
-    reviewedByStaffId: i.reviewedByStaffId ?? undefined,
-    reviewNotes: i.reviewNotes ?? undefined,
-    correctiveActions: i.correctiveActions ?? undefined,
     familyNotified: i.familyNotified,
     familyNotifiedAt: i.familyNotifiedAt ?? undefined,
     supportCoordinatorNotified: i.supportCoordinatorNotified,
@@ -349,4 +343,21 @@ export type IncidentTrendDto = {
   /** The provider-timezone date, so the card names "this month" without its own clock. */
   today: string
   months: IncidentTrendMonthDto[]
+}
+
+/** PUT /incidents/:id/review (Admin, SuperAdmin). The reviewer is the caller and the date is the server's, so neither is sent. */
+export interface RecordIncidentReviewDto {
+  reviewNotes: string
+  correctiveActions?: string
+  status: IncidentStatus
+}
+
+/** One status change, from the audit trail (Admin, Coordinator, SuperAdmin). Newest first. */
+export interface IncidentStatusChangeDto {
+  /** A UTC instant. */
+  at: string
+  byName: string | null
+  /** Null for the first row: the incident was reported as `to`. */
+  from: IncidentStatus | null
+  to: IncidentStatus
 }

@@ -8,6 +8,8 @@ import type {
   CreateIncidentDto,
   UpdateIncidentDto,
   IncidentTrendDto,
+  RecordIncidentReviewDto,
+  IncidentStatusChangeDto,
 } from '../types'
 
 /**
@@ -39,6 +41,15 @@ export function useIncident(id: string | undefined) {
     queryKey: ['incident', id],
     queryFn: () => apiGet<IncidentDetailDto>(`/incidents/${id}`),
     enabled: !!id,
+  })
+}
+
+/** Status history of one incident (Admin, Coordinator, SuperAdmin); the caller passes enabled=false for a role that would only get 403. */
+export function useIncidentStatusHistory(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['incident', id, 'status-history'],
+    queryFn: () => apiGet<IncidentStatusChangeDto[]>(`/incidents/${id}/status-history`),
+    enabled: !!id && enabled,
   })
 }
 
@@ -82,6 +93,20 @@ export function useUpdateIncident() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateIncidentDto }) =>
       apiPutRaw<IncidentDetailDto>(`/incidents/${id}`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['incidents'] })
+      qc.invalidateQueries({ queryKey: ['incident', vars.id] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+/** The Admin review: refreshes the incident (and with it the status history, which sits under the 'incident' key) and the lists. */
+export function useRecordIncidentReview() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: RecordIncidentReviewDto }) =>
+      apiPutRaw<IncidentListDto>(`/incidents/${id}/review`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
       qc.invalidateQueries({ queryKey: ['incident', vars.id] })

@@ -387,10 +387,10 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByText(/Prefers morning visits\./)).toBeInTheDocument()
   })
 
-  it('lists the About sub-tabs like the wizard, and each section shows its own heading', () => {
+  it('lists the two About chips, and each section shows its own heading on the chip that holds it', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123', isCald: true }), isLoading: false })
     const { unmount } = renderAtTab('participant-1', 'about')
-    expect(subLabels()).toEqual(['Identity', 'Address & living', 'NDIS & funding', 'Services', 'Key identifiers', 'Cultural background', 'About me'])
+    expect(subLabels()).toEqual(['Profile', 'NDIS & services'])
     unmount()
     const headings: Record<string, string> = {
       identity: 'Identity', 'ndis-plan': 'NDIS & Funding', 'key-identifiers': 'Key Identifiers', 'culture-and-rights': 'Cultural Background',
@@ -402,7 +402,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     })
   })
 
-  it('lists the Health sub-tabs in order, with the risk summary before the entries', () => {
+  it('lists the Health chips in order, with the risk summary before the entries', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({
         primaryDiagnosis: 'Autism', memory: 'Fair', serviceStreams: 'CommunityAccessDailyLiving',
@@ -412,25 +412,25 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       isLoading: false,
     })
     const { unmount } = renderAtTab('participant-1', 'health')
-    expect(subLabels()).toEqual(['Emergency', 'Medical', 'Conditions', 'Medications', 'Behaviour & communication', 'Behaviour support', 'Risks', 'Restrictive practices', 'Earlier checklist'])
+    expect(subLabels()).toEqual(['Medical', 'Medications', 'Risks & practices', 'Behaviour'])
     unmount()
     renderAtTab('participant-1', 'health', 'risks')
     const summary = screen.getByRole('heading', { name: 'Risks & Hazards Summary' })
     expect(summary.compareDocumentPosition(screen.getByTestId('risk-entries-section')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('keeps each nested CRUD section on the sub-tab that owns it, one section at a time', () => {
+  it('keeps each nested CRUD section on the chip that holds it, one chip at a time', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    const owned: Record<string, Record<string, string>> = {
-      health: { 'health-conditions': 'health-conditions-section', risks: 'risk-entries-section', medications: 'medications-tab', 'restrictive-practices': 'restrictive-practices-tab' },
-      daily: { 'daily-living': 'adl-assessments-section', routines: 'routines-tab' },
-      people: { contacts: 'contacts-tab' },
-      records: { consents: 'consents-section', notes: 'notes-tab' },
+    const owned: Record<string, Record<string, string[]>> = {
+      health: { emergency: ['health-conditions-section'], risks: ['risk-entries-section', 'restrictive-practices-tab'], medications: ['medications-tab'] },
+      daily: { 'support-needs': ['adl-assessments-section'], routines: ['routines-tab'] },
+      people: { contacts: ['contacts-tab'] },
+      records: { consents: ['consents-section'], notes: ['notes-tab'] },
     }
-    for (const [tab, sections] of Object.entries(owned)) {
-      eachSection(tab, Object.keys(sections), section => {
-        expect(screen.getByTestId(sections[section]), tab + ' ' + section).toBeInTheDocument()
-        for (const other of Object.values(sections).filter(id => id !== sections[section])) expect(screen.queryByTestId(other), tab + ' ' + section + ' without ' + other).not.toBeInTheDocument()
+    for (const [tab, chips] of Object.entries(owned)) {
+      eachSection(tab, Object.keys(chips), chip => {
+        for (const id of chips[chip]) expect(screen.getByTestId(id), tab + ' ' + chip).toBeInTheDocument()
+        for (const other of Object.entries(chips).filter(([c]) => c !== chip).flatMap(([, ids]) => ids)) expect(screen.queryByTestId(other), tab + ' ' + chip + ' without ' + other).not.toBeInTheDocument()
       })
     }
   })
@@ -438,34 +438,34 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
   // A section with nothing recorded is a quiet sub-tab, reachable by everyone; its card shows Not recorded (and Edit for an editor).
   const quietSubTabs = () => within(subStrip()).getAllByRole('tab').filter(t => t.firstElementChild!.className.includes('border-dashed')).map(subLabel)
 
-  it('marks the empty About sections as quiet sub-tabs and shows an editor the empty card with Edit', () => {
+  it('keeps the About chips loud while a card on them is recorded, and shows an editor the empty card with Edit', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123' }), isLoading: false })
     const { unmount } = renderAtTab('participant-1', 'about')
-    expect(quietSubTabs()).toEqual(expect.arrayContaining(['Address & living', 'Cultural background', 'About me']))
-    expect(quietSubTabs()).not.toContain('Key identifiers')
-    expect(quietSubTabs()).not.toContain('Identity')
+    // A merged chip is quiet only when every card on it is empty; Profile holds Identity, which is always recorded.
+    expect(quietSubTabs()).toEqual([])
     unmount()
     renderAtTab('participant-1', 'about', 'culture-and-rights')
     const panel = screen.getByRole('tabpanel')
-    expect(within(panel).getByRole('heading', { name: 'Cultural Background' })).toBeInTheDocument()
-    expect(within(panel).getByText('Not recorded')).toBeInTheDocument()
-    expect(within(panel).getByRole('button', { name: /Edit/ })).toBeInTheDocument()
+    const culture = document.getElementById('culture-and-rights')!
+    expect(panel).toContainElement(culture)
+    expect(within(culture).getByRole('heading', { name: 'Cultural Background' })).toBeInTheDocument()
+    expect(within(culture).getByText('Not recorded')).toBeInTheDocument()
+    expect(within(culture).getByRole('button', { name: /Edit/ })).toBeInTheDocument()
     expect(panel.querySelector('details')).toBeNull()
   })
 
-  it('shows a role that cannot edit the same quiet sub-tabs and an empty card with no Edit', () => {
+  it('shows a role that cannot edit the same chips and an empty card with no Edit', () => {
     setUserRole('SupportWorker')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123' }), isLoading: false })
     const { unmount } = renderAtTab('participant-1', 'about')
-    expect(quietSubTabs()).toEqual(expect.arrayContaining(['Address & living', 'Cultural background', 'About me']))
+    expect(quietSubTabs()).toEqual([])
     unmount()
     renderAtTab('participant-1', 'about', 'culture-and-rights')
-    const panel = screen.getByRole('tabpanel')
-    expect(within(panel).getByRole('heading', { name: 'Cultural Background' })).toBeInTheDocument()
-    expect(within(panel).getByText('Not recorded')).toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: /^(Edit|Add)/ })).not.toBeInTheDocument()
-    expect(screen.queryByText(/^Not recorded: .* and /)).not.toBeInTheDocument()
+    const culture = document.getElementById('culture-and-rights')!
+    expect(within(culture).getByRole('heading', { name: 'Cultural Background' })).toBeInTheDocument()
+    expect(within(culture).getByText('Not recorded')).toBeInTheDocument()
+    expect(within(culture).queryByRole('button', { name: /^(Edit|Add)/ })).not.toBeInTheDocument()
   })
 
   // T6: every About section, for a role that cannot edit.
@@ -909,7 +909,7 @@ describe('ParticipantDetailPage — Rostering section', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     const { unmount } = renderAtTab('participant-1', 'people')
-    expect(subLabels()).toEqual(['Contacts', 'Rostering', 'Week', 'Bookings'])
+    expect(subLabels()).toEqual(['Contacts', 'Roster & staff match', 'Bookings'])
     unmount()
     renderAtTab('participant-1', 'people', 'roster')
 
@@ -940,8 +940,9 @@ describe('ParticipantDetailPage — Week section', () => {
       </MemoryRouter>,
     )
 
-    expect(selectedSub()).toEqual(['Week'])
+    expect(selectedSub()).toEqual(['Roster & staff match'])
     expect(screen.getByRole('heading', { level: 3, name: 'Roster week' })).toBeInTheDocument()
+    expect(screen.getByTestId('rostering-tab')).toBeInTheDocument()
     expect(mockPersonWeek).toHaveBeenCalledWith('participant', 'participant-1', '2026-11-02')
   })
 
@@ -950,7 +951,7 @@ describe('ParticipantDetailPage — Week section', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'people', 'week')
 
-    expect(subLabels()).not.toContain('Week')
+    expect(subLabels()).not.toContain('Roster & staff match')
     expect(selectedSub()).toEqual(['Contacts'])
     expect(mockPersonWeek).not.toHaveBeenCalled()
   })
@@ -1300,17 +1301,17 @@ describe('ParticipantDetailPage — support profile refetch', () => {
         <Routes><Route path="/participants/:id" element={<PageWithClient />} /></Routes>
       </MemoryRouter>,
     )
-    expect(selectedSub()).toEqual(['Risks'])
+    expect(selectedSub()).toEqual(['Risks & practices'])
     await waitFor(() => expect(document.getElementById('risks-summary')!.contains(document.activeElement)).toBe(true))
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
   })
 
-  it('lists Restrictive practices after Risks, and no sub-tab for the nested summary', () => {
+  it('lists Medications and Risks & practices, and no chip for the nested summary or the practices', () => {
     renderHealth()
     const labels = subLabels()
-    expect(labels).toEqual(expect.arrayContaining(['Conditions', 'Medications', 'Risks', 'Restrictive practices']))
-    expect(labels.indexOf('Restrictive practices')).toBeGreaterThan(labels.indexOf('Risks'))
+    expect(labels).toEqual(expect.arrayContaining(['Medical', 'Medications', 'Risks & practices']))
     expect(labels).not.toContain('Risks & Hazards Summary')
+    expect(labels).not.toContain('Restrictive practices')
   })
 })
 
@@ -1704,7 +1705,7 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: undefined }), isLoading: false })
     renderWithProbe('/participants/p-1?tab=about#key-identifiers')
     const section = document.getElementById('key-identifiers')!
-    expect(selectedSub()).toEqual(['Key identifiers'])
+    expect(selectedSub()).toEqual(['Profile'])
     await waitFor(() => expect(section.contains(document.activeElement)).toBe(true))
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
   })
@@ -1759,7 +1760,7 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(selectedTabName()).toEqual([expect.stringMatching(new RegExp(`^${tabName}`))])
     if (target.hash) {
       await waitFor(() => expect(document.getElementById(target.hash!)!.contains(document.activeElement)).toBe(true))
-      expect(selectedSub()).toEqual([SUB_TABS[target.tab as GroupedTabKey].find(r => r.id === target.hash)!.label])
+      expect(selectedSub()).toEqual([SUB_TABS[target.tab as GroupedTabKey].find(r => r.id === target.hash || r.nested?.includes(target.hash!))!.label])
     }
   })
 
@@ -1790,6 +1791,10 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
   it('T10: every card keeps a section id on the tab that owns it, and #risks holds both the summary and the entries', () => {
     setUserRole('Admin')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving', behaviourRiskSummary: 'x' }), isLoading: false })
+    const chips: Record<string, string[]> = {
+      about: ['identity', 'ndis-plan'], health: ['emergency', 'medications', 'risks', 'behaviour-and-communication'], daily: ['support-needs', 'routines'],
+      people: ['contacts', 'roster', 'trips'], funding: ['plan-budget', 'claims'], records: ['notes', 'consents', 'history'],
+    }
     const inventory: Record<string, string[]> = {
       about: ['identity', 'home-and-living', 'ndis-plan', 'services', 'key-identifiers', 'culture-and-rights', 'about-me'],
       health: ['emergency', 'medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'behaviour-support', 'risks', 'restrictive-practices'],
@@ -1803,9 +1808,9 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(screen.getByRole('region', { name: 'Today’s routines' })).toBeInTheDocument()
     overview()
     for (const [tab, ids] of Object.entries(inventory)) {
-      // The strip has a sub-tab for every id (a row without a node, or a node without a row, fails here), and each id's panel holds its section.
+      // The strip has a chip for every merged group, and each old section id is still an element on the chip that holds it.
       const { unmount } = renderAtTab('participant-1', tab)
-      expect(within(subStrip()).getAllByRole('tab').map(t => t.id.replace(/^sub-[a-z]+-tab-/, '')), tab).toEqual(ids)
+      expect(within(subStrip()).getAllByRole('tab').map(t => t.id.replace(/^sub-[a-z]+-tab-/, '')), tab).toEqual(chips[tab])
       unmount()
       eachSection(tab, ids, id => {
         expect(document.getElementById(id), `${tab}#${id}`).not.toBeNull()
@@ -1818,23 +1823,24 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     }
   })
 
-  it('T8: Health and Daily sub-tabs follow the plan order, and the stream-gated ones go with the stream', () => {
+  it('T8: Health and Daily chips follow the table, and the stream-gated cards go with the stream inside their chip', () => {
     setUserRole('Admin')
-    const order = {
-      health: ['emergency', 'medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'behaviour-support', 'risks', 'restrictive-practices'],
-      daily: ['support-needs', 'mobility-and-personal-care', 'equipment-and-overnight', 'daily-living', 'routines', 'meals', 'typical-day', 'transport-and-travel'],
-    }
+    const order = { health: ['emergency', 'medications', 'risks', 'behaviour-and-communication'], daily: ['support-needs', 'routines'] }
     for (const stream of ['CommunityAccessDailyLiving', 'None'] as const) {
       mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: stream, behaviourRiskSummary: 'x' }), isLoading: false })
       for (const [tab, expected] of Object.entries(order)) {
         const { unmount } = renderAtTab('participant-1', tab)
         // Tab ids, not aria-controls: only the active tab names its panel.
-        const present = within(subStrip()).getAllByRole('tab').map(t => t.id.replace(/^sub-[a-z]+-tab-/, ''))
-        expect(present, stream + ' ' + tab).toEqual(expected.filter(id => stream !== 'None' || id !== 'typical-day'))
-        // The Earlier checklist needs the stream AND an answered checklist; this participant has none.
-        expect(present).not.toContain('community-access-risk')
+        expect(within(subStrip()).getAllByRole('tab').map(t => t.id.replace(/^sub-[a-z]+-tab-/, '')), stream + ' ' + tab).toEqual(expected)
         unmount()
       }
+      const { unmount } = renderAtTab('participant-1', 'daily', 'typical-day')
+      expect(document.getElementById('typical-day') !== null, stream).toBe(stream !== 'None')
+      unmount()
+      // The Earlier checklist needs the stream AND an answered checklist; this participant has none.
+      const last = renderAtTab('participant-1', 'health', 'risks')
+      expect(document.getElementById('community-access-risk'), stream).toBeNull()
+      last.unmount()
     }
   })
 
@@ -2071,15 +2077,15 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(grid.contains(funding)).toBe(true)
   })
 
-  it('T21: the Earlier checklist sub-tab needs the stream and an answered checklist', () => {
+  it('T21: the Earlier checklist card needs the stream and an answered checklist', () => {
     renderAtTab('participant-1', 'health', 'community-access-risk')
-    expect(subLabels()).not.toContain('Earlier checklist')
-    expect(selectedSub()).toEqual(['Emergency'])
+    expect(document.getElementById('community-access-risk')).toBeNull()
+    expect(selectedSub()).toEqual(['Risks & practices'])
     cleanup()
 
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving', checklistItems: [makeChecklistItem({ itemType: 'HarmToSelf', value: 'No' })] }), isLoading: false })
     renderAtTab('participant-1', 'health', 'community-access-risk')
-    expect(subLabels().at(-1)).toBe('Earlier checklist')
+    expect(subLabels()).toEqual(['Medical', 'Medications', 'Risks & practices', 'Behaviour'])
     expect(within(document.getElementById('community-access-risk')!).getByText('Earlier checklist (1)')).toBeInTheDocument()
   })
 })
@@ -2184,8 +2190,8 @@ const everyFlag = {
 } as unknown as Partial<ParticipantDetailDto>
 /** After a vetoed switch: focus and the one tabbable chip are back on the selected sub-tab. */
 const expectSubFocusOnAboutMe = () => {
-  expect(subTab('About me')).toHaveFocus()
-  for (const t of within(subStrip()).getAllByRole('tab')) expect(t).toHaveAttribute('tabindex', subLabel(t) === 'About me' ? '0' : '-1')
+  expect(subTab('Profile')).toHaveFocus()
+  for (const t of within(subStrip()).getAllByRole('tab')) expect(t).toHaveAttribute('tabindex', subLabel(t) === 'Profile' ? '0' : '-1')
 }
 const editedAboutMe = async (role = 'Coordinator') => {
   setUserRole(role)
@@ -2204,13 +2210,12 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     mockRisks.mockReturnValue({ data: [] })
   })
 
-  it.each([['SupportWorker'], ['Coordinator'], ['Admin']])('b: every tab opens on its first visible sub-tab with only that section (%s)', role => {
+  it.each([['SupportWorker'], ['Coordinator'], ['Admin']])('b: every tab opens on its first visible chip, whose own card comes first (%s)', role => {
     setUserRole(role)
     const first: Record<string, string> = { about: 'identity', health: 'emergency', daily: 'support-needs', people: 'contacts', records: 'notes' }
     for (const [tab, id] of Object.entries(first)) {
       const { unmount } = renderAtTab('participant-1', tab)
       expect(within(subStrip()).getAllByRole('tab')[0], tab).toHaveAttribute('aria-selected', 'true')
-      expect(screen.getByRole('tabpanel').querySelectorAll('section[id]'), tab).toHaveLength(1)
       expect(screen.getByRole('tabpanel').querySelector('section[id]')!.id).toBe(id)
       unmount()
     }
@@ -2220,7 +2225,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     setUserRole('Admin')
     renderAtTab('participant-1', 'health')
     expect(screen.getByRole('tablist', { name: 'Health & safety sections' })).toBe(subStrip())
-    expect(subLabels()).toEqual(['Emergency', 'Medical', 'Conditions', 'Medications', 'Behaviour & communication', 'Behaviour support', 'Risks', 'Restrictive practices'])
+    expect(subLabels()).toEqual(['Medical', 'Medications', 'Risks & practices', 'Behaviour'])
   })
 
   it('c: choosing a sub-tab writes section= with replace, the first one deletes it, the active one does nothing, a main tab drops section and hash', async () => {
@@ -2232,9 +2237,9 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     expect(selectedSub()).toEqual(['Medications'])
     await user.click(subTab('Medications'))
     expect(probe().path).toBe('?tab=health&section=medications')
-    await user.click(subTab('Emergency'))
+    await user.click(subTab('Medical'))
     expect(probe().path).toBe('?tab=health')
-    await user.click(subTab('Risks'))
+    await user.click(subTab('Risks & practices'))
     await user.click(screen.getByRole('tab', { name: 'Daily support' }))
     expect(probe()).toEqual({ path: '?tab=daily', type: 'REPLACE' })
   })
@@ -2244,31 +2249,33 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     setUserRole('Admin')
     const { probe } = renderWithProbe('/participants/p-1?tab=health#medical')
     expect(selectedSub()).toEqual(['Medical'])
-    await user.click(subTab('Risks'))
+    await user.click(subTab('Risks & practices'))
     expect(probe().path).toBe('?tab=health&section=risks')
   })
 
   it.each([
     ['?tab=health#medical', 'Health & safety', 'Medical', 'medical'],
-    ['?tab=daily#meals', 'Daily support', 'Meals & diet', 'meals'],
-    ['?tab=daily#mobility-and-personal-care', 'Daily support', 'Mobility & personal care', 'mobility-and-personal-care'],
-    ['?tab=health#behaviour-and-communication', 'Health & safety', 'Behaviour & communication', 'behaviour-and-communication'],
-    ['?tab=health#restrictive-practices', 'Health & safety', 'Restrictive practices', 'restrictive-practices'],
-    ['?tab=about#identity', 'About', 'Identity', 'identity'],
-    ['?tab=about#home-and-living', 'About', 'Address & living', 'home-and-living'],
-    ['?tab=about#ndis-plan', 'About', 'NDIS & funding', 'ndis-plan'],
-    ['?tab=health#risks-summary', 'Health & safety', 'Risks', 'risks-summary'],
+    ['?tab=daily#meals', 'Daily support', 'Routines & meals', 'meals'],
+    ['?tab=daily#mobility-and-personal-care', 'Daily support', 'Care & ADL', 'mobility-and-personal-care'],
+    ['?tab=health#behaviour-and-communication', 'Health & safety', 'Behaviour', 'behaviour-and-communication'],
+    ['?tab=health#restrictive-practices', 'Health & safety', 'Risks & practices', 'restrictive-practices'],
+    ['?tab=about#identity', 'About', 'Profile', 'identity'],
+    ['?tab=about#home-and-living', 'About', 'Profile', 'home-and-living'],
+    ['?tab=about#about-me', 'About', 'Profile', 'about-me'],
+    ['?tab=about#ndis-plan', 'About', 'NDIS & services', 'ndis-plan'],
+    ['?tab=health#risks-summary', 'Health & safety', 'Risks & practices', 'risks-summary'],
     ['?tab=records&section=notes#history', 'Notes & records', 'History', 'history'],
-    ['?tab=details', 'About', 'NDIS & funding', 'ndis-plan'],
+    ['?tab=details', 'About', 'NDIS & services', 'ndis-plan'],
     ['?tab=contacts', 'People & roster', 'Contacts', 'contacts'],
     ['?tab=bookings', 'People & roster', 'Bookings', 'trips'],
-    ['?tab=support', 'Daily support', 'Support needs', 'support-needs'],
+    ['?tab=support', 'Daily support', 'Care & ADL', 'support-needs'],
     ['?tab=medications', 'Health & safety', 'Medications', 'medications'],
     ['?tab=notes', 'Notes & records', 'Notes', 'notes'],
-    ['?tab=routines', 'Daily support', 'Routines', 'routines'],
-    ['?tab=restrictive-practices', 'Health & safety', 'Restrictive practices', 'restrictive-practices'],
+    ['?tab=routines', 'Daily support', 'Routines & meals', 'routines'],
+    ['?tab=restrictive-practices', 'Health & safety', 'Risks & practices', 'restrictive-practices'],
     ['?tab=claims', 'Funding & claims', 'Claims', 'claims'],
-    ['?tab=rostering', 'People & roster', 'Rostering', 'roster'],
+    ['?tab=rostering', 'People & roster', 'Roster & staff match', 'roster'],
+    ['?tab=roster', 'People & roster', 'Roster & staff match', 'roster'],
     ['?tab=history', 'Notes & records', 'History', 'history'],
   ])('e: %s lands on %s / %s, focuses inside #%s and scrolls once', async (url, mainTab, sub, focusId) => {
     setUserRole('Admin')
@@ -2291,7 +2298,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
   it('f: a viewer reaching a flag target on an empty section still lands on it', async () => {
     setUserRole('ReadOnly')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    for (const [url, sub, id] of [['health#medical', 'Medical', 'medical'], ['daily#meals', 'Meals & diet', 'meals'], ['daily#mobility-and-personal-care', 'Mobility & personal care', 'mobility-and-personal-care'], ['health#behaviour-and-communication', 'Behaviour & communication', 'behaviour-and-communication']]) {
+    for (const [url, sub, id] of [['health#medical', 'Medical', 'medical'], ['daily#meals', 'Routines & meals', 'meals'], ['daily#mobility-and-personal-care', 'Care & ADL', 'mobility-and-personal-care'], ['health#behaviour-and-communication', 'Behaviour', 'behaviour-and-communication']]) {
       const view = renderWithProbe(`/participants/p-1?tab=${url}`)
       await waitFor(() => expect(document.getElementById(id)!.contains(document.activeElement)).toBe(true))
       expect(selectedSub()).toEqual([sub])
@@ -2318,19 +2325,17 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     }
   })
 
-  it('an empty section is a quiet sub-tab for everyone, and its card shows Not recorded with Edit for an editor', () => {
+  it('an empty card on a merged chip shows Not recorded, with Edit for an editor, and the chip is not quiet while another card is recorded', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     const { unmount } = renderAtTab('participant-1', 'about')
-    const quiet = within(subStrip()).getAllByRole('tab').filter(t => t.firstElementChild!.className.includes('border-dashed')).map(subLabel)
-    expect(quiet).toEqual(expect.arrayContaining(['Key identifiers']))
-    expect(subTab('Key identifiers')).toHaveAccessibleName(/, not recorded$/)
+    expect(within(subStrip()).getAllByRole('tab').filter(t => t.firstElementChild!.className.includes('border-dashed'))).toHaveLength(0)
     unmount()
     renderAtTab('participant-1', 'about', 'key-identifiers')
-    const panel = screen.getByRole('tabpanel')
-    expect(within(panel).getAllByText(/Not recorded/).length).toBeGreaterThan(0)
-    expect(within(panel).getAllByRole('button', { name: /Edit|Add/ }).length).toBeGreaterThan(0)
-    expect(panel.querySelector('details')).toBeNull()
+    const card = document.getElementById('key-identifiers')!
+    expect(within(card).getAllByText(/Not recorded/).length).toBeGreaterThan(0)
+    expect(within(card).getAllByRole('button', { name: /Edit|Add/ }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('tabpanel').querySelector('details')).toBeNull()
   })
 
   it('an editor opening an empty Daily living sub-tab sees its rows at once, with no click on a fold', () => {
@@ -2339,7 +2344,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     realAdl.on = true
     try {
       renderAtTab('participant-1', 'daily', 'daily-living')
-      const panel = screen.getByRole('tabpanel')
+      const panel = document.getElementById('daily-living')!
       expect(within(panel).getByText('Not recorded: Daily living').closest('details')).toHaveAttribute('open')
       expect(within(panel).getByText('Dressing')).toBeVisible()
     } finally { realAdl.on = false }
@@ -2360,8 +2365,8 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     mockRisks.mockReturnValue({ data: [{ isActive: true }, { isActive: true }, { isActive: false }] })
     mockNotes.mockReturnValue({ data: [{ isArchived: false }, { isArchived: false }, { isArchived: false }, { isArchived: false }] })
     renderAtTab('participant-1', 'health')
-    expect(subTab('Risks')).toHaveAccessibleName(/^Risks\s*, 2 active risks$/)
-    expect(subTab('Risks').querySelector('[aria-hidden="true"]')).toHaveTextContent('2')
+    expect(subTab('Risks & practices')).toHaveAccessibleName(/^Risks & practices\s*, 2 active risks$/)
+    expect(subTab('Risks & practices').querySelector('[aria-hidden="true"]')).toHaveTextContent('2')
     for (const t of within(subStrip()).getAllByRole('tab').filter(t => !/^Risks/.test(t.textContent!))) expect(t.textContent).not.toMatch(/\d/)
     cleanup()
     renderAtTab('participant-1', 'records')
@@ -2371,29 +2376,29 @@ describe('ParticipantDetailPage — sub-tabs', () => {
   it('i: a dirty edit makes a sub-tab switch ask first; Keep editing stays, Discard switches and releases the hold', async () => {
     const { user, probe } = await editedAboutMe()
     await user.type(screen.getByLabelText('Goals'), 'mine')
-    await user.click(subTab('Identity'))
+    await user.click(subTab('NDIS & services'))
     const dialog = screen.getByRole('alertdialog', { name: 'Discard changes?' })
     expect(within(dialog).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
-    expect(selectedSub()).toEqual(['About me'])
+    expect(selectedSub()).toEqual(['Profile'])
     expectSubFocusOnAboutMe()
     expect(screen.getByLabelText('Goals')).toHaveValue('mine')
     expect(probe().path).toBe('?tab=about&section=about-me')
-    await user.click(subTab('Identity'))
+    await user.click(subTab('NDIS & services'))
     await user.click(screen.getByRole('button', { name: 'Discard' }))
-    expect(selectedSub()).toEqual(['Identity'])
-    expect(subTab('Identity')).toHaveFocus()
-    expect(probe().path).toBe('?tab=about')
-    await user.click(subTab('Services'))
+    expect(selectedSub()).toEqual(['NDIS & services'])
+    expect(subTab('NDIS & services')).toHaveFocus()
+    expect(probe().path).toBe('?tab=about&section=ndis-plan')
+    await user.click(subTab('Profile'))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('i: opening an edit without changing anything switches without asking', async () => {
     const { user } = await editedAboutMe()
-    await user.click(subTab('Identity'))
+    await user.click(subTab('NDIS & services'))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(selectedSub()).toEqual(['Identity'])
-    expect(subTab('Identity')).toHaveFocus()
+    expect(selectedSub()).toEqual(['NDIS & services'])
+    expect(subTab('NDIS & services')).toHaveFocus()
   })
 
   it('j: the same ask for a main tab', async () => {
@@ -2414,23 +2419,23 @@ describe('ParticipantDetailPage — sub-tabs', () => {
   it('j: an arrow key on the strip with unsaved edits asks first; Keep editing leaves the sub-tab and the URL alone', async () => {
     const { user, probe } = await editedAboutMe()
     await user.type(screen.getByLabelText('Goals'), 'mine')
-    subTab('About me').focus()
-    await user.keyboard('{ArrowLeft}')
+    subTab('Profile').focus()
+    await user.keyboard('{ArrowRight}')
     const dialog = screen.getByRole('alertdialog', { name: 'Discard changes?' })
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
-    expect(selectedSub()).toEqual(['About me'])
+    expect(selectedSub()).toEqual(['Profile'])
     expect(probe().path).toBe('?tab=about&section=about-me')
     expectSubFocusOnAboutMe()
   })
 
-  // About me is the last sub-tab, so End would pick itself (no veto): End is covered on the main strip below.
-  it('j: Home on the strip with unsaved edits: Keep editing returns focus to the current sub-tab', async () => {
+  // Profile is the first chip, so Home would pick itself (no veto): End is the key that moves away.
+  it('j: End on the strip with unsaved edits: Keep editing returns focus to the current sub-tab', async () => {
     const { user } = await editedAboutMe()
     await user.type(screen.getByLabelText('Goals'), 'mine')
-    subTab('About me').focus()
-    await user.keyboard('{Home}')
+    subTab('Profile').focus()
+    await user.keyboard('{End}')
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep editing' }))
-    expect(selectedSub()).toEqual(['About me'])
+    expect(selectedSub()).toEqual(['Profile'])
     expectSubFocusOnAboutMe()
   })
 
@@ -2451,14 +2456,14 @@ describe('ParticipantDetailPage — sub-tabs', () => {
   it('j: the Discard button in the dialog is the danger style', async () => {
     const { user } = await editedAboutMe()
     await user.type(screen.getByLabelText('Goals'), 'mine')
-    await user.click(subTab('Identity'))
+    await user.click(subTab('NDIS & services'))
     expect(screen.getByRole('button', { name: 'Discard' }).className).toContain('bg-[var(--color-destructive)]')
   })
 
   it('d: a hash that is not valid percent-encoding shows the first sub-tab and no error', () => {
     setUserRole('Admin')
     renderWithProbe('/participants/p-1?tab=health#%E0')
-    expect(selectedSub()).toEqual(['Emergency'])
+    expect(selectedSub()).toEqual(['Medical'])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -2473,19 +2478,22 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     setUserRole('Admin')
     const { probe } = renderWithProbe('/participants/p-1?tab=health')
     expect(within(subStrip()).getAllByRole('tab').filter(t => t.tabIndex === 0)).toHaveLength(1)
-    subTab('Emergency').focus()
+    subTab('Medical').focus()
     await user.keyboard('{ArrowRight}')
-    expect(probe().path).toBe('?tab=health&section=medical')
+    expect(probe().path).toBe('?tab=health&section=medications')
     await user.keyboard('{End}')
-    expect(probe().path).toBe('?tab=health&section=restrictive-practices')
+    expect(probe().path).toBe('?tab=health&section=behaviour-and-communication')
     await user.keyboard('{Home}')
     expect(probe().path).toBe('?tab=health')
     await user.keyboard('{ArrowLeft}')
-    expect(probe().path).toBe('?tab=health&section=restrictive-practices')
+    expect(probe().path).toBe('?tab=health&section=behaviour-and-communication')
     await user.keyboard('{Home}')
+    // Medical holds 3 sections, so the section line sits between the strip and the panel: its three links, then the panel.
     await user.tab()
+    expect(screen.getByRole('navigation', { name: 'Sections on this page' })).toContainElement(document.activeElement as HTMLElement)
+    await user.tab(); await user.tab(); await user.tab()
     expect(screen.getByRole('tabpanel')).toContainElement(document.activeElement as HTMLElement)
-    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', subTab('Emergency').id)
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', subTab('Medical').id)
   })
 
   it('l: a sub-tab switch brings a scrolled-away strip back under the header; a visible strip does not scroll', async () => {
@@ -2498,16 +2506,115 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     try {
       renderAtTab('participant-1', 'health')
       rect.mockReturnValue({ top: -300 } as DOMRect)
-      await user.click(subTab('Medical'))
+      await user.click(subTab('Medications'))
       expect(scrollTo).toHaveBeenCalledWith({ top: 1000 - 300 - 56, behavior: 'auto' })
       scrollTo.mockClear()
       rect.mockReturnValue({ top: 120 } as DOMRect)
-      await user.click(subTab('Risks'))
+      await user.click(subTab('Risks & practices'))
       expect(scrollTo).not.toHaveBeenCalled()
     } finally {
       rect.mockRestore()
       vi.unstubAllGlobals()
       Reflect.deleteProperty(window, 'scrollY')
     }
+  })
+})
+
+describe('ParticipantDetailPage — surfacing (section line, In this profile)', () => {
+  const sectionLine = () => screen.queryByRole('navigation', { name: 'Sections on this page' })
+  const mapCard = () => screen.getByRole('list', { name: 'In this profile' })
+  const mapLines = () => within(mapCard()).getAllByRole('listitem')
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockNotes.mockReturnValue({ data: [] })
+    mockRisks.mockReturnValue({ data: [] })
+  })
+
+  it('shows the section line only on chips of 3 or more sections, linking each by hash', () => {
+    setUserRole('Admin')
+    const shown: [string, string | undefined, string[]][] = [
+      ['about', undefined, ['Identity', 'Address & Living Arrangements', 'Key Identifiers', 'Cultural Background', 'About Me']],
+      ['health', undefined, ['Emergency', 'Medical', 'Health conditions']],
+      ['daily', undefined, ['Support needs', 'Mobility and personal care', 'Equipment and overnight', 'Daily living', 'Transport and travel']],
+    ]
+    for (const [tab, section, titles] of shown) {
+      const { unmount } = renderAtTab('participant-1', tab, section)
+      expect(within(sectionLine()!).getAllByRole('link').map(a => a.textContent!.replace(/, not recorded$/, '')), tab).toEqual(titles)
+      unmount()
+    }
+    for (const [tab, section] of [['about', 'ndis-plan'], ['health', 'medications'], ['daily', 'routines'], ['people', undefined], ['records', undefined], ['funding', undefined]] as const) {
+      const { unmount } = renderAtTab('participant-1', tab, section)
+      expect(sectionLine(), `${tab}/${section}`).toBeNull()
+      unmount()
+    }
+  })
+
+  it('targets the hash of each section on the same tab, and the Typical day joins the Routines line only in the community stream', () => {
+    setUserRole('Admin')
+    renderAtTab('participant-1', 'health')
+    expect(within(sectionLine()!).getByRole('link', { name: /^Medical/ }).getAttribute('href')).toContain('?tab=health#medical')
+    cleanup()
+    renderAtTab('participant-1', 'daily', 'routines')
+    expect(sectionLine()).toBeNull()
+    cleanup()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving' }), isLoading: false })
+    renderAtTab('participant-1', 'daily', 'routines')
+    expect(within(sectionLine()!).getAllByRole('link').map(a => a.textContent!.replace(/, not recorded$/, ''))).toEqual(['Routines', 'Meals & Diet', 'Typical day'])
+  })
+
+  it('labels an empty section in the line as not recorded', () => {
+    setUserRole('Admin')
+    renderAtTab('participant-1', 'about')
+    const line = within(sectionLine()!)
+    expect(line.getByRole('link', { name: /^Cultural Background\s*, not recorded$/ })).toBeInTheDocument()
+    expect(line.getByRole('link', { name: 'Identity' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Admin', ['About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Agreements', 'Notes & records']],
+    ['Coordinator', ['About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Agreements', 'Notes & records']],
+    ['SupportWorker', ['About', 'Health & safety', 'Daily support', 'People & roster', 'Notes & records']],
+  ])('lists the tabs %s can see on Overview, and no others', (role, labels) => {
+    setUserRole(role)
+    renderAt('participant-1')
+    const visible = within(screen.getByRole('tablist', { name: 'Participant sections' })).getAllByRole('tab').map(t => t.textContent!.replace(/,\s.*$/, '').replace(/\d+$/, '')).filter(l => l !== 'Overview')
+    expect(visible).toEqual(labels)
+    const lines = mapLines().map(li => li.textContent!.replace(/\d+$/, '').replace(/,\s?not recorded/g, ''))
+    labels.forEach((label, i) => expect(lines[i], label).toContain(label.startsWith('Agreements') ? 'Agreements' : label))
+    expect(lines).toHaveLength(labels.length)
+  })
+
+  it('links the chips a role can see, and not the gated ones', () => {
+    setUserRole('SupportWorker')
+    renderAt('participant-1')
+    const hrefs = within(mapCard()).getAllByRole('link').map(a => a.getAttribute('href')!)
+    expect(hrefs.some(h => h.includes('#contacts'))).toBe(true)
+    expect(hrefs.some(h => h.includes('#roster') || h.includes('#history'))).toBe(false)
+    cleanup()
+    setUserRole('Admin')
+    renderAt('participant-1')
+    const adminHrefs = within(mapCard()).getAllByRole('link').map(a => a.getAttribute('href')!)
+    expect(adminHrefs.some(h => h.includes('#roster'))).toBe(true)
+    expect(adminHrefs.some(h => h.includes('#history'))).toBe(true)
+  })
+
+  it('shows counts equal to the tab badges', () => {
+    setUserRole('Admin')
+    mockRisks.mockReturnValue({ data: [{ isActive: true }, { isActive: true }, { isActive: false }] })
+    mockNotes.mockReturnValue({ data: [{ isArchived: false }, { isArchived: false }, { isArchived: false }, { isArchived: true }] })
+    renderAt('participant-1')
+    const badge = (name: string) => within(screen.getByRole('tab', { name: new RegExp(`^${name}`) })).queryByText(/^\d+$/)?.textContent
+    const shown = (label: string) => mapLines().find(li => li.textContent!.startsWith(label))!.querySelector('span.tabular-nums')?.firstChild?.textContent
+    expect(badge('Health & safety')).toBe('2')
+    expect(shown('Health & safety')).toBe('2')
+    expect(badge('Notes & records')).toBe('3')
+    expect(shown('Notes & records')).toBe('3')
+    // The count is spoken with its noun, as the tab badge's screen-reader text is.
+    expect(mapLines().find(li => li.textContent!.startsWith('Health & safety'))!.textContent).toContain('2 active risks')
+    expect(mapLines().find(li => li.textContent!.startsWith('Notes & records'))!.textContent).toContain('3 notes')
+    expect(badge('Daily support')).toBeUndefined()
+    expect(shown('Daily support')).toBeUndefined()
   })
 })
