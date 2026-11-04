@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 import SettingsNav from './SettingsNav'
-import { visibleSections, type SectionKey } from './settingsSections'
+import { railSections, requestedSection, visibleSections, type SectionKey } from './settingsSections'
 
 function renderNav(role: keyof typeof SETTINGS_PERMS, current: SectionKey | null, returnFocusTo: SectionKey | null = null) {
   const perms = SETTINGS_PERMS[role]
@@ -15,6 +15,17 @@ function renderNav(role: keyof typeof SETTINGS_PERMS, current: SectionKey | null
 }
 
 const nav = () => screen.getByRole('navigation', { name: 'Settings' })
+
+describe('trips switched off', () => {
+  it('drops Event templates and Activity library from the rail, but a link to either still opens', () => {
+    const perms = { ...SETTINGS_PERMS.Admin, hiddenTrips: true }
+    render(<MemoryRouter><SettingsNav sections={railSections(perms)} current="profile" noOrganisation={false} returnFocusTo={null} /></MemoryRouter>)
+    expect(within(nav()).queryByRole('link', { name: 'Event templates' })).toBeNull()
+    expect(within(nav()).queryByRole('link', { name: 'Activity library' })).toBeNull()
+    expect(within(nav()).getByRole('link', { name: 'Referral sources' })).toBeInTheDocument()
+    expect(requestedSection(new URLSearchParams('section=templates'), visibleSections(perms))?.key).toBe('templates')
+  })
+})
 
 describe('SettingsNav', () => {
   it('lists each group as a list named by its label, every section a link to its ?section= URL', () => {

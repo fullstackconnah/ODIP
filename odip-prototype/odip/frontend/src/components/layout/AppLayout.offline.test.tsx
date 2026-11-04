@@ -17,7 +17,7 @@ vi.mock('@/api/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/hooks')>()
   return {
     ...actual,
-    useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
+    useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false }),
     usePendingWitnessRequests: () => ({ data: [], isLoading: false }),
     usePendingLeaveCount: () => 0,
     usePendingCompletionCount: () => 0,

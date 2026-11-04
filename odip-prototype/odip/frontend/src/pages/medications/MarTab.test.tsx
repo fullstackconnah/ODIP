@@ -9,7 +9,7 @@ const { mockUseMar, mockUseParticipants, mockUseRecordPrnOutcome, mockNavigate, 
   mockUseParticipants: vi.fn(),
   mockUseRecordPrnOutcome: vi.fn(),
   mockNavigate: vi.fn(),
-  permissionsOverride: { canCreateIncidents: true },
+  permissionsOverride: { canCreateIncidents: true, canRecordAdministrations: true },
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -20,7 +20,7 @@ vi.mock('@/api/hooks', () => ({
 
 vi.mock('@/lib/permissions', () => ({
   usePermissions: () => ({
-    canRecordAdministrations: true, canManageMedications: true, canCreateIncidents: permissionsOverride.canCreateIncidents,
+    canRecordAdministrations: permissionsOverride.canRecordAdministrations, canManageMedications: true, canCreateIncidents: permissionsOverride.canCreateIncidents,
   }),
 }))
 
@@ -185,6 +185,7 @@ function administeredEntry(status: string, overrides: Record<string, unknown> = 
 describe('MarTab — connection map: incident link/file action on scheduled rows', () => {
   beforeEach(() => {
     permissionsOverride.canCreateIncidents = true
+    permissionsOverride.canRecordAdministrations = true
     mockUseParticipants.mockReturnValue({ data: [] })
     mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
     mockNavigate.mockReset()
@@ -241,6 +242,19 @@ describe('MarTab — connection map: incident link/file action on scheduled rows
     renderTab()
 
     expect(screen.queryByRole('button', { name: 'File incident' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MarTab — a slot nobody has recorded, seen by a role that cannot record', () => {
+  it('shows a Not recorded status badge in the status column, not bare text', () => {
+    permissionsOverride.canRecordAdministrations = false
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
+    mockUseMar.mockReturnValue({ data: { entries: [scheduledEntry()], prnMedications: [] }, isLoading: false })
+    renderTab()
+
+    expect(screen.getByText('Not recorded')).toHaveAttribute('data-status-badge')
+    expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument()
   })
 })
 

@@ -1,8 +1,7 @@
-import { networkInterfaces } from 'node:os';
 import { test, expect } from '@playwright/test';
 import { BASE_URL } from '../../support/env';
 
-// Each visitor gets their own sign-in flood budget (#288): nginx trusts CF-Connecting-IP only from a hop inside 172.16.0.0/12 and sends the API
+// Each visitor gets their own sign-in flood budget (#288): nginx trusts CF-Connecting-IP only from cloudflared (10.250.0.3) and loopback and sends the API
 // X-Forwarded-For $remote_addr, so the API partitions by the visitor, not by the proxy or a client-supplied header.
 //
 // The flood limiter ("login" policy, Program.cs) allows 60 per 5 minutes per client and answers 429 with an empty body. It sits on POST /auth/exchange, the
@@ -12,18 +11,17 @@ import { BASE_URL } from '../../support/env';
 // Every source below is a fake address of its own and the tests run serially, so nothing here can throttle another spec: only this spec calls
 // /auth/exchange, and each test uses its own fake CF-Connecting-IP.
 //
-// What this stack cannot show: every request here arrives from a Docker address (or 127.0.0.1), so "a forged CF-Connecting-IP from a non-Docker
+// What this stack cannot show: every request here arrives from a trusted hop, so "a forged CF-Connecting-IP from a non-Docker
 // LAN source is ignored" is not covered here. That is the conf test (nginxHeaders.test.ts) plus the lead's live measurement (a LAN PC arrives as
-// 192.168.4.119, outside the trusted range).
+// 192.168.4.119, not a trusted hop).
 
 // No retries: a failed attempt leaves its fake source throttled, so a retry would fail for that reason rather than the real one.
 test.describe.configure({ mode: 'serial', retries: 0 });
 
-// The runner puts Playwright in the nginx container's network namespace. 127.0.0.1 is not a trusted hop, but this container's own Docker address is
-// (a connection to it arrives from that same address), standing in for cloudflared's hop. Without one (a stack laid out differently), skip.
-const trustedHost = Object.values(networkInterfaces()).flat()
-  .find(i => i?.family === 'IPv4' && /^172\.(1[6-9]|2\d|3[01])\./.test(i.address))?.address;
-const trustedUrl = trustedHost ? `http://${trustedHost}${new URL(BASE_URL).port ? ':' + new URL(BASE_URL).port : ''}` : undefined;
+// nginx trusts CF-Connecting-IP only from cloudflared (10.250.0.3) and loopback. The runner puts Playwright in the nginx container's network
+// namespace, so BASE_URL (127.0.0.1) arrives from loopback and stands in for cloudflared. CI publishes the port, so BASE_URL arrives from the
+// Docker gateway (untrusted): there E2E_TRUSTED_URL points at a second listener inside the container that forwards from loopback.
+const trustedUrl = process.env.E2E_TRUSTED_URL ?? BASE_URL;
 
 const FLOOD_PERMITS = 60;
 
@@ -38,21 +36,27 @@ async function exchange(base: string, headers: Record<string, string>) {
 }
 
 test.describe('per-visitor sign-in flood budget', () => {
-  test.skip(!trustedUrl, 'no trusted (172.16.0.0/12) address in this container');
+  // The runner's Docker network is 192.168.x, outside the API's trusted 172.16.0.0/12 (Program.cs), so there the API never reads nginx's
+  // X-Forwarded-For and this spec has always skipped. CI sets E2E_TRUSTED_URL and must never skip: a broken forwarder there fails the spec.
+  test.beforeAll(async () => {
+    if (process.env.E2E_TRUSTED_URL) return;
+    const r = await fetch(`${trustedUrl}/api/v1/auth/dev-whoami`, { headers: { 'cf-connecting-ip': '203.0.113.99' } });
+    test.skip(!(await r.text()).includes('exempt:203.0.113.99'), "the API does not trust this stack's proxy hop (Docker network outside 172.16.0.0/12)");
+  });
 
   test('one visitor flooding is limited, another on the same endpoint is not', async () => {
     const c = { 'cf-connecting-ip': '203.0.113.12' };
     let floodedAt = 0;
     let flood: Awaited<ReturnType<typeof exchange>> | undefined;
     for (let n = 1; n <= FLOOD_PERMITS + 5 && !floodedAt; n++) {
-      const r = await exchange(trustedUrl!, c);
+      const r = await exchange(trustedUrl, c);
       if (r.status === 429) { floodedAt = n; flood = r; }
       else expect(r.status, `attempt ${n}`).toBe(401);
     }
     expect(floodedAt).toBe(FLOOD_PERMITS + 1);
     expect(flood?.text).toBe('');
 
-    const d = await exchange(trustedUrl!, { 'cf-connecting-ip': '203.0.113.13' });
+    const d = await exchange(trustedUrl, { 'cf-connecting-ip': '203.0.113.13' });
     expect(d.status).toBe(401);
   });
 
@@ -62,10 +66,10 @@ test.describe('per-visitor sign-in flood budget', () => {
     // shares one key, so it could not show a per-visitor budget there.
     const cf = '203.0.113.14';
     for (let n = 1; n <= FLOOD_PERMITS; n++) {
-      const r = await exchange(trustedUrl!, { 'cf-connecting-ip': cf, 'x-forwarded-for': n % 2 ? '198.51.100.7' : '198.51.100.8' });
+      const r = await exchange(trustedUrl, { 'cf-connecting-ip': cf, 'x-forwarded-for': n % 2 ? '198.51.100.7' : '198.51.100.8' });
       expect(r.status, `attempt ${n}`).toBe(401);
     }
-    const r = await exchange(trustedUrl!, { 'cf-connecting-ip': cf, 'x-forwarded-for': '198.51.100.9' });
+    const r = await exchange(trustedUrl, { 'cf-connecting-ip': cf, 'x-forwarded-for': '198.51.100.9' });
     expect(r.status).toBe(429);
   });
 });

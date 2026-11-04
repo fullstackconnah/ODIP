@@ -16,7 +16,7 @@ describe('toUpdateStaffDto', () => {
   it('carries every editable field of the row, with the patch applied', () => {
     expect(toUpdateStaffDto(row, { isActive: false })).toEqual({
       firstName: 'Alex', lastName: 'Rivera', role: 'SupportWorker', position: 'SupportWorker', email: 'alex@example.com', region: 'North',
-      isDriverEligible: true, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: true, isOvernightEligible: false,
+      isDriverEligible: true, isFirstAidQualified: true, isCprQualified: false, isMedicationCompetent: false, isManualHandlingCompetent: true, isOvernightEligible: false,
       isActive: false, firstAidExpiryDate: '2027-01-31', manualHandlingExpiryDate: '2027-02-28', workerScreeningNumber: 'WS-1',
       workerScreeningExpiryDate: '2028-03-01',
     })
@@ -24,6 +24,12 @@ describe('toUpdateStaffDto', () => {
 
   it('keeps the goal hours, so a status click does not clear them', () => {
     expect(toUpdateStaffDto({ ...row, goalWeeklyHours: 30 }, { isActive: false }).goalWeeklyHours).toBe(30)
+  })
+
+  it('keeps the CPR flag and expiry, so a status click does not clear them, and a patch overrides them', () => {
+    const cpr = { ...row, isCprQualified: true, cprExpiryDate: '2027-02-01' }
+    expect(toUpdateStaffDto(cpr, { isActive: false })).toMatchObject({ isCprQualified: true, cprExpiryDate: '2027-02-01' })
+    expect(toUpdateStaffDto(cpr, { cprExpiryDate: '2028-02-01' }).cprExpiryDate).toBe('2028-02-01')
   })
 
   it('keeps the employment type, so a status click does not clear it', () => {

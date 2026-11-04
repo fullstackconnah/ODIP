@@ -40,12 +40,14 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
   })
 
   // Without these, every tunnel visitor reaches the API as the Docker gateway and shares one rate-limit and sign-in-lockout bucket.
-  it('takes the visitor from CF-Connecting-IP, trusting only Docker-internal hops, and forwards that single address', () => {
+  it('takes the visitor from CF-Connecting-IP, trusting only cloudflared and loopback, and forwards that single address', () => {
     const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
-    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.0\/29;/m)
-    // Phase 1 only: phase 2 drops the 172.16.0.0/12 line once cloudflared has moved to the odip-tunnel network.
-    expect(conf).toMatch(/^\s*set_real_ip_from\s+172\.16\.0\.0\/12;/m)
-    expect(conf.match(/set_real_ip_from/g)).toHaveLength(2)
+    // Exactly these two /32s: no 172.16.0.0/12 (any container on the host), no /29 (it would include the gateway 10.250.0.1).
+    // 127.0.0.1 is safe: only a process inside the frontend container connects from loopback; a published port arrives from the gateway.
+    expect(conf.match(/^\s*set_real_ip_from\s+\S+;/gm)?.map((l) => l.trim())).toEqual([
+      'set_real_ip_from 10.250.0.3/32;',
+      'set_real_ip_from 127.0.0.1/32;',
+    ])
     // Server level, so /api sees the rewritten address too: inside `location /` it would only reach the SPA.
     const firstLocation = conf.indexOf('location ')
     for (const d of ['set_real_ip_from', 'real_ip_header', 'real_ip_recursive']) {
@@ -59,10 +61,11 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
   })
 
   // The nginx trust list and the compose network are one decision in two files; if they drift, tunnel visitors share one bucket.
-  it.skipIf(!existsSync(COMPOSE))('compose gives the frontend 10.250.0.2 on an odip-tunnel network whose subnet is the one nginx trusts', () => {
+  it.skipIf(!existsSync(COMPOSE))('compose gives the frontend 10.250.0.2 on an odip-tunnel network that contains the cloudflared address nginx trusts', () => {
     const compose = readFileSync(COMPOSE, 'utf8')
     const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
-    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.0\/29;/m)
+    // cloudflared (.3) and the frontend (.2) must both sit inside the compose subnet, or the trusted address is not on the network.
+    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.3\/32;/m)
     expect(compose).toMatch(/name:\s*odip-tunnel/)
     expect(compose).toMatch(/^\s*-\s*subnet:\s*10\.250\.0\.0\/29\s*$/m)
     // The frontend service block runs from `  frontend:` to the next top-level key; its own networks: must keep default and hold .2.

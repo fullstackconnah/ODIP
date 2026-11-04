@@ -17,7 +17,7 @@ const { mockUseStaff, mockUseSettings, providerSettings, mockMutate, mockApiGet,
 vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGet: mockApiGet }))
 vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
-  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false }),
   useStaff: mockUseStaff,
   useUnclaimedShifts: () => ({ count: 0, participants: 0, loading: false, error: false }),
   useSettings: mockUseSettings,
@@ -327,5 +327,24 @@ describe('QualificationsPage — staff from Employment Hero', () => {
     render(<MemoryRouter><QualificationsPage /></MemoryRouter>)
     expect(screen.getByText('No staff members yet')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'New staff member' })).toBeNull()
+  })
+})
+
+describe('QualificationsPage: CPR', () => {
+  beforeEach(() => { mockMutate.mockReset(); mockApiGet.mockReset(); mockPending.current = false })
+
+  it('shows an expired CPR as its own row, and its pencil saves cprExpiryDate', async () => {
+    const cleo = person('s9', 'Cleo Pulse', { isCprQualified: true, cprExpiryDate: '2026-08-22' })
+    mockUseStaff.mockReturnValue({ data: [cleo], isLoading: false })
+    mockApiGet.mockResolvedValue(cleo)
+    renderList()
+    fireEvent.click(screen.getByRole('button', { name: /Cleo Pulse/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit: CPR, Cleo Pulse' }))
+    fireEvent.change(screen.getByLabelText('Expiry date'), { target: { value: '2027-08-22' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
+    expect(mockMutate.mock.calls[0][0]).toEqual({ id: 's9', data: expect.objectContaining({ isCprQualified: true, cprExpiryDate: '2027-08-22' }) })
   })
 })

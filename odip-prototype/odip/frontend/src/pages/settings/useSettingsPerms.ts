@@ -1,4 +1,4 @@
-import { useAuthConfig } from '@/api/hooks'
+import { useAuthConfig, useModuleVisibility } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import type { SettingsPerms } from './settingsSections'
 import { getViewAs } from '@/lib/viewAs'
@@ -7,5 +7,6 @@ import { getViewAs } from '@/lib/viewAs'
 export function useSettingsPerms(): SettingsPerms {
   const perms = usePermissions()
   const config = useAuthConfig()
-  return { ...perms, microsoftSignIn: config.data?.microsoft === true, viewingAs: getViewAs('odip_viewing_user') !== null }
+  const visibility = useModuleVisibility()
+  return { ...perms, hiddenTrips: !visibility.isError && visibility.data?.hiddenTrips === true, microsoftSignIn: config.data?.microsoft === true, viewingAs: getViewAs('odip_viewing_user') !== null }
 }

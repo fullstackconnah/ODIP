@@ -1,13 +1,14 @@
 // Which staff credentials count, and what state each is in: ONE rule for the Qualifications list, a staff member's Credentials tab and the
 // Dashboard's "Qualification Issues" figure, so the three can never disagree. Pure and JSX-free.
 //
-// The rule: a credential with a qualification flag (First Aid, Driver Licence, Manual Handling, Medication Competency) applies when the
+// The rule: a credential with a qualification flag (First Aid, CPR, Driver Licence, Manual Handling, Medication Competency) applies when the
 // flag is set, with or without a date (no date is an issue). Worker Screening has no flag: it applies to every active person (the roster
 // warns on a missing screening for anyone it can assign, RosterConflictService WSC_MISSING) and to anyone with a date; no date is an issue.
 import { deadlineState, isDeadlineIssue, type DeadlineState } from './deadline'
 
 export const CREDENTIALS = [
   { key: 'firstAid', label: 'First Aid', flag: 'isFirstAidQualified', field: 'firstAidExpiryDate' },
+  { key: 'cpr', label: 'CPR', flag: 'isCprQualified', field: 'cprExpiryDate' },
   { key: 'driver', label: 'Driver Licence', flag: 'isDriverEligible', field: 'driverLicenceExpiryDate' },
   { key: 'manualHandling', label: 'Manual Handling', flag: 'isManualHandlingCompetent', field: 'manualHandlingExpiryDate' },
   { key: 'medication', label: 'Medication Competency', flag: 'isMedicationCompetent', field: 'medicationCompetencyExpiryDate' },
@@ -22,6 +23,8 @@ export interface CredentialSource {
   isActive?: boolean
   isFirstAidQualified?: boolean
   firstAidExpiryDate?: string | null
+  isCprQualified?: boolean
+  cprExpiryDate?: string | null
   isDriverEligible?: boolean
   driverLicenceExpiryDate?: string | null
   isManualHandlingCompetent?: boolean

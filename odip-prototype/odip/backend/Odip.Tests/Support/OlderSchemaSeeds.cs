@@ -11,6 +11,7 @@ internal static class OlderSchemaSeeds
 {
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
+        ("AppSettings", "HiddenTrips", "boolean NOT NULL DEFAULT FALSE"),
         ("IncidentReports", "AmbulanceOfficerName", "character varying(100)"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
@@ -42,8 +43,10 @@ internal static class OlderSchemaSeeds
         ("ShiftBreaks", "WithParticipant", "boolean"),
         ("Shifts", "CancelledAt", "timestamp without time zone"),
         ("StaffParticipantCompatibilities", "Rank", "integer"),
+        ("Users", "CprExpiryDate", "date"),
         ("Users", "EmploymentType", "integer"),
         ("Users", "GoalWeeklyHours", "numeric"),
+        ("Users", "IsCprQualified", "boolean NOT NULL DEFAULT false"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)
