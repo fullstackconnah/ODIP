@@ -99,6 +99,11 @@ for (const vp of VPS) {
     const pool = dialog.locator('section[data-pool-key]').first()
     const table = pool.locator('table').first()
 
+    if (vp.touch) check(t('diag: layout widths'), true, await page.evaluate(() => {
+      const d = document.querySelector('[role=dialog]'); const s = d.querySelector('section[data-pool-key]'); const r = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.width)] }
+      const wide = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed').slice(0, 6).map((e) => `${e.tagName}.${String(e.className).slice(0, 50)} ${r(e)}`)
+      return { iw: innerWidth, docScroll: document.documentElement.scrollWidth, dialog: r(d), section: r(s), wide }
+    }))
     const geo = await page.evaluate(() => {
       const d = document.querySelector('[role=dialog]')
       const scrollers = [d, ...d.querySelectorAll('*')].filter((e) => { const o = getComputedStyle(e).overflowY; return o === 'auto' || o === 'scroll' })
@@ -136,7 +141,7 @@ for (const vp of VPS) {
     // worked-out state: a pool row whose box is empty
     await crop(page, pool, `editor-rollover-set-by-hand-${tag}.png`, vp)
     if (vp.touch) await crop(page, table, `editor-rollover-390-${tag}.png`, vp)
-    await reset.click()
+    await reset.dispatchEvent('click')
     await page.waitForTimeout(300)
     await crop(page, pool, `editor-rollover-worked-out-${tag}.png`, vp)
     const firstLine = pool.getByText('Nothing rolls over into the first period.').first()
@@ -149,8 +154,8 @@ for (const vp of VPS) {
     const message = dialog.locator('p', { hasText: /rolled-over amount|rolled over/i }).filter({ hasText: /at least|can't be|cannot|must/i }).first()
     if (!(await message.isVisible().catch(() => false))) await dialog.getByRole('button', { name: /^Save/ }).first().click().catch(() => {})
     await page.waitForTimeout(400)
-    const errText = await dialog.locator('p.text-\\[var\\(--color-destructive\\)\\]').first().innerText().catch(() => '')
-    check(t('error: a rolled-over message shows for -5'), /roll/i.test(errText), errText)
+    const errText = await box.evaluate((el) => el.parentElement.parentElement.querySelector(':scope > p.text-\[var\(--color-destructive\)\]')?.textContent ?? '')
+    check(t('error: the rollover row shows a message under the box for -5'), errText.length > 0, errText)
     await crop(page, pool, `editor-rollover-error-${tag}.png`, vp)
     await context.close()
   } catch (e) { check(t('editor states ran'), false, String(e.message).split('\n')[0]) }

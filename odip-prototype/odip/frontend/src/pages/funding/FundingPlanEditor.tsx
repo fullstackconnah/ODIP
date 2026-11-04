@@ -511,7 +511,7 @@ function RolloverRow({ span, value, problem, workedOut, onChange }: { span: stri
   const ready = workedOut.status === 'ready' ? workedOut : null
   const hint = byHand
     ? ready ? `Set by hand. Worked out: ${formatCurrency(ready.amount)}.` : 'Set by hand.'
-    : ready ? (ready.amount > 0 ? `Worked out from what was left unspent: ${formatCurrency(ready.amount)}. Type an amount to change it.` : 'Nothing was left unspent last period.')
+    : ready ? (ready.amount > 0 ? `Worked out from what was left unspent: ${formatCurrency(ready.amount)}` : 'Nothing was left unspent last period.')
       : workedOut.status === 'loading' ? 'Working out the rolled-over amount…'
         : workedOut.status === 'failed' ? 'Couldn’t work out the rolled-over amount. You can still type one.'
           : 'Worked out once the period before has ended.'

@@ -1320,7 +1320,7 @@ describe('editor: the rolled-over amount of each period', () => {
     expect(rolled(0)).toHaveValue('')
     expect(rolled(0)).toHaveAttribute('placeholder', '500.00')
     expect(rolled(2)).toHaveAttribute('placeholder', '2820.00')
-    expect(within(coreCard()).getByText('Worked out from what was left unspent: $500.00. Type an amount to change it.')).toBeInTheDocument()
+    expect(within(coreCard()).getByText('Worked out from what was left unspent: $500.00')).toBeInTheDocument()
     expect(within(coreCard()).getByText('Nothing rolls over into the first period.')).toBeInTheDocument()
     expect(within(coreCard()).getByText('Worked out from the amounts above as saved.')).toBeInTheDocument()
   })
