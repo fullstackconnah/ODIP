@@ -22,4 +22,6 @@ public class AppSettings : ITenantEntity
     public int PlanExpiryWarningDays { get; set; } = 30;
     /// <summary>Minutes a sign-in lasts, counted from when the person signed in. Null = no limit (today's behaviour); never backfilled.</summary>
     public int? SessionLengthMinutes { get; set; }
+    /// <summary>How far down the compatibility tiers auto-roster may place without a flag: 0 Preferred, 1 Backup, 2 Emergency, 3 anyone not marked No. Past it a pick is still proposed but marked "Needs a look". 3 is the old behaviour.</summary>
+    public int AutoRosterReach { get; set; } = 3;
 }

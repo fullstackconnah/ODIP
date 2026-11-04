@@ -1511,6 +1511,7 @@ public record AppSettingsDto
     public int VarianceReviewMinutes { get; init; }
     public int PlanExpiryWarningDays { get; init; }
     public int? SessionLengthMinutes { get; init; }
+    public int AutoRosterReach { get; init; } = 3;
 }
 
 public record UpdateSecuritySettingsDto
@@ -1552,6 +1553,9 @@ public record UpdateAppSettingsDto
     /// <summary>Days before a participant's plan ends that the alert starts.</summary>
     [System.ComponentModel.DataAnnotations.Range(1, 365)]
     public int? PlanExpiryWarningDays { get; init; }
+    /// <summary>0 Preferred only, 1 through Backup, 2 through Emergency, 3 anyone not marked No; left out keeps the stored value.</summary>
+    [System.ComponentModel.DataAnnotations.Range(0, 3)]
+    public int? AutoRosterReach { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════
