@@ -250,6 +250,14 @@ public record StaffLeaveDto
     public LeaveStatus Status { get; init; }
 }
 
+/// <summary>A whole day the person marked Available or Preferred, with no leave or unavailability: the staff picker's "Available that day".</summary>
+public record StaffAvailableDayDto
+{
+    public Guid StaffId { get; init; }
+    public DateOnly Date { get; init; }
+    public bool Preferred { get; init; }
+}
+
 public record RosterExceptionDto
 {
     public Guid? ShiftId { get; init; }
@@ -329,6 +337,8 @@ public record RosterBoardDto
     public List<PendingAgreementDto>? PendingAgreements { get; init; }
     /// <summary>Participant mode only: the week's approved and pending leave of every active staff member, for the staff picker. Null in staff mode.</summary>
     public List<StaffLeaveDto>? StaffLeave { get; init; }
+    /// <summary>Both modes: the days of the week (and the day after, for an overnight Sunday shift) each active staff member marked Available or Preferred and is not away. Empty, never null.</summary>
+    public List<StaffAvailableDayDto> StaffAvailableDays { get; init; } = new();
     public List<RosterExceptionDto> Exceptions { get; init; } = new();
 }
 

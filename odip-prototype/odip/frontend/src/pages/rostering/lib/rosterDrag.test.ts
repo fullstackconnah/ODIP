@@ -395,3 +395,56 @@ describe('pickerGroups — Employment Hero start date', () => {
     expect(groups.free.map(r => r.key)).toEqual(['same', 'none'])
   })
 })
+
+describe('pickerGroups availability', () => {
+  const target = makeUnfilledShift({ id: 'open', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', status: 'Draft' })
+  const person = (id: string) => ({ id, fullName: id, isActive: true, hasExpiredQualifications: false }) as StaffListDto
+  const day = (staffId: string, date: string, preferred = false) => ({ staffId, date, preferred })
+  const keys = (rows: PickRow[]) => rows.map(r => r.key)
+  const none = new Map<string, number>()
+
+  it('lists marked people under available, Preferred first, and leaves the rest in free', () => {
+    const staff = [person('amy'), person('bo'), person('cal')]
+    const groups = pickerGroups(target, staff, [], [], none, [day('amy', '2026-08-18'), day('bo', '2026-08-18', true)])
+    expect(groups.available.map(r => [r.key, r.available])).toEqual([['bo', 'Preferred'], ['amy', 'Available']])
+    expect(keys(groups.free)).toEqual(['cal'])
+  })
+
+  it('is the same as today when no days are sent', () => {
+    const groups = pickerGroups(target, [person('amy')], [], [], none)
+    expect(groups.available).toEqual([])
+    expect(keys(groups.free)).toEqual(['amy'])
+  })
+
+  it('lets leave win over a marked day', () => {
+    const groups = pickerGroups(target, [person('amy')], [], [{ staffId: 'amy', from: '2026-08-18', to: '2026-08-18', status: 'Pending' }], none, [day('amy', '2026-08-18')])
+    expect(keys(groups.leave)).toEqual(['amy'])
+    expect(groups.available).toEqual([])
+  })
+
+  it('lets an overlapping shift win over a marked day', () => {
+    const other = makeShift({ id: 'amy-tue', staffId: 'amy', participantId: 'p-2', participantName: 'Liam Okafor', serviceDate: '2026-08-18', startTime: '08:00:00', endTime: '17:00:00', status: 'Draft' })
+    const groups = pickerGroups(target, [person('amy')], [other], [], none, [day('amy', '2026-08-18')])
+    expect(keys(groups.move)).toEqual(['amy:amy-tue'])
+    expect(groups.available).toEqual([])
+  })
+
+  it('needs every day an overnight shift touches to be marked', () => {
+    const night = makeUnfilledShift({ id: 'night', serviceDate: '2026-08-16', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true })
+    const sunOnly = pickerGroups(night, [person('amy')], [], [], none, [day('amy', '2026-08-16')])
+    expect(keys(sunOnly.free)).toEqual(['amy'])
+    const both = pickerGroups(night, [person('amy')], [], [], none, [day('amy', '2026-08-16'), day('amy', '2026-08-17')])
+    expect(keys(both.available)).toEqual(['amy'])
+  })
+
+  it('is Preferred only when every touched day is Preferred', () => {
+    const night = makeUnfilledShift({ id: 'night', serviceDate: '2026-08-16', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true })
+    const groups = pickerGroups(night, [person('amy')], [], [], none, [day('amy', '2026-08-16', true), day('amy', '2026-08-17')])
+    expect(groups.available[0].available).toBe('Available')
+  })
+
+  it('adds "prefers this day" to a Preferred option name', () => {
+    const groups = pickerGroups(target, [person('amy')], [], [], none, [day('amy', '2026-08-18', true)])
+    expect(pickOptionName(groups.available[0], 38)).toContain('prefers this day')
+  })
+})

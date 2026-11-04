@@ -273,3 +273,35 @@ describe('RosterBoardPage: Swap with… from the menu', () => {
     expect(within(document.querySelector('[data-shift-chip="sam-wed"]') as HTMLElement).getByRole('button', { name: /^Actions for/ })).toHaveFocus()
   })
 })
+
+describe('RosterBoardPage: the picker lists who is available that day', () => {
+  const withDays = (days: { staffId: string; date: string; preferred: boolean }[]) =>
+    h.board.mockReturnValue({ data: { ...BOARD, staffAvailableDays: days }, isLoading: false, isError: false, refetch: vi.fn() })
+
+  it('puts Available that day before Free at this time and names the Preferred option', async () => {
+    const user = userEvent.setup()
+    withDays([{ staffId: 'staff-6', date: '2026-08-18', preferred: true }])
+    renderPage()
+    await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+    expect(groupLabels(picker())).toEqual(['Available that day', 'On another shift at this time', 'On leave that day'])
+    expect(option(/^Kim Lee/)).toHaveAccessibleName(expect.stringContaining('prefers this day'))
+    expect(within(option(/^Kim Lee/)).getByText('Prefers this day')).toBeInTheDocument()
+  })
+
+  it('makes the first Available row the active one on ArrowDown', async () => {
+    const user = userEvent.setup()
+    withDays([{ staffId: 'staff-6', date: '2026-08-18', preferred: false }])
+    renderPage()
+    await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+    await user.keyboard('{ArrowDown}')
+    expect(option(/^Kim Lee/)).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('draws no Available group when no days are sent', async () => {
+    const user = userEvent.setup()
+    withDays([])
+    renderPage()
+    await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+    expect(within(picker()).queryByText('Available that day')).not.toBeInTheDocument()
+  })
+})
