@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
+import { Card } from '@/components/Card'
 import { NotRecordedFold } from './NotRecordedFold'
 
 /**
@@ -9,7 +10,7 @@ import { NotRecordedFold } from './NotRecordedFold'
  * plain line; with no rows at all there is nothing to fill in, so both get the plain line. `rows` are in DOM order, so the first unanswered one is the first row that appears on reveal.
  */
 export function FixedListFrame<T>({
-  title, rows, isAnswered, unit, addLabel, canAdd, rowSelector, children,
+  title, rows, isAnswered, unit, addLabel, canAdd, rowSelector, framed, children,
 }: {
   title: string
   rows: T[]
@@ -19,6 +20,8 @@ export function FixedListFrame<T>({
   canAdd: boolean
   /** Selects the rendered rows inside the frame, in the same order as `rows`. */
   rowSelector: string
+  /** The caller has no card of its own: the plain "not recorded" line then sits in one, so a merged chip shows a row of cards. */
+  framed?: boolean
   /** Renders the rows it is given; `visible` is the answered ones, or all of them once revealed. */
   children: (visible: T[]) => ReactNode
 }) {
@@ -31,8 +34,12 @@ export function FixedListFrame<T>({
   ) : null
 
   if (answered.length === 0) {
-    if (!canAdd || rows.length === 0) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {title}</p>
-    return <NotRecordedFold summary={title} defaultOpen>{children(rows)}{count}</NotRecordedFold>
+    if (!canAdd || rows.length === 0) {
+      const line = <p className="text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {title}</p>
+      return framed ? <Card>{line}</Card> : line
+    }
+    const fold = <NotRecordedFold summary={title} defaultOpen>{children(rows)}{count}</NotRecordedFold>
+    return framed ? <Card>{fold}</Card> : fold
   }
 
   function toggle() {

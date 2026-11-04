@@ -287,7 +287,20 @@ export default function ParticipantDetailPage() {
   // One card renders as it is; a merged chip stacks its cards in the page grid, a list (wide) taking the full row.
   const panelBody = (tab: GroupedTabKey, r: SubTab) => {
     const ms = members(tab, r)
-    return ms.length === 1 ? ms[0].node : <div className={CARD_GRID}>{ms.map(c => <div key={c.id} className={c.wide ? 'col-span-full' : undefined}>{c.node}</div>)}</div>
+    if (ms.length === 1) return ms[0].node
+    // Runs of narrow cards pack into CSS columns (no row alignment, so no holes; DOM order stays the reading order); a wide card breaks the run.
+    const runs: ShortCard[][] = []
+    ms.forEach((c, i) => { if (c.wide || i === 0 || ms[i - 1].wide) runs.push([c]); else runs[runs.length - 1].push(c) })
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        {runs.map(run => run[0].wide ? <div key={run[0].id}>{run[0].node}</div> : (
+          // The negative bottom margin cancels the last card's trailing margin.
+          <div key={run[0].id} className="mb-[calc(-1*var(--section-gap))] [column-gap:var(--section-gap)] [columns:26rem]">
+            {run.map(c => <div key={c.id} className="mb-[var(--section-gap)] break-inside-avoid">{c.node}</div>)}
+          </div>
+        ))}
+      </div>
+    )
   }
   // Counts ride on the four list rows: the numeral for sight, the spoken noun for a screen reader. A non-list chip whose cards are all empty is quiet.
   const subItems = (tab: GroupedTabKey, rows: readonly SubTab[], active: string | undefined) => rows.map(r => {

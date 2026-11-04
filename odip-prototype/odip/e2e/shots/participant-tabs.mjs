@@ -84,6 +84,34 @@ try {
     await goto(page, '/participants/p-0001?tab=agreements')
     check(`${vp.name} 1 agreements has no sub-strip`, await chipLabels(page), (await chipLabels(page)) === null)
 
+    // 5. Health and Daily (1280; a column ending short above a full-width list is a ragged end, so only same-width cards count): on every chip no card is followed by more than 32px of empty space in its column, and no bare "Not recorded:" text.
+    if (vp.name === '1280') for (const tab of ['health', 'daily']) {
+      await goto(page, `/participants/p-0001?tab=${tab}`)
+      const n = (await chipLabels(page)).length
+      for (let i = 0; i < n; i++) {
+        await page.evaluate((i) => {
+          const strip = [...document.querySelectorAll('[role="tablist"]')].find((l) => l.getAttribute('aria-label') !== 'Participant sections')
+          strip.querySelectorAll('[role="tab"]')[i].click()
+        }, i)
+        await page.waitForTimeout(400)
+        const r = await page.evaluate(() => {
+          const panel = document.querySelector('[role="tabpanel"]')
+          const secs = [...panel.querySelectorAll('section[id]')].filter((s) => !s.parentElement.closest('section[id]')).map((s) => s.getBoundingClientRect())
+          let worst = 0
+          for (const a of secs) {
+            const below = secs.filter((b) => b !== a && Math.abs(b.left - a.left) < 4 && b.top >= a.bottom - 1).sort((x, y) => x.top - y.top)[0]
+            if (below && Math.abs(below.width - a.width) < 4) worst = Math.max(worst, Math.round(below.top - a.bottom))
+          }
+          const w = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT)
+          let bare = 0
+          for (let t = w.nextNode(); t; t = w.nextNode()) if (/Not recorded:/.test(t.textContent) && !t.parentElement.closest('.rounded-md')) bare++
+          return { worst, bare }
+        })
+        check(`${vp.name} 5 ${tab} chip ${i} gap under a card`, r.worst, r.worst <= 32)
+        check(`${vp.name} 5 ${tab} chip ${i} bare Not recorded`, r.bare, r.bare === 0)
+      }
+    }
+
     // 2. A nested section= selects the merged chip, keeps the URL as written, and brings the card into view.
     const nested = [
       ['about', 'about-me', 'Profile'],
