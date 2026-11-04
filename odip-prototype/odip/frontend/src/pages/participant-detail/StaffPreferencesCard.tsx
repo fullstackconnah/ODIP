@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Users } from 'lucide-react'
+import { ArrowRight, Users } from 'lucide-react'
 import { useCompatibility, useParticipant } from '@/api/hooks'
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
@@ -29,15 +29,16 @@ export function StaffPreferencesCard({ participantId }: { participantId: string 
 
   return (
     <Card title="Staff preferences">
-      <div className="space-y-4">
+      <div className="mt-1 space-y-4">
         {nothingToShow ? (
           <EmptyState icon={Users} size="inline" title="No staff preferences yet" description="No preferred, backup or emergency staff have been listed." />
         ) : (
           <TierBoard participantId={participantId} participantName={participantName} compact />
         )}
         <CompatibilityReachLine canChange={isAdmin} />
-        <Link to={`/rostering/compatibility?participant=${participantId}`} className={`${TAP_FLOOR} text-sm text-[var(--color-primary)] hover:underline`}>
+        <Link to={`/rostering/compatibility?participant=${participantId}`} className={`inline-flex items-center gap-1 ${TAP_FLOOR} text-sm text-[var(--color-primary)] hover:underline`}>
           Open on the Compatibility page
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
     </Card>

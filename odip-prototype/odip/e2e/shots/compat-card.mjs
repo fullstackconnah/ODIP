@@ -2,7 +2,8 @@
 // States: card with tiers, card empty, card with a No chip (read-only); each at 1280 and at 390 touch. Padded crops plus one full page per width, once.
 // Numeric checks: no horizontal scroll at 390; tap targets >= 44 px on coarse pointers; the four columns stacked (equal left edge) at both widths; the link href.
 import path from 'node:path'
-import { prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { readFileSync } from 'node:fs'
+import { prepareOutDir, fullPage, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -52,11 +53,21 @@ const go = async (page) => {
   await page.getByRole('link', { name: 'Open on the Compatibility page' }).waitFor({ timeout: 30_000 })
 }
 const cardOf = (page) => page.locator('h3', { hasText: 'Staff preferences' }).locator('xpath=../..')
-const crop = async (page, loc, name, touch) => {
-  const r = await cropElement(page, loc, path.join(OUT_DIR, `${name}.png`), { pad: 24, touch })
-  const c = checkCropHolds(r)
-  check(`crop holds ${name}`, JSON.stringify(c.detail), c.pass)
+// The whole element, not a clip: fixed chrome (the bottom nav) is hidden first, the element scrolled into view, then element.screenshot.
+// The PNG's own size must match the element's box, so a card cut short by the nav or a hand clip fails here.
+const crop = async (page, loc, name) => {
+  await page.evaluate(() => { for (const el of document.querySelectorAll('body *')) if (getComputedStyle(el).position === 'fixed') el.style.visibility = 'hidden' })
+  await loc.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  const box = await loc.boundingBox()
+  const file = path.join(OUT_DIR, `${name}.png`)
+  await loc.screenshot({ path: file })
+  const png = readFileSync(file)
+  const w = png.readUInt32BE(16), h = png.readUInt32BE(20)
+  check(`crop holds ${name}`, `png ${w}x${h}, box ${Math.round(box.width)}x${Math.round(box.height)}`, Math.abs(w - box.width) <= 2 && Math.abs(h - box.height) <= 2)
 }
+const showTier = (page, only) => page.evaluate((keep) => {
+  for (const s of document.querySelectorAll('section[aria-labelledby^="tier-"]')) s.style.display = s.getAttribute('aria-labelledby') === keep ? '' : 'none'
+}, only)
 
 async function run(touch) {
   const bp = touch ? '390' : '1280'
@@ -85,12 +96,19 @@ async function run(touch) {
   const noMenu = await card.locator('section[aria-labelledby="tier-Excluded"] button').count()
   check(`No chip is read-only (${bp})`, `${noChip} chip, ${noMenu} buttons`, noChip === 1 && noMenu === 0)
 
-  await crop(page, card, `card-tiers-${bp}`, touch)
-  await crop(page, card.locator('section[aria-labelledby="tier-Excluded"]'), `card-no-chip-${bp}`, touch)
+  const caption = await card.getByText('Mark or change a No on the Compatibility page.').count()
+  check(`No caption present (${bp})`, caption, caption === 1)
+  const linkBox = await card.getByRole('link', { name: 'Open on the Compatibility page' }).boundingBox()
+  check(`link height (${bp})`, Math.round(linkBox.height), !touch || linkBox.height >= 44)
+
+  await crop(page, card, `card-tiers-${bp}`)
+  // Only the No tier stays, so the crop is the No tier, its caption, the reach line and the link.
+  await showTier(page, 'tier-Excluded')
+  await crop(page, card, `card-no-chip-${bp}`)
 
   rows = []
   await go(page)
-  await crop(page, cardOf(page), `card-empty-${bp}`, touch)
+  await crop(page, cardOf(page), `card-empty-${bp}`)
 
   rows = TIERS
   await go(page)

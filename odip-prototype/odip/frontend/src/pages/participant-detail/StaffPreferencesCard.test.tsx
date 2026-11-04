@@ -16,7 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useUpsertCompatibility: () => ({ mutate: mockUpsert }),
   useParticipant: () => ({ data: { fullName: 'Mia Chen' } }),
   useSettings: () => ({ data: { autoRosterReach: 3 } }),
-  useStaff: () => ({ data: [{ id: 'z', fullName: 'Zed Free', isActive: true }] }),
+  useStaff: () => ({ data: [{ id: 'z', fullName: 'Zed Free', isActive: true }, { id: 'o', fullName: 'Olly Gone', isActive: false }] }),
 }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => perms }))
 
@@ -74,6 +74,44 @@ describe('StaffPreferencesCard', () => {
     await user.click(screen.getByRole('button', { name: 'Options for Cam Ng' }))
     await user.click(await screen.findByRole('option', { name: 'Move to Emergency' }))
     expect(mockUpsert).toHaveBeenCalledWith({ staffId: 'c', participantId: 'p1', level: 'Emergency', reason: 'Knows the house' }, expect.anything())
+  })
+
+  it('says No is changed on the Compatibility page, also when the No tier is empty and for a reader', () => {
+    const { unmount } = setup(tierRows())
+    expect(screen.getByText('Mark or change a No on the Compatibility page.')).toBeInTheDocument()
+    unmount()
+    setup([row('a', 'Alex Rivera', 'Preferred', 1)], false)
+    expect(screen.getByText('No one is marked No.')).toBeInTheDocument()
+    expect(screen.getByText('Mark or change a No on the Compatibility page.')).toBeInTheDocument()
+  })
+
+  it('while a save is in flight the menus are disabled and the lists are busy', async () => {
+    const user = userEvent.setup()
+    setup(tierRows()) // mockUpsert never settles
+    await user.click(screen.getByRole('button', { name: 'Options for Cam Ng' }))
+    await user.click(await screen.findByRole('option', { name: 'Move to Emergency' }))
+    expect(screen.getByRole('button', { name: 'Options for Alex Rivera' })).toBeDisabled()
+    expect(within(column('Preferred')).getByRole('list')).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('a failed save shows a dismissible error and frees the menus', async () => {
+    const user = userEvent.setup()
+    mockUpsert.mockImplementation((_dto, opts) => opts.onError(new Error('boom')))
+    setup(tierRows())
+    await user.click(screen.getByRole('button', { name: 'Options for Cam Ng' }))
+    await user.click(await screen.findByRole('option', { name: 'Move to Emergency' }))
+    expect(screen.getByText('Couldn’t save this change. Try again.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Options for Alex Rivera' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Dismiss error' }))
+    expect(screen.queryByText('Couldn’t save this change. Try again.')).not.toBeInTheDocument()
+  })
+
+  it('the Add checklist lists active staff who are not yet listed, and leaves inactive staff out', async () => {
+    const user = userEvent.setup()
+    setup(tierRows())
+    await user.click(screen.getByRole('button', { name: 'Add to Backup' }))
+    expect(await screen.findByText('Zed Free')).toBeInTheDocument()
+    expect(screen.queryByText('Olly Gone')).not.toBeInTheDocument()
   })
 
   it('a reader sees names only: no buttons, and the link stays', () => {

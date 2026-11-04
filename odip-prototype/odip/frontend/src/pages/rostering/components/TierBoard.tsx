@@ -164,6 +164,9 @@ export function TierBoard({ participantId, participantName, compact = false, onM
               ) : (
                 <List aria-busy={busy} className="space-y-2">{tier.map((row, i) => chip(row, i, tier.length))}</List>
               )}
+              {compact && level === 'Excluded' && (
+                <p className="text-xs text-muted-foreground">Mark or change a No on the Compatibility page.</p>
+              )}
               {canWrite && !(compact && level === 'Excluded') && (
                 <Button
                   variant="ghost"
