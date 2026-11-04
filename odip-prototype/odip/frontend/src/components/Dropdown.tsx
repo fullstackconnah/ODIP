@@ -37,6 +37,8 @@ type DropdownProps = {
   colorClass?: string       // Tailwind color classes for pill trigger background
   /** Icon variant: replaces the small icon-button look, so a header icon can match its neighbours' size. Menu variant: added to the trigger (a min-width that holds across a changing label). */
   triggerClassName?: string
+  /** Icon variant: -1 takes the trigger out of the tab order (a grid that reaches it by arrow keys). Default: unchanged. */
+  tabIndex?: number
   /** Form variant: a long chosen label stays on one line, cut with an ellipsis and left-aligned (default: it wraps). */
   truncateLabel?: boolean
   disabled?: boolean        // caller controls — not auto-applied on empty items
@@ -71,6 +73,7 @@ export function Dropdown({
   triggerVariant = 'primary',
   colorClass = '',
   triggerClassName,
+  tabIndex,
   truncateLabel,
   disabled = false,
   loading = false,
@@ -469,6 +472,7 @@ export function Dropdown({
           aria-controls={panelId}
           aria-expanded={open}
           aria-label={label ?? 'More actions'}
+          tabIndex={tabIndex}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
