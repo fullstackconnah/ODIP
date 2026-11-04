@@ -309,7 +309,9 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
           )}
         </div>
         <AnnouncementRegion message={message} />
-        <table data-table className="sr-only">
+        {/* The wrapper clips; a table ignores sr-only's 1px width and would widen the phone layout. */}
+        <div className="sr-only">
+        <table data-table>
           <caption>Weekly figures for {scope.name}, {writtenSpan(planStart, planEnd)}</caption>
           <thead>
             <tr><th scope="col">Week to</th><th scope="col">Budget, spread evenly</th><th scope="col">Used</th><th scope="col">Used and booked</th><th scope="col">Expected</th></tr>
@@ -326,6 +328,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
             ))}
           </tbody>
         </table>
+        </div>
         <div className="mt-3 space-y-1 empty:hidden">
           {budgetTrackFootnotes(series, scope).map(note => (
             <p key={note.text} className={`text-[13px] ${note.tone === 'warning' ? 'text-[var(--color-on-warning-container)]' : 'text-[var(--color-muted-foreground)]'}`}>{note.text}</p>
