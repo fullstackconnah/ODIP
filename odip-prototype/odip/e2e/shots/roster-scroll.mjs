@@ -82,7 +82,7 @@ const board = (page) => page.evaluate(() => {
 const gaps = (page) => page.evaluate(() => {
   const bar = document.querySelector('[data-publish-bar]'), call = bar.firstElementChild, nav = document.querySelector('nav[aria-label="Mobile"]')
   const token = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--section-gap'))
-  const floor = nav && getComputedStyle(nav).position === 'fixed' ? nav.getBoundingClientRect().top : innerHeight
+  const floor = nav && nav.getBoundingClientRect().height > 0 ? nav.getBoundingClientRect().top : innerHeight
   return { token, gap: floor - call.getBoundingClientRect().bottom, barToFloor: floor - bar.getBoundingClientRect().bottom }
 })
 const wheel = async (page, dy, wait = 700) => { await page.mouse.wheel(0, dy); await page.waitForTimeout(wait) }
