@@ -365,3 +365,22 @@ describe('StaffCreatePage employment type (R6)', () => {
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
   })
 })
+
+describe('StaffCreatePage — CPR', () => {
+  it('fills the CPR checkbox and expiry date from the record, and a save sends both', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: true })
+    const staff = makeStaff({ isCprQualified: true, cprExpiryDate: '2027-02-01' })
+    mockUseStaffDetail.mockReturnValue({ data: staff, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: staff }) })
+    renderEditPage('staff-1')
+
+    const box = await screen.findByRole('checkbox', { name: 'CPR Qualified' })
+    expect(box).toBeChecked()
+    // First Aid's date comes first in the card, CPR's second.
+    expect(screen.getAllByLabelText('Expiry date')[1]).toHaveValue('2027-02-01')
+
+    await user.type(screen.getByLabelText(/mobile/i), '0411 222 333')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'staff-1', data: expect.objectContaining({ isCprQualified: true, cprExpiryDate: '2027-02-01' }) }))
+  })
+})

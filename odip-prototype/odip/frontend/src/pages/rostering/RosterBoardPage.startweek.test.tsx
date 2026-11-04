@@ -89,18 +89,31 @@ beforeEach(() => {
 })
 
 describe('the Publish banner', () => {
-  it('a started week with drafts: the banner comes first in the notices, counts the drafts, and holds Publish week, the one primary', () => {
+  it('a started week with drafts: the sticky bar after the board counts the drafts and holds Publish week, the one primary, once', () => {
     showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }] }))
     renderPage()
 
     const title = screen.getByText('3 shifts not visible to staff yet')
     expect(title.closest('[role="alert"]')).toBeNull()
-    const waiting = screen.getByRole('button', { name: '1 agreement waiting' })
+    const bar = document.querySelector('[data-publish-bar]') as HTMLElement
+    expect(bar).toContainElement(title)
+    // The foot of the page, pinned: above the bottom nav below lg, at the foot of the fitted page from lg.
+    expect(bar.parentElement?.lastElementChild).toBe(bar)
+    expect(bar).toHaveClass('sticky', 'lg:bottom-0')
+    expect(bar.className).toContain('bottom-[var(--mobile-nav-h)]')
+    const waiting = within(bar).getByRole('button', { name: '1 agreement waiting' })
     expect(title.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    const banner = title.closest('[class*="color-warning-container"]') as HTMLElement
-    expect(within(banner).getByRole('button', { name: 'Publish week' })).toHaveClass(PRIMARY)
+    expect(screen.getAllByRole('button', { name: 'Publish week' })).toHaveLength(1)
+    expect(within(bar).getByRole('button', { name: 'Publish week' })).toHaveClass(PRIMARY)
     expect(screen.queryByText('4 drafts')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'New' })).not.toHaveClass(PRIMARY)
+  })
+
+  it('from lg the page fits the screen: it opts the shell column in, and the board is the scroller', () => {
+    renderPage()
+    const root = document.querySelector('[data-fit-screen]') as HTMLElement
+    expect(root).toHaveClass('lg:flex-1', 'lg:min-h-0')
+    expect(root.querySelector('[class~="lg:overflow-y-auto"]')).not.toBeNull()
   })
 
   it('blocked drafts: the banner says so, Publish week sends only the rest, and all-blocked hides the button', async () => {
@@ -129,9 +142,10 @@ describe('the Publish banner', () => {
     expect(screen.queryByText('All published')).not.toBeInTheDocument()
   })
 
-  it('a reader sees the banner without Publish week', () => {
+  it('a reader sees the bar without Publish week', () => {
     asReader()
     renderPage()
+    expect(document.querySelector('[data-publish-bar]')).not.toBeNull()
     expect(screen.getByText('3 shifts not visible to staff yet')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
   })

@@ -63,7 +63,7 @@ export function useAdminTenantUsers(tenantId: string | null) {
   })
 }
 
-const VISIBLE_WORKSPACES = { hiddenAccommodation: false, hiddenVehicles: false }
+const VISIBLE_WORKSPACES = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }
 
 /** The organisation the session is working in: the one a SuperAdmin is viewing, else the signed-in user's own. */
 export function currentTenantId(): string | null {

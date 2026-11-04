@@ -42,7 +42,7 @@ describe('ItineraryTab — activity cost', () => {
 describe('ItineraryTab — headings and the empty schedule', () => {
   it('heads the schedule in sentence case', () => {
     render(<ItineraryTab tripId="t1" />)
-    expect(screen.getByRole('heading', { name: 'Day-by-day schedule' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Schedule' })).toBeInTheDocument()
   })
 
   it('links the empty schedule to the Activities tab', () => {

@@ -50,7 +50,7 @@ const tripsStart = (n: number) => (n === 1 ? 'Trip starts' : 'Trips start')
 function DashboardHeader({ now, fullName, counts, action }: {
   now: Date
   fullName: string | null
-  counts?: { upcomingTrips: number; activeParticipants: number; outstandingTasks: number }
+  counts?: { upcomingTrips?: number; activeParticipants: number; outstandingTasks: number }
   action?: ReactNode
 }) {
   return (
@@ -63,7 +63,7 @@ function DashboardHeader({ now, fullName, counts, action }: {
       subtitle={
         counts && (
           <PageHeaderMeta>
-            <span className="tabular-nums">{plural(counts.upcomingTrips, 'upcoming trip')}</span>
+            {counts.upcomingTrips !== undefined && <span className="tabular-nums">{plural(counts.upcomingTrips, 'upcoming trip')}</span>}
             <span className="tabular-nums">{plural(counts.activeParticipants, 'active participant')}</span>
             <span className="tabular-nums">{plural(counts.outstandingTasks, 'outstanding task')}</span>
           </PageHeaderMeta>
@@ -79,6 +79,8 @@ export default function DashboardPage() {
   const permissions = usePermissions()
   const visibility = useModuleVisibility()
   const platform = platformNavigation(permissions, visibility.isError ? undefined : visibility.data)
+  // Trips and holidays switched off (Settings, Workspace visibility): their figures, Missing items and card leave the page. Presentation only; a failed answer hides nothing.
+  const hiddenTrips = !visibility.isError && visibility.data?.hiddenTrips === true
   const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName, id, isAdmin, isSuperAdmin, canImportData, hasOrganisation } = permissions
   // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
   // advertises a new date beside a count that still belongs to yesterday.
@@ -214,7 +216,7 @@ export default function DashboardPage() {
         action: { label: 'Open overdue tasks', to: '/tasks?status=Overdue' },
       },
     )
-    attentionItems.push(
+    if (!hiddenTrips) attentionItems.push(
       // The three "Missing" counts are of the trips the server calls upcoming (they start today or within 60 days). A vehicle or a staff member is assigned to a trip on the
       // Schedule (the same assignments the count reads), and accommodation on the trip's own tab, so that one opens the Trips list to choose the trip.
       {
@@ -329,7 +331,7 @@ export default function DashboardPage() {
         now={now}
         fullName={fullName}
         action={<DashboardShortcuts entries={platform} permissions={permissions} />}
-        counts={d && { upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
+        counts={d && { upcomingTrips: hiddenTrips ? undefined : d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
       />
       {/* Mounted before any group can speak, outside the sections, so it survives the page turning all clear (SHAPE §10). sr-only, so it takes no gap. */}
       {groups.length > 0 && <AnnouncementRegion message={decision.announcement} />}
@@ -337,7 +339,7 @@ export default function DashboardPage() {
 
       <div className="flex min-w-0 flex-col gap-[var(--section-gap)]">
       {(card === 'steps' || card === 'done') && setup.data && (
-        <SetupSteps status={setup.data} provider={provider.data ?? null} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
+        <SetupSteps status={setup.data} provider={provider.data ?? null} hiddenTrips={visibility.isError || !visibility.data ? undefined : hiddenTrips} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
       )}
       {pageClear ? (
         // Same id as the Alerts heading, which it replaces: where focus lands when the last decision turns the page clear (QuickGroup's finish).
@@ -432,7 +434,7 @@ export default function DashboardPage() {
 
       {/* Upcoming trips: the full width (its half-width partner, the Overdue Tasks panel, is gone: the Tasks due group replaced it). The card is its own size
           container, so its rows show their date, destination and pax columns as the card's width allows. */}
-      {d && (
+      {d && !hiddenTrips && (
         <Card className="@container">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold">Upcoming trips</h2>

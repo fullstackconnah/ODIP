@@ -84,7 +84,7 @@ const CULTURAL_TRI_STATE_FIELDS = [
 
 /** Review-step display helper for a tri-state ('true' | 'false' | '' | undefined) field. */
 function yesNoUnknown(value: string | undefined): string {
-  return value === 'true' ? 'Yes' : value === 'false' ? 'No' : 'Not recorded'
+  return value === 'true' ? 'Yes' : value === 'false' ? 'No' : '—'
 }
 
 /** Review-step display helper for an enum value: its label, else the name split into words, else a dash. */

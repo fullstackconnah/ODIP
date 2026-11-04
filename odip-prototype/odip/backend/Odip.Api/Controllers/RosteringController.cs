@@ -2723,6 +2723,8 @@ public class RosteringController : ControllerBase
             notes.Add($"{staff.FullName} has no worker screening recorded — confirm it before the shift.");
         if (staff.IsFirstAidQualified && staff.FirstAidExpiryDate is { } firstAid && firstAid < weekStart)
             notes.Add($"{staff.FullName}'s first aid certificate expired {firstAid.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
+        if (staff.IsCprQualified && staff.CprExpiryDate is { } cpr && cpr < weekStart)
+            notes.Add($"{staff.FullName}'s CPR certificate expired {cpr.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
         if (staff.IsDriverEligible && staff.DriverLicenceExpiryDate is { } licence && licence < weekStart)
             notes.Add($"{staff.FullName}'s driver licence expired {licence.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
         if (staff.IsManualHandlingCompetent && staff.ManualHandlingExpiryDate is { } manualHandling && manualHandling < weekStart)

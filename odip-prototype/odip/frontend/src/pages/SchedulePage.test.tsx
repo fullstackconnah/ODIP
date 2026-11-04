@@ -27,7 +27,9 @@ let currentError: unknown = null
 // A refetch that failed behind data already on screen: TanStack keeps the data and sets the error.
 let refetchError: unknown = null
 
+let tripsHidden = false
 vi.mock('@/api/hooks', () => ({
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: tripsHidden }, isError: false }),
   useIntakeVisits: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useConvertParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
   useScheduleOverview: () => ({ data: currentError ? undefined : currentOverview, isLoading: false, error: currentError ?? refetchError }),
@@ -380,5 +382,27 @@ describe('SchedulePage — assign and unassign by role', () => {
 
     expect(screen.getAllByRole('button', { name: /^Assign/ }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: /^Unassign/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('trips switched off', () => {
+  it('says nothing is scheduled, not that a trip is missing, when there are no trips', () => {
+    tripsHidden = true; localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    try {
+      currentOverview = { trips: [], staff: [], vehicles: [] }
+      renderPage()
+      expect(screen.getByText('Nothing scheduled')).toBeInTheDocument()
+      expect(screen.getByText('Trips and holidays are switched off for your organisation.')).toBeInTheDocument()
+      expect(screen.queryByText('No trips scheduled')).toBeNull()
+    } finally { tripsHidden = false; currentOverview = overview; localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' })) }
+  })
+  it('leaves a viewer who sees the intake visits with just those, and no empty card', () => {
+    tripsHidden = true
+    try {
+      currentOverview = { trips: [], staff: [], vehicles: [] }
+      renderPage()
+      expect(screen.queryByText('Nothing scheduled')).toBeNull()
+      expect(screen.queryByText('No trips scheduled')).toBeNull()
+    } finally { tripsHidden = false; currentOverview = overview }
   })
 })
