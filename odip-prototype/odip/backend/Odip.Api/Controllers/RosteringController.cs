@@ -996,7 +996,7 @@ public class RosteringController : ControllerBase
     /// tells nobody twice.
     /// </summary>
     [HttpPost("weeks/{weekStart}/publish")]
-    public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct, PublishShiftsRequest? body = null)
     {
         // A SuperAdmin who has not chosen an organisation has no tenant filter: a publish then would reach every organisation's week.
         if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<PublishWeekResultDto>.Fail("Choose an organisation to publish its week."));

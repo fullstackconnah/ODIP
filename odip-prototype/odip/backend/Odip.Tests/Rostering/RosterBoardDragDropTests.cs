@@ -1411,6 +1411,119 @@ public class RosterBoardDragDropTests
         Assert.Equal(thursday.Id, (await db.NotificationOutbox.SingleAsync()).EntityId);
     }
 
+    // ── Publish several (R3, 2026-11-04): an optional shiftIds list narrows the week's publish ──
+
+    private static PublishShiftsRequest Ids(params Guid[] ids) => new() { ShiftIds = ids.ToList() };
+
+    [Fact]
+    public async Task PublishWeek_WithShiftIds_PublishesOnlyThoseDrafts_AndLeavesTheRestDraft()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var chosen = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var left = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(1));
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default, Ids(chosen.Id)));
+
+        Assert.Equal(1, result.Published);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, chosen.Id)).Status);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, left.Id)).Status);
+    }
+
+    [Fact]
+    public async Task PublishWeek_WithShiftIds_CountsUnfilledAndSkippedOnlyAmongTheChosen()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var chosen = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        SeedShift(db, mia.Id, null, ShiftStatus.Draft, day: Monday.AddDays(1));   // unstaffed, not chosen
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default, Ids(chosen.Id)));
+
+        Assert.Equal(1, result.Published);
+        Assert.Equal(0, result.Unfilled);
+        Assert.Equal(0, result.Skipped);
+    }
+
+    [Fact]
+    public async Task PublishWeek_WithShiftIds_IgnoresAnIdOutsideTheWeekOrOfAnotherTenant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, SeedStaff(other).Id, ShiftStatus.Draft);
+        using var db = TestDb.ForTenant(dbName, ours);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var chosen = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var nextWeek = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(7));
+
+        var result = Body(await Controller(db, ours).PublishWeek(Monday, default, Ids(chosen.Id, nextWeek.Id, theirs.Id)));
+
+        Assert.Equal(1, result.Published);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, nextWeek.Id)).Status);
+        using var all = TestDb.Create(dbName);
+        Assert.Equal(ShiftStatus.Draft, (await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).Status);
+    }
+
+    [Fact]
+    public async Task PublishWeek_WithShiftIds_TellsEachChosenWorkerOnce()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var a = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var b = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(1));
+        SeedShift(db, mia.Id, alex.Id, ShiftStatus.Draft, day: Monday.AddDays(2));   // not chosen: Alex hears nothing
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default, Ids(a.Id, b.Id)));
+
+        Assert.Equal(1, result.Notified);
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task PublishWeek_WithAnEmptyShiftIdList_Is400_AndPublishesNothing()   // an empty list must never mean the whole week
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var draft = SeedShift(db, SeedParticipant(db).Id, SeedStaff(db).Id, ShiftStatus.Draft, day: Monday);
+
+        var result = await Controller(db, tenant).PublishWeek(Monday, default, Ids());
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, draft.Id)).Status);
+        Assert.Empty(await db.NotificationOutbox.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PublishWeek_WithMoreThan500Ids_Is400()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var draft = SeedShift(db, SeedParticipant(db).Id, SeedStaff(db).Id, ShiftStatus.Draft, day: Monday);
+
+        var result = await Controller(db, tenant).PublishWeek(Monday, default, Ids(Enumerable.Range(0, 501).Select(_ => Guid.NewGuid()).ToArray()));
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, draft.Id)).Status);
+    }
+
+    [Fact]
+    public void PublishWeek_BodyIsOptional_SoAPostWithNoBodyStillBindsAsTheWholeWeek()   // direct calls can't catch a 415/400 from model binding; the attribute is what lets the empty body through
+    {
+        var body = typeof(RosteringController).GetMethod(nameof(RosteringController.PublishWeek))!.GetParameters().Single(p => p.ParameterType == typeof(PublishShiftsRequest));
+        var from = (Microsoft.AspNetCore.Mvc.FromBodyAttribute)body.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.FromBodyAttribute), false).Single();
+        Assert.Equal(Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow, from.EmptyBodyBehavior);
+        Assert.True(body.HasDefaultValue);
+    }
+
     // ── Changing a Published shift's time, day or participant tells its worker (shift-change-notice, 2026-10-29) ──
 
     private const string Dash = "\u00A0\u2013\u2060\u00A0";
