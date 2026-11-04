@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiDelete, apiGet, apiPost } from '../client'
+import { caregiverGet } from '../caregiverClient'
 import { refreshBudgetFigures } from './funding-ledger'
-import type { AgreementEndingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, PopulateDraftDto, PopulatePreviewDto, PopulateResultDto, ServiceAgreementDraftDto } from '../types'
+import type { AgreementEndingDto,AgreementSharingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, PopulateDraftDto, PopulatePreviewDto, PopulateResultDto, SendAgreementDto, SendAgreementResultDto, ServiceAgreementDraftDto, SharedAgreementDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -165,11 +166,14 @@ export const APPROVE_TIMEOUT_MS = 30_000
 export function useApproveServiceAgreementDraft() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ participantId, draftId, acknowledgeOverlaps }: { participantId: string; draftId: string } & ApproveDraftDto) =>
-      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/approve`, { acknowledgeOverlaps }, { timeout: APPROVE_TIMEOUT_MS }),
+    // Who agreed and how are optional and left out of the body when not set.
+    mutationFn: ({ participantId, draftId, ...body }: { participantId: string; draftId: string } & ApproveDraftDto) =>
+      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/approve`, body, { timeout: APPROVE_TIMEOUT_MS }),
     onSuccess: (_, { participantId }) => Promise.all([
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
+      // Approval revokes the links of that revision.
+      queryClient.invalidateQueries({ queryKey: ['agreement-sharing', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
@@ -190,7 +194,28 @@ export function useApproveServiceAgreementDraft() {
   })
 }
 
-const populatePreviewKey = (participantId: string | undefined, id: string | undefined) => ['service-agreement-populate-preview', participantId, id] as const
+const sharingKey = (participantId: string | undefined, id: string | undefined) => ['agreement-sharing', participantId, id] as const
+
+/** Who a revision can be sent to and what has been sent (never the link). Only the roles that may approve may ask: a 403 for anyone else. */
+export function useAgreementSharing(participantId: string | undefined, id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: sharingKey(participantId, id),
+    queryFn: () => apiGet<AgreementSharingDto>(`${path(participantId!)}/${id}/sharing`),
+    enabled: enabled && !!participantId && !!id,
+  })
+}
+
+/** Emails the revision to a contact as a link. A send that did not go answers 200 with `error`, so the dialog can say which; the history is read again either way (the row is kept). */
+export function useSendAgreement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId, ...body }: { participantId: string; draftId: string } & SendAgreementDto) =>
+      apiPost<SendAgreementResultDto>(`${path(participantId)}/${draftId}/send`, body),
+    onSettled: (_, __, { participantId, draftId }) => queryClient.invalidateQueries({ queryKey: sharingKey(participantId, draftId) }),
+  })
+}
+
+const populatePreviewKey =(participantId: string | undefined, id: string | undefined) => ['service-agreement-populate-preview', participantId, id] as const
 
 /**
  * What Populate roster would add to each started week (S11). Like the approval preview it is read again each time the dialog opens and kept no longer: shifts and started weeks change under it.
@@ -257,5 +282,18 @@ export function useDownloadServiceAgreementDraftPdf() {
       link.remove()
       window.URL.revokeObjectURL(url)
     },
+  })
+}
+
+// The public page for a link sent to a contact (agreement PR3b). Its own client, like the caregiver form: no session header goes with it, and the token in the URL is the only credential.
+export const sharedAgreementPdfUrl = (token: string) => `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/public/agreement-share/${token}/pdf`
+
+export function useSharedAgreement(token: string | undefined) {
+  return useQuery({
+    queryKey: ['shared-agreement', token],
+    queryFn: async () => (await caregiverGet<SharedAgreementDto>(`/public/agreement-share/${token}`)).data!,
+    enabled: !!token,
+    retry: false, // an unknown, expired or replaced link is a fixed 404: that is the answer
+    staleTime: Infinity,
   })
 }

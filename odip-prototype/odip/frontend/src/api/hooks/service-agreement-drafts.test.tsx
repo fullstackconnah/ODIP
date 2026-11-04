@@ -12,7 +12,7 @@ vi.mock('../client', async () => {
 })
 
 import { apiClient } from '../client'
-import { APPROVE_TIMEOUT_MS, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, usePopulatePreview, usePopulateRoster } from './service-agreement-drafts'
+import { APPROVE_TIMEOUT_MS, useAgreementSharing, useSendAgreement, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, usePopulatePreview, usePopulateRoster } from './service-agreement-drafts'
 
 const wrapper = (client: QueryClient) => function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -231,5 +231,41 @@ describe('useCreateServiceAgreementDraft', () => {
 
     const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
     expect(keys).toEqual(expect.arrayContaining([['service-agreement-drafts', 'p1'], ['onboarding', 'p1'], ['participant-onboarding-worklist']]))
+  })
+})
+
+describe('sending an agreement to a contact', () => {
+  it('reads the sharing of a revision only when asked, from its own endpoint', async () => {
+    apiGet.mockResolvedValue({ contacts: [], shares: [] })
+    const client = new QueryClient()
+    renderHook(() => useAgreementSharing('p1', 'd1', false), { wrapper: wrapper(client) })
+    expect(apiGet).not.toHaveBeenCalled()
+
+    const { result } = renderHook(() => useAgreementSharing('p1', 'd1'), { wrapper: wrapper(client) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(apiGet).toHaveBeenCalledWith('/participants/p1/service-agreement-drafts/d1/sharing')
+  })
+
+  it('posts the person and the version seen, then reads the sharing again', async () => {
+    apiPost.mockResolvedValue({ sent: true })
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useSendAgreement(), { wrapper: wrapper(client) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd1', personId: 'c1', expectedVersion: 3 }) })
+
+    expect(apiPost).toHaveBeenCalledWith('/participants/p1/service-agreement-drafts/d1/send', { personId: 'c1', expectedVersion: 3 })
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual(expect.arrayContaining([['agreement-sharing', 'p1', 'd1']]))
+  })
+
+  it('carries who agreed and how on an approval only when they are set', async () => {
+    apiPost.mockResolvedValue({ id: 'd1', version: 2 })
+    const { result } = renderHook(() => useApproveServiceAgreementDraft(), { wrapper: wrapper(new QueryClient()) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd1', acknowledgeOverlaps: false }) })
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd2', acknowledgeOverlaps: false, agreedByPersonId: 'c1', agreedHow: 'Email' }) })
+
+    expect(Object.keys(apiPost.mock.calls[0][1])).toEqual(['acknowledgeOverlaps'])
+    expect(apiPost.mock.calls[1][1]).toEqual({ acknowledgeOverlaps: false, agreedByPersonId: 'c1', agreedHow: 'Email' })
   })
 })
