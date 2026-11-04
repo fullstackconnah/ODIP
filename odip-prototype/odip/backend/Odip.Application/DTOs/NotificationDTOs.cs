@@ -75,6 +75,8 @@ public record InAppNotificationDto
     public string? LinkTo { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime? ReadAt { get; init; }
+    /// <summary>True for an item the person must act on soon (the 24-hour incident alert); the bell marks it in words and colour.</summary>
+    public bool Urgent { get; init; }
 }
 
 /// <summary>GET api/v1/notifications/inbox: the caller's newest items, their unread count over every item they have, and whether older items exist past `take`.</summary>

@@ -166,6 +166,8 @@ public class IncidentReport
     public DateTime? DetailedReportDueAt { get; set; }
     /// <summary>True when a year in the business-day count had no public holiday rows, so only weekends were skipped.</summary>
     public bool DueCountedWithoutHolidays { get; set; }
+    /// <summary>When the urgent 24-hour alert went out (IC6). Set once, only when the incident moves into Within24h; never cleared, so a later change back and forth cannot alert twice. No backfill: null on an old row.</summary>
+    public DateTime? UrgentAlertSentAt { get; set; }
     // Provider-local wall clock, like QscReportedAt.
     public DateTime? CommissionDetailedReportedAt { get; set; }
     public bool CommissionFinalReportRequested { get; set; }

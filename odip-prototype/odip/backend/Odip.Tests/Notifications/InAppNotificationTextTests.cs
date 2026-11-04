@@ -41,6 +41,8 @@ public class InAppNotificationTextTests
             "Ann Hughes sent a profile update for Grace Palmer-Hughes.", $"/caregiver-submissions/{Id}" },
         { NotificationEventType.IncidentReported, new IncidentReportedPayload("a@x.au", "Sam Lee", "BehaviourOfConcern", "High"),
             "Sam Lee reported an incident: behaviour of concern, high severity.", $"/incidents/{Id}" },
+        { NotificationEventType.IncidentReportable24h, new IncidentReportable24hPayload("a@x.au", "Sam Lee", "BehaviourOfConcern", "High", "Wed 5 Nov, 2:15 pm", Id),
+            "Urgent: report an incident to the NDIS Commission by Wed 5 Nov, 2:15 pm.", $"/incidents/{Id}" },
         { NotificationEventType.IntakeBooked, IntakeVisit(IntakeWording.Booked),
             "Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am.", "/portal" },
         { NotificationEventType.IntakeBooked, IntakeVisit(IntakeWording.Changed),

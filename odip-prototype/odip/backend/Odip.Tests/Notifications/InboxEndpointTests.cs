@@ -84,6 +84,22 @@ public class InboxEndpointTests
         Assert.NotNull(inbox.Items[2].ReadAt);
     }
 
+    [Fact]
+    public async Task GetInbox_MarksOnlyTheUrgentIncidentAlertAsUrgent()
+    {
+        var me = Guid.NewGuid();
+        var urgent = Row(TenantA, me, 1);
+        urgent.EventType = NotificationEventType.IncidentReportable24h;
+        var plain = Row(TenantA, me, 2);
+        var reported = Row(TenantA, me, 3);
+        reported.EventType = NotificationEventType.IncidentReported;
+        using var db = Context(Seed(urgent, plain, reported), TenantA);
+
+        var items = Body(await Controller(db, me).GetInbox(30, CancellationToken.None)).Items;
+
+        Assert.Equal(new[] { urgent.Id }, items.Where(i => i.Urgent).Select(i => i.Id));
+    }
+
     /// <summary>The bell's "Mark all as read" clears only what it shows, so an unread notice older than the newest 30 must reach the panel or the badge can never be cleared.</summary>
     [Fact]
     public async Task GetInbox_With45Unread_TheFirstPageIsThirtyUnread_IncludingTheOldest_AndReadRowsComeAfterUnread()
