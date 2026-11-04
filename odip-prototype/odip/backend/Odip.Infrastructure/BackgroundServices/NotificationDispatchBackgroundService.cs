@@ -30,6 +30,7 @@ public class NotificationDispatchBackgroundService : BackgroundService
 
     /// <summary>How long a bell item is kept (dashboard spec 2026-10-14, "Retention").</summary>
     public const int InAppRetentionDays = 90;
+    private const int UrgentEmailMaxAgeHours = 24;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
@@ -169,6 +170,15 @@ public class NotificationDispatchBackgroundService : BackgroundService
     private async Task ProcessRowAsync(
         OdipDbContext db, NotificationOutbox row, INotificationChannel emailChannel, string baseUrl, CancellationToken ct)
     {
+        // Email is off on live, so Pending rows pile up for 90 days and would all send the day it is switched on. An urgent 24-hour notice
+        // that old is wrong (its deadline has passed), so it is skipped instead; the bell item stays.
+        if (row.EventType == NotificationEventType.IncidentReportable24h && row.CreatedAt < DateTime.UtcNow.AddHours(-UrgentEmailMaxAgeHours))
+        {
+            row.Status = NotificationOutboxStatus.Skipped;
+            row.LastError = "Expired: older than 24 hours";
+            return;
+        }
+
         // a. Resolve the recipient User (tenant-scoped query).
         var recipient = await db.Users.FirstOrDefaultAsync(u => u.Id == row.RecipientUserId, ct);
         if (recipient is null)
@@ -289,6 +299,8 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 CaregiverSubmissionReceivedTemplate.Render(Deserialize<CaregiverSubmissionReceivedPayload>(payloadJson), baseUrl),
             NotificationEventType.IncidentReported =>
                 IncidentReportedTemplate.Render(Deserialize<IncidentReportedPayload>(payloadJson), baseUrl),
+            NotificationEventType.IncidentReportable24h =>
+                IncidentReportable24hTemplate.Render(Deserialize<IncidentReportable24hPayload>(payloadJson), baseUrl),
             NotificationEventType.IntegrationDegraded =>
                 IntegrationDegradedTemplate.Render(Deserialize<IntegrationDegradedPayload>(payloadJson), baseUrl),
             NotificationEventType.IntakeBooked =>

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
-  useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useAgreementsEnding, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
+  useAgreementSharing, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useAgreementsEnding, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
 } from '@/api/hooks'
 import type { AgreementState, ApprovalActivationDto, CreateServiceAgreementDraftDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
@@ -27,6 +27,9 @@ import { formatWithTimeZone } from '@/lib/utils'
 import { SUPPORT_LABEL, normaliseBlock, stampLocation, zoneOfMm } from '@/lib/planBlocks'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
+import { SendToContact } from './agreement/SendToContact'
+import { ShareStatus } from './agreement/ShareStatus'
+import { liveShare } from './agreement/shareRows'
 import { PopulateDialog } from './agreement/PopulateDialog'
 import { movedWords, notMovedWords } from './agreements/outcomeWords'
 import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
@@ -229,6 +232,14 @@ function DraftPage() {
   const blocking = issues.filter(issue => issue.tone === 'fix')
   const flagged = useMemo(() => new Set(issues.filter(issue => issue.step === 'week').flatMap(issue => issue.shiftIds)), [issues])
 
+  // Approval: the newest save, built from shifts, not yet approved, for the roles the organisation lets approve. A SuperAdmin acting for an organisation always may.
+  const approverRoles = pricing.settings?.approverRoles
+  const mayApprove = isSuperAdmin || !approverRoles || (isAdmin && approverRoles.includes('Admin')) || (isCoordinator && approverRoles.includes('Coordinator'))
+  const approvable = canEdit && !!onScreen && onScreen.blocks.length > 0 && !onScreen.approval && unreadableVersion === null
+  // Send to a contact: the same people as Mark approved (the server answers 403 to anyone else), on the newest unapproved save with nothing unsaved (the email carries the saved copy).
+  const sharable = approvable && mayApprove && !dirty && onScreen?.id === newest?.id
+  const sharing = useAgreementSharing(participantId, onScreen?.id, sharable)
+
   const canonicalIdentifiers = {
     ndis: participant.data?.ndisNumber ? 'Recorded on participant' : 'Not recorded on participant',
     dob: participant.data?.dateOfBirth || 'Not recorded on participant',
@@ -374,10 +385,6 @@ function DraftPage() {
     </>
   ) : null
 
-  // Approval: the newest save, built from shifts, not yet approved, for the roles the organisation lets approve. A SuperAdmin acting for an organisation always may.
-  const approverRoles = pricing.settings?.approverRoles
-  const mayApprove = isSuperAdmin || !approverRoles || (isAdmin && approverRoles.includes('Admin')) || (isCoordinator && approverRoles.includes('Coordinator'))
-  const approvable = canEdit && !!onScreen && onScreen.blocks.length > 0 && !onScreen.approval && unreadableVersion === null
   // Populate roster: the newest save, once approved. The server refuses an older approved revision.
   const populatable = canEdit && !!onScreen?.approval && onScreen.id === newest?.id
   const submit = (event: FormEvent) => {
@@ -409,6 +416,8 @@ function DraftPage() {
         activatesName={pricing.settings?.approvalActivatesParticipant && participant.data?.isDraft ? participant.data.firstName : undefined}
         onGoToShifts={blockId => { go('week', true); setSelected(shiftIdsOfBlock(onScreen.blocks, blockId)) }}
         onSuperseded={superseded}
+        contacts={sharing.data?.contacts}
+        sentTo={sharing.data && liveShare(sharing.data.shares)}
       />
     )}
     {populatable && onScreen && (
@@ -534,6 +543,14 @@ function DraftPage() {
                 onOpen: () => { setPopulated(null); setPopulating(true) },
                 result: populated?.draftId === onScreen.id ? populated.text : null,
               } : undefined}
+              send={sharable && onScreen && sharing.data ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <SendToContact participantId={participantId} draftId={onScreen.id} version={onScreen.version} contacts={sharing.data.contacts} shares={sharing.data.shares} onSuperseded={superseded} />
+                  </div>
+                  <ShareStatus shares={sharing.data.shares} />
+                </>
+              ) : undefined}
               approval={approvable ? { mayApprove, approverRoles, notReady: onScreen?.pricing?.needsReview === true, onOpen: () => { setActivationNotice(null); setApproving(true) } } : undefined}
             />
           )}
