@@ -7,6 +7,7 @@ import { Dropdown } from '@/components/Dropdown'
 import type { DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
+import { SelectField } from '@/components/SelectField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
@@ -17,7 +18,7 @@ import { ReadinessNote } from '@/components/ReadinessNote'
 import { RequirementChips } from '@/components/RequirementChips'
 import { requirementLabels } from '@/lib/workerRequirements'
 import {
-  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
+  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings, useServiceLocations,
 } from '@/api/hooks'
 import { formatNoteTimestamp } from '@/lib/format'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
@@ -137,6 +138,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [status, setStatus] = useState<ShiftStatus>(existing?.status ?? 'Draft')
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [location, setLocation] = useState(existing?.location ?? '')
+  const [serviceLocationId, setServiceLocationId] = useState(existing?.serviceLocationId ?? '')
+  const { data: places = [] } = useServiceLocations()
+  // An archived place stays pickable only on the shift that already has it, labelled so the coordinator sees why.
+  const placeOptions = places.filter(p => p.isActive || p.id === serviceLocationId).map(p => ({ value: p.id, label: p.isActive ? p.name : `${p.name} (archived)` }))
   // The marker a shift already carries from a save past its budget (read from the codes the server stored, never from the reason's words). Its reason is shown by the marker, read only: it is not copied into
   // the ordinary reason field below, where a later save would send the server's own sentence back as if somebody had just written it.
   const budgetMarker = markerForAcknowledgedCodes(existing?.acknowledgedFindingCodes)
@@ -173,7 +178,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   // Unsaved edits: the form as it is now against the form as it first rendered. The page keys this component on the target,
   // so "first render" is the moment the panel opened.
-  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode, status, notes, location, overrideReason, emergencyDescription])
+  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode, status, notes, location, serviceLocationId, overrideReason, emergencyDescription])
   const [opened] = useState(current)
   const dirty = current !== opened
 
@@ -390,6 +395,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       status,
       notes: notes.trim() || null,
       location: location.trim() || null,
+      serviceLocationId: serviceLocationId || null,
       overrideReason: emergencyActive ? emergencyDescription.trim() : overrideReason.trim() || null,
       // A code once: two pools both past their funding are two findings with the same code.
       acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
@@ -611,7 +617,16 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         )}
 
         {/* Typed by the coordinator for this shift only; never filled from the participant's address. autoComplete off so the browser offers no saved street addresses. */}
-        <FormField label="Location" hint="The support worker sees this on their shift. Leave it empty for a shift at home.">
+        <SelectField
+          label="Service location"
+          hint={places.length === 0 ? 'Add places in Settings, Service locations.' : 'The support worker sees the place and its address on their shift.'}
+          options={[{ value: '', label: 'None' }, ...placeOptions]}
+          value={serviceLocationId}
+          disabled={!canWrite}
+          onChange={e => setServiceLocationId(e.target.value)}
+        />
+
+        <FormField label="Location details" hint="Anything extra the worker needs, like a room or a meeting point. Leave it empty for a shift at home.">
           <input type="text" value={location} maxLength={200} autoComplete="off" disabled={!canWrite} onChange={e => setLocation(e.target.value)} placeholder="e.g. Southside Library" />
         </FormField>
 

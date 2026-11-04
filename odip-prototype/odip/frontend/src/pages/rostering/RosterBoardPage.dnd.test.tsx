@@ -35,6 +35,7 @@ vi.mock('@/api/hooks', async () => {
     useParticipantRoutines: () => ({ data: [] }),
     useCompatibility: () => ({ data: [] }),
     useRosterShiftNotes: () => ({ data: [] }),
+    useServiceLocations: () => ({ data: [] }),
     useCheckShift: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })

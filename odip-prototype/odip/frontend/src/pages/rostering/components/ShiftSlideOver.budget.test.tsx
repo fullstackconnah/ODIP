@@ -26,6 +26,7 @@ vi.mock('@/api/hooks', () => ({
   useParticipantRoutines: () => ({ data: [] }),
   useCompatibility: () => ({ data: [] }),
   useRosterShiftNotes: () => ({ data: [] }),
+  useServiceLocations: () => ({ data: [] }),
   getRosterFindings: mockGetRosterFindings,
 }))
 
@@ -86,7 +87,7 @@ describe('a budget warning (Warn mode)', () => {
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
       participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', supportGroupCode: null,
-      status: 'Draft', notes: null, location: null, overrideReason: null, acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'],
+      status: 'Draft', notes: null, location: null, serviceLocationId: null, overrideReason: null, acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'],
     })
   })
 
@@ -173,7 +174,7 @@ describe('a Coordinator the budget refused', () => {
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
       participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', supportGroupCode: null,
-      status: 'Draft', notes: null, location: null, overrideReason: DESCRIPTION, emergency: true, acknowledgedFindingCodes: ['BUDGET_APPROACHING'],
+      status: 'Draft', notes: null, location: null, serviceLocationId: null, overrideReason: DESCRIPTION, emergency: true, acknowledgedFindingCodes: ['BUDGET_APPROACHING'],
     })
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })

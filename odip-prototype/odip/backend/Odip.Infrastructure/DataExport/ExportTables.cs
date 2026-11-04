@@ -212,6 +212,7 @@ public static class ExportTables
         Own<EventTemplate>("event-templates.csv", "Trip templates."),
         Own<Activity>("activities.csv", "The activity library."),
         Own<ReferralSource>("referral-sources.csv", "The list of who refers people to you, including the hidden ones."),
+        Own<ServiceLocation>("service-locations.csv", "The places your team works, with their map pin, check-in distance and time zone, including the hidden ones."),
         Own<TripInstance>("trips.csv", "Trips: dates, places, status and coordinator."),
         Via("trip-days.csv", "The days of each trip.",
             (db, t) => { var trips = Trips(db, t); return db.TripDays.Where(d => trips.Any(x => x.Id == d.TripInstanceId)); }),

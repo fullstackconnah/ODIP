@@ -97,6 +97,7 @@ public class PortalController : ControllerBase
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
         var staffId = await ResolveCurrentStaffIdAsync(ct);
+        // shortcut: one org zone for the whole list, so a shift at a place in another zone is listed in the org zone; batch a ForShiftsAsync if that bites.
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
         if (staffId is null)
         {
@@ -188,7 +189,7 @@ public class PortalController : ControllerBase
         // is about to (Published, from 48 hours before its rostered start). A worker whose shift is PendingReview, Completed, Cancelled or Draft - or a
         // Published shift further out than that - keeps seeing the shift itself but not the participant's phone numbers, address or the latest handover
         // through it. Withheld = explicit null, with the reason.
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct);
+        var provider = await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct);
         var sensitiveWithheldReason = SensitiveInfoWithheld(shift, provider);
         var showSensitive = sensitiveWithheldReason is null;
 
@@ -228,6 +229,11 @@ public class PortalController : ControllerBase
         // The organisation switch only: the portal knows no agreement block. No settings row is the policy default (on).
         var travelAsked = PlanPricingPolicy.From(await _db.PlanPricingSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == shift.TenantId, ct)).ClaimProviderTravel;
 
+        // The tenant is named on the query: a SuperAdmin context has no filter. A hidden place still shows, so a past shift keeps its place.
+        var serviceLocation = shift.ServiceLocationId is { } placeId
+            ? await _db.ServiceLocations.AsNoTracking().Where(l => l.Id == placeId && l.TenantId == shift.TenantId).Select(l => new PortalServiceLocationDto(l.Name, l.Address)).FirstOrDefaultAsync(ct)
+            : null;
+
         return new PortalShiftDetailDto(
             shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
@@ -252,7 +258,8 @@ public class PortalController : ControllerBase
             access.Reason,
             access.Code,
             sensitiveWithheldReason,
-            travelAsked);
+            travelAsked,
+            serviceLocation);
     }
 
     /// <summary>Why the participant's handover, emergency contacts and address are not shown for this shift right now (plain language), or null when they are:
@@ -363,12 +370,11 @@ public class PortalController : ControllerBase
                 "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
         }
 
-        var providerSettings = await _db.ProviderSettings.Where(p => p.TenantId == shift.TenantId).FirstOrDefaultAsync(ct); // the shift's own organisation: the zone is saved on the completion, so an unscoped SuperAdmin must not pick another
         var now = NowUtc;
         var startStamp = dto.StartedAt is { } startedIn ? ShiftBreakRules.ToUtc(startedIn) : now;   // a queued tap: the phone's time, inside ClientTimeRules' bounds
         if (dto.StartedAt is not null && ClientTimeError(ClientTimeRules.Check(startStamp, now, null)) is { } lateStart)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(lateStart.Message, lateStart.Code));
-        var timeZoneId = ProviderTimeZoneResolver.For(providerSettings?.TimeZoneId, providerSettings?.State).Id;
+        var timeZoneId = (await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct)).Id;   // the shift's place can have its own zone; the completion saves it
 
         // F7: variance-at-start, computed once here so the coordinator queue can show it before
         // Finish. Finish still recomputes/overwrites VarianceMinutesStart from the final stored
@@ -525,8 +531,7 @@ public class PortalController : ControllerBase
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                     "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
 
-            var providerSettings = await _db.ProviderSettings.Where(p => p.TenantId == shift.TenantId).FirstOrDefaultAsync(ct); // the shift's own organisation: the zone is saved on the completion, so an unscoped SuperAdmin must not pick another
-            var timeZoneId = ProviderTimeZoneResolver.For(providerSettings?.TimeZoneId, providerSettings?.State).Id;
+            var timeZoneId = (await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct)).Id;   // the shift's place can have its own zone; the completion saves it
 
             // F4: Legacy Npgsql timestamp behaviour persists Kind verbatim; treat unsuffixed values as UTC.
             var actualStartUtc = dto.ActualStart.Value.Kind switch
@@ -769,7 +774,7 @@ public class PortalController : ControllerBase
     /// </summary>
     private async Task<DateTime> EarliestDoseTimeAsync(Shift shift, CancellationToken ct)
     {
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct);
+        var provider = await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct);
         var (rosteredStartLocal, _) = ProviderLocalTime.RosteredWindowLocal(shift);
         var rosteredLimit = ProviderLocalTime.LocalToUtc(rosteredStartLocal, provider.Zone).AddMinutes(-MedicationAdministrationRecorder.EarlyAdministrationMinutes);
 
@@ -823,7 +828,7 @@ public class PortalController : ControllerBase
 
         // A Published shift whose need-to-know window has not opened does not show the handover, so there is nothing the worker has seen to mark as read
         // (an acknowledge without a completionId would otherwise record the latest handover as read, unseen).
-        var withheld = SensitiveInfoWithheld(shift, await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct));
+        var withheld = SensitiveInfoWithheld(shift, await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct));
         if (withheld is not null)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail(withheld, ShiftErrorCodes.ShiftHandoverNotFound));
 

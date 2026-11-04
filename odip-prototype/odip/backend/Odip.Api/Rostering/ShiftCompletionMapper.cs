@@ -54,6 +54,7 @@ public static class ShiftCompletionMapper
             .GroupBy(i => i.ShiftId!.Value)
             .Select(g => new { ShiftId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ShiftId, x => x.Count, ct);
+        // shortcut: the org zone for every row, though a completion can hold its place's zone; slot enumeration is zone-free, so the count is the same either way. Read the completion's TimeZoneId if a zone-aware figure is added here.
         // Each row's own organisation: an unscoped SuperAdmin's context settings are their HOME organisation's, and a page can mix organisations.
         var zones = new Dictionary<Guid, TimeZoneInfo>();
         foreach (var tenantId in rows.Select(r => r.TenantId).Distinct())

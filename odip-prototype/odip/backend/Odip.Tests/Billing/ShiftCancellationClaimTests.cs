@@ -72,6 +72,25 @@ public class ShiftCancellationClaimTests
         Assert.Equal("Olga Outside", left.ParticipantName);
     }
 
+    [Fact]
+    public async Task D_APerthPlaceOfASydneyOrganisation_CountsTheNoticeInPerthDays()
+    {
+        var (kit, engine) = NewKit();
+        using var _ = kit;
+        var perth = new ServiceLocation { Id = Guid.NewGuid(), TenantId = kit.TenantId, Name = "Perth house", Latitude = -31.95m, Longitude = 115.86m, RadiusMetres = 200, TimeZoneId = "Australia/Perth", IsActive = true };
+        kit.Db.ServiceLocations.Add(perth);
+        var onFriday18Dec = new DateOnly(2026, 12, 18);
+        // 22:30 on 11 Dec in Perth (UTC+8) is 14:30 UTC, which is 01:30 on the 12th in Sydney (UTC+11): seven days before in Perth, so NOT short notice; the Sydney count would say six and claim it.
+        var shift = Cancelled(kit, kit.SeedParticipant(), onFriday18Dec, new DateTime(2026, 12, 11, 14, 30, 0, DateTimeKind.Utc));
+        shift.ServiceLocationId = perth.Id;
+        kit.Db.SaveChanges();
+
+        var result = await engine.CancellationCandidatesAsync(kit.TenantId, new DateOnly(2026, 12, 20), Ct);
+
+        Assert.Empty(result.Shifts);
+        Assert.Contains("Cancelled 7 days ahead", Assert.Single(result.LeftOut).Reason);
+    }
+
     [Theory]
     [InlineData(CatalogueClaimFlag.No)]
     [InlineData(null)]

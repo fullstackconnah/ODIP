@@ -362,6 +362,25 @@ public class AutoRosterControllerTests
         Assert.Empty(draft.Uncovered);
     }
 
+    [Fact] // service locations PR1: both halves of a split stay at the same place
+    public async Task AutoRosterApply_ASplit_KeepsTheServiceLocationOnBothHalves()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var (person, shift) = OpenShift(db, "Mia", TenantA);
+        shift.EndTime = new TimeOnly(17, 0);
+        var place = Guid.NewGuid();
+        shift.ServiceLocationId = place;
+        await db.SaveChangesAsync();
+
+        Result(await Controller(db, TenantA).AutoRosterApply(Monday, OneSplit(shift, 13, pat.Id, quinn.Id), default));
+
+        var halves = await db.Shifts.AsNoTracking().Where(s => s.ParticipantId == person.Id).ToListAsync();
+        Assert.Equal(2, halves.Count);
+        Assert.All(halves, h => Assert.Equal(place, h.ServiceLocationId));
+    }
+
     [Fact] // [D]
     public async Task AutoRosterApply_ASplitOfAPublishedShift_GivesAPublishedHalf_AndTellsBothWorkers()
     {

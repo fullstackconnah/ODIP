@@ -241,6 +241,61 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(ShiftStatus.Published, (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status);
     }
 
+    // Service locations PR1: a shift at a Perth place runs on Perth time. OrdinaryDayNoon is 10:00 in Perth.
+    private static Shift SeedPerthShift(OdipDbContext db, Guid participantId, Guid staffId, TimeOnly startTime)
+    {
+        var place = Seed(db, new ServiceLocation { Id = Guid.NewGuid(), Name = "Perth hub", Latitude = -31.95m, Longitude = 115.86m, TimeZoneId = "Australia/Perth" });
+        var shift = SeedShiftAt(db, participantId, staffId, new DateOnly(2026, 9, 8), startTime);
+        shift.ServiceLocationId = place.Id;
+        db.SaveChanges();
+        return shift;
+    }
+
+    [Fact]
+    public async Task GetShiftDetail_ShowsTheWorkerThePlaceNameAndAddress_AndNoPlaceWhenNoneIsSet()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var withPlace = SeedPerthShift(db, participant.Id, user.Id, new TimeOnly(10, 30));
+        db.ServiceLocations.Single().Address = "1 Hay St, Perth";
+        var without = SeedShiftAt(db, participant.Id, user.Id, new DateOnly(2026, 9, 9), new TimeOnly(9, 0));
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var shown = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetShiftDetail(withPlace.Id, CancellationToken.None)).Result).Value).Data!;
+        var none = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetShiftDetail(without.Id, CancellationToken.None)).Result).Value).Data!;
+
+        Assert.Equal(("Perth hub", "1 Hay St, Perth"), (shown.ServiceLocation!.Name, shown.ServiceLocation.Address));
+        Assert.Null(none.ServiceLocation);
+    }
+
+    [Fact]
+    public async Task StartShift_AtAPerthPlace_SnapshotsPerthTime()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedPerthShift(db, SeedParticipant(db).Id, user.Id, new TimeOnly(10, 30));
+        var controller = MakeController(db, tenant.Object, user.Id, new FakeClock(OrdinaryDayNoon));
+
+        Assert.IsType<OkObjectResult>((await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None)).Result);
+
+        Assert.Equal("Australia/Perth", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).TimeZoneId);
+    }
+
+    [Fact]
+    public async Task StartShift_AtAPerthPlace_TheStartWindowOpensInPerthTime()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedPerthShift(db, SeedParticipant(db).Id, user.Id, new TimeOnly(12, 0));   // 12:00 Perth is two hours away; in Sydney it would be now
+        var controller = MakeController(db, tenant.Object, user.Id, new FakeClock(OrdinaryDayNoon));
+
+        var conflict = Assert.IsType<ConflictObjectResult>((await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None)).Result);
+
+        Assert.Equal("It's too early to start this shift. You can start from 11:00 am on Tue 8 Sep.", Assert.Single(Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value).Errors!));
+    }
+
     [Theory]
     [InlineData(50)]
     [InlineData(0)]

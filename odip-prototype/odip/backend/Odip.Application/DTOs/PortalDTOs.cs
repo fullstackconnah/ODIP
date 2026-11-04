@@ -207,7 +207,9 @@ public record PortalShiftDetailDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? SensitiveInfoWithheldReason,
     /// <summary>Whether the organisation claims provider travel (the organisation switch, on when there is no settings row). The portal shows the four
     /// travel fields at Finish only when this is true. Derived on the server, never trusted from the client.</summary>
-    bool TravelAsked);
+    bool TravelAsked,
+    /// <summary>The saved place the shift is at (name and address), or null. Shown above the free-text <c>location</c> details.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalServiceLocationDto? ServiceLocation = null);
 
 // ── At a glance (need-to-know critical facts) ─────────────────────────────
 

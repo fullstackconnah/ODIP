@@ -88,6 +88,9 @@ public class Shift : ITenantEntity
     public string? Notes { get; set; }
     /// <summary>Where the shift happens, as the coordinator typed it for this shift (a venue, a centre). Null for a shift at the participant's home: never filled from the participant's address.</summary>
     public string? Location { get; set; }
+    /// <summary>The saved place this shift is at (Settings > Service locations), or null. Its time zone, when it has one, is the shift's zone. Independent of the free-text <see cref="Location"/>.</summary>
+    public Guid? ServiceLocationId { get; set; }
+    public Odip.Domain.Entities.ServiceLocation? ServiceLocation { get; set; }
     /// <summary>The support type (<see cref="Odip.Domain.Entities.SupportActivityGroup.GroupCode"/>) this shift is claimed under. Null is community access; the claim prices that group's hourly row for the shift's day.</summary>
     public string? SupportGroupCode { get; set; }
 

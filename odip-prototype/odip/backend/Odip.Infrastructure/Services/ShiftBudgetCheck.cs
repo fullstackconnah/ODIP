@@ -69,6 +69,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         var rowsByGroup = catalogue.GroupBy(row => row.GroupCode).ToDictionary(g => g.Key, g => g.Select(row => row.Item).Where(i => i.Unit == "H").ToList());
         var sleepoverRows = catalogue.Where(row => row.GroupCode == CatalogueGroups.SleepoverGroupCode && row.Item.Unit == "E").Select(row => row.Item).ToList();
         var personalCareRows = rowsByGroup.GetValueOrDefault(CatalogueGroups.PersonalCareGroupCode) ?? new List<SupportCatalogueItem>();
+        // shortcut: a ShiftSpec carries no place, so a not-yet-saved shift is checked in the org zone (its break spans are empty, only a clock-change night differs); add the place to ShiftSpec when the check should price a Perth place exactly.
         var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone;
 
         var from = shifts.Min(s => s.ServiceDate);

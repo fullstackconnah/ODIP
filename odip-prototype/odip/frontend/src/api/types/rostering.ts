@@ -106,6 +106,8 @@ export interface ShiftDto {
   notes: string | null
   /** Where the shift happens, as a coordinator typed it for this shift (a venue, a centre). Omitted when none: never the participant's address. */
   location?: string | null
+  /** The saved place (Settings, Service locations) the shift is at; absent when none. It may be one archived since. */
+  serviceLocationId?: string | null
   overrideReason: string | null
   /** The finding codes the server stored when it saved this shift. The over-budget marker is read from these (`markerForAcknowledgedCodes`): `BUDGET_EMERGENCY` for an emergency or safety booking, `BUDGET_FORECAST_OVER` for one an Admin pushed over budget with a written reason. Omitted when none. */
   acknowledgedFindingCodes?: string[]
@@ -512,6 +514,8 @@ export interface CreateShiftDto {
   notes?: string | null
   /** Trimmed text or an explicit null. Always sent by the shift panel; the server keeps the stored value when a PUT leaves it out (the board chip does), and clears it on null. */
   location?: string | null
+  /** A saved place's id or an explicit null (none). The slide-over always sends it; the server keeps the stored place when a PUT leaves it out (the board chip does). */
+  serviceLocationId?: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
   /**

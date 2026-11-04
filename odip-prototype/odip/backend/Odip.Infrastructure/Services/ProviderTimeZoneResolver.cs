@@ -32,6 +32,36 @@ public static class ProviderTimeZoneResolver
     }
 
     /// <summary>
+    /// The zone of ONE shift: its service location's zone when it has a valid one, else the zone of the shift's organisation. The location is read by id AND the shift's tenant, so a
+    /// SuperAdmin's unfiltered context cannot pick up another organisation's place. An archived place still gives its zone. Every call that resolves the zone for one shift uses this;
+    /// calls that cover many shifts load the places' zones in one query (<see cref="ZonesOfLocationsAsync"/>) and pick per shift with <see cref="ZoneOf"/> (one query per shift is not allowed).
+    /// </summary>
+    public static async Task<ProviderTimeZone> ForShiftAsync(OdipDbContext db, Shift shift, CancellationToken ct)
+    {
+        if (shift.ServiceLocationId is { } locationId)
+        {
+            var zoneId = await db.ServiceLocations.Where(l => l.Id == locationId && l.TenantId == shift.TenantId).Select(l => l.TimeZoneId).FirstOrDefaultAsync(ct);
+            if (zoneId is not null && StateTimeZoneMap.Zones.Contains(zoneId)) return new ProviderTimeZone(zoneId, ProviderLocalTime.ResolveZone(zoneId));
+        }
+        return await ResolveAsync(db, shift.TenantId, ct);
+    }
+
+    /// <summary>The valid zone of each named place of ONE organisation, in one query. A place without a zone (or an unknown one) is absent: <see cref="ZoneOf"/> falls back to the organisation's.</summary>
+    public static async Task<Dictionary<Guid, TimeZoneInfo>> ZonesOfLocationsAsync(OdipDbContext db, Guid tenantId, IEnumerable<Guid?> locationIds, CancellationToken ct)
+    {
+        var ids = locationIds.OfType<Guid>().Distinct().ToList();
+        if (ids.Count == 0) return new();
+        var rows = await db.ServiceLocations.Where(l => ids.Contains(l.Id) && l.TenantId == tenantId && l.TimeZoneId != null).Select(l => new { l.Id, l.TimeZoneId }).ToListAsync(ct);
+        return rows.Where(r => StateTimeZoneMap.Zones.Contains(r.TimeZoneId!)).ToDictionary(r => r.Id, r => ProviderLocalTime.ResolveZone(r.TimeZoneId!));
+    }
+
+    /// <summary>One shift's zone from <see cref="ZonesOfLocationsAsync"/>: its place's, else the organisation's.</summary>
+    public static TimeZoneInfo ZoneOf(Shift shift, IReadOnlyDictionary<Guid, TimeZoneInfo> byLocation, TimeZoneInfo orgZone) => ZoneOf(shift.ServiceLocationId, byLocation, orgZone);
+
+    public static TimeZoneInfo ZoneOf(Guid? locationId, IReadOnlyDictionary<Guid, TimeZoneInfo> byLocation, TimeZoneInfo orgZone) =>
+        locationId is { } id && byLocation.TryGetValue(id, out var zone) ? zone : orgZone;
+
+    /// <summary>
     /// The provider's calendar date now (see <see cref="ProviderLocalTime.TodayIn"/>): the "today" every calendar rule uses. Pass the
     /// request's <see cref="TimeProvider"/> so a test can fix the clock.
     /// </summary>

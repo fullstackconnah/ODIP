@@ -75,6 +75,7 @@ public class OdipDbContext : DbContext
     public DbSet<ScheduledActivity> ScheduledActivities => Set<ScheduledActivity>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<ReferralSource> ReferralSources => Set<ReferralSource>();
+    public DbSet<ServiceLocation> ServiceLocations => Set<ServiceLocation>();
     public DbSet<BookingTask> BookingTasks => Set<BookingTask>();
     public DbSet<TripDocument> TripDocuments => Set<TripDocument>();
     public DbSet<User> Users => Set<User>();
@@ -574,6 +575,20 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
             // One name once per organisation. The controller also compares case-insensitively; this is the backstop for a race.
             entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique();
+        });
+
+        // ── ServiceLocation ──────────────────────────────────────
+        modelBuilder.Entity<ServiceLocation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Address).HasMaxLength(300);
+            entity.Property(e => e.Latitude).HasPrecision(9, 6);
+            entity.Property(e => e.Longitude).HasPrecision(9, 6);
+            entity.Property(e => e.TimeZoneId).HasMaxLength(64);
+            entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+            // One active place per name per organisation. The controller also compares case-insensitively; this is the backstop for a race.
+            entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique().HasFilter("\"IsActive\"");
         });
 
         // ── Activity ─────────────────────────────────────────────
@@ -1191,6 +1206,10 @@ public class OdipDbContext : DbContext
 
             // SetNull: losing the user only loses the flag's name, never the shift (as ShiftPattern.DefaultUser).
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.RegularUserId).OnDelete(DeleteBehavior.SetNull);
+
+            // Restrict: places are archived, never deleted, so a shift keeps its place and its zone.
+            entity.HasOne(e => e.ServiceLocation).WithMany().HasForeignKey(e => e.ServiceLocationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.ServiceLocationId);
 
             // Board queries filter by day/week; the roster-check helper filters by staff+week.
             entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
@@ -2249,6 +2268,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ReferralSource>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ReferralSource>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ServiceLocation>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ServiceLocation>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<TripInstance>()

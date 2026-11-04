@@ -164,6 +164,29 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
+    public async Task D_ABreakAtAPerthPlaceOfASydneyOrganisation_IsPlacedInPerthTime_InTheEstimate()
+    {
+        var (kit, person, _) = Arrange();
+        kit.Db.ProviderSettings.Single().TimeZoneId = "Australia/Sydney";
+        var perth = TimeZoneInfo.FindSystemTimeZoneById("Australia/Perth");
+        var place = new ServiceLocation { Id = Guid.NewGuid(), TenantId = kit.TenantId, Name = "Perth house", Latitude = -31.95m, Longitude = 115.86m, RadiusMetres = 200, TimeZoneId = "Australia/Perth", IsActive = true };
+        kit.Db.ServiceLocations.Add(place);
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);   // Thursday 09:00-17:00: 8 h x $60
+        shift.ServiceLocationId = place.Id;
+        DateTime At(int h, int m = 0) => ProviderLocalTime.LocalToUtc(new DateTime(2026, 10, 1, h, m, 0), perth);
+        var completion = new ShiftCompletion { Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftId = shift.Id, TimeZoneId = "Australia/Perth", IsActive = true, SubmittedByUserId = Guid.NewGuid(), ActualStart = At(9), ActualEnd = At(17) };
+        kit.Db.ShiftCompletions.Add(completion);
+        // 15:00-15:30 Perth is 18:00 in Sydney (UTC+11): outside the shift, so the Sydney count would take nothing off.
+        kit.Db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftCompletionId = completion.Id, CreatedByUserId = Guid.NewGuid(), StartedAt = At(15), EndedAt = At(15, 30) });
+        kit.Db.SaveChanges();
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+
+        Assert.Equal(450m, q2.Pending);   // 7.5 h x $60
+        Assert.Contains("7.5 h", Assert.Single(q2.Items).Description);
+    }
+
+    [Fact]
     public async Task ACompletedShiftThatHasAClaimLineIsCountedOnceThroughTheLine_NotAgainAsAShift()
     {
         var (kit, person, _) = Arrange();
