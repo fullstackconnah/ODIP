@@ -597,6 +597,11 @@ export interface PublishWeekResultDto {
   skipped: number
 }
 
+/** The optional body of Publish week (R3): only these Draft shifts go out. */
+export interface PublishShiftsRequest {
+  shiftIds: string[]
+}
+
 /** Dry-run candidate for POST /shifts/check — no writes, no override fields. */
 export interface CheckShiftDto {
   id?: string

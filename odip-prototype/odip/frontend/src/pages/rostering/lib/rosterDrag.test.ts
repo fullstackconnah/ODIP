@@ -232,6 +232,14 @@ describe('sentences', () => {
       .toBe("Published 1 shift. 1 person notified. 2 shifts stayed in draft: a rule that can't be overridden stops them.")
   })
 
+  it('publishedSentence names the chosen shifts that had changed and were left alone (R3)', () => {
+    const r = { published: 3, notified: 2, unfilled: 0, skipped: 0 }
+    expect(publishedSentence(r, 3)).toBe('Published 3 shifts. 2 people notified.')
+    expect(publishedSentence(r, 4)).toBe('Published 3 shifts. 2 people notified. 1 shift had changed since you selected it and was left alone.')
+    expect(publishedSentence(r, 5)).toBe('Published 3 shifts. 2 people notified. 2 shifts had changed since you selected them and were left alone.')
+    expect(publishedSentence({ ...r, skipped: 1 }, 4)).not.toContain('changed')   // a blocked one is counted as skipped, not as changed
+  })
+
   it('builds the Replace/Swap prompt and the Publish week dialog', () => {
     expect(replacePromptLines(onShift(mon), tue, true)).toEqual([
       'Mia Chen, Tue 18 Aug, 9am–3pm.',

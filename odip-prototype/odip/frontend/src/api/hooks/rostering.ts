@@ -12,6 +12,7 @@ import type {
   UpdateShiftDto,
   AssignShiftDto,
   MoveStaffDto,
+  PublishShiftsRequest,
   PublishWeekResultDto,
   StartWeekResultDto,
   AutoRosterDraftDto,
@@ -163,11 +164,12 @@ export function useMoveStaff() {
   })
 }
 
-/** Publish week: every Draft shift of the week (all participants, unfilled ones too) becomes Published, and the server tells their workers. `weekStart` is the board's Monday, yyyy-MM-dd. */
+/** Publish week: every Draft shift of the week (all participants, unfilled ones too) becomes Published, and the server tells their workers. `weekStart` is the board's Monday, yyyy-MM-dd. With `{ weekStart, shiftIds }` (R3) only those Drafts go out. */
 export function usePublishWeek() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (weekStart: string) => apiPost<PublishWeekResultDto>(`/rostering/weeks/${weekStart}/publish`),
+    mutationFn: (v: string | PublishShiftsRequest & { weekStart: string }) =>
+      typeof v === 'string' ? apiPost<PublishWeekResultDto>(`/rostering/weeks/${v}/publish`) : apiPost<PublishWeekResultDto>(`/rostering/weeks/${v.weekStart}/publish`, { shiftIds: v.shiftIds }),
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       qc.invalidateQueries({ queryKey: ['dashboard', 'setup'] })   // the first published week finishes the setup card
