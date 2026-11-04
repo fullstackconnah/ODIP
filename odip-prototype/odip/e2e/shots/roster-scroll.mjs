@@ -103,7 +103,7 @@ await step('w1280', async () => {
   const ga = await gaps(page)
   results.a1280 = { ...ga, scrollY: o.y, pass: o.y === 0 && ga.gap >= ga.token - 0.5 }
   await cropBar(page, 'bar-top-1280')
-  results.hNormal = { ...(await barBox(page)) }; results.hNormal.pass = results.hNormal.barH <= 56
+  results.hNormal = { ...(await barBox(page)) }; results.hNormal.pass = results.hNormal.barH <= 52
   await page.screenshot({ path: path.join(OUT_DIR, 'full-1280.png'), fullPage: true })
   // (e) down: board first, then the footer.
   const down = []
@@ -134,7 +134,7 @@ await step('w1280', async () => {
   await page.waitForFunction(() => document.querySelector('[data-publish-bar] [aria-live="polite"]') !== null)
   await page.waitForTimeout(300)
   await cropBar(page, 'selecting-1280')
-  results.hSelecting = { ...(await barBox(page)) }; results.hSelecting.pass = results.hSelecting.barH <= 56
+  results.hSelecting = { ...(await barBox(page)) }; results.hSelecting.pass = results.hSelecting.barH <= 52
   const ga3 = await gaps(page)
   results.aSelecting = { ...ga3, pass: ga3.gap >= ga3.token - 0.5 }
   await context.close()
