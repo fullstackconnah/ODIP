@@ -101,6 +101,40 @@ public class NotificationDispatchBackgroundServiceTests
         Assert.Equal("Jo Care", sent!.OrganisationName);
     }
 
+    // IC6: email is off on live, so Pending rows pile up; the day it is switched on an old urgent notice must not go out with a deadline long past.
+    [Theory]
+    [InlineData(-25, NotificationOutboxStatus.Skipped, 0)]
+    [InlineData(-2, NotificationOutboxStatus.Sent, 1)]
+    public async Task An_urgent_incident_email_older_than_24_hours_is_skipped_not_sent(int hoursOld, NotificationOutboxStatus expected, int sends)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        Guid rowId;
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            var payload = new IncidentReportable24hPayload(user.Email, "Sam Lee", "Abuse", "High", "Wed 5 Nov, 2:15 pm", Guid.NewGuid());
+            rowId = Guid.NewGuid();
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = rowId, TenantId = tenantId, EventType = NotificationEventType.IncidentReportable24h, EntityType = "IncidentReport", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddHours(hoursOld), CreatedAt = DateTime.UtcNow.AddHours(hoursOld),
+            });
+            db.SaveChanges();
+        }
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        using var check = SeedDb(dbName);
+        Assert.Equal(expected, (await check.NotificationOutbox.SingleAsync(o => o.Id == rowId)).Status);
+        channel.Verify(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()), Times.Exactly(sends));
+    }
+
     // Only another organisation has a profile row: an unscoped lookup would take its name, the recipient's own scope finds none.
     [Fact]
     public async Task The_message_carries_no_organisation_name_when_only_another_organisation_has_a_profile()
