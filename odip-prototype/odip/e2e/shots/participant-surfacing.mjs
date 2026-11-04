@@ -99,29 +99,39 @@ try {
     if (role === 'Admin') check(`${n} Admin card has 7 named rows`, rows.rows.map((x) => x.name), rows.rows.length === 7 && rows.rows.every((x) => x.name.length > 0))
     check(`${n} card link fill`, rows.bg, rows.bg.every((b) => b === 'rgba(0, 0, 0, 0)'))
     check(`${n} card link tones`, rows.tones, rows.tones.quiet === null || (rows.tones.quiet !== rows.tones.filled && rows.tones.quietContrast >= 4.5 && rows.tones.filledContrast >= 4.5))
-    // Whole-card captures: instant scroll, fixed/sticky chrome hidden, document-space clips (boundingBox is viewport-space, so add the scroll offset).
-    await card.scrollIntoViewIfNeeded()
+    // Whole-card captures: viewport clips (fullPage: false, so no mobile relayout), the block scrolled in instantly with fixed/sticky chrome hidden; boxes are read from the layout that is screenshotted.
     await page.mouse.move(0, 0)
     const pad = 16
-    const geo2 = await page.evaluate(() => {
+    const place = (mode) => page.evaluate((m) => {
       document.documentElement.style.scrollBehavior = 'auto'
       for (const el of document.querySelectorAll('body *')) { const p = getComputedStyle(el).position; if (p === 'fixed' || p === 'sticky') el.style.visibility = 'hidden' }
       const root = [...document.querySelectorAll('h3')].find((h) => h.textContent === 'In this profile').parentElement.parentElement
-      const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height } }
+      const top = (e) => e.getBoundingClientRect().top + scrollY
+      const target = m === 'column' ? root.parentElement : root
+      scrollTo(0, Math.max(0, top(target) - (m === 'column' ? 24 : (innerHeight - root.getBoundingClientRect().height) / 2)))
+      const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height } }
       const c = rect(root), col = rect(root.parentElement), next = root.nextElementSibling ? rect(root.nextElementSibling) : c
+      const link = rect(root.querySelector('li a'))
       const hit = [...document.querySelectorAll('body *')].filter((el) => ['fixed', 'sticky'].includes(getComputedStyle(el).position) && getComputedStyle(el).visibility !== 'hidden').length
-      return { c, col, bottom: Math.max(c.y + c.h, next.y + next.h), hit }
-    })
+      return { c, col, link, bottom: Math.max(c.y + c.h, next.y + next.h), above: root.previousElementSibling ? root.previousElementSibling.querySelector('h3, h2')?.textContent ?? '(card without heading)' : null, hit, vh: innerHeight }
+    }, mode)
+    const g = await place('card')
     await page.waitForTimeout(200)
-    check(`${n} no fixed overlay over the card`, geo2.hit, geo2.hit === 0)
-    const cw = Math.min(vp.width, geo2.c.w + 2 * pad), ch = geo2.c.h + 2 * pad
-    await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-card.png`), fullPage: true, clip: { x: Math.max(0, geo2.c.x - pad), y: geo2.c.y - pad, width: cw, height: ch } })
-    check(`${n} card image holds the whole card`, [ch, geo2.c.h], ch >= geo2.c.h)
+    check(`${n} no fixed overlay over the card`, g.hit, g.hit === 0)
+    const clip = { x: Math.max(0, g.c.x - pad), y: Math.max(0, g.c.y - pad), width: Math.min(vp.width, g.c.w + 2 * pad), height: g.c.h + 2 * pad }
+    check(`${n} card clip fits the viewport`, [clip.y, clip.height, g.vh], clip.y + clip.height <= g.vh)
+    await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-card.png`), fullPage: false, animations: 'disabled', clip })
+    const lt = g.link.y - clip.y, lb = lt + g.link.h
+    check(`${n} first card link inside the saved image (top, bottom, image height)`, [Math.round(lt), Math.round(lb), clip.height], lt >= 0 && lb <= clip.height && g.link.h >= (vp.mobile ? 44 : 0))
     if (role === 'Admin' && !vp.mobile) {
-      // The Overview column from its top: budget card, then "In this profile", then the next card.
-      const y0 = Math.max(0, geo2.col.y - pad), h = geo2.bottom + pad - y0
-      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-column.png`), fullPage: true, clip: { x: Math.max(0, geo2.col.x - pad), y: y0, width: geo2.col.w + 2 * pad, height: h } })
-      check(`${n} column clip spans top to next card`, [y0, geo2.c.y, geo2.bottom], y0 < geo2.c.y && geo2.bottom >= geo2.c.y + geo2.c.h)
+      // The Overview column from its top, through the card after "In this profile".
+      const gc = await place('column')
+      await page.waitForTimeout(200)
+      const y0 = Math.max(0, gc.col.y - pad), h = gc.bottom + pad - y0
+      check(`${n} column clip fits the viewport`, [y0, h, gc.vh], y0 + h <= gc.vh)
+      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-column.png`), fullPage: false, animations: 'disabled', clip: { x: Math.max(0, gc.col.x - pad), y: y0, width: gc.col.w + 2 * pad, height: h } })
+      // The mock has no budget data for p-0001 if nothing sits above the card; recorded, not faked.
+      check(`${n} column holds the card after the top (first card heading above "In this profile")`, [gc.above, Math.round(gc.c.y - gc.col.y)], y0 < gc.c.y && gc.bottom >= gc.c.y + gc.c.h)
     }
 
     // The section line: on a 3+ section chip only, links at the touch floor, at most 3 lines at 390, a click lands on its section.
