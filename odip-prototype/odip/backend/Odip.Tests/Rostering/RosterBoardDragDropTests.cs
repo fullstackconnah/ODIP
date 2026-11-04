@@ -1461,11 +1461,13 @@ public class RosterBoardDragDropTests
         var mia = SeedParticipant(db);
         var chosen = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
         var nextWeek = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(7));
+        var alreadyOut = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Published, day: Monday);
 
-        var result = Body(await Controller(db, ours).PublishWeek(Monday, default, Ids(chosen.Id, nextWeek.Id, theirs.Id)));
+        var result = Body(await Controller(db, ours).PublishWeek(Monday, default, Ids(chosen.Id, nextWeek.Id, theirs.Id, alreadyOut.Id)));
 
         Assert.Equal(1, result.Published);
         Assert.Equal(ShiftStatus.Draft, (await Reload(db, nextWeek.Id)).Status);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, alreadyOut.Id)).Status);
         using var all = TestDb.Create(dbName);
         Assert.Equal(ShiftStatus.Draft, (await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).Status);
     }

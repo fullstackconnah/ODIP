@@ -767,6 +767,37 @@ describe('picking several drafts to publish (R3)', () => {
     expect(within(bar()).getByText('Select the shifts to publish')).toBeInTheDocument()
   })
 
+  it('a retry that succeeds clears the 409 banner', async () => {
+    const user = userEvent.setup()
+    h.publish.mockRejectedValueOnce(conflict()).mockResolvedValueOnce({ published: 2, notified: 2, unfilled: 0, skipped: 0 })
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(chip('sam-sat'))
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 2 shifts' }))
+    expect(await screen.findByText(/roster is being changed/i)).toBeInTheDocument()
+
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 2 shifts' }))
+    await waitFor(() => expect(screen.queryByText(/roster is being changed/i)).not.toBeInTheDocument())
+    expect(await screen.findByText(/^Published 2 shifts/)).toBeInTheDocument()
+  })
+
+  it('Escape with an open listbox or menu leaves select mode alone', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    const menu = document.body.appendChild(document.createElement('div'))
+    menu.setAttribute('role', 'menu')
+    await user.keyboard('{Escape}')
+    expect(chip('sam-wed')).toHaveAttribute('aria-checked', 'true')
+    menu.remove()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
   it('moving to another week leaves select mode and clears the selection', async () => {
     const user = userEvent.setup()
     renderPage()

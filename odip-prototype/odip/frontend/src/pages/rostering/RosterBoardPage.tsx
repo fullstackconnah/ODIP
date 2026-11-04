@@ -268,11 +268,11 @@ export default function RosterBoardPage() {
   const focusCount = useCallback((el: HTMLElement | null) => el?.focus(), [])
   const focusSelectButton = useCallback((el: HTMLButtonElement | null) => { if (el && returnFocusToSelect.current) { returnFocusToSelect.current = false; el.focus() } }, [])
   const leaveSelecting = () => { returnFocusToSelect.current = true; setSelection(null) }
-  // Escape closes the topmost layer only: a capture listener sees a dialog that Escape is about to close, so it leaves the mode alone.
+  // Escape closes the topmost layer only: a capture listener sees a dialog, listbox or menu that Escape is about to close, so it leaves the mode alone.
   useEffect(() => {
     if (!selecting) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role=alertdialog], [role=dialog]')) return
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role=alertdialog], [role=dialog], [role=listbox], [role=menu]')) return
       returnFocusToSelect.current = true
       setSelection(null)
     }
@@ -426,6 +426,7 @@ export default function RosterBoardPage() {
   }
 
   async function handlePublishWeek() {
+    setAssignError(null)
     try {
       const ids = selecting ? chosen.map(s => s.id) : null
       setAnnouncement(publishedSentence(await publishWeek.mutateAsync(ids ? { weekStart, shiftIds: ids } : weekStart), ids?.length))

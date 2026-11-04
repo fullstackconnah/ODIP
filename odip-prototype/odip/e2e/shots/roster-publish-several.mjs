@@ -142,6 +142,15 @@ try {
       await chipOf(page, 'sam-wed').focus()
       await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab')
       await crop(page, chipOf(page, 'sam-wed').locator('xpath=ancestor::div[contains(concat(" ",@class," ")," group ")][1]'), `4-focus-ring-${tag}.png`, vp, 12)
+      // Unticked, so focus and selection can be told apart: untick one chip, focus it by keyboard, then tick it again.
+      await chipOf(page, 'alex-fri').click()
+      await chipOf(page, 'alex-fri').focus()
+      await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab')
+      check(`${tag} 4b: the focused chip is unticked`, (await chipOf(page, 'alex-fri').getAttribute('aria-checked')) === 'false')
+      await crop(page, chipOf(page, 'alex-fri').locator('xpath=ancestor::div[contains(concat(" ",@class," ")," group ")][1]'), `4b-focus-ring-unticked-${tag}.png`, vp, 12)
+      await chipOf(page, 'alex-fri').click()
+      await page.mouse.move(0, 0)
+      check(`${tag} 4b: three ticked again`, (await barText(page)) === '3 shifts selected', await barText(page))
     }
 
     // 5. The confirm dialog.
@@ -169,6 +178,12 @@ try {
     await page.waitForTimeout(250)
     check(`${tag} 7: short-result sentence`, (await done.innerText()).includes('Published 1 shift. 1 person notified. 2 shifts had changed since you selected them and were left alone.'), await done.innerText())
     check(`${tag} 7: select mode closed`, await page.locator('[data-shift-open][aria-checked]').count() === 0)
+    // The sentence is screen-reader-only; show it for the shot only (a script-side style, not app code) so the crop carries it.
+    const region = page.locator('[role=status][aria-live=polite].sr-only')
+    check(`${tag} 7: success sentence matches exactly`, (await region.innerText()).trim() === 'Published 1 shift. 1 person notified. 2 shifts had changed since you selected them and were left alone.', await region.innerText())
+    const alerts = await page.locator('[role=alert]').evaluateAll((els) => els.map((e) => (e.textContent || '').trim()).filter(Boolean))
+    check(`${tag} 7: no role=alert error text`, alerts.length === 0 && (await page.getByText(/roster is being changed/i).count()) === 0, alerts)
+    await region.evaluate((e) => { e.classList.remove('sr-only'); Object.assign(e.style, { position: 'fixed', top: '8px', left: '8px', zIndex: '9999', maxWidth: 'calc(100% - 16px)', background: '#fff', color: '#111', padding: '6px 10px', fontSize: '14px', border: '1px solid #888', borderRadius: '8px' }) })
     await crop(page, page.locator('[data-fit-screen]').first(), `7-success-${tag}.png`, vp, edge)
     await context.close()
   }
