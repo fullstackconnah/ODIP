@@ -50,7 +50,7 @@ public class ModuleVisibilityEmploymentHeroTests
         await using var db = Db(Guid.NewGuid().ToString(), a);
         await ConnectAsync(db, a);
 
-        var data = Data(await Controller(db, a).UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false }, default));
+        var data = Data(await Controller(db, a).UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false, HiddenTrips = false }, default));
 
         Assert.True(data.EmploymentHeroConnected);
         Assert.True(data.HiddenAccommodation);
