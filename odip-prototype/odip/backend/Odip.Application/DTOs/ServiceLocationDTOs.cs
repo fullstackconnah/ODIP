@@ -19,8 +19,9 @@ public record SaveServiceLocationDto
 {
     public string Name { get; init; } = string.Empty;
     public string? Address { get; init; }
-    public decimal Latitude { get; init; }
-    public decimal Longitude { get; init; }
+    /// <summary>Null when the body has no pin: refused with a 400 rather than saved as 0,0.</summary>
+    public decimal? Latitude { get; init; }
+    public decimal? Longitude { get; init; }
     /// <summary>50 to 2000; defaults to 200.</summary>
     public int RadiusMetres { get; init; } = 200;
     public string? TimeZoneId { get; init; }

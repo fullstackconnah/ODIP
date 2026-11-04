@@ -211,7 +211,7 @@ public partial class ShiftClaimGenerationService
 
     /// <summary>
     /// Prices the shifts (all one participant's) into claim lines, leaving out those that cannot be claimed, with the reason. A non-null <paramref name="cancelToday"/> is a short-notice cancellation claim:
-    /// the shifts are cancelled ones, each must have been cancelled less than 7 days ahead (calendar days in the organisation's zone) and be over, its item must allow cancellation, and every line is a Cancellation line with no provider travel.
+    /// the shifts are cancelled ones, each must have been cancelled less than 7 days ahead (calendar days in the shift's zone) and be over, its item must allow cancellation, and every line is a Cancellation line with no provider travel.
     /// </summary>
     private async Task<(List<ShiftLineCalc> LineItems, List<ShiftClaimLeftOutDto> LeftOut, Participant Participant)> PriceShiftsAsync(
         Participant participant, List<Shift> shifts, DateOnly from, DateOnly to, DateOnly? cancelToday, CancellationToken ct, Guid? replacing = null)
@@ -250,9 +250,9 @@ public partial class ShiftClaimGenerationService
         // through it too, so a day is a holiday in all of them or in none.
         // One day past the range: a shift on its last day runs past midnight into the next, which can be a holiday.
         var publicHolidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to.AddDays(1), includePartDay: false, ct)).For(state);
-        // The organisation's zone (the shifts are its own and the clocks change there), not the participant's state.
-        // shortcut: multi-zone providers price DST days in the org zone until a batched ForShiftsAsync exists; revisit when a provider has places in zones that change clocks differently.
-        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, participant.TenantId, ct)).Zone;
+        // Each shift's own zone: its place's when it has one (a Perth place is 2-3 hours behind Sydney every day, not only on clock-change days), else the organisation's, not the participant's state.
+        var orgZone = (await ProviderTimeZoneResolver.ResolveAsync(_db, participant.TenantId, ct)).Zone;
+        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, participant.TenantId, shifts.Select(s => s.ServiceLocationId), ct);
 
         // Only the community access group is priced from here. It is the only group that existed when this engine picked "the first active item for the
         // day type", and the catalogue now also holds personal care, sleepover, STA, travel and every other family: an item of those must never be
@@ -295,6 +295,7 @@ public partial class ShiftClaimGenerationService
                 : null;
         foreach (var shift in shifts)
         {
+            var zone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone);
             if (noNdisNumber is not null)
             {
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });
@@ -385,7 +386,7 @@ public partial class ShiftClaimGenerationService
         return (lineItems, leftOut, participant);
     }
 
-    /// <summary>Why a cancelled shift is not (yet) claimable as a short-notice cancellation, or null when it is. Notice is whole calendar days in the organisation's zone.</summary>
+    /// <summary>Why a cancelled shift is not (yet) claimable as a short-notice cancellation, or null when it is. Notice is whole calendar days in the shift's zone.</summary>
     private static string? NotClaimableCancellation(Shift shift, DateOnly today, TimeZoneInfo zone)
     {
         if (shift.CancelledAt is not { } cancelledAt) return "It wasn't published when it was cancelled, or it was cancelled before Bunya Support kept cancel times, so it can't be claimed.";

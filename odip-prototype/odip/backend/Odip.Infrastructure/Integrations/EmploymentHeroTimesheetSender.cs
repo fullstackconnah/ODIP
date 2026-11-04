@@ -118,10 +118,11 @@ public sealed class EmploymentHeroTimesheetSender
             .ToListAsync(ct);
         if (rows.Count == 0) return;
         var data = await LoadAsync(db, tenantId, rows, ct);
+        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(db, tenantId, data.Values.Select(v => v.Shift.ServiceLocationId), ct);
         foreach (var row in rows)
         {
             if (!data.TryGetValue(row.EntityId, out var d)) continue;
-            var built = EmploymentHeroTimesheets.Build(d.Shift, d.Completion, d.Breaks, d.PayrollId, map, zone);
+            var built = EmploymentHeroTimesheets.Build(d.Shift, d.Completion, d.Breaks, d.PayrollId, map, ProviderTimeZoneResolver.ZoneOf(d.Shift, placeZones, zone));
             if (built.Line is null) continue;
             var hash = built.Hash;
             if (row.Status == EmploymentHeroOutboxStatus.Sent && hash != row.PayloadHash)
@@ -186,13 +187,14 @@ public sealed class EmploymentHeroTimesheetSender
             .OrderBy(r => r.NextAttemptAt).Take(BatchSize).ToListAsync(ct);
         if (due.Count == 0) return new(0, 0, 0, 0, null);
         var data = await LoadAsync(db, tenantId, due, ct);
+        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(db, tenantId, data.Values.Select(v => v.Shift.ServiceLocationId), ct);
         var watch = Stopwatch.StartNew();
 
         foreach (var row in due)
         {
             if (watch.Elapsed > DrainBudget) break;
             if (!data.TryGetValue(row.EntityId, out var d)) { Flag(row, "This shift's hours are no longer available."); await SaveOrSkipAsync(db, row, now, ct); continue; }
-            var built = EmploymentHeroTimesheets.Build(d.Shift, d.Completion, d.Breaks, d.PayrollId, map, zone);
+            var built = EmploymentHeroTimesheets.Build(d.Shift, d.Completion, d.Breaks, d.PayrollId, map, ProviderTimeZoneResolver.ZoneOf(d.Shift, placeZones, zone));
             if (built.WaitReason is { } why)
             {
                 row.Status = EmploymentHeroOutboxStatus.Pending;

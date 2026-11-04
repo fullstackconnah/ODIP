@@ -90,6 +90,7 @@ public class ServiceLocationsController : ControllerBase
         string.IsNullOrWhiteSpace(dto.Name) ? "Enter a name."
         : dto.Name.Trim().Length > MaxName ? "Use 100 characters or fewer for the name."
         : dto.Address?.Trim().Length > MaxAddress ? "Use 300 characters or fewer for the address."
+        : dto.Latitude is null || dto.Longitude is null ? "Pick the place on the map."
         : dto.Latitude is < -90m or > 90m ? "Latitude must be between -90 and 90."
         : dto.Longitude is < -180m or > 180m ? "Longitude must be between -180 and 180."
         : dto.RadiusMetres is < 50 or > 2000 ? "Use a check-in distance from 50 to 2000 metres."
@@ -100,8 +101,8 @@ public class ServiceLocationsController : ControllerBase
     {
         row.Name = dto.Name.Trim();
         row.Address = string.IsNullOrWhiteSpace(dto.Address) ? null : dto.Address.Trim();
-        row.Latitude = dto.Latitude;
-        row.Longitude = dto.Longitude;
+        row.Latitude = dto.Latitude!.Value;   // FieldError refused a missing pin
+        row.Longitude = dto.Longitude!.Value;
         row.RadiusMetres = dto.RadiusMetres;
         row.TimeZoneId = string.IsNullOrWhiteSpace(dto.TimeZoneId) ? null : dto.TimeZoneId.Trim();
         row.UpdatedAt = DateTime.UtcNow;

@@ -72,6 +72,42 @@ public class ShiftCancellationClaimTests
         Assert.Equal("Olga Outside", left.ParticipantName);
     }
 
+    [Fact]
+    public async Task D_APerthPlaceOfASydneyOrganisation_CountsTheNoticeInPerthDays()
+    {
+        var (kit, engine) = NewKit();
+        using var _ = kit;
+        var perth = new ServiceLocation { Id = Guid.NewGuid(), TenantId = kit.TenantId, Name = "Perth house", Latitude = -31.95m, Longitude = 115.86m, RadiusMetres = 200, TimeZoneId = "Australia/Perth", IsActive = true };
+        kit.Db.ServiceLocations.Add(perth);
+        var onFriday18Dec = new DateOnly(2026, 12, 18);
+        // 22:30 on 11 Dec in Perth (UTC+8) is 14:30 UTC, which is 01:30 on the 12th in Sydney (UTC+11): seven days before in Perth, so NOT short notice; the Sydney count would say six and claim it.
+        var shift = Cancelled(kit, kit.SeedParticipant(), onFriday18Dec, new DateTime(2026, 12, 11, 14, 30, 0, DateTimeKind.Utc));
+        shift.ServiceLocationId = perth.Id;
+        kit.Db.SaveChanges();
+
+        var result = await engine.CancellationCandidatesAsync(kit.TenantId, new DateOnly(2026, 12, 20), Ct);
+
+        Assert.Empty(result.Shifts);
+        Assert.Contains("Cancelled 7 days ahead", Assert.Single(result.LeftOut).Reason);
+    }
+
+    [Fact]
+    public void D_ABreakAtAPerthPlace_IsPlacedInPerthTime()
+    {
+        var perth = TimeZoneInfo.FindSystemTimeZoneById("Australia/Perth");
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var shiftId = Guid.NewGuid();
+        // 12:00-12:30 Perth is 04:00-04:30 UTC; the shift is rostered 09:00-17:00 local.
+        var breaks = new Dictionary<Guid, List<(DateTime From, DateTime To)>> { [shiftId] = [(new DateTime(2026, 12, 18, 4, 0, 0, DateTimeKind.Utc), new DateTime(2026, 12, 18, 4, 30, 0, DateTimeKind.Utc))] };
+        var day = new DateOnly(2026, 12, 18);
+
+        var inPerth = ShiftAloneBreaks.SpansOf(breaks, shiftId, day, new TimeOnly(9, 0), new TimeOnly(17, 0), false, SleepoverType.None, perth);
+        var inSydney = ShiftAloneBreaks.SpansOf(breaks, shiftId, day, new TimeOnly(9, 0), new TimeOnly(17, 0), false, SleepoverType.None, sydney);
+
+        Assert.Equal([(180, 210)], inPerth);   // 3 h after the 09:00 start
+        Assert.NotEqual(inPerth, inSydney);    // the org zone would put it at 15:00, six hours in
+    }
+
     [Theory]
     [InlineData(CatalogueClaimFlag.No)]
     [InlineData(null)]

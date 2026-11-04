@@ -109,6 +109,30 @@ for (const vp of VPS) {
     const rows = await page.evaluate(() => ({ edit: document.querySelectorAll('button[aria-label^="Edit: "]').length, archive: document.querySelectorAll('button[aria-label^="Archive: "]').length }))
     check(t('two active places have Edit and Archive, the archived one has none'), rows.edit === 2 && rows.archive === 2, rows)
     await noHScroll(page, t('settings-list'))
+    const geo = await page.evaluate((phone) => {
+      const table = document.querySelector('table')
+      const wrap = table.parentElement
+      const rows = [...table.querySelectorAll('tbody tr')].slice(0, 2)
+      const cell = (tr, i) => tr.children[i].getBoundingClientRect()
+      return {
+        scroll: wrap.scrollWidth - wrap.clientWidth,
+        headers: [...table.querySelectorAll('thead th')].map((th) => ({ text: th.textContent.trim(), right: th.getBoundingClientRect().right })),
+        wrapRight: wrap.getBoundingClientRect().right,
+        gaps: phone ? rows.map((tr) => cell(tr, 1).top - cell(tr, 0).bottom) : [],
+        zoneX: phone ? rows.map((tr) => Math.round(cell(tr, 1).left)) : [],
+        radiusX: phone ? rows.map((tr) => Math.round(cell(tr, 2).left)) : [],
+        padding: phone ? [] : rows.map((tr) => parseFloat(getComputedStyle(tr.children[1]).paddingTop)),
+      }
+    }, vp.touch)
+    if (!vp.touch) {
+      check(t('list: table scrollWidth <= clientWidth (no scroll chevron)'), geo.scroll <= 0, geo.scroll)
+      check(t('list: Name, Time zone, Check-in distance and Actions all inside the table'), geo.headers.length === 4 && geo.headers.every((h) => h.right <= geo.wrapRight + 0.5), geo.headers)
+      check(t('list: cell padding about py-2 (8px)'), geo.padding.every((p) => p >= 7.5), geo.padding)
+    } else {
+      check(t('list: row gap between Name and the columns is at least 8px'), geo.gaps.every((g) => g >= 7.5), geo.gaps)
+      check(t('list: Time zone has the same x in every card'), new Set(geo.zoneX).size === 1, geo.zoneX)
+      check(t('list: Check-in distance has the same x in every card, right of Time zone'), new Set(geo.radiusX).size === 1 && geo.radiusX[0] > geo.zoneX[0], geo)
+    }
     if (vp.touch) await tapTargets(main, t('settings-list'))
     await crop(page, main, `settings-list-${tag}.png`, vp)
     checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `settings-list-${tag}.png`), { touch: vp.touch })).checks)
@@ -197,7 +221,16 @@ for (const vp of VPS) {
       await noHScroll(page, t(state))
       // Only the picker's own block: the panel's other controls (a 13px checkbox among them) are not this PR's.
       if (vp.touch) await tapTargets(picker.locator('xpath=ancestor::div[1]'), t(state))
-      await crop(page, picker.locator('xpath=ancestor::div[1]'), `${state}-${tag}.png`, vp)
+      // The crop holds the whole picker block down to the Location details field (a native select's open list is drawn by the browser and cannot be captured headless).
+      await page.evaluate(() => {
+        const d = document.querySelector('[role=dialog]')
+        const by = (t) => [...d.querySelectorAll('select, input, textarea')].find((i) => i.labels?.[0]?.textContent.replace('*', '').trim() === t)
+        let el = by('Service location')
+        const details = by('Location details')
+        while (el && !el.contains(details)) el = el.parentElement
+        el.setAttribute('data-shot-picker', '')
+      })
+      await crop(page, page.locator('[data-shot-picker]'), `${state}-${tag}.png`, vp)
       await context.close()
     } catch (e) { check(t(`${state} ran`), false, String(e.message).split('\n')[0]) }
   }

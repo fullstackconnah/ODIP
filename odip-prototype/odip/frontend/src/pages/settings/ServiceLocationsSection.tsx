@@ -22,7 +22,9 @@ type FieldErrors = Partial<Record<'name' | 'pin' | 'radius', string>>
 type Editing = { id?: string; initial: Form }
 
 const NEW_PLACE: Form = { name: '', address: '', pin: '', radius: '200', timeZoneId: '' }
-const zoneLabel = (id: string | null) => ZONES.find(z => z.value === id)?.label ?? id
+const CELL = 'md:py-2'   // the sibling tables' cell padding
+const HALF = 'max-md:flex-1 max-md:min-w-0'   // two equal columns under the card's full-width name
+const zoneLabel =(id: string | null) => ZONES.find(z => z.value === id)?.label ?? id
 
 const formOf = (p: ServiceLocationDto): Form => ({
   name: p.name, address: p.address ?? '', pin: formatMapPin(p.latitude, p.longitude), radius: String(p.radiusMetres), timeZoneId: p.timeZoneId ?? '',
@@ -124,7 +126,8 @@ export default function ServiceLocationsSection() {
 
   const columns = (archivedRows: boolean) => [
     {
-      key: 'name', header: 'Name', className: 'font-medium',
+      // The address wraps inside the Name cell (wrap + a share of the width), so the other columns and the actions stay in view with no table scroll; on a phone every card is Name, then two columns.
+      key: 'name', header: 'Name', className: `font-medium break-words ${CELL} max-md:basis-full`, wrap: true, width: '40%',
       render: (p: ServiceLocationDto) => (
         <div className="min-w-0">
           <span className={archivedRows ? 'text-[var(--color-muted-foreground)]' : undefined}>{p.name}</span>
@@ -132,10 +135,10 @@ export default function ServiceLocationsSection() {
         </div>
       ),
     },
-    { key: 'zone', header: 'Time zone', render: (p: ServiceLocationDto) => p.timeZoneId ? zoneLabel(p.timeZoneId) : 'Same as your organisation' },
-    { key: 'radius', header: 'Check-in distance', render: (p: ServiceLocationDto) => `${p.radiusMetres} m` },
+    { key: 'zone', header: 'Time zone', className: `${CELL} ${HALF}`, render: (p: ServiceLocationDto) => p.timeZoneId ? zoneLabel(p.timeZoneId) : 'Same as your organisation' },
+    { key: 'radius', header: 'Check-in distance', className: `${CELL} ${HALF}`, render: (p: ServiceLocationDto) => `${p.radiusMetres} m` },
     ...(canEdit && !archivedRows ? [{
-      key: 'actions', header: 'Actions',
+      key: 'actions', header: 'Actions', className: CELL,
       render: (p: ServiceLocationDto) => (
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" className={TAP_AREA} onClick={() => open({ id: p.id, initial: formOf(p) })} aria-label={`Edit: ${p.name}`}>Edit</Button>

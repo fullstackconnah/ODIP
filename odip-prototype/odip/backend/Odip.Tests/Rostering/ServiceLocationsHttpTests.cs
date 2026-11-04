@@ -48,7 +48,7 @@ public class ServiceLocationsHttpTests
     {
         await using var host = await Host.StartAsync();
 
-        var response = await host.SendAsync(role, HttpMethod.Post, "", new { name = "Day centre" });
+        var response = await host.SendAsync(role, HttpMethod.Post, "", new { name = "Day centre", latitude = -33.8688, longitude = 151.2093 });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(1, await host.CountAsync());

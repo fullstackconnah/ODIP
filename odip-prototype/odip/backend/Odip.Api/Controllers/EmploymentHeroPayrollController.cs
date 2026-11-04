@@ -152,6 +152,7 @@ public class EmploymentHeroPayrollController : ControllerBase
         var awaiting = await _db.Shifts.CountAsync(s => s.TenantId == tenantId && s.ServiceDate >= from && s.ServiceDate <= to
                                                         && (s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview), ct);
 
+        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, completions.Select(c => c.Shift!.ServiceLocationId), ct);
         var items = new List<Item>();
         var byWorker = new Dictionary<Guid, List<PayrollShiftDto>>();
         foreach (var c in completions)
@@ -161,7 +162,8 @@ public class EmploymentHeroPayrollController : ControllerBase
             var payrollId = worker?.ExternalPayrollId;
             rows.TryGetValue(c.Id, out var row);
             var shiftBreaks = breaks[c.Id].ToList();
-            var built = EmploymentHeroTimesheets.Build(shift, c, shiftBreaks, payrollId, map, zone);
+            var shiftZone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, zone);
+            var built = EmploymentHeroTimesheets.Build(shift, c, shiftBreaks, payrollId, map, shiftZone);
             var (status, reason, sendable) = EmploymentHeroTimesheets.StatusOf(row, payrollId is not null, built.WaitReason, zone);
             var (rostered, breakMinutes, paid) = ShiftBreakRules.PaidMinutes(shift, c, now, shiftBreaks);
             items.Add(new Item(c.Id, row, sendable));

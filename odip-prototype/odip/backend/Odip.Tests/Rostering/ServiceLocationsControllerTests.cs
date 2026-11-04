@@ -119,6 +119,19 @@ public class ServiceLocationsControllerTests
     }
 
     [Fact]
+    public async Task Create_and_update_refuse_a_body_without_a_pin_instead_of_saving_0_0()
+    {
+        var noPin = Valid() with { Latitude = null, Longitude = null };
+        var created = Assert.IsType<BadRequestObjectResult>((await Controller(_tenantId).Create(noPin, CancellationToken.None)).Result);
+        Assert.Equal("Pick the place on the map.", Refusal<ServiceLocationDto>(created));
+        Assert.Empty(await Db().ServiceLocations.ToListAsync());
+
+        var row = Seed(_tenantId, "Hub");
+        Assert.IsType<BadRequestObjectResult>((await Controller(_tenantId).Update(row.Id, Valid("Hub") with { Longitude = null }, CancellationToken.None)).Result);
+        Assert.Equal(-33.8688m, (await Db().ServiceLocations.SingleAsync()).Latitude);
+    }
+
+    [Fact]
     public async Task Create_refuses_a_name_over_100_characters_and_an_address_over_300()
     {
         Assert.IsType<BadRequestObjectResult>((await Controller(_tenantId).Create(Valid(new string('a', 101)), CancellationToken.None)).Result);
