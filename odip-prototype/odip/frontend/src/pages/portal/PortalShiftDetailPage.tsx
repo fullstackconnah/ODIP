@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Armchair, Clock, MapPin, ScrollText, WifiOff } from 'lucide-react'
-import { usePortalShiftDetail, useShiftNotes, useStartShift, useStartBreak, useEndBreak } from '@/api/hooks'
+import { usePortalShiftDetail, useShiftNotes, useStartShift, useSaveLocationReason, useStartBreak, useEndBreak } from '@/api/hooks'
 import { useQueueRecords, savedAtFor } from '@/api/hooks/portal'
 import { waitingBreak, waitingKind } from '@/lib/offline/overlay'
 import { isStillTrying, offlineQueue } from '@/lib/offline/queue'
@@ -34,7 +34,8 @@ import { FinishFlow } from './shift/FinishFlow'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
 import { dueDoseKeys } from './shift/checklist'
 import { loadEndDraft } from './shift/endDraft'
-import { requestGeolocation } from './shift/geolocation'
+import { requestGeolocation, type GeoCause } from './shift/geolocation'
+import { NoFixSheet, OffSiteSheet } from './shift/LocationSheets'
 import { useOnline } from './shift/useOnline'
 import { ActionBar, Chip, Section, WaitingToSend } from './shift/ui'
 import { SyncBar } from './sync/SyncBar'
@@ -142,11 +143,15 @@ export default function PortalShiftDetailPage() {
   const [tab, setTab] = useTabParam(TAB_KEYS, 'now')
   const { data: notes } = useShiftNotes(id)
   const startShift = useStartShift()
+  const saveReason = useSaveLocationReason()
   const startBreak = useStartBreak()
   const endBreak = useEndBreak()
   const [actionError, setActionError] = useState<string | null>(null)
   // Set on the tap, before the location wait, so a second tap can't send a second Start (the mutation isn't pending yet).
   const [starting, setStarting] = useState(false)
+  // The no-fix sheet (before Start: why the phone gave no fix) and the off-site sheet (after Start: how far from the place).
+  const [noFix, setNoFix] = useState<GeoCause | null>(null)
+  const [offSite, setOffSite] = useState<{ placeName: string; distanceMetres: number } | null>(null)
   // A draft with an open step means the worker was mid-finish (left for the incident form, or reloaded): open it again at that step.
   const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.step != null)
   const [submitted, setSubmitted] = useState(false)
@@ -154,18 +159,34 @@ export default function PortalShiftDetailPage() {
   useEffect(() => { if (submitted) submittedTitle.current?.focus() }, [submitted])
   const [sheet, setSheet] = useState<{ target: DoseTarget; notGiven: boolean } | null>(null)
 
-  async function handleStart() {
-    if (!id || starting) return
+  /** Sends Start. An off-site answer opens the note sheet afterwards; a queued Start (offline) answers nothing, so no sheet. */
+  async function sendStart(data: StartShiftDto) {
+    if (!id) return
     setStarting(true)
     setActionError(null)
     try {
-      const geo = await requestGeolocation()
-      await startShift.mutateAsync({ id, data: geo satisfies StartShiftDto })
+      const out = await startShift.mutateAsync({ id, data })
+      setNoFix(null)
+      const c = out?.completion
+      if (c?.locationCheck === 'NotAtLocation' && c.locationDistanceMetres != null && out?.serviceLocation) {
+        setOffSite({ placeName: out.serviceLocation.name, distanceMetres: c.locationDistanceMetres })
+      }
     } catch (err) {
       setActionError(extractErrorMessage(err, "Couldn't start this shift. Check your connection and try again."))
     } finally {
       setStarting(false)
     }
+  }
+
+  async function handleStart() {
+    if (!id || starting || !shift) return
+    // No saved place on this shift: nothing to check, so the phone is not asked at all.
+    if (!shift.serviceLocation) return sendStart({ geolocationDeclined: false })
+    setStarting(true)
+    const geo = await requestGeolocation()
+    setStarting(false)
+    if (geo.ok) return sendStart({ latitude: geo.latitude, longitude: geo.longitude, accuracyMetres: geo.accuracyMetres, geolocationDeclined: false })
+    setNoFix(geo.cause)
   }
 
   async function handleBreak(runningId: string | undefined) {
@@ -465,6 +486,8 @@ export default function PortalShiftDetailPage() {
         allowMissed={sheet?.notGiven ?? false}
         online={online}
       />
+      {noFix && <NoFixSheet cause={noFix} starting={starting} error={actionError} onStart={reason => void sendStart({ geolocationDeclined: true, locationReason: reason || null })} onRetry={() => void handleStart()} onClose={() => setNoFix(null)} />}
+      {offSite && <OffSiteSheet {...offSite} send={reason => saveReason.mutateAsync({ id: shift.id, reason })} onClose={() => setOffSite(null)} />}
     </div>
   )
 }

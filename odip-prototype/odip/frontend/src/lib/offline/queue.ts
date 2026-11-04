@@ -206,6 +206,12 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
     const s = deps.session()
     if (!s.userId) throw new Error('No signed-in user to queue a change for.')
     const rec = build(input, s)
+    // A worker's coordinates are never kept (owner, 2026-11-04): a queued Start drops the fix and replays as "Started offline".
+    if (rec.kind === 'start' && rec.body) {
+      const rest = { ...(rec.body as Record<string, unknown>) }
+      for (const k of ['latitude', 'longitude', 'accuracyMetres']) delete rest[k]
+      rec.body = rest
+    }
     mutate(s.userId, (list) => [...list, rec])
     return rec
   }
