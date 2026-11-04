@@ -36,7 +36,31 @@ describe('ProfileMapCard', () => {
 
   it('makes a one-chip tab a single link under its own name', () => {
     view()
-    const agreements = within(screen.getAllByRole('listitem')[2]).getAllByRole('link')
-    expect(agreements.map(a => [a.textContent, a.getAttribute('href')])).toEqual([['Agreements', '/?tab=agreements']])
+    const row = screen.getAllByRole('listitem')[2]
+    expect(within(row).getAllByRole('link').map(a => [a.textContent, a.getAttribute('href')])).toEqual([['Agreements', '/?tab=agreements']])
+    expect(row.firstElementChild).toHaveTextContent('Agreements')
+  })
+
+  it('puts the name in a left column and the links in a wrapping right column', () => {
+    view()
+    const row = screen.getAllByRole('listitem')[0]
+    expect(row.className).toContain('sm:grid-cols-[9rem_1fr]')
+    expect(row.lastElementChild!.className).toContain('flex-wrap')
+    expect(within(row.lastElementChild as HTMLElement).getAllByRole('link')).toHaveLength(2)
+  })
+
+  it('names the list and speaks the count with its noun', () => {
+    render(<MemoryRouter><ProfileMapCard lines={[{ ...lines[1], spoken: '3 active risks' }]} /></MemoryRouter>)
+    expect(screen.getByRole('list', { name: 'In this profile' })).toHaveTextContent('3, 3 active risks')
+  })
+
+  it('tones links by content and leaves them unfilled', () => {
+    view()
+    const quiet = screen.getByRole('link', { name: /^Medical/ })
+    const filled = screen.getByRole('link', { name: 'Medications' })
+    for (const a of [quiet, filled]) expect(a.className).toContain('bg-transparent')
+    expect(filled).not.toHaveAttribute('data-quiet')
+    expect(quiet.className).toContain('data-[quiet]:text-[var(--color-muted-foreground)]')
+    expect(filled.className).toContain('text-[var(--color-foreground)]')
   })
 })

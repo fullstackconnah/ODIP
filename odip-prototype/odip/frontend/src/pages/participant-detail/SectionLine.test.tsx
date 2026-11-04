@@ -35,6 +35,16 @@ describe('SectionLine', () => {
 
   it('keeps every link at the touch floor', () => {
     view()
-    for (const a of screen.getAllByRole('link')) expect(a.className).toContain('min-h-[var(--tap-min)]')
+    for (const a of screen.getAllByRole('link')) {
+      expect(a.className).toContain('min-h-[var(--tap-min)]')
+      expect(a.className).toContain('bg-transparent')
+      expect(a.className).not.toMatch(/(^|\s)(hover:|pointer-coarse:)?bg-\[var\(--color-accent\)\]/)
+    }
+  })
+
+  it('reads a filled section in the body tone and an empty one muted', () => {
+    view()
+    expect(screen.getByRole('link', { name: 'Emergency' }).className).toContain('text-[var(--color-foreground)]')
+    expect(screen.getByRole('link', { name: /^Medical/ }).className).toContain('data-[quiet]:text-[var(--color-muted-foreground)]')
   })
 })

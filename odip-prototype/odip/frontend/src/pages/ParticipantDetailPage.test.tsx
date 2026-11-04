@@ -2522,7 +2522,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
 
 describe('ParticipantDetailPage — surfacing (section line, In this profile)', () => {
   const sectionLine = () => screen.queryByRole('navigation', { name: 'Sections on this page' })
-  const mapCard = () => screen.getByRole('heading', { name: 'In this profile' }).parentElement!.parentElement!
+  const mapCard = () => screen.getByRole('list', { name: 'In this profile' })
   const mapLines = () => within(mapCard()).getAllByRole('listitem')
 
   beforeEach(() => {
@@ -2606,11 +2606,14 @@ describe('ParticipantDetailPage — surfacing (section line, In this profile)', 
     mockNotes.mockReturnValue({ data: [{ isArchived: false }, { isArchived: false }, { isArchived: false }, { isArchived: true }] })
     renderAt('participant-1')
     const badge = (name: string) => within(screen.getByRole('tab', { name: new RegExp(`^${name}`) })).queryByText(/^\d+$/)?.textContent
-    const shown = (label: string) => mapLines().find(li => li.textContent!.startsWith(label))!.querySelector('span.tabular-nums')?.textContent
+    const shown = (label: string) => mapLines().find(li => li.textContent!.startsWith(label))!.querySelector('span.tabular-nums')?.firstChild?.textContent
     expect(badge('Health & safety')).toBe('2')
     expect(shown('Health & safety')).toBe('2')
     expect(badge('Notes & records')).toBe('3')
     expect(shown('Notes & records')).toBe('3')
+    // The count is spoken with its noun, as the tab badge's screen-reader text is.
+    expect(mapLines().find(li => li.textContent!.startsWith('Health & safety'))!.textContent).toContain('2 active risks')
+    expect(mapLines().find(li => li.textContent!.startsWith('Notes & records'))!.textContent).toContain('3 notes')
     expect(badge('Daily support')).toBeUndefined()
     expect(shown('Daily support')).toBeUndefined()
   })

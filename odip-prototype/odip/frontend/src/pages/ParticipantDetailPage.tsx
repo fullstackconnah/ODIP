@@ -317,12 +317,12 @@ export default function ParticipantDetailPage() {
     }
   })
   // The Overview map: each tab this role sees with its visible chips; the count is the tab's badge, a chip is quiet as in the strip.
-  const profileLines = tabKeys.filter((k): k is GroupedTabKey => k !== 'overview').map(k => ({
-    tab: k,
-    label: NEW_TABS.find(t => t.id === k)!.label,
-    count: k === 'health' || k === 'daily' || k === 'people' || k === 'records' ? counts[k] : undefined,
-    chips: visibleSubTabs(k, gates).map(r => ({ id: r.id, label: r.label, quiet: !r.list && !members(k, r).some(c => c.has) })),
-  }))
+  const profileLines = tabKeys.filter((k): k is GroupedTabKey => k !== 'overview').map(k => {
+    const def = NEW_TABS.find(t => t.id === k)!
+    const count = k === 'health' || k === 'daily' || k === 'people' || k === 'records' ? counts[k] : undefined
+    const chips = visibleSubTabs(k, gates).map(r => ({ id: r.id, label: r.label, quiet: !r.list && !members(k, r).some(c => c.has) }))
+    return { tab: k, label: def.label, count, spoken: count && def.noun ? plural(count, def.noun[0], def.noun[1]) : undefined, chips }
+  })
   // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
   // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
   const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']

@@ -1,5 +1,6 @@
-import { Button } from '@/components/Button'
+import { Link } from 'react-router-dom'
 import { Card } from '@/components/Card'
+import { SECTION_LINK } from './SectionLine'
 import type { GroupedTabKey } from './participantTabs'
 
 export type ProfileMapLine = {
@@ -7,30 +8,29 @@ export type ProfileMapLine = {
   label: string
   /** The tab badge's number; shown when above zero, as the badge is. */
   count?: number
+  /** What the count counts, spoken ("3 active risks"), as the tab badge's screen-reader text. */
+  spoken?: string
   chips: readonly { id: string; label: string; quiet: boolean }[]
 }
 
-const QUIET = 'text-[var(--color-muted-foreground)]'
-
-/** The Overview map of the profile: one line per tab this role can see, its chips as links. A tab with one chip is one link under its own name. */
+/** The Overview map of the profile: one row per tab this role can see, its name in a left column and its chips as links in the right. A tab with one chip is one link under its own name. */
 export function ProfileMapCard({ lines }: { lines: readonly ProfileMapLine[] }) {
   return (
     <Card title="In this profile">
-      <ul className="flex flex-col gap-1">
+      <ul aria-label="In this profile" className="flex flex-col gap-1">
         {lines.map(l => (
-          <li key={l.tab} className="flex flex-wrap items-center gap-x-1">
-            {l.chips.length === 1 ? (
-              <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)] font-semibold" to={`?tab=${l.tab}`}>{l.label}</Button>
-            ) : (
-              <>
-                <span className="w-full text-sm font-semibold sm:w-36">{l.label}{l.count ? <span className="ml-1.5 font-normal tabular-nums text-[var(--color-muted-foreground)]">{l.count}</span> : null}</span>
-                {l.chips.map(c => (
-                  <Button key={c.id} variant="ghost" size="sm" className={`min-h-[var(--tap-min)] ${c.quiet ? QUIET : ''}`} to={`?tab=${l.tab}#${c.id}`} {...(c.quiet ? { 'data-quiet': 'true' } : {})}>
-                    {c.label}{c.quiet ? <span className="sr-only">, not recorded</span> : null}
-                  </Button>
-                ))}
-              </>
-            )}
+          <li key={l.tab} className="grid items-center sm:grid-cols-[9rem_1fr]">
+            <span className="text-sm font-semibold">
+              {l.label}
+              {l.count ? <span className="ml-1.5 font-normal tabular-nums text-[var(--color-muted-foreground)]">{l.count}{l.spoken ? <span className="sr-only">, {l.spoken}</span> : null}</span> : null}
+            </span>
+            <div className="flex flex-wrap gap-x-1">
+              {l.chips.map(c => (
+                <Link key={c.id} className={SECTION_LINK} to={l.chips.length === 1 ? `?tab=${l.tab}` : `?tab=${l.tab}#${c.id}`} {...(c.quiet ? { 'data-quiet': 'true' } : {})}>
+                  {c.label}{c.quiet ? <span className="sr-only">, not recorded</span> : null}
+                </Link>
+              ))}
+            </div>
           </li>
         ))}
       </ul>
