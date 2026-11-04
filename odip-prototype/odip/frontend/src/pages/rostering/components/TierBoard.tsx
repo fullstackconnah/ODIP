@@ -108,25 +108,25 @@ export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, 
   function chip(row: CompatibilityRowDto, i: number, count: number) {
     const ranked = row.level !== 'Excluded'
     return (
-      <li key={row.staffId} className="flex items-start gap-2 rounded-[var(--radius-sm)] border border-border bg-card py-1 pl-3 pr-1">
-        {ranked && <span data-rank className="w-5 shrink-0 pt-2.5 text-sm tabular-nums text-muted-foreground">{i + 1}</span>}
-        <div className="min-w-0 flex-1 py-2.5">
-          <p data-name className="text-sm font-medium [overflow-wrap:anywhere]">{row.staffName}</p>
-          {row.reason && <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.reason}</p>}
+      <li key={row.staffId} className="rounded-[var(--radius-sm)] border border-border bg-card py-1 pl-3 pr-1">
+        <div className="flex items-start gap-2">
+          {ranked && <span data-rank className="w-5 shrink-0 pt-2.5 text-sm tabular-nums text-muted-foreground">{i + 1}</span>}
+          <p data-name className="min-w-0 flex-1 py-2.5 text-sm font-medium [overflow-wrap:anywhere]">{row.staffName}</p>
+          {canWrite && (
+            <span data-person={row.staffId}>
+              <Dropdown
+                variant="icon"
+                label={`Options for ${row.staffName}`}
+                icon={<MoreHorizontal className="h-5 w-5" aria-hidden="true" />}
+                items={menuItems(row, i, count)}
+                onSelect={value => choose(row, i, value)}
+                disabled={busy}
+                triggerClassName={TRIGGER}
+              />
+            </span>
+          )}
         </div>
-        {canWrite && (
-          <span data-person={row.staffId}>
-            <Dropdown
-              variant="icon"
-              label={`Options for ${row.staffName}`}
-              icon={<MoreHorizontal className="h-5 w-5" aria-hidden="true" />}
-              items={menuItems(row, i, count)}
-              onSelect={value => choose(row, i, value)}
-              disabled={busy}
-              triggerClassName={TRIGGER}
-            />
-          </span>
-        )}
+        {row.reason && <p data-reason className="-mt-1.5 pb-2.5 pr-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.reason}</p>}
       </li>
     )
   }
@@ -146,7 +146,7 @@ export function TierBoard({ participantId, participantName, onMarkNo, onEditNo, 
         </Callout>
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
         {[...RANKED_LEVELS, 'Excluded' as const].map(level => {
           const tier = inLevel(level)
           const name = level === 'Excluded' ? 'No' : level

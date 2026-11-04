@@ -63,6 +63,13 @@ describe('TierBoard', () => {
     expect(document.querySelectorAll('select')).toHaveLength(0)
   })
 
+  it('gives the reason its own full-width row and stacks the columns below sm', async () => {
+    renderBoard()
+    const reason = await screen.findByText('Knows the routine')
+    expect(reason.parentElement?.tagName).toBe('LI')
+    expect(column('Preferred').parentElement).toHaveClass('grid-cols-1', 'sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]')
+  })
+
   it('says nobody is marked No when the column is empty', async () => {
     rows = [row(1, 'Preferred', 1)]
     renderBoard()
