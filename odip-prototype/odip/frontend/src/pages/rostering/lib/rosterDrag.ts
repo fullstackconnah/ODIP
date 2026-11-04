@@ -219,11 +219,14 @@ export function publishedShiftSentence(shift: ShiftDto): string {
 }
 
 /** "Published 14 shifts. 9 people notified." and, when a blocking problem kept some back (gap 2), how many stayed in draft. */
-export function publishedSentence(result: PublishWeekResultDto): string {
+export function publishedSentence(result: PublishWeekResultDto, requested?: number): string {
   const kept = result.skipped > 0
     ? ` ${plural(result.skipped, 'shift')} stayed in draft: a rule that can't be overridden stops ${result.skipped === 1 ? 'it' : 'them'}.`
     : ''
-  return `Published ${plural(result.published, 'shift')}. ${plural(result.notified, 'person', 'people')} notified.${kept}`
+  // Chosen shifts someone published, deleted or unstaffed since the pick are left alone by the server (R3).
+  const changed = requested === undefined ? 0 : requested - result.published - result.skipped
+  const left = changed > 0 ? ` ${plural(changed, 'shift')} had changed since you selected ${changed === 1 ? 'it and was' : 'them and were'} left alone.` : ''
+  return `Published ${plural(result.published, 'shift')}. ${plural(result.notified, 'person', 'people')} notified.${kept}${left}`
 }
 
 /** The Replace/Swap prompt's body (the brief, section 10), a sentence a line. */
