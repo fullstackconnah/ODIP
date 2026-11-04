@@ -29,6 +29,12 @@ describe('useWindowFirstScrollUp', () => {
     expect(e.defaultPrevented).toBe(true)
   })
 
+  it('scales a page-mode wheel (deltaMode 2) by the window height', () => {
+    const { wheel, scrollBy } = setup({ scrollY: 2000 })
+    wheel({ deltaY: -1, deltaMode: 2 })
+    expect(scrollBy).toHaveBeenCalledWith({ top: -window.innerHeight, behavior: 'instant' })
+  })
+
   it('leaves the wheel alone once the window is at the top', () => {
     const { wheel, scrollBy } = setup({ scrollY: 0 })
     const e = wheel({ deltaY: -120 })

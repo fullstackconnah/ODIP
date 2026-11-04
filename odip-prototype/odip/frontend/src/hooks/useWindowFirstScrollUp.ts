@@ -14,7 +14,7 @@ export function useWindowFirstScrollUp(ref: RefObject<HTMLElement | null>) {
       if (e.deltaY >= 0 || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
       if (window.scrollY <= 0 || el.scrollHeight <= el.clientHeight) return
       e.preventDefault()
-      window.scrollBy({ top: e.deltaY * (e.deltaMode === 1 ? 16 : 1), behavior: 'instant' })
+      window.scrollBy({ top: e.deltaY * (e.deltaMode === 2 ? window.innerHeight : e.deltaMode === 1 ? 16 : 1), behavior: 'instant' })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)

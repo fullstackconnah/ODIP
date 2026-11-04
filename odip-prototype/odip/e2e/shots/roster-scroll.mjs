@@ -75,6 +75,13 @@ const cropBar = async (page, name) => {
   await page.screenshot({ path: path.join(OUT_DIR, name + '.png'), clip: { x: 0, y, width: await page.evaluate(() => innerWidth), height: 360 } })
 }
 
+// Bar buttons: edges, height, and the bar's own height (checks g, h, i).
+const barBox = (page) => page.evaluate(() => {
+  const bar = document.querySelector('[data-publish-bar]'), w = innerWidth
+  const b = [...bar.querySelectorAll('button')].map((x) => x.getBoundingClientRect())
+  return { barH: bar.firstElementChild.getBoundingClientRect().height, minLeft: Math.min(...b.map((r) => r.left)), maxRight: Math.max(...b.map((r) => r.right)), minH: Math.min(...b.map((r) => r.height)), n: b.length, w }
+})
+
 const board = (page) => page.evaluate(() => {
   const b = document.querySelector('[data-fit-screen] [class~="lg:overflow-y-auto"]'), f = document.querySelector('footer'), se = document.scrollingElement
   return { y: Math.round(se.scrollTop), yMax: se.scrollHeight - innerHeight, top: Math.round(b.scrollTop), topMax: b.scrollHeight - b.clientHeight, footerTop: f.getBoundingClientRect().top, innerHeight }
@@ -96,6 +103,7 @@ await step('w1280', async () => {
   const ga = await gaps(page)
   results.a1280 = { ...ga, scrollY: o.y, pass: o.y === 0 && ga.gap >= ga.token - 0.5 }
   await cropBar(page, 'bar-top-1280')
+  results.hNormal = { ...(await barBox(page)) }; results.hNormal.pass = results.hNormal.barH <= 56
   await page.screenshot({ path: path.join(OUT_DIR, 'full-1280.png'), fullPage: true })
   // (e) down: board first, then the footer.
   const down = []
@@ -126,6 +134,7 @@ await step('w1280', async () => {
   await page.waitForFunction(() => document.querySelector('[data-publish-bar] [aria-live="polite"]') !== null)
   await page.waitForTimeout(300)
   await cropBar(page, 'selecting-1280')
+  results.hSelecting = { ...(await barBox(page)) }; results.hSelecting.pass = results.hSelecting.barH <= 56
   const ga3 = await gaps(page)
   results.aSelecting = { ...ga3, pass: ga3.gap >= ga3.token - 0.5 }
   await context.close()
@@ -135,7 +144,21 @@ await step('w390', async () => {
   const ga = await gaps(page)
   const m = await page.evaluate(() => ({ hScroll: document.documentElement.scrollWidth > innerWidth }))
   const innerScroller = await page.evaluate(() => { const b = document.querySelector('[data-fit-screen] [class*="overflow-y-auto"]'); return b ? getComputedStyle(b).overflowY : 'none' })
+  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight))
+  await page.waitForTimeout(400)
   await cropBar(page, 'bar-390')
+  const gN = await barBox(page)
+  await page.getByRole('button', { name: 'Select shifts' }).click()
+  await page.waitForFunction(() => document.querySelector('[data-publish-bar] [aria-live="polite"]') !== null)
+  await page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight))
+  await page.waitForTimeout(400)
+  await cropBar(page, 'selecting-390')
+  const gS = await barBox(page)
+  const fits = (g) => g.minLeft >= 16 && g.maxRight <= g.w - 16
+  results.g = { normal: gN, selecting: gS, pass: fits(gN) && fits(gS) }
+  results.i = { normal: gN.minH, selecting: gS.minH, pass: gN.minH >= 44 && gS.minH >= 44 }
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await page.waitForTimeout(300)
   const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
   await page.setViewportSize({ width: 390, height: h })
   await page.waitForTimeout(500)
@@ -145,7 +168,7 @@ await step('w390', async () => {
   results.f = { hScroll: m.hScroll, pass: !m.hScroll }
   await context.close()
 })
-const allPass = ['a1280', 'a1280footer', 'aSelecting', 'a390', 'b', 'c', 'd', 'e', 'f'].every((k) => results[k] && results[k].pass)
+const allPass = ['a1280', 'a1280footer', 'aSelecting', 'a390', 'b', 'c', 'd', 'e', 'f', 'g', 'hNormal', 'hSelecting', 'i'].every((k) => results[k] && results[k].pass)
 const out = { allPass, results, notes }
 writeFileSync(path.join(OUT_DIR, 'checks.json'), JSON.stringify(out, null, 1))
 await browser.close(); console.log('[rs] DONE'); console.log(JSON.stringify(out))
