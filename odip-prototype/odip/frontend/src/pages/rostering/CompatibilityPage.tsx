@@ -161,7 +161,7 @@ export default function CompatibilityPage() {
       key: 'participantName', header: 'Participant', minWidth: '11rem', mobile: 'primary',
       render: r => (
         <Link
-          to={`/participants/${r.participantId}?tab=roster`}
+          to={`/participants/${r.participantId}?tab=people&section=roster`}
           className={`${TAP_FLOOR} font-medium text-[var(--color-foreground)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-sm`}
         >
           {r.participantName}

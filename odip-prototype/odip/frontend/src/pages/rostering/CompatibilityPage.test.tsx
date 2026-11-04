@@ -90,6 +90,12 @@ describe('CompatibilityPage: the exceptions list', () => {
     expect(document.querySelectorAll('table select')).toHaveLength(0)
   })
 
+  it('links a participant to the roster chip of their page, a tab and section the page knows', async () => {
+    renderPage()
+    await screen.findByText('Knows the routine')
+    expect(screen.getAllByRole('link', { name: 'Alex Rivera' })[0]).toHaveAttribute('href', '/participants/p1?tab=people&section=roster')
+  })
+
   it('filters by the No / Preferences toggle and the search, and opens on ?q=', async () => {
     const user = userEvent.setup()
     renderPage('/rostering/compatibility?view=all&q=Jamie')
