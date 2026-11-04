@@ -413,6 +413,13 @@ export interface StaffLeaveDto {
   status: Extract<LeaveStatus, 'Approved' | 'Pending'>
 }
 
+/** A whole day the person marked Available or Preferred, with no leave or unavailability: the staff picker's "Available that day". */
+export interface StaffAvailableDayDto {
+  staffId: string
+  date: string
+  preferred: boolean
+}
+
 // ── Roster Board ──────────────────────────────────────────
 export interface RosterStaffRowDto {
   staffId: string
@@ -487,6 +494,8 @@ export type RosterBoardDto =
       pendingAgreements?: PendingAgreementDto[]
       /** The week's approved and pending leave of every active staff member, for the staff picker. */
       staffLeave?: StaffLeaveDto[]
+      /** Whole days each active staff member marked Available or Preferred and is not away; absent from an older API. */
+      staffAvailableDays?: StaffAvailableDayDto[]
       exceptions: RosterExceptionDto[]
       /** False until someone starts rostering this week (2026-10-16). The server always sends it; old fixtures leave it out, which reads as started. */
       weekStarted?: boolean
@@ -499,6 +508,7 @@ export type RosterBoardDto =
       days: string[]
       staffRows: RosterStaffRowDto[]
       unfilled: ShiftDto[]
+      staffAvailableDays?: StaffAvailableDayDto[]
       exceptions: RosterExceptionDto[]
       /** False until someone starts rostering this week (2026-10-16). The server always sends it; old fixtures leave it out, which reads as started. */
       weekStarted?: boolean

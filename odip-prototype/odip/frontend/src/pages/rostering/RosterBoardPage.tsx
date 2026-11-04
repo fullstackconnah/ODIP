@@ -1007,6 +1007,7 @@ export default function RosterBoardPage() {
         staffLoading={staffLoading}
         shifts={boardShifts}
         leave={boardLeave}
+        availableDays={board?.staffAvailableDays ?? []}
         hours={hours}
         sheet={belowMd}
         onPick={handlePick}
