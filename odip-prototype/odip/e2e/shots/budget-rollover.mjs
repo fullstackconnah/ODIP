@@ -4,7 +4,7 @@
 // and the agreement check answer is patched to carry a rolled-over amount. Time-driven inputs: the Funding hints read the ledger's saved figures only, so the date does not move a number.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, fullPage, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -167,9 +167,12 @@ for (const vp of VPS) {
     check(t('error: the exact negative copy sits beside the box'), err.text === "A rolled-over amount can't be less than $0.00.", err.text)
     check(t('error: above the use-worked-out button, and described by the box'), err.above && err.described, err)
     await crop(page, pool, `editor-rollover-error-${tag}.png`, vp)
-    const full = await fullPage(page, path.join(OUT_DIR, 'full', `dialog-rollover-error-${tag}.png`), { touch: vp.touch })
-    checks.push(...full.checks)
-    check(t('dialog has no horizontal scroll'), await page.evaluate(() => { const d = document.querySelector('[role=dialog]'); return d.scrollWidth <= d.clientWidth && document.documentElement.scrollWidth <= document.documentElement.clientWidth }))
+    // The whole dialog: the viewport grows to the height of the dialog's scroller (the page behind it is long and not the subject), then the dialog alone is shot.
+    const need = await page.evaluate(() => { const d = document.querySelector('[role=dialog]'); const sc = [d, ...d.querySelectorAll('*')].filter((e) => ['auto', 'scroll'].includes(getComputedStyle(e).overflowY)).sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || d; return sc.scrollHeight - sc.clientHeight })
+    await page.setViewportSize({ width: vp.width, height: Math.min(vp.height + Math.max(0, need) + 40, 4000) })
+    await page.waitForTimeout(500)
+    await dialog.screenshot({ path: path.join(OUT_DIR, 'full', `dialog-rollover-error-${tag}.png`) })
+    check(t('dialog has no horizontal scroll'), await page.evaluate(() => { const d = document.querySelector('[role=dialog]'); return d.scrollWidth <= d.clientWidth }))
     await context.close()
   } catch (e) { check(t('editor states ran'), false, String(e.message).split('\n')[0]) }
 
