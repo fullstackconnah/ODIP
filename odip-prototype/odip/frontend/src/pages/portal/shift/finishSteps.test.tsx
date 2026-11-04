@@ -123,7 +123,8 @@ describe('SubmitStep: the finish drifted off roster (W2)', () => {
 
   it('says so once, offers Add a reason, and sends the worker back to step 1', () => {
     const go = submit({ finishAsked: false })
-    expect(screen.getByRole('button', { name: 'Add a reason' }).parentElement).toHaveTextContent("You're now finishing 7 minutes late. Add a reason?")
+    expect(screen.getByRole('button', { name: 'Add a reason' }).parentElement).toHaveTextContent("You're now finishing 7 minutes late.Add a reason")
+    expect(screen.getByRole('button', { name: 'Add a reason' }).parentElement).not.toHaveTextContent('?')
     expect(screen.queryByText(/optional/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add a reason' }))
     expect(go).toHaveBeenCalledWith('times', 'finish-time-reason')

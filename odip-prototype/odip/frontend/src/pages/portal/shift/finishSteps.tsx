@@ -458,8 +458,8 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
           tone="info"
           title={(
             <>
-              {`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}. `}
-              <Button variant="ghost" size="lg" className="underline" onClick={() => go('times', 'finish-time-reason')}>Add a reason</Button>?
+              {`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}.`}
+              <Button variant="ghost" size="lg" className="underline" onClick={() => go('times', 'finish-time-reason')}>Add a reason</Button>
             </>
           )}
         />

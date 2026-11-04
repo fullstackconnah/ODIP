@@ -173,18 +173,18 @@ for (const vp of VPS) {
     driftPage = page
     await routeWorkerShift(page, { startOff: -8 - 480, endOff: -8, status: 'InProgress' })
     await gotoShift(page)
-    const line = page.getByText(/You're now finishing 8 minutes late\. Add a reason\?/)
+    const line = page.getByText(/You're now finishing 8 minutes late\./)
     await line.waitFor({ state: 'visible', timeout: 60_000 })
     await page.waitForTimeout(400)
     const add = page.getByRole('button', { name: 'Add a reason' })
     const addBox = await add.boundingBox()
     const lineText = (await add.locator('xpath=..').innerText()).replace(/\s+/g, ' ').trim()
     check(t('submit-drift-line: Add a reason is a visible control'), await add.isVisible() && addBox !== null, addBox)
-    check(t('submit-drift-line: the line reads as the plan copy'), lineText === "You're now finishing 8 minutes late. Add a reason?", lineText)
+    check(t('submit-drift-line: the line reads as the plan copy'), /^You're now finishing 8 minutes late\.\s?Add a reason$/.test(lineText) && !lineText.includes('?'), lineText)
     if (vp.touch) check(t('submit-drift-line: Add a reason is at least 44 high'), addBox !== null && addBox.height >= 43.5, addBox)
     await noHScroll(page, t('submit-drift-line'))
     if (vp.touch) await tapTargets(page.locator('main').first(), t('submit-drift-line'))
-    await crop(page, line.locator('xpath=ancestor::div[1]'), `submit-drift-line-${tag}.png`, vp, 24)
+    await crop(page, line.locator('xpath=ancestor::div[2]'), `submit-drift-line-${tag}.png`, vp, 24)
     await context.close()
   } catch (e) {
     const seen = driftPage ? await driftPage.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)).catch(() => '') : ''
