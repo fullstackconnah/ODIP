@@ -112,7 +112,7 @@ try {
 
     // Numeric checks on the three-ticked board.
     const ticked = await chipOf(page, 'sam-wed').evaluate((e) => {
-      const wrap = e.closest('[class*="grid-cols"]'); const box = wrap.querySelector('[data-select-box] > span').getBoundingClientRect()
+      const wrap = e.closest('.group'); const box = wrap.querySelector('[data-select-box] > span').getBoundingClientRect()
       return { ring: getComputedStyle(wrap).boxShadow, box: Math.round(box.width * 10) / 10 }
     })
     check(`${tag}: selected ring is 2px`, /\b2px\b/.test(ticked.ring) && /inset/.test(ticked.ring), ticked.ring)
@@ -138,7 +138,7 @@ try {
     if (!vp.touch) {
       await chipOf(page, 'sam-wed').focus()
       await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab')
-      await crop(page, chipOf(page, 'sam-wed').locator('xpath=ancestor::*[contains(@class,"grid-cols")][1]'), `4-focus-ring-${tag}.png`, vp, 12)
+      await crop(page, chipOf(page, 'sam-wed').locator('xpath=ancestor::div[contains(concat(" ",@class," ")," group ")][1]'), `4-focus-ring-${tag}.png`, vp, 12)
     }
 
     // 5. The confirm dialog.
