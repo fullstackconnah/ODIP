@@ -4,7 +4,7 @@ import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDra
 afterEach(() => { sessionStorage.clear(); vi.restoreAllMocks() })
 
 const full: EndDraft = {
-  step: 'report', reached: 'report', startOverride: null, endOverride: '2026-08-17T16:50', adjustmentReason: 'Left early', kilometres: '12.5',
+  step: 'report', reached: 'report', startOverride: null, endOverride: '2026-08-17T16:50', adjustmentReason: 'Left early', timeReason: 'Waited for the taxi', finishAsked: true, kilometres: '12.5',
   preTravelMinutes: '25', preTravelKilometres: '12.3', postTravelMinutes: '20', postTravelKilometres: '10',
   anythingToReport: 'yes', handoverText: 'hi', nothingToNote: true, nothingToHandOver: false, timesSig: 'x',
 }

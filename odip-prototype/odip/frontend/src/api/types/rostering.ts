@@ -257,6 +257,12 @@ export interface ShiftCompletionDto {
   originalActualEnd: string | null
   /** Why the worker moved a time; null when nothing moved. */
   timeAdjustmentReason: string | null
+  /** Why the worker started or finished more than 5 minutes off roster (optional); null when not given. */
+  startTimeReason?: string | null
+  finishTimeReason?: string | null
+  /** Each side is more than 5 minutes off the roster (a finish counts only once it is set). */
+  offRosterStart?: boolean
+  offRosterFinish?: boolean
   /** Kilometres driven with the participant, one decimal place; null when not given. */
   kilometres: number | null
   /** Provider travel before and after the shift (not `kilometres`); null when not given. Optional until the review page reads them. */
@@ -331,6 +337,8 @@ export interface CompletionQueueItemDto {
   startWasManual: boolean
   /** True when the worker moved the start or end at Finish. */
   timesAdjusted: boolean
+  /** True when the start, or a set finish, is more than 5 minutes off the roster: the row needs review whatever the outlier setting says. */
+  offRoster: boolean
   /** Active incidents linked to the shift: the ones the review lists. A row is one-tap only when this is exactly 0 (dashboard). */
   incidentCount: number
 }

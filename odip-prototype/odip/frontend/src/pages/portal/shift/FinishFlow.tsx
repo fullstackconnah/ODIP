@@ -14,7 +14,7 @@ import type { ShiftIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { breaksSignature, clockLabel, FINISH_STEPS, handoverForward, movedTimes, offlineDueDoses, parseKilometres, parseTravelMinutes, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput, type TravelField } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
-import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
+import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, timeQuestions, type Refusal } from './finishSteps'
 import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
 import { joinList, plural } from '@/lib/format'
@@ -191,6 +191,9 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
       return
     }
     const sent = atSubmit ? movedTimes(atSubmit) : { start: null, end: null }
+    // One optional box answers the start and/or finish question; it goes to each side that is still off roster at this moment.
+    const asks = timeQuestions(shift, d, new Date())
+    const timeReason = d.timeReason.trim()
     setRefusals([])
     setNetworkError(false)
     setSubmitting(true)
@@ -201,6 +204,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           actualStart: sent.start,
           actualEnd: sent.end,
           timeAdjustmentReason: sent.start || sent.end ? d.adjustmentReason.trim() : null,
+          ...(timeReason && asks.finish !== null && { finishTimeReason: timeReason }),
+          ...(timeReason && asks.start !== null && { startTimeReason: timeReason }),
           kilometres: km === 'invalid' ? null : km,
           ...(shift.travelAsked && {
             preShiftTravelMinutes: travel.preTravelMinutes, preShiftTravelKilometres: travel.preTravelKilometres,

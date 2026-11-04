@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Flag } from 'lucide-react'
 import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/hooks'
 import { useQueueRecords } from '@/api/hooks/portal'
@@ -12,7 +12,7 @@ import { formatWithTimeZone } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
-import { rosteredInstants } from '../lib/portal'
+import { offRosterMinutes, rosteredInstants } from '../lib/portal'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { breaksLabel, clockLabel, FINISH_STEPS, unpaidBreakMinutes, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
@@ -201,6 +201,30 @@ function TravelLeg({ id, legend, help, draft, set, invalid, message }: {
   )
 }
 
+/** Minutes off the rostered finish, and off the rostered start when Start did not already ask (a moved or manual start with no reason saved); null within 5. */
+export function timeQuestions(shift: PortalShiftDetailDto, draft: EndDraft, now: Date): { start: number | null; finish: number | null } {
+  const tz = shift.timeZoneId
+  const c = shift.completion
+  const rostered = rosteredInstants(shift)
+  const startIso = (draft.startOverride ? providerLocalToUtcInstant(draft.startOverride, tz) : null) ?? c?.actualStart ?? null
+  const endIso = (draft.endOverride ? providerLocalToUtcInstant(draft.endOverride, tz) : null) ?? now.toISOString()
+  const startAsked = !!startIso && !c?.startTimeReason && (draft.startOverride !== null || !c?.actualStart)
+  return {
+    start: startAsked && rostered.start ? offRosterMinutes(startIso, rostered.start) : null,
+    finish: rostered.end ? offRosterMinutes(endIso, rostered.end) : null,
+  }
+}
+
+const early = (m: number) => (m < 0 ? 'early' : 'late')
+
+/** The label for the one box: the start question, the finish question, or both. */
+function timeQuestionLabel({ start, finish }: { start: number | null; finish: number | null }) {
+  const s = start !== null ? `start ${plural(Math.abs(start), 'minute')} ${early(start)}` : ''
+  const f = finish !== null ? `finishing ${plural(Math.abs(finish), 'minute')} ${early(finish)}` : ''
+  if (s && f) return `Why did you ${s} and why are you ${f}? (optional)`
+  return s ? `Why did you ${s}? (optional)` : `Why are you ${f}? (optional)`
+}
+
 /** Step 1, Your times (SHAPE §4): change either time by up to 15 minutes with a reason, correct the breaks, add kilometres. */
 export function TimesStep({ shift, online, now, draft, set, invalid, invalidMessage }: {
   shift: PortalShiftDetailDto; online: boolean; now: Date; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; invalidMessage?: string
@@ -217,6 +241,11 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
   const worked = startIso ? Math.max(0, minutesBetween(startIso, endIso) - breakMinutes) : 0
   const say = (local: string) => clockLabel(`${local}:00`)
   const muted = 'text-xs text-[var(--color-muted-foreground)]'
+  const asks = timeQuestions(shift, draft, now)
+  const asking = asks.start !== null || asks.finish !== null
+  // Remember whether step 1 was asking about the finish, so Submit nudges only for a finish that drifted off roster after this step.
+  const finishAsked = asks.finish !== null
+  useEffect(() => { if (draft.finishAsked !== finishAsked) set({ finishAsked }) }, [draft.finishAsked, finishAsked, set])
 
   return (
     <div className="space-y-4">
@@ -244,6 +273,16 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
             aria-invalid={invalid === 'reason' || undefined} value={draft.adjustmentReason} onChange={e => set({ adjustmentReason: e.target.value })}
           />
           <p className={muted}>{draft.adjustmentReason.length} of {REASON_MAX}</p>
+        </div>
+      )}
+      {asking && (
+        <div className="space-y-1">
+          <label htmlFor="finish-time-reason" className="text-sm font-medium">{timeQuestionLabel(asks)}</label>
+          <p id="finish-time-reason-help" className={muted}>Your coordinator sees this. You can leave it empty.</p>
+          <textarea
+            id="finish-time-reason" rows={3} maxLength={REASON_MAX} className={fieldClass} aria-describedby="finish-time-reason-help"
+            value={draft.timeReason} onChange={e => set({ timeReason: e.target.value })}
+          />
         </div>
       )}
       <section aria-labelledby="finish-breaks" className="space-y-2">
@@ -425,8 +464,16 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       { label: 'Handover', value: draft.nothingToHandOver || !handover ? 'Nothing to hand over' : handover.split('\n')[0] },
     ] },
   ]
+  const finishOff = timeQuestions(shift, { ...draft, endOverride: moved.end ? utcInstantToProviderLocal(moved.end, tz) : null }, now).finish
   return (
     <div className="space-y-4">
+      {finishOff !== null && !draft.finishAsked && !draft.timeReason.trim() && (
+        <Callout
+          tone="info"
+          title={`You're now finishing ${plural(Math.abs(finishOff), 'minute')} ${finishOff < 0 ? 'early' : 'late'}. Add a reason? It's optional.`}
+          actions={<Button variant="secondary" size="md" onClick={() => go('times')}>Add a reason</Button>}
+        />
+      )}
       {drifted && (
         <Callout
           tone="warning"

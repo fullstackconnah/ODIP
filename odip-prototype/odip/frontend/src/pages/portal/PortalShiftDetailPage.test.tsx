@@ -1239,6 +1239,26 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     }))
   })
 
+  it('a finish 10 minutes early asks why; the answer is sent as finishTimeReason, and an empty box still submits without it', async () => {
+    open()
+    moveFinish('2026-08-17T16:50', 'Left early.')
+    change('Why are you finishing 10 minutes early? (optional)', '  Participant went out  ')
+    toStepFive()
+    submitAnyway()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    expect(finishMutateAsync.mock.calls[0][0].data).toMatchObject({ finishTimeReason: 'Participant went out', timeAdjustmentReason: 'Left early.' })
+    expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('startTimeReason')
+  })
+
+  it('leaves finishTimeReason out when the box is empty, and never blocks Submit', async () => {
+    open()
+    moveFinish('2026-08-17T16:50', 'Left early.')
+    toStepFive()
+    submitAnyway()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('finishTimeReason')
+  })
+
   it("a Change left on the recorded minute sends nothing and needs no reason; '0' km sends 0", async () => {
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))

@@ -12,6 +12,10 @@ export interface EndDraft {
   startOverride: string | null
   endOverride: string | null
   adjustmentReason: string
+  /** The one optional box that explains an off-roster start and/or finish (W2). */
+  timeReason: string
+  /** Whether step 1 was asking about the finish when it was last open: the Submit step only nudges for a finish that drifted off roster after that. */
+  finishAsked: boolean
   /** The kilometre field as typed. */
   kilometres: string
   /** The four provider-travel fields as typed: the trip to the participant, then the trip after the shift. */
@@ -28,7 +32,7 @@ export interface EndDraft {
 }
 
 export const EMPTY_END_DRAFT: EndDraft = {
-  step: null, reached: 'times', startOverride: null, endOverride: null, adjustmentReason: '', kilometres: '',
+  step: null, reached: 'times', startOverride: null, endOverride: null, adjustmentReason: '', timeReason: '', finishAsked: false, kilometres: '',
   preTravelMinutes: '', preTravelKilometres: '', postTravelMinutes: '', postTravelKilometres: '',
   anythingToReport: null, handoverText: '', nothingToNote: false, nothingToHandOver: false, timesSig: null,
 }
@@ -49,6 +53,8 @@ export function loadEndDraft(shiftId: string): EndDraft | null {
       startOverride: textOrNull(d.startOverride),
       endOverride: textOrNull(d.endOverride),
       adjustmentReason: text(d.adjustmentReason),
+      timeReason: text(d.timeReason),
+      finishAsked: d.finishAsked === true,
       kilometres: text(d.kilometres),
       preTravelMinutes: text(d.preTravelMinutes),
       preTravelKilometres: text(d.preTravelKilometres),

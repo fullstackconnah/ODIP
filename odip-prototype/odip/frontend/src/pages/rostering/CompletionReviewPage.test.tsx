@@ -60,6 +60,7 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     breakMinutes: 0,
     startWasManual: false,
     timesAdjusted: false,
+    offRoster: false,
     incidentCount: 0,
     ...overrides,
   }
@@ -329,6 +330,29 @@ describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
     renderPage()
 
     expect(screen.getAllByText('Times adjusted by the worker')).toHaveLength(1)
+  })
+
+  it('labels an off-roster row in words beside the variance badge, and only that row', () => {
+    mockUseCompletions.mockReturnValue({
+      data: makePaged([makeQueueItem({ offRoster: true, varianceMinutesEnd: 8 }), makeQueueItem({ shiftId: 'shift-2', completionId: 'sc-2', participantName: 'Mia Chen' })]),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getAllByText('Off roster')).toHaveLength(1)
+  })
+
+  it.each([
+    [{ offRosterStart: true, varianceMinutesStart: -12, startTimeReason: 'Bus was early' }, 'Started 12 min early. Reason: Bus was early'],
+    [{ offRosterFinish: true, varianceMinutesEnd: 8, finishTimeReason: null }, 'Finished 8 min late. No reason given.'],
+    [{ offRosterFinish: true, varianceMinutesEnd: -9, finishTimeReason: 'Participant went out' }, 'Finished 9 min early. Reason: Participant went out'],
+  ] as const)('shows the off-roster start or finish and its reason in the review dialog: %j', async (extra, line) => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ offRoster: true })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail(extra) })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(within(screen.getByRole('alertdialog')).getByText(line)).toBeInTheDocument()
   })
 
   it('shows the stamped and moved times, the reason, the kilometres and the report answer in the review dialog', async () => {
