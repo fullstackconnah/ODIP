@@ -10,7 +10,7 @@ import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { StaffListDto } from '@/api/types/staff'
 import type { IncidentWitnessDto } from '@/api/types/incidents'
 import type { IncidentFormData } from '../incidentFormSchema'
-import type { Tone } from '@/lib/tone'
+import { WITNESS_TYPE_COLOR_MAP } from '../witnessColors'
 import { X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -33,9 +33,6 @@ export type WitnessesStepProps = {
 }
 
 type WitnessRow = { existingId?: string; witnessUserId: string | null; witnessName: string }
-
-// Staff and External are categories of witness, not states: info and neutral.
-export const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 'neutral' }
 
 /**
  * IN-7 — wizard step "Witnesses". A single `witnesses[]` field array holds both staff (approvable

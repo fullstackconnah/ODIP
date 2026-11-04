@@ -18,7 +18,7 @@ import type { IncidentDetailDto } from '@/api/types/incidents'
 import { RpAuthorisationBadge } from './RpAuthorisationBadge'
 import { reportingDueLines } from './reportingDue'
 import { emergencyServiceEntries, parseEmergencyServices } from './emergencyServices'
-import { WITNESS_TYPE_COLOR_MAP } from './steps/WitnessesStep'
+import { WITNESS_TYPE_COLOR_MAP } from './witnessColors'
 import type { GroupKey } from './incidentEditForm'
 
 /** What every view card needs to offer its Edit button: who may, whether one is already saving, and what opening does. */
