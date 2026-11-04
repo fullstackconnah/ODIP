@@ -676,7 +676,7 @@ export interface UpsertCompatibilityDto {
   level: CompatibilityLevel
   reason?: string | null
   /** 1-based target place in the tier; leave out to keep the row where it is (or append on a tier change). */
-  rank?: number
+  rank?: number | null
 }
 
 // ── Auto-roster (R7): a draft of who could take a week's open shifts. Nothing is saved until Apply. ──
