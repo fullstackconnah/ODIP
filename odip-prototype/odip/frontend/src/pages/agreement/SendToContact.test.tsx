@@ -121,6 +121,18 @@ describe('SendToContact: the dialog', () => {
     expect(screen.getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings?section=organisation')
   })
 
+  it('tells the page to read the agreement again when a newer save refuses the send (409)', async () => {
+    const user = userEvent.setup({ advanceTimers: () => {} })
+    const onSuperseded = vi.fn()
+    render(<MemoryRouter><SendToContact participantId="p-1" draftId="d-2" version={2} contacts={[guardian]} shares={[]} onSuperseded={onSuperseded} /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Send to a contact' }))
+    sendMutate.mockImplementation((_vars, options) => options.onError({ response: { status: 409, data: { errors: ['A newer save has replaced this agreement.'] } } }))
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSuperseded).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('A newer save has replaced this agreement.')).toBeInTheDocument()
+  })
+
   it('offers Send again when the link has expired', () => {
     setUp([guardian], [share({ expiresAt: '2026-11-04T09:00:00Z' })])
 

@@ -21,6 +21,8 @@ type SendToContactProps = {
   shares: AgreementShareRowDto[]
   /** The email went. The page needs nothing: the hook reads the sharing again, which shows the new line. */
   onSent?: () => void
+  /** A newer save has replaced the revision (409): the page reads the agreement again, as it does for the approval. */
+  onSuperseded?: () => void
 }
 
 type Outcome = { tone: 'danger' | 'warning'; text: string; settings?: boolean }
@@ -41,7 +43,7 @@ function refusal(error: unknown): Outcome {
  * "Send to a contact" (agreement PR3b): emails the saved revision to a guardian, plan nominee or the participant as a link they can read and download. The page offers it only to a role that may
  * approve. The address is shown, never typed: the server reads it from the contact's record. Nothing here copies or shows the link, which exists only in the email.
  */
-export function SendToContact({ participantId, draftId, version, contacts, shares, onSent }: SendToContactProps) {
+export function SendToContact({ participantId, draftId, version, contacts, shares, onSent, onSuperseded }: SendToContactProps) {
   const send = useSendAgreement()
   const [open, setOpen] = useState(false)
   const [chosen, setChosen] = useState('')
@@ -66,7 +68,7 @@ export function SendToContact({ participantId, draftId, version, contacts, share
         if (result.sent) { setOpen(false); onSent?.() }
         else setOutcome(result.error === 'NotConfigured' ? { tone: 'warning', text: NOT_CONFIGURED } : { tone: 'danger', text: FAILED })
       },
-      onError: error => setOutcome(refusal(error)),
+      onError: error => { setOutcome(refusal(error)); if (httpStatusOf(error) === 409) onSuperseded?.() },
     })
   }
 

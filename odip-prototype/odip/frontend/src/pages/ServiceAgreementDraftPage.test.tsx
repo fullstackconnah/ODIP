@@ -28,7 +28,7 @@ vi.mock('@/api/hooks', () => ({
   usePlanBudget: (...args: unknown[]) => budget(...args),
   usePlanPeriodQuote: () => ({ data: undefined, isError: false, isFetching: false, failureCount: 0 }),
   useAgreementCheck: () => check(),
-  useAgreementSharing: () => sharing(),
+  useAgreementSharing: (...args: unknown[]) => sharing(...args),
   useSendAgreement: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
@@ -389,6 +389,19 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
       renderPage()
       await user.click(stepButton('Save'))
       expect(screen.queryByRole('button', { name: 'Send to a contact' })).not.toBeInTheDocument()
+    })
+
+    it('does not ask for the sharing, and hides the button, for somebody who may edit but not approve', async () => {
+      sharing.mockClear()
+      asRole('Coordinator')
+      pricingSettings.mockReturnValue(makeSettings({ approverRoles: ['Admin'] }))
+      saved()
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(stepButton('Save'))
+      expect(screen.queryByRole('button', { name: 'Send to a contact' })).not.toBeInTheDocument()
+      expect(sharing.mock.calls.length).toBeGreaterThan(0)
+      expect(sharing.mock.calls.every(call => call[2] === false)).toBe(true)
     })
 
     it('hides it on an approved revision', async () => {

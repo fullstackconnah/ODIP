@@ -97,7 +97,7 @@ export default function SharedAgreementPage() {
       </div>
 
       <div className="mt-[var(--section-gap)] flex flex-col gap-3">
-        <a className={`${TAP_FLOOR} gap-2 self-start font-medium underline`} href={sharedAgreementPdfUrl(token!)}>
+        <a className={`${TAP_FLOOR} inline-flex items-center gap-2 self-start font-medium underline`} href={sharedAgreementPdfUrl(token!)}>
           <Download className="h-4 w-4" aria-hidden="true" />Download PDF
         </a>
         {reach && <p className="text-sm">To agree to this service agreement, {reach}.</p>}

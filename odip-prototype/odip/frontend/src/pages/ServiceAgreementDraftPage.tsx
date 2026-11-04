@@ -546,7 +546,7 @@ function DraftPage() {
               send={sharable && onScreen && sharing.data ? (
                 <>
                   <div className="flex flex-wrap items-center gap-3">
-                    <SendToContact participantId={participantId} draftId={onScreen.id} version={onScreen.version} contacts={sharing.data.contacts} shares={sharing.data.shares} />
+                    <SendToContact participantId={participantId} draftId={onScreen.id} version={onScreen.version} contacts={sharing.data.contacts} shares={sharing.data.shares} onSuperseded={superseded} />
                   </div>
                   <ShareStatus shares={sharing.data.shares} />
                 </>
