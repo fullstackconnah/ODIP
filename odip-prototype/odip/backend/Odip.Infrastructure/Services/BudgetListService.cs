@@ -67,7 +67,7 @@ public sealed class BudgetListService
                     rows.Add((new BudgetListRowDto
                     {
                         ParticipantId = participantId, ParticipantName = ledger.Name, PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind,
-                        ManagementType = pool.Pool.ManagementType, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, Available = period.Available, Carried = period.Carried,
+                        ManagementType = pool.Pool.ManagementType, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, Available = period.Available, Carried = period.Carried, CarriedSetByHand = period.Period.RolloverOverride is not null,
                         Used = period.Used, Remaining = period.Available - period.Used, BookedAhead = period.BookedAhead, Forecast = period.Forecast, Status = period.Status,
                         ListStatus = ListStatusOf(period.Status, refusal is not null, pace is not null), PaceRunsOutOn = pace,
                         UnpricedShiftCount = period.UnpricedShiftCount, NdiaRejection = refusal,

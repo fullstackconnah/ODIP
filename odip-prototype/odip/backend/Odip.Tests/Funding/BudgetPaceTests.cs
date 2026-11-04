@@ -57,7 +57,7 @@ public class BudgetPaceTests
         // Owner rule (a): booked ahead plays no part, so the date is the same with or without it.
         var period = new FundingPeriod { PeriodStart = Start, PeriodEnd = End, PlanAmount = 8000m };
         PeriodLedger Ledger(decimal booked) =>
-            new(period, true, 8000m, 0m, 4000m, 0m, booked, 0, 0, BudgetStatus.OnTrack, Array.Empty<LedgerItem>(), 0, 0);
+            new(period, true, 8000m, 0m, 4000m, 0m, booked, 0, 0, BudgetStatus.OnTrack, Array.Empty<LedgerItem>(), 0, 0, 0m);
         var today = D(2026, 11, 4);   // elapsed 34: floor(8000*34/4000) = 68 days
         Assert.Equal(D(2026, 12, 8), Ledger(0m).PaceAt(today)?.RunsOutOn);
         Assert.Equal(D(2026, 12, 8), Ledger(100m).PaceAt(today)?.RunsOutOn);

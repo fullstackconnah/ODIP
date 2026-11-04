@@ -47,12 +47,15 @@ public class RosteringBudgetGateTests : IDisposable
     // ── Rig ─────────────────────────────────────────────────────────────────
 
     /// <summary>The participant with a plan whose October quarter holds <paramref name="october"/>, two booked shifts, and the organisation in <paramref name="mode"/>.</summary>
-    private RosteringController Rig(string role = "Coordinator", BudgetLimitMode mode = BudgetLimitMode.HardLimit, decimal october = 1000m, bool booked = true, IShiftCostSource? costs = null, bool withTenant = true)
+    private RosteringController Rig(string role = "Coordinator", BudgetLimitMode mode = BudgetLimitMode.HardLimit, decimal october = 1000m, bool booked = true, IShiftCostSource? costs = null, bool withTenant = true, decimal? previousQuarter = null, decimal? rollover = null)
     {
         _kit.SeedProvider("NSW");
         _kit.SeedCommunityAccessCatalogue();
         _participant = _kit.SeedParticipant();
-        _kit.SeedPlan(_participant, LedgerKit.Core(PlanType.PlanManaged, LedgerKit.Q(2, october), LedgerKit.Q(3, 5000m)));
+        // A previous quarter makes October's carry; a rollover typed by hand replaces it.
+        var periods = new List<PeriodSpec> { LedgerKit.Q(2, october) with { Rollover = rollover }, LedgerKit.Q(3, 5000m) };
+        if (previousQuarter is not null) periods.Insert(0, LedgerKit.Q(1, previousQuarter.Value));
+        _kit.SeedPlan(_participant, LedgerKit.Core(PlanType.PlanManaged, periods.ToArray()));
         if (booked)
         {
             _kit.SeedShift(_participant, Mon12Oct);
@@ -381,6 +384,30 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal(RosterFindingSeverity.Blocking, Budget(refusal.Data!)!.Severity);
         Assert.Equal(2, ShiftCount());
         Assert.Empty(_kit.Db.BookingTasks);
+    }
+
+    [Fact]
+    public async Task UnderAHardLimit_ARolloverSetByHand_LiftsTheBlockTheWorkedOutOneLeft()
+    {
+        // The quarter before holds nothing (worked out: $0 rolls over), so the third shift is past the budget; $5,000 typed by hand lifts it.
+        var controller = Rig("Coordinator", previousQuarter: 0m, rollover: 5000m);
+
+        var saved = Ok(await controller.CreateShift(Create(Wed14Oct), default));
+
+        Assert.Equal(3, ShiftCount());
+        Assert.Null(saved.OverrideReason);
+    }
+
+    [Fact]
+    public async Task UnderAHardLimit_ARolloverOfZeroSetByHand_BlocksWhatTheWorkedOutOneAllowed()
+    {
+        // The quarter before leaves $5,000 unspent, which would cover the shift; zero typed by hand takes it away.
+        var controller = Rig("Coordinator", previousQuarter: 5000m, rollover: 0m);
+
+        var refusal = Refused(await controller.CreateShift(Create(Wed14Oct), default));
+
+        Assert.Equal(RosterFindingSeverity.Blocking, Budget(refusal.Data!)!.Severity);
+        Assert.Equal(2, ShiftCount());
     }
 
     [Fact]

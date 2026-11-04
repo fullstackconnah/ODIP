@@ -86,6 +86,50 @@ public class BudgetLedgerCalculatorTests
     }
 
     [Fact]
+    public void Override_replaces_worked_out_carry_and_chains()
+    {
+        // Q1 limit 1000, used 200 (worked out 800); Q2 override 500, limit 1000, used 0; Q3 chains off the overridden Q2.
+        var q2 = Period(D(2026, 10, 1), D(2026, 12, 31), 1000m, position: 1);
+        q2.RolloverOverride = 500m;
+        var plan = Plan(Core(PlanType.PlanManaged, new List<FundingPeriod>
+        {
+            Period(D(2026, 7, 1), D(2026, 9, 30), 1000m, position: 0), q2, Period(D(2027, 1, 1), D(2027, 3, 31), 1000m, position: 2),
+        }));
+
+        var periods = BudgetLedgerCalculator.Compute(plan, Today, 80, new[] { Item(200m, D(2026, 8, 1)) }).Pools[0].Periods;
+
+        Assert.Equal(new[] { 0m, 500m, 1500m }, periods.Select(p => p.Carried));
+        Assert.Equal(1500m, periods[1].Available);
+        Assert.Equal(800m, periods[1].CarriedWorkedOut);
+        Assert.Equal(1500m, periods[2].CarriedWorkedOut);   // worked out from the overridden chain, from saved data
+    }
+
+    [Fact]
+    public void Override_of_zero_drops_the_carry()
+    {
+        var q2 = Period(D(2026, 10, 1), D(2026, 12, 31), 1000m, position: 1);
+        q2.RolloverOverride = 0m;
+        var plan = Plan(Core(PlanType.PlanManaged, new List<FundingPeriod> { Period(D(2026, 7, 1), D(2026, 9, 30), 1000m, position: 0), q2 }));
+
+        var second = BudgetLedgerCalculator.Compute(plan, Today, 80, Array.Empty<LedgerItem>()).Pools[0].Periods[1];
+
+        Assert.Equal((0m, 1000m, 1000m), (second.Carried, second.Available, second.Limit));
+        Assert.Equal(1000m, second.CarriedWorkedOut);
+    }
+
+    [Fact]
+    public void Override_on_first_period_is_ignored()
+    {
+        var first = Period(D(2026, 7, 1), D(2026, 9, 30), 1000m, position: 0);
+        first.RolloverOverride = 700m;
+        var plan = Plan(Core(PlanType.PlanManaged, new List<FundingPeriod> { first, Period(D(2026, 10, 1), D(2026, 12, 31), 1000m, position: 1) }));
+
+        var periods = BudgetLedgerCalculator.Compute(plan, Today, 80, Array.Empty<LedgerItem>()).Pools[0].Periods;
+
+        Assert.Equal(new[] { 0m, 1000m }, periods.Select(p => p.Carried));
+    }
+
+    [Fact]
     public void UnspentLimitRollsForwardAndChainsAcrossThreePeriods_AndAnOverspentPeriodCarriesNothing()
     {
         var plan = Plan(Core(PlanType.PlanManaged, Quarters(2000m)));

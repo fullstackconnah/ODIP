@@ -12,7 +12,7 @@ namespace Odip.Domain.Funding;
 public static class AgreementCarry
 {
     /// <summary>One period of the pool: its limit, what is used in it already (claimed plus pending), and what the agreement costs in it (0 for a period the agreement does not touch).</summary>
-    public readonly record struct PeriodInput(decimal Limit, decimal Used, decimal AgreementCost);
+    public readonly record struct PeriodInput(decimal Limit, decimal Used, decimal AgreementCost, decimal? CarryOverride = null);
 
     /// <summary>
     /// What a period has once the agreement has spent its share of the earlier ones: what carried in, the limit plus that, what is left after what is used, and how far the agreement passes it.

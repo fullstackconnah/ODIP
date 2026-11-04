@@ -15,6 +15,7 @@ internal static class OlderSchemaSeeds
         ("AppSettings", "AutoRosterReach", "integer NOT NULL DEFAULT 3"),
         ("IncidentReports", "AmbulanceOfficerName", "character varying(100)"),
         ("Shifts", "ServiceLocationId", "uuid"),
+        ("FundingPeriods", "RolloverOverride", "numeric(18,2)"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
         ("IncidentReports", "FireOfficerName", "character varying(100)"),

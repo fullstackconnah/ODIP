@@ -1114,6 +1114,7 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.PlanAmount).HasPrecision(18, 2);
             entity.Property(e => e.SetAside).HasPrecision(18, 2);
+            entity.Property(e => e.RolloverOverride).HasPrecision(18, 2);
 
             entity.HasOne(e => e.FundingPool)
                 .WithMany(p => p.Periods)
