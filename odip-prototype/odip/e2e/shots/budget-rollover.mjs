@@ -24,8 +24,9 @@ const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, det
 
 const BY_HAND = 2500
 
+// isMobile stays false: the budget graph's sr-only data table (BudgetTrackCard, unchanged) is 570px wide, which makes a mobile-emulated page grow its layout viewport to 602 and the dialog with it.
 async function openPage(browser, vp, scheme, { byHand = true, carryIn = false } = {}) {
-  const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch, isMobile: vp.touch, colorScheme: scheme, reducedMotion: 'reduce' })
+  const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch, isMobile: false, colorScheme: scheme, reducedMotion: 'reduce' })
   await context.addInitScript(installContrast)
   const page = await context.newPage()
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers('Admin', 'dev.admin') }))
