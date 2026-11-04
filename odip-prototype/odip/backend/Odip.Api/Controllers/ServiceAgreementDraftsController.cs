@@ -335,6 +335,7 @@ public class ServiceAgreementDraftsController : ControllerBase
     public async Task<ActionResult<ApiResponse<AgreementSharingDto>>> Sharing(Guid participantId, Guid id, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<AgreementSharingDto>.Fail("A tenant context is required."));
+        if (!await _share.MayShareAsync(tenantId, Caller(), ct)) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<AgreementSharingDto>.Fail(ServiceAgreementApprovalService.NotAnApproverMessage));
         if (!await _db.ServiceAgreementDrafts.AnyAsync(x => x.Id == id && x.ParticipantId == participantId && x.TenantId == tenantId, ct))
             return NotFound(ApiResponse<AgreementSharingDto>.Fail("Draft not found."));
         return Ok(ApiResponse<AgreementSharingDto>.Ok(await _share.SharingAsync(tenantId, participantId, id, ct)));

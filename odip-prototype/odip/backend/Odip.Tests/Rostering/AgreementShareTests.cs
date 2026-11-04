@@ -447,6 +447,97 @@ public class AgreementShareTests
         Assert.Contains("9 November 2026", message.PlainTextBody);
     }
 
+    // ── Fix round 1 ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Saving_a_new_revision_keeps_the_sent_revision_its_link_and_its_history()
+    {
+        var w = await NewAsync();
+        var group = new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP_COMMUNITY_ACCESS", DisplayName = "Community Access", SupportCategory = 4 };
+        w.F.Db.SupportActivityGroups.Add(group);
+        w.F.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
+        {
+            Id = Guid.NewGuid(), ActivityGroupId = group.Id, ItemNumber = "TEST-CODE", Description = "Synthetic", DayType = ClaimDayType.Weekday, IsActive = true,
+            CatalogueVersion = "v1", EffectiveFrom = new DateOnly(2025, 1, 1), PriceLimit_NSW = 20m,
+        });
+        await w.F.Db.SaveChangesAsync();
+        var request = new CreateServiceAgreementDraftDto
+        {
+            PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = new DateOnly(2026, 7, 1), AgreementEndDate = new DateOnly(2026, 12, 20),
+            State = "NSW", ServiceTypes = ["Synthetic support"], Representative = "Representative",
+            Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = "Synthetic support", ItemCode = "TEST-CODE", Hours = 2.5m }],
+        };
+        var drafts = new ServiceAgreementDraftService(w.F.Db, clock: w.F.Clock);
+        var v1 = (await drafts.SaveAsync(TenantA, w.F.ParticipantId, request, "actor", CancellationToken.None)).Draft!;
+        Assert.Equal(AgreementSendStatus.Done, (await w.SendAsync(v1)).Status);
+        var token = TokenIn(w.Ch.Sent.Last());
+
+        var v2 = (await drafts.SaveAsync(TenantA, w.F.ParticipantId, request with { BaseVersion = 1 }, "actor", CancellationToken.None)).Draft!;
+
+        Assert.Equal(2, v2.Version);
+        Assert.NotNull(await w.F.Db.ServiceAgreementDrafts.FindAsync(v1.Id));
+        Assert.Single(await w.F.Db.ServiceAgreementShares.ToListAsync());
+        await using var publicDb = PublicDb(w.F);
+        Assert.NotNull(await w.Svc(db: publicDb).ViewAsync(token, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_share_row_that_disagrees_with_its_draft_on_tenant_or_participant_gives_no_answer(bool tenantDiffers)
+    {
+        var w = await NewAsync();
+        var draft = await RevisionAsync(w);
+        var token = CaregiverTokenService.GenerateRawToken();
+        var other = await ParticipantAsync(w.F, "Ben");
+        w.F.Db.ServiceAgreementShares.Add(new ServiceAgreementShare
+        {
+            Id = Guid.NewGuid(), TenantId = tenantDiffers ? TenantB : TenantA, ParticipantId = tenantDiffers ? w.F.ParticipantId : other, DraftId = draft.Id, TokenHash = CaregiverTokenService.Hash(token),
+            RecipientName = "Gina", RecipientEmail = "gina@family.test", SentByName = "Alex", SentAt = SentAt, ExpiresAt = SentAt.AddDays(30),
+        });
+        await w.F.Db.SaveChangesAsync();
+        w.F.Clock.Set(new DateTimeOffset(SentAt.AddDays(1), TimeSpan.Zero));
+        await using var publicDb = PublicDb(w.F);
+        var svc = w.Svc(db: publicDb);
+
+        Assert.Null(await svc.ViewAsync(token, CancellationToken.None));
+        Assert.Null(await svc.PdfAsync(token, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_link_of_an_inactive_participant_gives_no_answer()
+    {
+        var w = await NewAsync();
+        var (_, token) = await SentAsync(w);
+        var svc = w.Svc();
+        Assert.NotNull(await svc.ViewAsync(token, CancellationToken.None));
+
+        (await w.F.Db.Participants.SingleAsync(p => p.Id == w.F.ParticipantId)).IsActive = false;
+        await w.F.Db.SaveChangesAsync();
+
+        Assert.Null(await svc.ViewAsync(token, CancellationToken.None));
+        Assert.Null(await svc.PdfAsync(token, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("Admin", 200)]
+    [InlineData("SupportWorker", 403)]
+    public async Task Sharing_answers_403_to_a_role_that_may_not_approve_as_Send_does(string role, int status)
+    {
+        var w = await NewAsync();
+        var draft = await RevisionAsync(w);
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(TenantA);
+        var controller = new ServiceAgreementDraftsController(w.F.Db, tenant.Object, new ServiceAgreementDraftService(w.F.Db, clock: w.F.Clock), share: w.Svc())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test")) } },
+        };
+
+        var result = await controller.Sharing(w.F.ParticipantId, draft.Id, CancellationToken.None);
+
+        Assert.Equal(status, (result.Result as ObjectResult)?.StatusCode);
+    }
+
     // ── Revoking ────────────────────────────────────────────────────────────────
 
     [Fact]

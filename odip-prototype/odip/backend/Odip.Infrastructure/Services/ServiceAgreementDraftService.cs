@@ -142,12 +142,13 @@ public sealed class ServiceAgreementDraftService
     private Task<List<ServiceAgreementDraft>> ReplacedRevisionsAsync(Guid tenantId, Guid participantId, int version, CancellationToken ct) =>
         UnusedRevisions(tenantId, participantId).Where(x => x.Version < version).ToListAsync(ct);
 
-    /// <summary>The participant's revisions nothing points at: no approval, no roster pattern and no signing snapshot. A save replaces the older ones; Delete refuses a revision that is not one of these.</summary>
+    /// <summary>The participant's revisions nothing points at: no approval, no roster pattern, no signing snapshot and no emailed link (a save must not kill a live link or erase the send history). A save replaces the older ones; Delete refuses a revision that is not one of these.</summary>
     private IQueryable<ServiceAgreementDraft> UnusedRevisions(Guid tenantId, Guid participantId) =>
         _db.ServiceAgreementDrafts.Include(x => x.Blocks).Include(x => x.Lines).AsSplitQuery()
             .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId
                 && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id)
                 && !_db.ShiftPatterns.Any(p => p.SourceDraftId == x.Id)
+                && !_db.ServiceAgreementShares.Any(h => h.DraftId == x.Id)
                 && !_db.ElectronicSigningSnapshots.Any(s => s.DraftId == x.Id && s.DraftVersion == x.Version));
 
     public const string ApprovedCantBeDeleted = "An approved agreement can't be deleted. End it early instead.";

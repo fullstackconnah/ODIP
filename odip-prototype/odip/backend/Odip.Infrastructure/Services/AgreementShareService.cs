@@ -171,6 +171,9 @@ public sealed class AgreementShareService
         return new(AgreementSendStatus.Done, Error: outcome.ErrorCode);
     }
 
+    /// <summary>Whether the caller's role may approve, which is who may see the sharing of a revision and send it (plan D1).</summary>
+    public Task<bool> MayShareAsync(Guid tenantId, ApprovalCaller caller, CancellationToken ct) => ServiceAgreementApprovalService.MayApproveAsync(_pricing, tenantId, caller, ct);
+
     private static bool IsUsable(string? email) =>
         email is { Length: <= 254 } && !email.Any(char.IsWhiteSpace) && MailAddress.TryCreate(email, out var a) && a.Address == email && email.Contains('@');
 
@@ -190,14 +193,17 @@ public sealed class AgreementShareService
 
     // ── The link (no sign-in) ────────────────────────────────────────────────
 
-    /// <summary>The live share for a token, or null for every reason there is none: malformed, unknown, never delivered, revoked or expired.</summary>
+    /// <summary>The live share for a token, or null for every reason there is none: malformed, unknown, never delivered, revoked, expired or for an inactive participant.</summary>
     private async Task<ServiceAgreementShare?> LiveAsync(string? token, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(token) || token.Length > MaxTokenLength) return null;
         var hash = CaregiverTokenService.Hash(token);
         var now = _clock.GetUtcNow().UtcDateTime;
-        return await _db.ServiceAgreementShares.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking()
+        var share = await _db.ServiceAgreementShares.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking()
             .FirstOrDefaultAsync(s => s.TokenHash == hash && s.SendError == null && s.RevokedAt == null && s.ExpiresAt >= now, ct);
+        if (share is null) return null;
+        var active = await _db.Participants.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(p => p.Id == share.ParticipantId && p.TenantId == share.TenantId && p.IsActive, ct);
+        return active ? share : null;
     }
 
     /// <summary>What the link shows, and notes the first open. Null when the link is no good.</summary>
