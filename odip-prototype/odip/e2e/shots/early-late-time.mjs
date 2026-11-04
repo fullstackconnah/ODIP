@@ -84,14 +84,14 @@ async function routeWorkerShift(page, { startOff, endOff, status = 'Published', 
     if (body?.data) {
       const tz = body.data.timeZoneId ?? 'Australia/Sydney'
       const s = wall(at(startOff), tz), e = wall(at(endOff), tz)
-      Object.assign(body.data, { status, serviceDate: s.date, startTime: s.time, endTime: e.time, endsNextDay: e.date !== s.date, serviceLocation: null })
+      Object.assign(body.data, { id: SHIFT_ID, status, serviceDate: s.date, startTime: s.time, endTime: e.time, endsNextDay: e.date !== s.date, serviceLocation: null })
       if (status === 'InProgress') body.data.completion = { ...(body.data.completion ?? {}), actualStart: at(startOff).toISOString(), startTimeReason: null }
       last = body
     }
     await r.fulfill({ response, json: body })
   })
   await page.route(`**/api/v1/portal/shifts/${SHIFT_ID}/start`, (r) => startFails
-    ? r.fulfill({ status: 500, json: { success: false, data: null, message: 'Something went wrong', errors: [] } })
+    ? r.fulfill({ status: 400, json: { success: false, data: null, message: 'This shift cannot be started right now.', errors: [] } })
     : r.fulfill({ json: envelope({ ...(last?.data ?? {}), status: 'InProgress' }) }))
 }
 const gotoShift = async (page) => {
@@ -150,7 +150,7 @@ for (const vp of VPS) {
       await page.waitForTimeout(400)
       const edges = await page.evaluate(() => {
         const left = (el) => (el ? Math.round(el.getBoundingClientRect().left * 10) / 10 : null)
-        return { box: left(document.getElementById('finish-time-reason')), field: left(document.getElementById('finish-end')) }
+        return { box: left(document.getElementById('finish-time-reason')), field: left([...document.querySelectorAll('p')].find((p) => p.textContent === 'Started')) }
       })
       check(t(`${state}: reason box lines up with the time fields (within 1px)`), edges.box !== null && edges.field !== null && Math.abs(edges.box - edges.field) <= 1, edges)
       await fontAtLeast(page.locator('#finish-time-reason-help'), 12, t(`${state} helper`))
@@ -162,8 +162,10 @@ for (const vp of VPS) {
   }
 
   // submit-drift-line: step 1 did not ask (finishAsked false), the clock is now 8 minutes past the rostered end
+  let driftPage = null
   try {
     const { context, page } = await openPage(browser, vp, { role: 'SupportWorker', username: 'dev.worker', draft: { step: 'submit', reached: 'submit', finishAsked: false, nothingToNote: true, nothingToHandOver: true, anythingToReport: 'no' } })
+    driftPage = page
     await routeWorkerShift(page, { startOff: -8 - 480, endOff: -8, status: 'InProgress' })
     await gotoShift(page)
     const line = page.getByText(/You're now finishing 8 minutes late\. Add a reason\?/)
@@ -175,7 +177,10 @@ for (const vp of VPS) {
     if (vp.touch) await tapTargets(page.locator('main').first(), t('submit-drift-line'))
     await crop(page, line.locator('xpath=ancestor::div[1]'), `submit-drift-line-${tag}.png`, vp, 24)
     await context.close()
-  } catch (e) { check(t('submit-drift-line ran'), false, String(e.message).split('\n')[0]) }
+  } catch (e) {
+    const seen = driftPage ? await driftPage.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)).catch(() => '') : ''
+    check(t('submit-drift-line ran'), false, `${String(e.message).split('\n')[0]} | ${seen}`)
+  }
 
   // review-row-off-roster, review-detail-reasons: the coordinator's queue row and the approve dialog, with the completion patched
   try {
