@@ -284,6 +284,15 @@ public partial class ShiftClaimGenerationService
         // The breaks taken alone, read once for preview, run and claim again alike. A cancellation passes none: a cancelled shift was never worked, so it has no completion and no breaks.
         var aloneBreaks = cancelToday is null ? await ShiftAloneBreaks.LoadAsync(_db, shifts.Select(s => s.Id).ToList(), ct) : new();
 
+        // The window each shift is claimed on (W2 PR3): the hours worked, the pay window, with approved extra time only once approved. A cancellation has no completion and stays rostered.
+        var completions = cancelToday is null ? await ShiftClaimWindow.LoadAsync(_db, shifts.Select(s => s.Id).ToList(), ct) : new();
+        var windows = shifts.ToDictionary(s => s.Id, s => ShiftClaimWindow.For(s, completions.GetValueOrDefault(s.Id), ProviderTimeZoneResolver.ZoneOf(s, placeZones, orgZone)));
+        ShiftPriceOutcome PriceOn(Shift shift, ClaimSpan w, TimeZoneInfo shiftZone) => ShiftPriceEstimator.Price(
+            new ShiftRateRows(RowsOf(shift), personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.Ratio, shift.NightType,
+            participant.IsIntensiveSupport, state, publicHolidays, shiftZone,
+            ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone));
+        var extraRefusal = await ExtraTimeRefusalsAsync(participant, shifts, windows, PriceOn, placeZones, orgZone, ct);
+
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
         // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
@@ -312,11 +321,17 @@ public partial class ShiftClaimGenerationService
                 continue;
             }
             var catalogueItems = RowsOf(shift);
-            // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
-            var outcome = ShiftPriceEstimator.Price(
-                new ShiftRateRows(catalogueItems, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
-                participant.IsIntensiveSupport, state, publicHolidays, zone,
-                ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.NightType, zone));
+            // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say. Approved extra time that cannot be claimed (over a hard limit, outside the shift's date,
+            // or a window nothing prices) is left out on its own: the shift is claimed without it and the extra time is listed with the reason.
+            var window = windows[shift.Id];
+            string? extraReason = window.CannotClaimExtraBecause is { } cannot ? $"{participant.FullName}: {cannot}. The shift is claimed without it; add the extra time as a manual claim."
+                : extraRefusal.GetValueOrDefault(shift.Id);
+            var outcome = PriceOn(shift, extraReason is null ? window.Priced : window.WithoutExtra ?? window.Priced, zone);
+            if (extraReason is null && window.WithoutExtra is not null && !outcome.IsPriced)
+            {
+                outcome = PriceOn(shift, window.WithoutExtra, zone);
+                if (outcome.IsPriced) extraReason = $"{participant.FullName}: the extra time could not be priced ({outcome.NotPricedSentence}). The shift is claimed without it; add the extra time as a manual claim.";
+            }
             if (!outcome.IsPriced)
             {
                 // A shift that cannot be priced is not claimed, and it is not dropped silently either: it is listed with the reason, and it stays completed and unclaimed.
@@ -355,6 +370,8 @@ public partial class ShiftClaimGenerationService
             // Provider travel: one time line and one kilometre line, after the band lines, so they take the next parts of the shift.
             if (cancelToday is null) outcome = ShiftTravelPricer.Apply(outcome, travelOf[shift.Id], shift.ServiceDate, state, travelPolicy.KmRate, catalogueItems.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
 
+            if (extraReason is not null)
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = window.ExtraText ?? $"Extra time on {Describe(shift)}", Reason = extraReason, ExtraTimeOnly = true });
             lineItems.AddRange(outcome.Lines.Select((price, part) => new ShiftLineCalc
             {
                 Shift = shift,
@@ -384,6 +401,42 @@ public partial class ShiftClaimGenerationService
         }
 
         return (lineItems, leftOut, participant);
+    }
+
+    /// <summary>
+    /// Under a hard limit, the approved extra time that does not fit its budget (W2 PR3), by shift id with the sentence that says why. Only the increment (worked minus rostered, by part date and PACE category) is ever
+    /// checked: the rostered part is claimed as before. Warn mode, and shifts with no approved extra time, return nothing.
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> ExtraTimeRefusalsAsync(Participant participant, List<Shift> shifts, Dictionary<Guid, ClaimWindow> windows,
+        Func<Shift, ClaimSpan, TimeZoneInfo, ShiftPriceOutcome> priceOn, IReadOnlyDictionary<Guid, TimeZoneInfo> placeZones, TimeZoneInfo orgZone, CancellationToken ct)
+    {
+        var refusals = new Dictionary<Guid, string>();
+        var withExtra = shifts.Where(s => windows[s.Id].WithoutExtra is not null).ToList();
+        if (withExtra.Count == 0) return refusals;
+        var mode = await _db.BudgetSettings.AsNoTracking().Where(b => b.TenantId == participant.TenantId).Select(b => (BudgetLimitMode?)b.Mode).FirstOrDefaultAsync(ct) ?? BudgetSettings.DefaultMode;
+        if (mode != BudgetLimitMode.HardLimit) return refusals;
+        const string Manual = "The shift is claimed without it; add the extra time as a manual claim if the budget allows.";
+        if (_ledger is null || MoneyTenantIdFor(participant.TenantId) is not { } moneyTenantId)
+        {
+            foreach (var s in withExtra) refusals[s.Id] = $"{participant.FullName}: the budget could not be checked, so the extra time was left out. {Manual}";
+            return refusals;
+        }
+        var extras = new List<(Guid ShiftId, DateOnly ServiceDate, IReadOnlyList<ShiftCostPart> Increment)>();
+        foreach (var s in withExtra)
+        {
+            var zone = ProviderTimeZoneResolver.ZoneOf(s, placeZones, orgZone);
+            var worked = priceOn(s, windows[s.Id].Priced, zone);
+            var held = priceOn(s, windows[s.Id].WithoutExtra!, zone);
+            if (!worked.IsPriced || !held.IsPriced) continue;   // the main loop leaves it out with the pricing reason
+            var increment = ShiftPriceEstimator.PartsOf(worked)
+                .Concat(ShiftPriceEstimator.PartsOf(held).Select(p => p with { Amount = -p.Amount, Hours = -p.Hours }))
+                .GroupBy(p => (p.Date, p.PaceCategory)).Select(g => new ShiftCostPart(g.Key.Date, g.Key.PaceCategory, g.Sum(p => p.Amount), g.Sum(p => p.Hours)))
+                .Where(p => p.Amount > 0m).ToList();
+            if (increment.Count > 0) extras.Add((s.Id, s.ServiceDate, increment));
+        }
+        foreach (var (shiftId, over) in await _ledger.ExtraTimeOverBudgetAsync(moneyTenantId, participant.Id, extras, ct))
+            refusals[shiftId] = $"{participant.FullName}: the extra time would take {over} over its budget (hard limit). {Manual}";
+        return refusals;
     }
 
     /// <summary>Why a cancelled shift is not (yet) claimable as a short-notice cancellation, or null when it is. Notice is whole calendar days in the shift's zone.</summary>

@@ -216,6 +216,8 @@ public record ShiftClaimLeftOutDto
     /// <summary>Set when the shift is held by a rejected or cancelled claim: the screen links to it (and to "Claim again") by this id, never by the sentence.</summary>
     public Guid? HeldByClaimId { get; init; }
     public string? HeldByClaimReference { get; init; }
+    /// <summary>True when the shift IS in the claim (at its rostered hours) and only its approved extra time is left out, for the reason given; a heading counts whole shifts, not these.</summary>
+    public bool ExtraTimeOnly { get; init; }
 }
 
 /// <summary>
