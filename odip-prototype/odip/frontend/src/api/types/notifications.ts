@@ -26,6 +26,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'IntakeBooked',
   'StaffJoinedViaMicrosoft',
   'ShiftChanged',
+  'IncidentReportable24h',
 ] as const
 export type NotificationEventType = typeof NOTIFICATION_EVENT_TYPES[number]
 
@@ -46,6 +47,7 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
   IntakeBooked: 'Intake visits',
   StaffJoinedViaMicrosoft: 'Someone joined through Microsoft',
   ShiftChanged: 'Shift changed',
+  IncidentReportable24h: 'Incident to report within 24 hours',
 }
 
 /**
@@ -63,7 +65,7 @@ export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: Notifi
   { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftUnassigned', 'ShiftChanged', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
   { label: 'Medications', eventTypes: ['WitnessRequested'] },
   { label: 'Caregiver', eventTypes: ['CaregiverSubmissionReceived'] },
-  { label: 'Incidents', eventTypes: ['IncidentReported'] },
+  { label: 'Incidents', eventTypes: ['IncidentReported', 'IncidentReportable24h'] },
   { label: 'Intake', eventTypes: ['IntakeBooked'] },
   { label: 'Agreements', eventTypes: ['ServiceAgreementSent', 'ServiceAgreementSigned'] },
   { label: 'Integrations', eventTypes: ['IntegrationDegraded'] },
@@ -150,6 +152,8 @@ export interface InAppNotificationDto {
   linkTo?: string
   createdAt: string
   readAt?: string
+  /** The 24-hour incident alert: the bell marks it in words and colour, and keeps the mark after it is read. */
+  urgent?: boolean
 }
 
 /** GET api/v1/notifications/inbox: the caller's own newest items, their unread count over every item they have, and whether older ones exist. */
