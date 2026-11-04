@@ -3,7 +3,7 @@ import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { DragEndEvent } from '@dnd-kit/core'
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import RosterBoardPage from './RosterBoardPage'
 import { makeFinding, makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard, makeUnfilledShift } from './test-fixtures'
 import type { ShiftDto } from '@/api/types'
@@ -11,7 +11,7 @@ import type { DragCarry, DropTarget } from './lib/rosterDrag'
 
 const h = vi.hoisted(() => ({
   board: vi.fn(), assign: vi.fn(), move: vi.fn(), publish: vi.fn(), create: vi.fn(),
-  dnd: { props: null as null | { onDragEnd: (event: DragEndEvent) => void } },
+  dnd: { props: null as null | { onDragStart: (event: DragStartEvent) => void; onDragEnd: (event: DragEndEvent) => void } },
   screen: { belowMd: false },
   staff: [
     { id: 'staff-2', fullName: 'Sam Wilson', isActive: true, region: 'North', hasExpiredQualifications: false },
@@ -370,7 +370,7 @@ describe('RosterBoardPage: Publish week', () => {
     renderPage()
     const pill = (document.querySelector('[data-publish-bar]') as HTMLElement).firstElementChild as HTMLElement
     expect(pill).not.toHaveClass('pointer-events-none')
-    act(() => { h.dnd.props!.onDragStart({ active: { id: 'carried', data: { current: sam } } } as never) })
+    act(() => { h.dnd.props!.onDragStart({ active: { id: 'carried', data: { current: sam } } } as unknown as DragStartEvent) })
     expect(pill).toHaveClass('opacity-0', 'pointer-events-none')
     await drop(sam, null)
     expect(pill).not.toHaveClass('opacity-0')
