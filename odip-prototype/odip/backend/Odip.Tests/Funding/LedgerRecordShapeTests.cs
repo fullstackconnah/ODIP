@@ -19,7 +19,7 @@ public class LedgerRecordShapeTests
             new[]
             {
                 "Period", "IsCurrent", "Limit", "Carried", "Claimed", "Pending", "BookedAhead", "PastUnresolvedCount", "UnpricedTripDayCount", "Status", "Items",
-                "StartedUnclaimedTripCount", "UnpricedShiftCount", "CarriedWorkedOut",
+                "StartedUnclaimedTripCount", "UnpricedShiftCount", "CarriedWorkedOut", "CarriedSetByHand",
             },
             ConstructorParameters(typeof(PeriodLedger)));
     }
