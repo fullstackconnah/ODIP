@@ -14,8 +14,9 @@ if (!BASE_URL || !OUT_DIR) throw new Error('BASE_URL and OUT_DIR must be set (ru
 mkdirSync(OUT_DIR, { recursive: true })
 
 const envelope = (data) => ({ success: true, data, message: null, errors: [] })
-const devUsers = envelope([{ username: 'dev.admin', role: 'Admin', tenantName: 'Sample Support Co' }])
-const devLogin = envelope({ id: '00000000-0000-0000-0000-0000000000a1', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.admin', fullName: 'Dev Admin', role: 'Admin', tenantName: 'Sample Support Co', tenantId: 'tenant-0001' })
+const devUsersFor = (role) => envelope([{ username: 'dev.' + role.toLowerCase(), role, tenantName: 'Sample Support Co' }])
+const devLoginFor = (role) => envelope({ id: '00000000-0000-0000-0000-0000000000a1', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.' + role.toLowerCase(), fullName: 'Dev ' + role, role, tenantName: 'Sample Support Co', tenantId: 'tenant-0001' })
+const TABS = ['overview', 'about', 'health', 'daily', 'people', 'funding', 'agreements', 'records']
 
 const VIEWPORTS = [
   { name: '1280', width: 1280, height: 800 },
@@ -50,17 +51,24 @@ const chipLabels = (page) => page.evaluate(() => {
 const browser = await chromium.launch({ headless: true })
 const problems = []
 try {
-  for (const vp of VIEWPORTS) {
+  for (const role of ['Admin', 'SupportWorker']) for (const vp of VIEWPORTS) {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, locale: 'en-AU', timezoneId: 'Australia/Sydney', isMobile: !!vp.mobile, hasTouch: !!vp.mobile })
     const page = await context.newPage()
     page.on('pageerror', (err) => problems.push(`[${vp.name}] page error: ${err.message}`))
-    await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
-    await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
+    await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsersFor(role) }))
+    await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLoginFor(role) }))
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     const signIn = page.getByRole('button', { name: 'Sign in as selected user' })
     await signIn.waitFor({ state: 'visible', timeout: 60_000 })
     await signIn.click()
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+
+    // Captures: every tab for this role (the numeric checks below run for the Admin only).
+    for (const tab of TABS) {
+      await goto(page, `/participants/p-0001?tab=${tab}`)
+      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-${tab}.png`), fullPage: vp.name === '1280' })
+    }
+    if (role !== 'Admin') { await context.close(); continue }
 
     // 1. The chips on every tab, in order, and the total.
     let total = 0
@@ -71,7 +79,6 @@ try {
       check(`${vp.name} 1 ${tab} chips`, labels, JSON.stringify(labels) === JSON.stringify(expected))
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
       check(`${vp.name} 1 ${tab} no horizontal page scroll`, overflow, overflow <= 0)
-      if (tab === 'about' || tab === 'health' || tab === 'daily') await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${tab}.png`), fullPage: vp.name === '1280' })
     }
     check(`${vp.name} 1 total chips`, total, total === 16)
     await goto(page, '/participants/p-0001?tab=agreements')
@@ -94,6 +101,7 @@ try {
       check(`${vp.name} 2 ${id} URL kept`, r.url, r.url === `?tab=${tab}&section=${id}`)
       check(`${vp.name} 2 ${id} chip selected`, r.sel, r.sel.includes(chip))
       check(`${vp.name} 2 ${id} card in view`, r.top, r.top !== null && r.top >= 0 && r.top < r.vh)
+      if (id === 'restrictive-practices') await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-section-target.png`) })
     }
 
     // 3. Choosing a chip by hand does not scroll the page.
