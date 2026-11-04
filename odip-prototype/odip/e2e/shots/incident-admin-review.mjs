@@ -29,7 +29,8 @@ const check = (name, ctx, measured, pass) => {
 const browser = await chromium.launch({ headless: true })
 try {
   for (const vp of VIEWPORTS) {
-    for (const [role, incidentId] of [['Admin', 'inc-0002'], ['Coordinator', 'inc-0001'], ['SupportWorker', 'inc-0001']]) {
+    // The mock keeps a saved review, so each viewport reviews a different unreviewed incident.
+    for (const [role, incidentId] of [['Admin', vp.touch ? 'inc-0003' : 'inc-0002'], ['Coordinator', 'inc-0001'], ['SupportWorker', 'inc-0001']]) {
       const ctx = { role, width: vp.name }
       const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: vp.width, height: vp.height }, hasTouch: !!vp.touch, isMobile: !!vp.touch })
       const page = await context.newPage()
@@ -80,7 +81,7 @@ try {
         await record.click()
         const notes = review.getByLabel(/Review notes/)
         await notes.waitFor({ timeout: 10_000 })
-        await tap(review.getByLabel('Status'), 'Status select')
+        await tap(review.getByLabel('Status', { exact: true }), 'Status select')
         await tap(review.getByRole('button', { name: 'Save review' }), 'Save review button')
         await tap(review.getByRole('button', { name: 'Cancel' }), 'Cancel button')
         // Blank notes are refused with a message beside the field.
