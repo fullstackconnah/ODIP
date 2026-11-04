@@ -564,3 +564,62 @@ describe('ApprovalDialog: the budget is not part of approving (S11)', () => {
     expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 })
+
+describe('ApprovalDialog: who agreed and how (optional)', () => {
+  const contacts = [
+    { personId: 'c-1', name: 'Jo Lee', roles: 'Guardian', email: 'jo@example.com', isDefault: true },
+    { name: 'Marcus Tran', roles: 'Participant', email: 'marcus@example.com', isDefault: false },
+  ]
+  const sentTo = { id: 's-1', draftId: 'd-2', draftVersion: 2, recipientName: 'Jo Lee', recipientEmail: 'JO@example.com', sentByName: 'Alex', sentAt: '2026-11-03T01:00:00Z', expiresAt: '2026-12-03T01:00:00Z' }
+
+  it('adds nothing to the request when the fields are left alone and nothing was sent', async () => {
+    const user = userEvent.setup()
+    setUp({ contacts })
+
+    expect(screen.getByRole('combobox', { name: 'Agreed by' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'How' })).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(Object.keys(approveMutate.mock.calls[0][0]).sort()).toEqual(['acknowledgeOverlaps', 'draftId', 'participantId'])
+  })
+
+  it('shows no fields when the page has no contacts to offer (a role that may not send)', () => {
+    setUp()
+
+    expect(screen.queryByRole('combobox', { name: 'Agreed by' })).not.toBeInTheDocument()
+  })
+
+  it('starts with the contact it was sent to and Email, and sends them', async () => {
+    const user = userEvent.setup()
+    setUp({ contacts, sentTo })
+
+    expect(screen.getByRole('combobox', { name: 'Agreed by' })).toHaveValue('c-1')
+    expect(screen.getByRole('combobox', { name: 'How' })).toHaveValue('Email')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(approveMutate.mock.calls[0][0]).toEqual({ participantId: 'p-1', draftId: 'd-2', acknowledgeOverlaps: false, agreedByPersonId: 'c-1', agreedHow: 'Email' })
+  })
+
+  it('sends the participant as a name, and someone else as the typed name', async () => {
+    const user = userEvent.setup()
+    setUp({ contacts })
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Agreed by' }), 'participant')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'How' }), 'Phone')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(approveMutate.mock.calls[0][0]).toEqual({ participantId: 'p-1', draftId: 'd-2', acknowledgeOverlaps: false, agreedByName: 'Marcus Tran', agreedHow: 'Phone' })
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Agreed by' }), 'other')
+    await user.type(screen.getByRole('textbox', { name: 'Their name' }), '  Pat Kim ')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(approveMutate.mock.calls[1][0]).toMatchObject({ agreedByName: 'Pat Kim' })
+    expect(approveMutate.mock.calls[1][0]).not.toHaveProperty('agreedByPersonId')
+  })
+
+  it('is not offered when the revision cannot be approved', () => {
+    ready(preview({ canApprove: false, reasons: [{ code: 'Superseded', message: 'A newer version exists.' } as ApprovalReasonDto] }))
+    setUp({ contacts })
+
+    expect(screen.queryByRole('combobox', { name: 'Agreed by' })).not.toBeInTheDocument()
+  })
+})

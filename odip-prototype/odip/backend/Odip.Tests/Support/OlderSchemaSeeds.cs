@@ -21,6 +21,7 @@ internal static class OlderSchemaSeeds
         ("IncidentReports", "FireReference", "character varying(50)"),
         ("IncidentReports", "PoliceOfficerName", "character varying(100)"),
         ("IncidentReports", "PoliceReference", "character varying(50)"),
+        ("IncidentReports", "UrgentAlertSentAt", "timestamp without time zone"),
         ("RestrictivePractices", "CommissionReference", "character varying(50)"),
         ("Participants", "MmLevel", "integer"),
         ("FundingPlans", "MyProvider", "integer"),

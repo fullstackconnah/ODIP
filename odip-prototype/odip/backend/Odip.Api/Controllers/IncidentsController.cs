@@ -84,6 +84,34 @@ public class IncidentsController : ControllerBase
         incident.DueCountedWithoutHolidays = fiveDays.WeekendsOnly;
     }
 
+    private async Task<string> ReporterNameAsync(Guid? userId, CancellationToken ct) =>
+        await _db.Users.Where(u => u.Id == userId)
+            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
+
+    /// <summary>The active Admins and Coordinators of the incident's own organisation. The tenant match is explicit: a SuperAdmin's context has no tenant filter, and would otherwise reach every organisation. No tenant (an orphan row) gives nobody.</summary>
+    private async Task<List<User>> TenantIncidentRecipientsAsync(Guid? tenantId, CancellationToken ct) =>
+        tenantId == null ? []
+            : await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
+                .Where(u => u.TenantId == tenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+                .ToListAsync(ct);
+
+    /// <summary>IC6: the urgent 24-hour alert to the incident's Admins and Coordinators, and the marker that it went. No participant name, as with IncidentReported. The caller saves.</summary>
+    private async Task RaiseUrgentAlertAsync(IncidentReport incident, string reporterName, ProviderClock clock, CancellationToken ct)
+    {
+        var due = ProviderLocalTime.UtcToLocal(incident.NotifyDueAt ?? (incident.AwareAt ?? incident.CreatedAt).AddHours(QscReporting.OverdueHours), clock.Tz.Zone);
+        foreach (var recipient in await TenantIncidentRecipientsAsync(incident.TenantId, ct))
+        {
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.IncidentReportable24h, "IncidentReport", incident.Id,
+                new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.IncidentReportable24hPayload(
+                    recipient.Email, reporterName, incident.IncidentType.ToString(), incident.Severity.ToString(),
+                    Odip.Infrastructure.Notifications.InAppNotificationText.DueWording(due), incident.Id),
+                ct);
+        }
+        incident.UrgentAlertSentAt = _clock.GetUtcNow().UtcDateTime;
+    }
+
     private static DateTime TruncateToMinute(DateTime value) => new(value.Ticks - value.Ticks % TimeSpan.TicksPerMinute, value.Kind);
 
     /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident, due on the provider-local date of the stored deadline. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
@@ -697,19 +725,20 @@ public class IncidentsController : ControllerBase
         // NotificationEventType.IncidentReported — recipients are the tenant's Admin/
         // Coordinator users. Ruling (design spec §4): the email carries NO participant name —
         // see IncidentReportedTemplate's own doc comment for why.
-        var reporterName = await _db.Users.Where(u => u.Id == dto.ReportedByStaffId)
-            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
-        var incidentRecipients = await _db.Users
-            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
-            .ToListAsync(ct);
-        foreach (var recipient in incidentRecipients)
+        var reporterName = await ReporterNameAsync(dto.ReportedByStaffId, ct);
+        if (incident.ReportableClass == ReportableClass.Within24h)
+            await RaiseUrgentAlertAsync(incident, reporterName, clock, ct); // IC6: replaces IncidentReported for the same people, so each gets one notice
+        else
         {
-            await _notificationRaiser.RaiseAsync(
-                Odip.Domain.Notifications.NotificationEventType.IncidentReported, "IncidentReport", incident.Id,
-                new[] { recipient.Id },
-                new Odip.Infrastructure.Notifications.Templates.IncidentReportedPayload(
-                    recipient.Email, reporterName, dto.IncidentType.ToString(), dto.Severity.ToString()),
-                ct);
+            foreach (var recipient in await TenantIncidentRecipientsAsync(incident.TenantId, ct))
+            {
+                await _notificationRaiser.RaiseAsync(
+                    Odip.Domain.Notifications.NotificationEventType.IncidentReported, "IncidentReport", incident.Id,
+                    new[] { recipient.Id },
+                    new Odip.Infrastructure.Notifications.Templates.IncidentReportedPayload(
+                        recipient.Email, reporterName, dto.IncidentType.ToString(), dto.Severity.ToString()),
+                    ct);
+            }
         }
 
         await _db.SaveChangesAsync(ct);
@@ -842,6 +871,11 @@ public class IncidentsController : ControllerBase
         }
         await ApplyClockAsync(i, clock, ct);
         i.QscReportedAt = dto.QscReportedAt;
+        // IC6: alert only on a move INTO Within24h (a legacy row reads as Within24h through storedClass, so a null marker alone would alert on any edit of an old one),
+        // once ever (the marker is never cleared), and not for one already reported to the Commission, closed or archived.
+        if (storedClass != ReportableClass.Within24h && i.ReportableClass == ReportableClass.Within24h
+            && i.UrgentAlertSentAt == null && i.QscReportedAt == null && i.IsActive && i.Status != IncidentStatus.Closed)
+            await RaiseUrgentAlertAsync(i, await ReporterNameAsync(i.ReportedByUserId, ct), clock, ct);
         i.QscReportingStatus = QscReporting.DeriveStatus(i.ReportableClass,
             dto.QscReportedAt is { } reportedLocal ? ProviderLocalTime.LocalToUtc(reportedLocal, zone) : null, i.NotifyDueAt);
         i.QscReferenceNumber = dto.QscReferenceNumber;

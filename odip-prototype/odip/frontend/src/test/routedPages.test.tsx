@@ -124,6 +124,7 @@ const ROUTES: Route[] = [
 const ALLOWED: Record<string, string> = {
   '/login': 'pre-auth shell with its own h1 and sign-in panel, outside the app layout',
   '/caregiver/:token': 'public caregiver form: no app shell, its own h1 per wizard step',
+  '/agreement/:token': 'public shared agreement page: no app shell, its own h1 (its test checks the tab title)',
   '/participants/new': 'intake wizard: its own h1 shell per step (its test checks the tab title)',
   '/participants/:id/intake': 'intake wizard: its own h1 shell per step (its test checks the tab title)',
   '/participants/:id/profile': 'profile wizard: its own h1 shell per step (its test checks the tab title)',

@@ -71,6 +71,23 @@ describe('NotificationList', () => {
     expect(screen.getByRole('button', { name: /^Unread: Odd link/ })).toBeInTheDocument()
   })
 
+  /** IC6: an urgent item is marked in words and in the destructive colour, not by colour alone, and the dot stays once it is read. */
+  it('marks an urgent item with the word "Urgent" and a destructive dot, read or not', () => {
+    const title = 'Urgent: report an incident to the NDIS Commission by Wed 5 Nov, 2:15 pm.'
+    const urgentUnread: InAppNotificationDto = { ...unread('u1', title, '/incidents/i1'), urgent: true }
+    const urgentRead: InAppNotificationDto = { ...read('u2', title), urgent: true }
+    renderList({ inbox: loaded([urgentUnread, urgentRead, unread('n1', 'Plain.', '/portal')]) })
+    const items = screen.getAllByRole('listitem')
+    for (const item of items.slice(0, 2)) {
+      expect(item.querySelector('.rounded-full')).toHaveClass('bg-[var(--color-destructive)]')
+      expect(item).toHaveTextContent('Urgent')
+      expect(item.querySelector('[data-urgent-label]')).toHaveClass('text-[var(--color-destructive)]')
+    }
+    expect(screen.getAllByRole('link')[0]).toHaveAccessibleName(`Unread: ${title} 5 min ago`) // the title already says Urgent: the label is not read twice
+    expect(items[2].querySelector('[data-urgent-label]')).toBeNull()
+    expect(items[2].querySelector('.rounded-full')).toHaveClass('bg-[var(--color-primary)]')
+  })
+
   /** Review Focus 4. */
   it('says "Showing 30, unread first." only when the server says there are more', () => {
     renderList({ inbox: loaded([unread('a', 'A', '/portal')], true) })

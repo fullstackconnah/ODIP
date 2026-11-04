@@ -170,6 +170,20 @@ public class TemplateRenderingTests
     }
 
     [Fact]
+    public void IncidentReportable24hTemplate_GivesTheDeadlineAndTheLink_WithNoParticipantName()
+    {
+        var id = Guid.NewGuid();
+        var message = IncidentReportable24hTemplate.Render(
+            new IncidentReportable24hPayload("coord@example.com", "Ben Turner", "SexualAbuse", "High", "Wed 5 Nov, 2:15 pm", id), BaseUrl);
+
+        Assert.Equal("Urgent: report this incident to the NDIS Commission by Wed 5 Nov, 2:15 pm", message.Subject);
+        Assert.Contains("Ben Turner reported a High sexual abuse incident. It must be reported to the NDIS Commission within 24 hours, by Wed 5 Nov, 2:15 pm.", message.PlainTextBody);
+        Assert.Contains($"https://odip.test/incidents/{id}", message.PlainTextBody);
+        Assert.Contains($"<a href=\"https://odip.test/incidents/{id}\">Open the incident</a>", message.HtmlBody);
+        Assert.DoesNotContain("Alice", message.Subject + message.PlainTextBody + message.HtmlBody);
+    }
+
+    [Fact]
     public void IncidentReportedTemplate_PrintsTheTypeInWords()
     {
         var message = IncidentReportedTemplate.Render(new IncidentReportedPayload("coord@example.com", "Ben Turner", "SexualAbuse", "High"), BaseUrl);

@@ -125,12 +125,13 @@ jobs:
       - name: Build images
         # This is the gate. If either image fails to compile the job stops here
         # and the currently running containers are left untouched.
+        # The script retries (3 attempts) only on network faults, never on compile errors.
         env:
           GIT_SHA: ${{ github.sha }} # the platform footer's build number (deploy/compose.yaml, frontend/Dockerfile)
         run: |
           set -euo pipefail
           cd "$STACK_DIR"
-          docker compose build
+          bash "$GITHUB_WORKSPACE/deploy/build-with-retry.sh"
 
       - name: Deploy
         id: deploy
