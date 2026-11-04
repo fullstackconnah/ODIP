@@ -114,6 +114,7 @@ public sealed record PlanLedger(
 /// <list type="bullet">
 /// <item><b>Limit</b> is the period's set-aside when the pool has set-asides, else its plan amount. <b>Carried</b> is what the pool's earlier periods left unspent, chained:
 ///   max(0, available - used) of the period before. Nothing carries across plans (a ledger is one plan's).</item>
+/// <item><b>Rollover set by hand.</b> A period after the first may carry a typed amount (RolloverOverride) instead of the worked-out one; the chain goes on from it, and CarriedWorkedOut keeps what the ledger itself would have carried.</item>
 /// <item><b>Used</b> = claimed + pending; <b>Forecast</b> = used + booked ahead.</item>
 /// <item><b>Status</b>, the worst that applies: Over (used above available, so a period with nothing available and anything used is over), Forecast over, Approaching (used at or above
 ///   the percentage of available), else On track.</item>
@@ -220,6 +221,8 @@ public static class BudgetLedgerCalculator
         var carried = 0m;
         foreach (var period in pool.Periods.OrderBy(p => p.PeriodStart))
         {
+            var workedOut = carried;
+            if (periods.Count > 0) carried = period.RolloverOverride ?? workedOut;   // set by hand: replaces the chain (never on the pool's first period)
             var held = Ordered(byPeriod.TryGetValue(period, out var list) ? list : new List<LedgerItem>());
             var limit = hasSetAside ? period.SetAside ?? period.PlanAmount : period.PlanAmount;
             var claimed = held.Where(i => i.Group == LedgerGroup.Claimed).Sum(i => i.Amount);
@@ -233,7 +236,7 @@ public static class BudgetLedgerCalculator
                 StatusOf(available, used, used + booked, approachingPercent), held,
                 // A booking priced in more than one category has an item for each: it is one trip however many parts it is split into.
                 held.Where(i => i.IsStartedUnclaimedTrip).Select(i => i.BookingId).Distinct().Count(),
-                held.Count(i => i.IsUnpricedShift), carried));
+                held.Count(i => i.IsUnpricedShift), workedOut));
             carried = Math.Max(0m, available - used);   // what this period leaves unspent rolls into the next, and chains
         }
 

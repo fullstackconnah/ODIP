@@ -27,8 +27,10 @@ public static class AgreementCarry
     {
         var outcomes = new List<PeriodOutcome>(periods.Count);
         var carry = Math.Max(0m, carriedIntoFirst);
-        foreach (var period in periods)
+        for (var i = 0; i < periods.Count; i++)
         {
+            var period = periods[i];
+            if (i > 0) carry = period.CarryOverride ?? carry;   // a hand-set rollover replaces the chain from the second period on; the first takes what the ledger says
             var available = period.Limit + carry;
             var remaining = available - period.Used;
             outcomes.Add(new PeriodOutcome(carry, available, remaining, Math.Max(0m, period.AgreementCost - remaining), Math.Max(0m, -remaining)));
