@@ -728,13 +728,17 @@ describe('CompletionReviewPage extra time', () => {
     expect(screen.getByText('Extra time paid')).toBeInTheDocument()
   })
 
-  it('says Employment Hero will not be updated for a shift past the 62-day window', async () => {
+  it('shows a Completed shift past the 62-day window read-only, with the reason', async () => {
     const user = userEvent.setup()
     showQueue(extra({ status: 'Completed', extraTime: 'Pending', serviceDate: '2026-01-05' }))
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^extra time for /i }))
 
-    expect(within(screen.getByRole('dialog', { name: 'Extra time' })).getByText(/won't be updated: this shift is more than 62 days old/)).toBeInTheDocument()
+    const dialog = within(screen.getByRole('dialog', { name: 'Extra time' }))
+    expect(dialog.getByText(/more than 62 days old, so Employment Hero can't be updated from here/)).toBeInTheDocument()
+    expect(dialog.queryByRole('radio')).not.toBeInTheDocument()
+    expect(dialog.queryByRole('button', { name: /pay extra time/i })).not.toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Done' })).toBeInTheDocument()
   })
 })

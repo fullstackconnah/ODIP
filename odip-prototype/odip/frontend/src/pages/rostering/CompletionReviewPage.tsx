@@ -428,7 +428,7 @@ export default function CompletionReviewPage() {
         ) : row.status === 'Completed' && row.extraTime ? (
           // Decided later: the shift is already approved, so this is the one place to pay the actual times or the rostered hours.
           <div className="flex justify-end">
-            <Button variant="secondary" size="sm" onClick={() => { setDecideStale((Date.now() - Date.parse(row.serviceDate)) / 86_400_000 > SYNC_WINDOW_DAYS); setDecideTarget(row) }} aria-label={`Extra time for ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
+            <Button variant="secondary" size="sm" onClick={() => { setDecideStale(row.status === 'Completed' && (Date.now() - Date.parse(row.serviceDate)) / 86_400_000 > SYNC_WINDOW_DAYS); setDecideTarget(row) }} aria-label={`Extra time for ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Extra time
             </Button>
           </div>
@@ -557,12 +557,13 @@ export default function CompletionReviewPage() {
           <div className="space-y-3 text-sm">
             <p>{decideTarget.staffName} with {decideTarget.participantName} on {unbroken(formatServiceDate(decideTarget.serviceDate))}.</p>
             <p className="text-xs font-medium">{EXTRA_TIME_LABEL[decideTarget.extraTime]}</p>
-            <ExtraTimeChoiceGroup row={decideTarget} value={EXTRA_TIME_CHOICE[decideTarget.extraTime]} onChange={decide}
-              disabled={decideExtraTime.isPending} saving={decideExtraTime.isPending ? decideExtraTime.variables?.decision : null} />
-            {decideError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't save. Try again.</p>}
-            {decideStale && (
-              <p className="text-xs text-[var(--color-muted-foreground)]">Employment Hero won't be updated: this shift is more than {SYNC_WINDOW_DAYS} days old.</p>
+            {decideStale ? (
+              <p className="text-xs text-[var(--color-muted-foreground)]">This shift is more than {SYNC_WINDOW_DAYS} days old, so Employment Hero can't be updated from here. Change its hours in Employment Hero.</p>
+            ) : (
+              <ExtraTimeChoiceGroup row={decideTarget} value={EXTRA_TIME_CHOICE[decideTarget.extraTime]} onChange={decide}
+                disabled={decideExtraTime.isPending} saving={decideExtraTime.isPending ? decideExtraTime.variables?.decision : null} />
             )}
+            {decideError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't save. Try again.</p>}
           </div>
         )}
       </Modal>

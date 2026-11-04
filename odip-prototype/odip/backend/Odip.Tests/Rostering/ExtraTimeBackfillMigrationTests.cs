@@ -25,16 +25,17 @@ public class ExtraTimeBackfillMigrationTests : IClassFixture<PostgresFixture>
         await cmd.ExecuteNonQueryAsync();
     }
 
-    // Name, shift status (5 PendingReview, 2 Completed), start variance, end variance, active, already in the Employment Hero outbox, expected ExtraTime (0 Pending, null none).
-    private static readonly (string Name, int Status, int Start, int End, bool Active, bool Sent, int? Expected)[] Cases =
+    // Name, shift status (5 PendingReview, 2 Completed), start variance, end variance, active, already in the Employment Hero outbox, expected ExtraTime (0 Pending, null none), NightType (3 Sleepover).
+    private static readonly (string Name, int Status, int Start, int End, bool Active, bool Sent, int? Expected, int Night)[] Cases =
     [
-        ("early", 5, -20, 0, true, false, 0),
-        ("late", 5, 0, 10, true, false, 0),
-        ("within", 5, -5, 5, true, false, null),
-        ("late-start-early-finish", 5, 20, -20, true, false, null),
-        ("completed", 2, -20, 0, true, false, null),
-        ("already-sent", 5, -20, 0, true, true, null),
-        ("superseded", 5, -20, 0, false, false, null),
+        ("early", 5, -20, 0, true, false, 0, 0),
+        ("late", 5, 0, 10, true, false, 0, 0),
+        ("within", 5, -5, 5, true, false, null, 0),
+        ("late-start-early-finish", 5, 20, -20, true, false, null, 0),
+        ("completed", 2, -20, 0, true, false, null, 0),
+        ("already-sent", 5, -20, 0, true, true, null, 0),
+        ("superseded", 5, -20, 0, false, false, null, 0),
+        ("sleepover", 5, -20, 20, true, false, null, 3),
     ];
 
     [SkippableFact]
@@ -61,7 +62,7 @@ public class ExtraTimeBackfillMigrationTests : IClassFixture<PostgresFixture>
                 ids[c.Name] = completion;
                 await ExecAsync(conn,
                     "INSERT INTO \"Shifts\" (\"Id\",\"TenantId\",\"ParticipantId\",\"ServiceDate\",\"StartTime\",\"EndTime\",\"EndsNextDay\",\"NightType\",\"Ratio\",\"Status\",\"ReturnCount\",\"CreatedAt\",\"UpdatedAt\") " +
-                    "VALUES (@s,@t,@p,'2026-11-03','09:00','15:00',false,0,0,@st,0,now(),now())", ("s", shift), ("t", tenant), ("p", Guid.NewGuid()), ("st", c.Status));
+                    "VALUES (@s,@t,@p,'2026-11-03','09:00','15:00',false,@n,0,@st,0,now(),now())", ("s", shift), ("t", tenant), ("p", Guid.NewGuid()), ("st", c.Status), ("n", c.Night));
                 await ExecAsync(conn,
                     "INSERT INTO \"ShiftCompletions\" (\"Id\",\"TenantId\",\"ShiftId\",\"ActualStart\",\"StartedAt\",\"TimeZoneId\",\"SubmittedByUserId\",\"IsActive\",\"GeolocationDeclined\",\"NothingToHandOver\",\"NothingToNoteConfirmed\"," +
                     "\"SentFromOffline\",\"StartWasManual\",\"VarianceMinutesStart\",\"VarianceMinutesEnd\",\"CreatedAt\",\"UpdatedAt\") " +

@@ -24,6 +24,8 @@ public static class ShiftErrorCodes
     public const string ShiftNeedsReview = "SHIFT_NEEDS_REVIEW";
     /// <summary>An extra-time decision was sent for a completion that has no extra time (the worker started and finished within 5 minutes of the roster, or started late and finished early).</summary>
     public const string ShiftNoExtraTime = "SHIFT_NO_EXTRA_TIME";
+    /// <summary>An extra-time decision was sent for a Completed shift older than the Employment Hero change window, so the change would never reach payroll.</summary>
+    public const string ShiftExtraTimeTooOld = "SHIFT_EXTRA_TIME_TOO_OLD";
     public const string ShiftExtraTimeChoiceInvalid = "SHIFT_EXTRA_TIME_CHOICE_INVALID";
     public const string ShiftReturnReasonRequired = "SHIFT_RETURN_REASON_REQUIRED";
     public const string ShiftReturnReasonTooLong = "SHIFT_RETURN_REASON_TOO_LONG";

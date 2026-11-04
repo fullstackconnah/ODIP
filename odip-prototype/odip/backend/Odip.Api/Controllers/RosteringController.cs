@@ -1617,7 +1617,7 @@ public class RosteringController : ControllerBase
 
     /// <summary>
     /// A coordinator decides, or changes, the extra time on a completion: "approve" pays the actual times, "decline" pays rostered hours. Allowed while the shift is
-    /// PendingReview or Completed with an active completion; 404 otherwise, 409 SHIFT_NO_EXTRA_TIME when the completion has none. Employment Hero is updated by the
+    /// PendingReview or Completed with an active completion; 404 otherwise, 409 SHIFT_NO_EXTRA_TIME when the completion has none, 409 SHIFT_EXTRA_TIME_TOO_OLD when a Completed shift is past the Employment Hero change window. Employment Hero is updated by the
     /// sender's change check (the paid window changes the line's hash), so nothing is sent from here.
     /// </summary>
     [HttpPost("shifts/{id:guid}/completion/extra-time")]
@@ -1633,6 +1633,9 @@ public class RosteringController : ControllerBase
             return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
         if (completion.ExtraTime is null)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail("This shift has no extra time to decide.", ShiftErrorCodes.ShiftNoExtraTime));
+        // Employment Hero is only re-checked inside the change window, so an older decision would show in Payroll but never reach the timesheet.
+        if (shift.Status == ShiftStatus.Completed && shift.ServiceDate < (await ShiftTodayAsync(shift, ct)).AddDays(-EmploymentHeroTimesheetSender.ChangeWindowDays))
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail("This shift is more than 62 days old, so Employment Hero can't be updated from here. Change its hours in Employment Hero.", ShiftErrorCodes.ShiftExtraTimeTooOld));
 
         completion.ExtraTime = choice;
         completion.UpdatedAt = DateTime.UtcNow;

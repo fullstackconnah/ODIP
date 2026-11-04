@@ -526,14 +526,14 @@ public class ShiftCompletionStateMachineTests
     public async Task Finish_SetsExtraTimePending_OnlyForEarlyStartOrLateFinish()
     {
         // Rostered 09:00-17:00 Sydney on 8 Sep 2026 (23:00Z the day before to 07:00Z). Finish is stamped at the fake clock's now.
-        async Task<ExtraTimeDecision?> FinishedWith(int startOffsetMinutes, int endOffsetMinutes)
+        async Task<ExtraTimeDecision?> FinishedWith(int startOffsetMinutes, int endOffsetMinutes, SleepoverType night = SleepoverType.None)
         {
             var (db, tenant) = CreateDb();
             var user = SeedUser(db);
             var shift = Seed(db, new Shift
             {
                 Id = Guid.NewGuid(), ParticipantId = SeedParticipant(db).Id, UserId = user.Id, ServiceDate = new DateOnly(2026, 9, 8), StartTime = new TimeOnly(9, 0),
-                EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.InProgress,
+                EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = night, Status = ShiftStatus.InProgress,
             });
             var start = new DateTime(2026, 9, 7, 23, 0, 0, DateTimeKind.Utc).AddMinutes(startOffsetMinutes);
             Seed(db, new ShiftCompletion
@@ -552,6 +552,7 @@ public class ShiftCompletionStateMachineTests
         Assert.Null(await FinishedWith(6, 0));                                  // late start: flagged, but no extra time
         Assert.Null(await FinishedWith(0, -6));                                 // early finish: same
         Assert.Null(await FinishedWith(-5, 5));                                 // within 5 minutes either side
+        Assert.Null(await FinishedWith(-20, 20, SleepoverType.Sleepover));      // a sleepover has no extra time to decide
     }
 
     [Fact]

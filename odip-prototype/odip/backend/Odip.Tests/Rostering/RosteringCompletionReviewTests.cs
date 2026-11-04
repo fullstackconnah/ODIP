@@ -69,9 +69,9 @@ public class RosteringCompletionReviewTests
         Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true,
     });
 
-    private static Shift SeedShift(OdipDbContext db, Guid participantId, Guid staffId, ShiftStatus status) => Seed(db, new Shift
+    private static Shift SeedShift(OdipDbContext db, Guid participantId, Guid staffId, ShiftStatus status, DateOnly? date = null) => Seed(db, new Shift
     {
-        Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId, ServiceDate = ServiceDate,
+        Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId, ServiceDate = date ?? ServiceDate,
         StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
         NightType = SleepoverType.None, Status = status,
     });
@@ -2042,7 +2042,7 @@ public class RosteringCompletionReviewTests
     {
         using var db = CreateDb();
         var staff = SeedStaff(db);
-        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, status);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, status, DaysAgo(3));
         var completion = SeedExtraTime(db, shift.Id, staff.Id, ExtraTimeDecision.Pending);
         var controller = MakeController(db);
 
@@ -2053,12 +2053,56 @@ public class RosteringCompletionReviewTests
         Assert.Equal(ExtraTimeDecision.Declined, Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>(changed.Result).Value).Data!.ExtraTime);
     }
 
+    private static DateOnly DaysAgo(int days) => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-days);
+
+    [Theory]
+    [InlineData(70, false)]   // past the Employment Hero change window: refused, the decision stays
+    [InlineData(60, true)]
+    public async Task DecideExtraTime_OnACompletedShiftPastTheChangeWindow_Is409AndLeavesTheDecision(int daysOld, bool saves)
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed, DaysAgo(daysOld));
+        var completion = SeedExtraTime(db, shift.Id, staff.Id, ExtraTimeDecision.Declined);
+
+        var result = (await MakeController(db).DecideExtraTime(shift.Id, new DecideExtraTimeDto("approve"), CancellationToken.None)).Result;
+
+        if (saves) Assert.IsType<OkObjectResult>(result);
+        else Assert.Equal("SHIFT_EXTRA_TIME_TOO_OLD", Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<ConflictObjectResult>(result).Value).Code);
+        Assert.Equal(saves ? ExtraTimeDecision.Approved : ExtraTimeDecision.Declined, (await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id)).ExtraTime);
+    }
+
+    [Fact]
+    public async Task DecideExtraTime_OtherTenantShift_Is404()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        ICurrentTenant TenantOf(Guid id) { var t = new Mock<ICurrentTenant>(); t.Setup(x => x.TenantId).Returns(id); t.Setup(x => x.IsSuperAdmin).Returns(false); return t.Object; }
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
+        Guid otherTenantShiftId;
+        using (var seedDb = new OdipDbContext(options, TenantOf(Guid.NewGuid())))
+        {
+            var staff = SeedStaff(seedDb);
+            var shift = SeedShift(seedDb, SeedParticipant(seedDb).Id, staff.Id, ShiftStatus.Completed, DaysAgo(3));
+            SeedExtraTime(seedDb, shift.Id, staff.Id, ExtraTimeDecision.Pending);
+            otherTenantShiftId = shift.Id;
+        }
+
+        using var db = new OdipDbContext(options, TenantOf(Guid.NewGuid()));
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString())], "Test");
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } }
+        };
+
+        Assert.IsType<NotFoundObjectResult>((await controller.DecideExtraTime(otherTenantShiftId, new DecideExtraTimeDto("approve"), CancellationToken.None)).Result);
+    }
+
     [Fact]
     public async Task DecideExtraTime_NoExtraTime_Is409_UnknownShiftOrOtherStatus_Is404_BadWord_Is400()
     {
         using var db = CreateDb();
         var staff = SeedStaff(db);
-        var plain = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed);
+        var plain = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed, DaysAgo(3));
         SeedExtraTime(db, plain.Id, staff.Id, null);
         var running = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.InProgress);
         SeedExtraTime(db, running.Id, staff.Id, ExtraTimeDecision.Pending);
