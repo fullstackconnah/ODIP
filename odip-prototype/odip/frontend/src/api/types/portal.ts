@@ -216,6 +216,8 @@ export interface StartShiftDto {
   geolocationDeclined: boolean
   /** The worker's note when no fix was found (at most 300 characters; the server cuts longer). */
   locationReason?: string | null
+  /** Why the worker started more than 5 minutes off roster (optional; at most 500 characters, the server cuts longer). */
+  startTimeReason?: string | null
 }
 
 /** POST portal/shifts/{id}/location-reason body: the note after an off-site Start. */
@@ -235,6 +237,10 @@ export interface FinishShiftDto {
   actualEnd?: string | null
   /** Why a time moved: required when one did, at most 500 characters. */
   timeAdjustmentReason?: string | null
+  /** Why the finish was more than 5 minutes off roster (optional; at most 500 characters). A re-Finish replaces it. */
+  finishTimeReason?: string | null
+  /** Why the start was off roster, when Start did not ask (a manual or moved start). Saved only if the start has no reason yet. */
+  startTimeReason?: string | null
   /** Kilometres driven with the participant, 0 to 2,000, one decimal place. Null when not given. */
   kilometres?: number | null
   /** Provider travel, two optional legs (not `kilometres`): whole minutes 0 to 480, kilometres 0 to 2,000 to one decimal place. Null when not given.

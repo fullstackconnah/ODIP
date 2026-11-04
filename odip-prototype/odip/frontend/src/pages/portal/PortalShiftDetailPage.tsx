@@ -26,7 +26,7 @@ import { formatShiftTimeRange, RATIO_LABELS, formatElapsedSince, formatMinutesSp
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { httpStatusOf, isNotFoundError } from '@/lib/httpStatus'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
-import { EARLIEST_START_LEAD_MINUTES, OVERNIGHT_SUPPORT_LABELS, portalStatusLabel, rosteredInstants } from './lib/portal'
+import { EARLIEST_START_LEAD_MINUTES, OVERNIGHT_SUPPORT_LABELS, offRosterMinutes, portalStatusLabel, rosteredInstants } from './lib/portal'
 import { ShiftNotesSection } from './components/ShiftNotesSection'
 import { HandoverSection, GlanceSection, ContactsSection, MustKnowLine } from './shift/BeforeSection'
 import { DuringSection } from './shift/DuringSection'
@@ -36,6 +36,7 @@ import { dueDoseKeys } from './shift/checklist'
 import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation, type GeoCause } from './shift/geolocation'
 import { NoFixSheet, OffSiteSheet } from './shift/LocationSheets'
+import { TimeCheckSheet } from './shift/TimeCheckSheet'
 import { useOnline } from './shift/useOnline'
 import { ActionBar, Chip, Section, WaitingToSend } from './shift/ui'
 import { SyncBar } from './sync/SyncBar'
@@ -152,6 +153,9 @@ export default function PortalShiftDetailPage() {
   // The no-fix sheet (before Start: why the phone gave no fix) and the off-site sheet (after Start: how far from the place).
   const [noFix, setNoFix] = useState<GeoCause | null>(null)
   const [offSite, setOffSite] = useState<{ placeName: string; distanceMetres: number } | null>(null)
+  // The time check comes first (minutes off the rostered start, signed). Its reason rides on whichever Start goes out, so the location sheets and retries need not know it.
+  const [timeCheck, setTimeCheck] = useState<number | null>(null)
+  const timeReason = useRef<string | null>(null)
   // A draft with an open step means the worker was mid-finish (left for the incident form, or reloaded): open it again at that step.
   const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.step != null)
   const [submitted, setSubmitted] = useState(false)
@@ -160,8 +164,9 @@ export default function PortalShiftDetailPage() {
   const [sheet, setSheet] = useState<{ target: DoseTarget; notGiven: boolean } | null>(null)
 
   /** Sends Start. An off-site answer opens the note sheet afterwards; a queued Start (offline) answers nothing, so no sheet. */
-  async function sendStart(data: StartShiftDto) {
-    if (!id) return
+  async function sendStart(data: StartShiftDto): Promise<boolean> {
+    if (!id) return false
+    if (timeReason.current) data = { ...data, startTimeReason: timeReason.current }
     setStarting(true)
     setActionError(null)
     try {
@@ -171,14 +176,26 @@ export default function PortalShiftDetailPage() {
       if (c?.locationCheck === 'NotAtLocation' && c.locationDistanceMetres != null && out?.serviceLocation) {
         setOffSite({ placeName: out.serviceLocation.name, distanceMetres: c.locationDistanceMetres })
       }
+      return true
     } catch (err) {
       setActionError(extractErrorMessage(err, "Couldn't start this shift. Check your connection and try again."))
+      return false
     } finally {
       setStarting(false)
     }
   }
 
-  async function handleStart() {
+  /** The Start button: more than 5 minutes off the rostered start asks why first; otherwise straight to the location step. */
+  function handleStart() {
+    if (!id || starting || !shift) return
+    timeReason.current = null
+    const rosteredStart = rosteredInstants(shift).start
+    const off = rosteredStart ? offRosterMinutes(new Date(), rosteredStart) : null
+    if (off != null) { setActionError(null); setTimeCheck(off); return }
+    void startWithLocation()
+  }
+
+  async function startWithLocation() {
     if (!id || starting || !shift) return
     // No saved place on this shift: nothing to check, so the phone is not asked at all.
     if (!shift.serviceLocation) return sendStart({ geolocationDeclined: false })
@@ -486,7 +503,19 @@ export default function PortalShiftDetailPage() {
         allowMissed={sheet?.notGiven ?? false}
         online={online}
       />
-      {noFix && <NoFixSheet cause={noFix} starting={starting} error={actionError} onStart={reason => void sendStart({ geolocationDeclined: true, locationReason: reason || null })} onRetry={() => void handleStart()} onClose={() => setNoFix(null)} />}
+      {noFix && <NoFixSheet cause={noFix} starting={starting} error={actionError} onStart={reason => void sendStart({ geolocationDeclined: true, locationReason: reason || null })} onRetry={() => void startWithLocation()} onClose={() => setNoFix(null)} />}
+      {timeCheck != null && (
+        <TimeCheckSheet
+          minutes={timeCheck}
+          starting={starting}
+          error={actionError}
+          onStart={async reason => {
+            timeReason.current = reason || null
+            if (shift.serviceLocation) { setTimeCheck(null); await startWithLocation() } else if (await sendStart({ geolocationDeclined: false })) setTimeCheck(null)
+          }}
+          onClose={() => setTimeCheck(null)}
+        />
+      )}
       {offSite && <OffSiteSheet {...offSite} send={reason => saveReason.mutateAsync({ id: shift.id, reason })} onClose={() => setOffSite(null)} />}
     </div>
   )

@@ -52,6 +52,15 @@ export function pickCurrentShift(shifts: PortalShiftSummaryDto[], now: Date, tz:
 /** Mirrors PortalController.EarliestStartLeadMinutes: Start opens this long before the rostered start. The server stays the floor (its "too early" message shows if clocks disagree). */
 export const EARLIEST_START_LEAD_MINUTES = 60
 
+/** Matches the server's ShiftTimeRules.OffRosterMinutes: more than this many whole minutes off roster asks the worker why. */
+export const OFF_ROSTER_MINUTES = 5
+
+/** Signed whole minutes the actual instant is from the rostered one (negative is early), or null when within OFF_ROSTER_MINUTES. */
+export function offRosterMinutes(actualIso: string | Date, rosteredIso: string | Date): number | null {
+  const m = Math.round((new Date(actualIso).getTime() - new Date(rosteredIso).getTime()) / 60_000)
+  return Math.abs(m) > OFF_ROSTER_MINUTES ? m : null
+}
+
 /** The rostered start and end as instants, read in the provider's zone (the end on the next day for an overnight shift). */
 export function rosteredInstants(s: { serviceDate: string; startTime: string; endTime: string; endsNextDay: boolean; timeZoneId: string }) {
   const endDate = s.endsNextDay ? format(addDays(parseISO(s.serviceDate), 1), 'yyyy-MM-dd') : s.serviceDate
