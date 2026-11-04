@@ -8,13 +8,15 @@ const COMPOSE = resolve(__dirname, '../../../../../deploy/compose.yaml')
 // nginx: a location block with its own add_header (directly, or nested in an `if`) drops every add_header inherited from the
 // server block, so the security headers silently vanish from whatever that location serves (the static assets, before this test).
 describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
-  it('has no add_header anywhere inside a location block, which would drop the server-level security headers', () => {
+  it('has no add_header anywhere inside a location block, except the agreement link\'s, which would drop the server-level security headers', () => {
     const lines = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, ''))
     const offenders: string[] = []
     const stack: boolean[] = []   // one entry per open block: is it a location?
+    let inAgreement = false       // the one location that repeats every server header (checked by the next test)
     for (const line of lines) {
       const opensLocation = /^\s*location\s/.test(line)
-      if (/\badd_header\b/.test(line) && (opensLocation || stack.some(Boolean))) offenders.push(line.trim())
+      if (opensLocation) inAgreement = /^\s*location\s+\/agreement\/\s*\{/.test(line)
+      if (/\badd_header\b/.test(line) && (opensLocation || stack.some(Boolean)) && !inAgreement) offenders.push(line.trim())
       let first = true
       for (const ch of line.match(/[{}]/g) ?? []) {
         if (ch === '}') stack.pop()
@@ -22,6 +24,19 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
       }
     }
     expect(offenders).toEqual([])
+  })
+
+  // The emailed agreement link is a page under a secret token. Its location adds noindex and no referrer, so it must repeat every server-level header (nginx drops the inherited ones).
+  it('serves /agreement/ with noindex, no referrer and every server-level security header', () => {
+    const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
+    const headerNames = (text: string) => [...text.matchAll(/^\s*add_header\s+(\S+)/gm)].map((m) => m[1].toLowerCase())
+    const block = conf.match(/^\s*location\s+\/agreement\/\s*\{([^}]*)\}/m)?.[1] ?? ''
+    const server = [...conf.matchAll(/^ {4}add_header\s+(\S+)/gm)].map((m) => m[1].toLowerCase())
+    expect(server.length).toBeGreaterThan(0)
+    for (const name of server) expect(headerNames(block)).toContain(name)
+    expect(block).toMatch(/add_header\s+X-Robots-Tag\s+"noindex, nofollow"/)
+    expect(block).toMatch(/add_header\s+Referrer-Policy\s+"no-referrer"/)
+    expect(block).toMatch(/try_files\s+\/index\.html\s+=404;/)
   })
 
   // Without these, every tunnel visitor reaches the API as the Docker gateway and shares one rate-limit and sign-in-lockout bucket.

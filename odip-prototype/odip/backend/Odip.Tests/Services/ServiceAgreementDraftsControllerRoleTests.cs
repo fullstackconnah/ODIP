@@ -31,6 +31,8 @@ public class ServiceAgreementDraftsControllerRoleTests
         nameof(ServiceAgreementDraftsController.ApprovalPreview),
         // The preview of Populate roster (S11): per started week, the shifts it would add and the budget warnings, for the roles that may populate.
         nameof(ServiceAgreementDraftsController.PopulatePreview),
+        // Who the agreement can be sent to (contacts' emails) and what was sent, for the roles that may send it.
+        nameof(ServiceAgreementDraftsController.Sharing),
     ];
 
     public static TheoryData<string> PriceReadActions
@@ -63,6 +65,8 @@ public class ServiceAgreementDraftsControllerRoleTests
     {
         nameof(ServiceAgreementDraftsController.Delete),
         nameof(ServiceAgreementDraftsController.EndEarly),
+        // Send agreement to contact emails a link to the plan's figures and a PDF with the NDIS number.
+        nameof(ServiceAgreementDraftsController.Send),
     };
 
     /// <summary>Delete draft and End early change saved agreements and their rosters: the same writers as the signing writes, and nobody else.</summary>
@@ -88,7 +92,7 @@ public class ServiceAgreementDraftsControllerRoleTests
         var gets = typeof(ServiceAgreementDraftsController).GetMethods()
             .Where(m => m.GetCustomAttributes(typeof(HttpGetAttribute), false).Length > 0).Select(m => m.Name).OrderBy(name => name).ToList();
 
-        // The five above are all of them: a new GET fails here until somebody has decided who may read what it returns.
+        // The ones above are all of them: a new GET fails here until somebody has decided who may read what it returns.
         Assert.Equal(PriceReads.OrderBy(name => name), gets);
         foreach (var name in gets) Assert.False(Allows(name, "SupportWorker") || Allows(name, "ReadOnly"), name);
     }
