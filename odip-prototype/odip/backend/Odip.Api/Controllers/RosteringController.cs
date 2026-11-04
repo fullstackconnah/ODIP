@@ -1618,7 +1618,8 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// A coordinator decides, or changes, the extra time on a completion: "approve" pays the actual times, "decline" pays rostered hours. Allowed while the shift is
     /// PendingReview or Completed with an active completion; 404 otherwise, 409 SHIFT_NO_EXTRA_TIME when the completion has none, 409 SHIFT_EXTRA_TIME_TOO_OLD when a Completed shift is past the Employment Hero change window. Employment Hero is updated by the
-    /// sender's change check (the paid window changes the line's hash), so nothing is sent from here.
+    /// sender's change check (the paid window changes the line's hash), so nothing is sent from here. The reply carries the reference of the claim that
+    /// still counts for the shift (W2 PR3): a claim is never re-billed, so a decision made after claiming does not change it.
     /// </summary>
     [HttpPost("shifts/{id:guid}/completion/extra-time")]
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> DecideExtraTime(Guid id, [FromBody] DecideExtraTimeDto dto, CancellationToken ct)

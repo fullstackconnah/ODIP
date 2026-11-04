@@ -38,8 +38,7 @@ public static class ShiftClaimWindow
     }
 
     /// <summary>The window to claim <paramref name="s"/> on, in <paramref name="zone"/> (the zone the estimator prices the shift in). A null decision counts as Pending, like a worker's time not yet reviewed.</summary>
-    public static ClaimWindow For(Shift s, ShiftCompletion? c, TimeZoneInfo zone) => new(Rostered(s));
-    public static ClaimWindow ForReal(Shift s, ShiftCompletion? c, TimeZoneInfo zone)
+    public static ClaimWindow For(Shift s, ShiftCompletion? c, TimeZoneInfo zone)
     {
         var rostered = Rostered(s);
         if (c?.ActualEnd is null || s.NightType is SleepoverType.Sleepover or SleepoverType.PassiveNight) return new(rostered);

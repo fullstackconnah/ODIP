@@ -172,6 +172,8 @@ export interface ShiftClaimLeftOutDto {
   /** Set when a rejected or cancelled claim holds the shift: the screen links to it (and to Claim again) by this id, never by the sentence. */
   heldByClaimId?: string | null
   heldByClaimReference?: string | null
+  /** Approved extra time left out of an otherwise claimed shift (over a hard limit, outside the shift's date, or not priced): the shift IS in the claim at its held hours. */
+  extraTimeOnly?: boolean
 }
 
 /**

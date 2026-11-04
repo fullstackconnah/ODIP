@@ -106,6 +106,25 @@ describe('ShiftClaimRunModal', () => {
     expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1)
   })
 
+  it('lists approved extra time left out under its own heading, and does not count it as a left-out shift', () => {
+    const extra = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's11', serviceDate: '2026-10-22', description: 'Extra time 08:40–09:00 · 20 min', reason: 'Sam Lee: the extra time would take Core for 1 Jul 2026–30 Jun 2027 over its budget (hard limit).', extraTimeOnly: true }
+    answer(m.preview, { ...base, leftOut: [extra] })
+    open()
+
+    expect(screen.getByText('Extra time left out')).toBeInTheDocument()
+    expect(screen.queryByText(/shift will be left out/)).not.toBeInTheDocument()
+    expect(screen.getByText(/The shifts are claimed at their held hours/)).toBeInTheDocument()
+  })
+
+  it('counts only whole shifts in the heading when extra time is left out beside them', () => {
+    const extra = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's11', serviceDate: '2026-10-22', description: 'Extra time 08:40–09:00 · 20 min', reason: 'Sam Lee: over budget.', extraTimeOnly: true }
+    answer(m.preview, { ...base, leftOut: [...base.leftOut, extra] })
+    open()
+
+    expect(screen.getByText('1 shift will be left out')).toBeInTheDocument()
+    expect(screen.getByText(/A shift whose extra time is left out is claimed at its held hours/)).toBeInTheDocument()
+  })
+
   it('says nothing can be claimed yet when every shift is left out', () => {
     answer(m.preview, { ...base, participants: [], shiftCount: 0, hours: 0, totalAmount: 0 })
     open()

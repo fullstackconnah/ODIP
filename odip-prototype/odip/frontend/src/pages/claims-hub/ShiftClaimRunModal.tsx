@@ -136,10 +136,10 @@ function RunBody({ run, made, preview }: { run: ShiftClaimRunDto; made: boolean;
   const rows = run.participants
   const failed = run.skipped.filter(s => s.failed)
   const leftOut = [
-    ...run.leftOut.map(l => ({ key: `${l.participantId}-${l.shiftId}`, lead: <><span>{l.participantName}</span> · <span className="tabular-nums">{formatDateAu(l.serviceDate)}</span></>, description: l.description, reason: l.reason, action: heldClaimLink(l) })),
+    ...run.leftOut.map(l => ({ key: `${l.participantId}-${l.shiftId}`, lead: <><span>{l.participantName}</span> · <span className="tabular-nums">{formatDateAu(l.serviceDate)}</span></>, description: l.description, reason: l.reason, action: heldClaimLink(l), extraTime: l.extraTimeOnly })),
     ...run.skipped.filter(s => !s.failed).map(s => ({ key: `skip-${s.participantId}`, lead: <span>{s.participantName}</span>, description: 'Every shift in this period', reason: s.reason })),
   ]
-  const leftOutCount = run.leftOut.length + run.skipped.filter(s => !s.failed).length
+  const leftOutCount = run.leftOut.filter(l => !l.extraTimeOnly).length + run.skipped.filter(s => !s.failed).length
   const empty = rows.length === 0 && leftOut.length === 0 && failed.length === 0
 
   const columns = [

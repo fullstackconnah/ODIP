@@ -692,6 +692,20 @@ describe('CompletionReviewPage extra time', () => {
     await waitFor(() => expect(within(dialog).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' })).toHaveAttribute('aria-checked', 'true'))
   })
 
+  it('says the shift is already claimed, with the way through, when the saved decision comes back with a claim reference', async () => {
+    const user = userEvent.setup()
+    mockDecideMutateAsync.mockResolvedValue(makeCompletionDetail({ extraTime: 'Approved', claimReference: 'TC-12' }))
+    showQueue(extra({ status: 'Completed', extraTime: 'Pending' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^extra time for /i }))
+    const dialog = screen.getByRole('dialog', { name: 'Extra time' })
+    expect(within(dialog).queryByText(/Already claimed/)).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' }))
+
+    expect(await within(dialog).findByText(/Already claimed at rostered hours on TC.12\./)).toHaveTextContent('delete that draft claim and claim again, or add a manual claim')
+  })
+
   it('keeps the old choice and says so when the save fails', async () => {
     const user = userEvent.setup()
     mockDecideMutateAsync.mockRejectedValue(new Error('boom'))

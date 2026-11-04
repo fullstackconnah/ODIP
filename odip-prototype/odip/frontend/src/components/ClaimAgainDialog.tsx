@@ -47,6 +47,7 @@ export function ClaimAgainDialog({ open, claimId, claimReference, claimStatus, o
     description: row.description,
     reason: row.reason,
     action: heldClaimLink(row),
+    extraTime: row.extraTimeOnly,
   }))
 
   return (
@@ -75,7 +76,7 @@ export function ClaimAgainDialog({ open, claimId, claimReference, claimStatus, o
               <p className={LINE}>Changes made on {claimReference} aren't kept. You can check the new claim before you send it.</p>
             </>
           )}
-          {leftOut.length > 0 && <LeftOutCallout items={leftOut} heading={plural(leftOut.length, 'shift') + ' left out'} footer={SHIFT_LEFT_OUT_FOOTER} />}
+          {leftOut.length > 0 && <LeftOutCallout items={leftOut} heading={plural(leftOut.filter(l => !l.extraTime).length, 'shift') + ' left out'} footer={SHIFT_LEFT_OUT_FOOTER} />}
           {make.isError && <Callout tone="danger">{noBreakRefs(extractErrorMessage(make.error, "Could not claim this again. Try again."))}</Callout>}
         </div>
       }

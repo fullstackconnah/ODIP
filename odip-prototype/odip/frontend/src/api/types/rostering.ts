@@ -268,6 +268,8 @@ export interface ShiftCompletionDto {
   finishTimeReason?: string | null
   /** Extra time (a start more than 5 min early or a finish more than 5 min late): null when none. Pending is held at rostered hours in Employment Hero until a coordinator decides. */
   extraTime?: ExtraTimeDecision | null
+  /** Only on the extra-time decision's reply: the reference of the claim that still counts for this shift (a claim never re-bills), else null. */
+  claimReference?: string | null
   /** Each side is more than 5 minutes off the roster (a finish counts only once it is set). */
   offRosterStart?: boolean
   offRosterFinish?: boolean

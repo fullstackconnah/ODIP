@@ -23,9 +23,11 @@ namespace Odip.Infrastructure.Services;
 /// active-hours that have no shift equivalent, and mixing the two would force every trip call
 /// site to reason about shift-only parameters.
 ///
-/// Billing is against ROSTERED hours (<see cref="Shift.DurationHours"/>) minus the breaks the worker took on their own
-/// (owner, 2026-11-03, W9; <see cref="ShiftBreakRules.UnclaimedSpans"/>), never <c>ShiftCompletion</c>'s clocked times — the
-/// office already accepted any variance at Approve time, so re-deriving hours here would silently relitigate that decision.
+/// Billing is against the hours WORKED (W2 PR3, owner 2026-11-05): the window Employment Hero pays (<see cref="ShiftClaimWindow"/>),
+/// minus the breaks the worker took on their own (owner, 2026-11-03, W9; <see cref="ShiftBreakRules.UnclaimedSpans"/>). Extra time
+/// (an early start or late finish over 5 minutes) is claimed only once a coordinator approves it; Pending, Declined and unset extra
+/// time is held at rostered hours. Under a budget hard limit, only the approved extra-time increment is checked; what does not fit
+/// is claimed at held hours and listed as left out. A shift with a live claim line is never priced again.
 /// Breaks with the participant are still claimed.
 ///
 /// TripClaim/ClaimLineItem are NOT ITenantEntity (standing ruling) — every query here is scoped
