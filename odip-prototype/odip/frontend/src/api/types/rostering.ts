@@ -196,6 +196,12 @@ export type ShiftCompletionReviewOutcome = 'Approved' | 'Returned'
 
 export type LocationCheckStatus = 'AtLocation' | 'NotAtLocation' | 'Unavailable' | 'NoLocationSet'
 
+/** Extra time (an early start or a late finish over 5 minutes). Pending is held at rostered hours in Employment Hero until a coordinator decides. */
+export type ExtraTimeDecision = 'Pending' | 'Approved' | 'Declined'
+
+/** What the Approve dialog and the extra-time endpoint send: pay the actual times, or the rostered hours. */
+export type ExtraTimeChoice = 'approve' | 'decline'
+
 export interface ShiftCompletionDto {
   id: string
   shiftId: string
