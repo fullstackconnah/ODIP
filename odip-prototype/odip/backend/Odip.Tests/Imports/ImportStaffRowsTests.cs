@@ -56,4 +56,18 @@ public class ImportStaffRowsTests
         var plan = Build([ImportParticipantRows.ExampleFirstName, ImportParticipantRows.ExampleLastName, "example@example.com", "", "", "", "", ""]).Single();
         Assert.Equal((ImportRowStatus.Skipped, "This is the template's example row."), (plan.Status, plan.SkipReason));
     }
+
+    [Fact]
+    public void Cpr_columns_map_to_the_flag_and_expiry_and_a_bad_date_gets_the_first_aid_error_shape()
+    {
+        string[] headers = ["First name", "Last name", "Email", "CPR", "CPR expiry"];
+        List<ImportRowPlan> Plan(params string[][] rows) =>
+            ImportStaffRows.Build(new ImportTable(headers, rows.Select((cells, i) => new ImportRow(i + 2, cells)).ToList()), ImportFields.AutoMatch(ImportKind.Staff, headers));
+
+        var dto = Plan(["Jo", "Ng", "jo@own.example.com", "yes", "30/06/2027"]).Single().Staff!;
+        Assert.Equal((true, new DateOnly(2027, 6, 30)), (dto.IsCprQualified, dto.CprExpiryDate!.Value));
+
+        var bad = Plan(["Jo", "Ng", "jo@own.example.com", "yes", "04/23/2027"]).Single();
+        Assert.Contains(bad.Reasons, r => r.StartsWith("CPR expiry: this column has month-first dates"));
+    }
 }

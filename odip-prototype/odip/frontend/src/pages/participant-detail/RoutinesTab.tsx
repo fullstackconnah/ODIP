@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
 import { ListChecks, AlertTriangle, Plus, Clock, CalendarDays } from 'lucide-react'
 import { useParticipantRoutines, useCreateRoutine, useUpdateRoutine, useDeleteRoutine } from '@/api/hooks'
-import { formatShiftTime, extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage } from '@/lib/utils'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField, labelClass } from '@/components/FormField'
@@ -18,27 +18,7 @@ import type { RoutineCategory } from '@/api/types/enums'
 import { Button } from '@/components/Button'
 import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Callout } from '@/components/Callout'
-
-/** Monday-first for display, independent of the .NET DayOfWeek (Sunday=0) wire ordering. */
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
-
-const WEEKDAY_ABBREVIATIONS: Record<string, string> = {
-  Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun',
-}
-
-/**
- * Readable label for a routine's day set (PD-4) — "Every day" for all 7, "Weekdays"/"Weekends"
- * for those two common subsets, otherwise a Monday-first comma list of abbreviations (e.g.
- * "Mon, Wed, Fri"). Re-sorts to Monday-first order regardless of the input array's order, since
- * the days array is built by toggling individual checkboxes and isn't guaranteed to arrive sorted.
- */
-function formatDaySet(days: string[]): string {
-  const sorted = WEEKDAYS.filter(d => days.includes(d))
-  if (sorted.length === 7) return 'Every day'
-  if (sorted.length === 5 && WEEKDAYS.slice(0, 5).every(d => sorted.includes(d))) return 'Weekdays'
-  if (sorted.length === 2 && WEEKDAYS.slice(5).every(d => sorted.includes(d))) return 'Weekends'
-  return sorted.map(d => WEEKDAY_ABBREVIATIONS[d]).join(', ')
-}
+import { WEEKDAYS, formatDaySet, formatRoutineTime, sortRoutines } from './routineFormat'
 
 /** Normalises a "HH:mm:ss"/"HH:mm" time from the API to what an <input type="time"> needs. */
 function toTimeInputValue(time: string | null | undefined): string {
@@ -50,17 +30,6 @@ function toApiTime(time: string): string {
   return time.length === 5 ? `${time}:00` : time
 }
 
-/** Same "h:mma–h:mma" formatting as the rostering board's shift times, plus an "Untimed" fallback
- * for routines with no start/end — delegates to the shared formatShiftTime instead of duplicating it.
- * A routine may also have only a start ("the task needs to be done from this time") or only an end
- * ("the task needs to be done by this time") — both render as a single time with a directional word. */
-function formatRoutineTime(startTime: string | null, endTime: string | null): string {
-  if (startTime && endTime) return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}`
-  if (startTime) return `From ${formatShiftTime(startTime)}`
-  if (endTime) return `By ${formatShiftTime(endTime)}`
-  return 'Untimed'
-}
-
 /**
  * Groups active routines into "Every day" plus one bucket per weekday that has entries, each
  * sorted critical-first then by time (untimed last). A routine spanning multiple days but not
@@ -68,27 +37,14 @@ function formatRoutineTime(startTime: string | null, endTime: string | null): st
  * "Every day" — so a support worker checking any one of those days sees it (PD-4).
  */
 function groupRoutines(routines: ParticipantRoutineDto[]): { label: string; items: ParticipantRoutineDto[] }[] {
-  const sortWithin = (items: ParticipantRoutineDto[]) =>
-    [...items].sort((a, b) => {
-      if (a.isCritical !== b.isCritical) return a.isCritical ? -1 : 1
-      // An end-only routine ("By 5pm") still carries a real time constraint, so it sorts among
-      // timed routines by its deadline rather than being lumped in with true "Untimed" routines.
-      const aTime = a.startTime ?? a.endTime
-      const bTime = b.startTime ?? b.endTime
-      if (!aTime && !bTime) return 0
-      if (!aTime) return 1
-      if (!bTime) return -1
-      return aTime.localeCompare(bTime)
-    })
-
   const groups: { label: string; items: ParticipantRoutineDto[] }[] = []
 
   const everyDay = routines.filter(r => r.days.length === 7)
-  if (everyDay.length > 0) groups.push({ label: 'Every day', items: sortWithin(everyDay) })
+  if (everyDay.length > 0) groups.push({ label: 'Every day', items: sortRoutines(everyDay) })
 
   for (const day of WEEKDAYS) {
     const items = routines.filter(r => r.days.includes(day) && r.days.length < 7)
-    if (items.length > 0) groups.push({ label: day, items: sortWithin(items) })
+    if (items.length > 0) groups.push({ label: day, items: sortRoutines(items) })
   }
 
   return groups

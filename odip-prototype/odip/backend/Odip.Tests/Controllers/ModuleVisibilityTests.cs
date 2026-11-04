@@ -43,7 +43,7 @@ public class ModuleVisibilityTests
     {
         var (db, controller) = Create(A);
         var data = Data(await controller.GetModuleVisibility(default));
-        Assert.False(data.HiddenAccommodation); Assert.False(data.HiddenVehicles);
+        Assert.False(data.HiddenAccommodation); Assert.False(data.HiddenVehicles); Assert.False(data.HiddenTrips);
         Assert.Empty(db.AppSettings); Assert.Empty(db.AuditLogs);
     }
 
@@ -52,24 +52,25 @@ public class ModuleVisibilityTests
     public async Task Reads_and_writes_are_explicitly_tenant_scoped_even_for_SuperAdmin(bool superAdmin)
     {
         var (db, controller) = Create(A, superAdmin);
-        db.AppSettings.AddRange(new AppSettings { Id = Guid.NewGuid(), TenantId = B, HiddenAccommodation = true, HiddenVehicles = true }, new AppSettings { Id = Guid.NewGuid(), TenantId = A });
+        db.AppSettings.AddRange(new AppSettings { Id = Guid.NewGuid(), TenantId = B, HiddenAccommodation = true, HiddenVehicles = true, HiddenTrips = true }, new AppSettings { Id = Guid.NewGuid(), TenantId = A });
         await db.SaveChangesAsync();
         Assert.False(Data(await controller.GetModuleVisibility(default)).HiddenAccommodation);
-        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false }, default);
+        Assert.False(Data(await controller.GetModuleVisibility(default)).HiddenTrips);
+        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false, HiddenTrips = false }, default);
         var other = await db.AppSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == B);
-        Assert.True(other.HiddenAccommodation); Assert.True(other.HiddenVehicles);
+        Assert.True(other.HiddenAccommodation); Assert.True(other.HiddenVehicles); Assert.True(other.HiddenTrips);
         var own = await db.AppSettings.SingleAsync(s => s.TenantId == A);
-        Assert.True(own.HiddenAccommodation); Assert.False(own.HiddenVehicles);
+        Assert.True(own.HiddenAccommodation); Assert.False(own.HiddenVehicles); Assert.False(own.HiddenTrips);
         var audit = Assert.Single(await db.AuditLogs.ToListAsync());
         Assert.Equal(own.Id, audit.EntityId); Assert.Equal(nameof(AppSettings), audit.EntityType); Assert.Equal(Actor, audit.ChangedById); Assert.Equal("Synthetic Admin", audit.ChangedByName);
         var change = Assert.Single(JsonDocument.Parse(audit.Changes).RootElement.EnumerateArray().ToArray());
         Assert.Equal("HiddenAccommodation", change.GetProperty("Field").GetString());
         Assert.Equal("False", change.GetProperty("Old").GetString()); Assert.Equal("True", change.GetProperty("New").GetString());
-        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false }, default);
+        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false, HiddenTrips = false }, default);
         Assert.Single(await db.AuditLogs.ToListAsync());
         if (!superAdmin) await controller.Update(new() { QualificationWarningDays = 14 }, default);
         Assert.True(own.HiddenAccommodation); Assert.False(own.HiddenVehicles); if (!superAdmin) Assert.Equal(14, own.QualificationWarningDays);
-        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false }, default);
+        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = false }, default);
         Assert.False(Data(await controller.GetModuleVisibility(default)).HiddenAccommodation);
     }
 
@@ -79,20 +80,35 @@ public class ModuleVisibilityTests
         var (db, controller) = Create(null, true);
         db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = B, HiddenVehicles = true }); await db.SaveChangesAsync();
         Assert.False(Data(await controller.GetModuleVisibility(default)).HiddenVehicles);
-        Assert.IsType<BadRequestObjectResult>((await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = true }, default)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = true, HiddenTrips = true }, default)).Result);
         Assert.Single(db.AppSettings); Assert.Empty(db.AuditLogs);
+    }
+
+    [Fact]
+    public async Task Hiding_trips_saves_reads_back_and_audits_one_change()
+    {
+        var (db, controller) = Create(A);
+        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = true }, default);
+        Assert.True(Data(await controller.GetModuleVisibility(default)).HiddenTrips);
+        var audit = Assert.Single(await db.AuditLogs.ToListAsync());
+        var change = Assert.Single(JsonDocument.Parse(audit.Changes).RootElement.EnumerateArray().ToArray());
+        Assert.Equal("HiddenTrips", change.GetProperty("Field").GetString());
+        Assert.Equal("False", change.GetProperty("Old").GetString()); Assert.Equal("True", change.GetProperty("New").GetString());
     }
 
     [Fact]
     public async Task Missing_fields_are_invalid_and_never_silently_clear_a_choice()
     {
-        var dto = new UpdateModuleVisibilityDto { HiddenAccommodation = false };
+        var dto = new UpdateModuleVisibilityDto { HiddenAccommodation = false, HiddenVehicles = false };
         var errors = new List<ValidationResult>();
         Assert.False(Validator.TryValidateObject(dto, new ValidationContext(dto), errors, true));
-        Assert.Contains(errors, e => e.MemberNames.Contains(nameof(dto.HiddenVehicles)));
+        Assert.Contains(errors, e => e.MemberNames.Contains(nameof(dto.HiddenTrips)));
         var (db, controller) = Create(A);
         Assert.IsType<BadRequestObjectResult>((await controller.UpdateModuleVisibility(dto, default)).Result);
         Assert.Empty(db.AppSettings); Assert.Empty(db.AuditLogs);
+        await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = true }, default);
+        Assert.IsType<BadRequestObjectResult>((await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false }, default)).Result);
+        Assert.True((await db.AppSettings.SingleAsync()).HiddenTrips);
     }
 
     [Theory]

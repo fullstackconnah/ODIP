@@ -31,7 +31,7 @@ public static class ImportStaffRows
         [nameof(CreateStaffDto.Email)] = "Email", [nameof(CreateStaffDto.Region)] = "Region",
     };
 
-    private static readonly string[] DateKeys = ["driversLicenceExpiry", "firstAidExpiry", "medicationExpiry", "manualHandlingExpiry", "workerScreeningExpiry"];
+    private static readonly string[] DateKeys = ["driversLicenceExpiry", "firstAidExpiry", "cprExpiry", "medicationExpiry", "manualHandlingExpiry", "workerScreeningExpiry"];
 
     public static List<ImportRowPlan> Build(ImportTable table, IReadOnlyList<string?> mapping)
     {
@@ -98,6 +98,7 @@ public static class ImportStaffRows
             Mobile = mobile.Length == 0 ? null : mobile, Region = get("region") is { Length: > 0 } region ? region : null,
             IsDriverEligible = YesNo("driversLicence", "Driver's licence"), DriverLicenceExpiryDate = Date("driversLicenceExpiry", "Driver's licence expiry"),
             IsFirstAidQualified = YesNo("firstAid", "First aid"), FirstAidExpiryDate = Date("firstAidExpiry", "First aid expiry"),
+            IsCprQualified = YesNo("cpr", "CPR"), CprExpiryDate = Date("cprExpiry", "CPR expiry"),
             IsMedicationCompetent = YesNo("medication", "Medication competent"), MedicationCompetencyExpiryDate = Date("medicationExpiry", "Medication competency expiry"),
             IsManualHandlingCompetent = YesNo("manualHandling", "Manual handling"), ManualHandlingExpiryDate = Date("manualHandlingExpiry", "Manual handling expiry"),
             IsOvernightEligible = YesNo("overnight", "Overnight eligible"),

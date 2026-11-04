@@ -39,6 +39,8 @@ const WRAPPED: [RegExp, unknown][] = [
   [/\/incidents\/trend$/, { today: '2026-10-14', months: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'].map(month => ({ month, incidents: 0, rpUses: 0, otherIncidents: 0 })) }],
   // Not connected: the Payroll page reads an object, and its not-connected state is its quiet default.
   [/\/payroll\/periods$/, { connected: false, today: '2026-10-14', periods: [] }],
+  // The budget graph is an object (no chart drawn), not a list.
+  [new RegExp(`/participants/${ID}/funding/ledger/series$`), { chart: null }],
   // The payslip list is an object ($ keeps /portal/payslips/9001/pdf out).
   [/\/portal\/payslips$/, { status: 'Ready', payslips: [] }],
 ]

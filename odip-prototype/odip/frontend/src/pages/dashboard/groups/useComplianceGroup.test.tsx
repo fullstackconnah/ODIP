@@ -74,13 +74,13 @@ describe('Staff compliance group — Update expiry', () => {
     fireEvent.change(field, { target: { value: '2027-10-03' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // The WHOLE body, written out field by field (toUpdateStaffDto's 22 fields): the PUT rewrites the staff record, so nothing may be dropped.
+    // The WHOLE body, written out field by field (toUpdateStaffDto's 24 fields): the PUT rewrites the staff record, so nothing may be dropped.
     await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/staff/s1', {
       firstName: 'Sam', lastName: 'Lee', email: 'sam@example.com', role: 'SupportWorker', position: 'SupportWorker', employmentType: 'PartTime',
       mobile: '0400 000 000', region: 'Brisbane',
-      isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true,
+      isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true, isCprQualified: false,
       notes: 'Prefers mornings.',
-      firstAidExpiryDate: '2027-10-03', driverLicenceExpiryDate: '2028-06-30', manualHandlingExpiryDate: undefined, medicationCompetencyExpiryDate: undefined,
+      firstAidExpiryDate: '2027-10-03', cprExpiryDate: undefined, driverLicenceExpiryDate: '2028-06-30', manualHandlingExpiryDate: undefined, medicationCompetencyExpiryDate: undefined,
       workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: '2029-01-01',
     }))
     await waitFor(() => expect(announcement()).toHaveTextContent("Saved Sam Lee's first aid: expires 3 Oct 2027."))

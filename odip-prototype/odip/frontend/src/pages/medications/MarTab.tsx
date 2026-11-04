@@ -263,7 +263,7 @@ export default function MarTab() {
                           Record
                         </Button>
                       ) : (
-                        <span className="text-xs text-[var(--color-muted-foreground)]">Not recorded</span>
+                        <StatusBadge tone="neutral" label="Not recorded" />
                       )}
                     </div>
                   </div>

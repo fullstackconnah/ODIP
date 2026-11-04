@@ -14,7 +14,7 @@ import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
 const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockUseInbox, mockEndSession, mockUseModuleVisibility } = vi.hoisted(() => ({
-  mockUseModuleVisibility: vi.fn(() => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })),
+  mockUseModuleVisibility: vi.fn(() => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false })),
   mockEndSession: vi.fn(),
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
@@ -67,12 +67,12 @@ function renderAt(path: string) {
 describe('platform page finder', () => {
   beforeEach(() => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', fullName: 'Synthetic Coordinator' }))
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false })
   })
 
   afterEach(() => {
     localStorage.clear()
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false })
   })
 
   it('replaces inert entity search with a filter of existing permitted page destinations', () => {
@@ -99,7 +99,7 @@ describe('platform page finder', () => {
 
   it('does not advertise refused role destinations or explicitly hidden workspaces', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: false })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false }, isError: false })
     renderAt('/')
     fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
     const dialog = screen.getByRole('dialog', { name: 'Explore the platform' })
@@ -122,7 +122,7 @@ describe('platform page finder', () => {
   })
 
   it('keeps presentation-only workspaces discoverable when the current visibility answer fails', () => {
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: true })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false }, isError: true })
     renderAt('/')
     fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
     const dialog = screen.getByRole('dialog')
@@ -287,7 +287,7 @@ describe('AppLayout — Completions nav entry', () => {
 })
 
 describe('AppLayout — Payroll nav entry', () => {
-  afterEach(() => mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }))
+  afterEach(() => mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false }))
 
   it('hides Payroll until Employment Hero is connected', () => {
     renderAt('/rostering')
@@ -295,7 +295,7 @@ describe('AppLayout — Payroll nav entry', () => {
   })
 
   it('shows Payroll under Rostering once connected, linking to /rostering/payroll', () => {
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, employmentHeroConnected: true } as never, isError: false })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, employmentHeroConnected: true } as never, isError: false })
     renderAt('/rostering')
     expect(screen.getByRole('link', { name: /Payroll$/ })).toHaveAttribute('href', '/rostering/payroll')
   })
@@ -1477,10 +1477,10 @@ describe('AppLayout — the notifications bell is in the header for every role',
 
 
 describe('optional workspace recovery', () => {
-  afterEach(() => { mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }); localStorage.clear() })
+  afterEach(() => { mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false }); localStorage.clear() })
   it('moves hidden links into a discoverable disclosure and preserves the active deep link', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: false })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false }, isError: false })
     renderAt('/vehicles/v-1')
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const disclosure = within(nav).getByText('Other workspaces').closest('details')!
@@ -1491,9 +1491,24 @@ describe('optional workspace recovery', () => {
     expect(within(nav).getByRole('link', { name: /Schedule$/ })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: /Tasks$/ })).toBeInTheDocument()
   })
+  it('moves Trips and Bookings to Other workspaces when trips are off, and shows them again when the answer fails', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: true }, isError: false })
+    const view = renderAt('/')
+    const nav = screen.getByRole('navigation', { name: 'Main' })
+    const disclosure = within(nav).getByText('Other workspaces').closest('details')!
+    expect(within(disclosure).getByRole('link', { name: /Trips$/ })).toHaveAttribute('href', '/trips')
+    expect(within(disclosure).getByRole('link', { name: /Bookings$/ })).toHaveAttribute('href', '/bookings')
+    expect(within(nav).getByRole('link', { name: /Schedule$/ })).toBeInTheDocument()
+    view.unmount()
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: true }, isError: true })
+    renderAt('/trips')
+    expect(screen.queryByText('Other workspaces')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link', { name: /Trips$/ }).length).toBeGreaterThan(0)
+  })
   it('fails open on settings errors and never offers a worker forbidden recovery links', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: true })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false }, isError: true })
     renderAt('/portal')
     expect(screen.queryByText('Other workspaces')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Vehicles$/ })).not.toBeInTheDocument()

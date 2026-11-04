@@ -32,6 +32,7 @@ const isExpired = (date: string) => deadlineState(date, { warnDays: 0 }).status 
 const QUALIFICATIONS: Array<[keyof StaffListDto, string]> = [
   ['isDriverEligible', 'Driver'],
   ['isFirstAidQualified', 'First aid'],
+  ['isCprQualified', 'CPR'],
   ['isMedicationCompetent', 'Medication'],
   ['isManualHandlingCompetent', 'Manual handling'],
   ['isOvernightEligible', 'Overnight'],

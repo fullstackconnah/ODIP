@@ -8,12 +8,12 @@ import { SetupSteps } from './SetupSteps'
 const empty: SetupStatusDto = { staffCount: 0, participantCount: 0, participantsWithPlanCount: 0, firstPublishedWeekStart: null, hasInvoice: false, employmentHeroAvailable: false }
 const provider = (over: Partial<ProviderSettingsDto> = {}) => ({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW', ...over }) as ProviderSettingsDto
 
-function show(status: SetupStatusDto, prov: ProviderSettingsDto | null, role = 'Admin', card: 'steps' | 'done' = 'steps', onHide = () => {}) {
+function show(status: SetupStatusDto, prov: ProviderSettingsDto | null, role = 'Admin', card: 'steps' | 'done' = 'steps', onHide = () => {}, hiddenTrips?: boolean) {
   localStorage.setItem('odip_user', JSON.stringify({ role, tenantId: 't1' }))
   return render(
     <MemoryRouter>
       <div id="dashboard-alerts" tabIndex={-1} />
-      <SetupSteps status={status} provider={prov} card={card} onHide={onHide} />
+      <SetupSteps status={status} provider={prov} hiddenTrips={hiddenTrips} card={card} onHide={onHide} />
     </MemoryRouter>,
   )
 }
@@ -21,6 +21,28 @@ function show(status: SetupStatusDto, prov: ProviderSettingsDto | null, role = '
 const primaries = () => screen.queryAllByRole('link').filter((a) => a.className.includes('bg-[var(--color-primary)]'))
 
 beforeEach(() => localStorage.clear())
+
+describe('SetupSteps What you run row', () => {
+  it('is an optional first row that leaves "of 5" and the one primary alone, and is done only when trips are hidden', () => {
+    const view = show(empty, null, 'Admin', 'steps', () => {}, false)
+    expect(screen.getByText('0 of 5 done')).toBeInTheDocument()
+    const first = screen.getAllByRole('listitem')[0]
+    expect(within(first).getByText('What you run')).toBeInTheDocument()
+    expect(within(first).getByText('Optional')).toBeInTheDocument()
+    expect(within(first).getByText('Trips and holidays shown')).toBeInTheDocument()
+    expect(within(first).getByRole('link', { name: 'Choose what shows' })).toHaveAttribute('href', '/settings?section=workspace-visibility')
+    expect(primaries().map((a) => a.textContent)).toEqual(['Review details'])
+    view.unmount()
+    show(empty, null, 'Admin', 'steps', () => {}, true)
+    expect(screen.getByText('0 of 5 done')).toBeInTheDocument()
+    expect(screen.getByText('Trips and holidays hidden')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Choose what shows' })).toBeNull()
+  })
+  it('leaves the row out until the answer is known', () => {
+    show(empty, null)
+    expect(screen.queryByText('What you run')).toBeNull()
+  })
+})
 
 describe('SetupSteps', () => {
   it('0 of 5: Review details is the only primary; plans row says Add participants first with no action', () => {

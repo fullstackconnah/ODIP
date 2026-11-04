@@ -387,6 +387,10 @@ public sealed class RosterConflictService
             findings.Add(new RosterFinding(CredentialExpired, RosterFindingSeverity.Warning,
                 $"{staff.FullName}'s first aid certificate expired {Fmt(firstAid)}."));
 
+        if (staff.IsCprQualified && staff.CprExpiryDate is { } cpr && cpr < serviceDate)
+            findings.Add(new RosterFinding(CredentialExpired, RosterFindingSeverity.Warning,
+                $"{staff.FullName}'s CPR certificate expired {Fmt(cpr)}."));
+
         if (staff.IsDriverEligible && staff.DriverLicenceExpiryDate is { } licence && licence < serviceDate)
             findings.Add(new RosterFinding(CredentialExpired, RosterFindingSeverity.Warning,
                 $"{staff.FullName}'s driver licence expired {Fmt(licence)}."));
