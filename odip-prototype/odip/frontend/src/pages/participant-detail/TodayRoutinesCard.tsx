@@ -43,11 +43,12 @@ export function TodayRoutinesCard({ participantId }: { participantId: string }) 
           {today.slice(0, MAX_ROWS).map(r => (
             <li key={r.id} className="grid grid-cols-[7.5rem_1fr] gap-x-3 py-1">
               <span className="text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{formatRoutineTime(r.startTime, r.endTime)}</span>
-              <span className="flex flex-wrap items-center gap-1.5 text-sm min-w-0">
-                {r.isCritical && <AlertTriangle className="w-3.5 h-3.5 text-[var(--color-destructive)] shrink-0" aria-label="Critical" />}
-                <span className="break-words">{r.title}</span>
+              {/* Icon, title and pill share one inline run, so a long title wraps with the icon on its first line and the pill after its last word. */}
+              <span className="text-sm min-w-0 break-words">
+                {r.isCritical && <AlertTriangle className="inline w-3.5 h-3.5 mr-1.5 align-[-2px] text-[var(--color-destructive)]" aria-label="Critical" />}
+                <span>{r.title}</span>
                 {r.isCritical && (
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">Critical</span>
+                  <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] whitespace-nowrap">Critical</span>
                 )}
               </span>
             </li>
