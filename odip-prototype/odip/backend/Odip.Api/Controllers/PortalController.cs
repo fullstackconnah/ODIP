@@ -1422,6 +1422,8 @@ public class PortalController : ControllerBase
         // Never overwrite a previously-typed statement with null when the caller omits it.
         if (!string.IsNullOrWhiteSpace(dto?.StatementText))
             witness.StatementText = dto!.StatementText!.Trim();
+        // So an editor's form loaded before this answer is refused (409) instead of deleting it.
+        witness.IncidentReport!.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToIncidentWitnessRequestDto(witness)));

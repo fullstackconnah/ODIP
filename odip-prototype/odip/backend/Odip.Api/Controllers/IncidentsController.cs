@@ -758,12 +758,23 @@ public class IncidentsController : ControllerBase
         return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(incident.Id, ct)));
     }
 
+    /// <summary>Equal to the millisecond: Postgres keeps microseconds and a JS Date round trip keeps milliseconds. Unspecified (what the database hands back) reads as UTC.</summary>
+    private static bool SameMillisecond(DateTime a, DateTime b) =>
+        Utc(a).Ticks / TimeSpan.TicksPerMillisecond == Utc(b).Ticks / TimeSpan.TicksPerMillisecond;
+
+    private static DateTime Utc(DateTime d) => d.Kind == DateTimeKind.Local ? d.ToUniversalTime() : DateTime.SpecifyKind(d, DateTimeKind.Utc);
+
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<IncidentListDto>>> Update(Guid id, [FromBody] UpdateIncidentDto dto, CancellationToken ct)
     {
         var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
+
+        // A form loaded before someone else's change would delete what it never saw (a witness's statement, say), so refuse it.
+        // shortcut: check-then-save is not atomic (two PUTs inside one request's run both pass); upgrade = UpdatedAt.IsConcurrencyToken() on IncidentReport as at OdipDbContext.cs:1014 (needs a model-snapshot migration), mapping DbUpdateConcurrencyException to 409 in Update, the review action and archive.
+        if (dto.ExpectedUpdatedAt is { } expected && !SameMillisecond(expected, i.UpdatedAt))
+            return Conflict(ApiResponse<IncidentListDto>.Fail("Someone else changed this incident after you opened it. Cancel, then edit it again to see their changes."));
 
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
         if (crossFieldError != null)

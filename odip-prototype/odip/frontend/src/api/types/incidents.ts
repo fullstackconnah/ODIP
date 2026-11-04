@@ -245,6 +245,8 @@ export interface CreateIncidentDto {
 
 export interface UpdateIncidentDto extends CreateIncidentDto {
   status: IncidentStatus
+  /** The `updatedAt` string the form was loaded from, sent back untouched; a different stored one is a 409. Omit to skip the check (restore). */
+  expectedUpdatedAt?: string
   qscReportingStatus: QscReportingStatus
   /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   qscReportedAt?: string
@@ -312,6 +314,8 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     shiftId: i.shiftId ?? undefined,
     shiftNoteId: i.shiftNoteId ?? undefined,
     status: i.status,
+    // Restore reads a fresh GET and saves at once, so it skips the stale-form check.
+    expectedUpdatedAt: undefined,
     qscReportingStatus: i.qscReportingStatus,
     qscReportedAt: i.qscReportedAt ?? undefined,
     qscReferenceNumber: i.qscReferenceNumber ?? undefined,

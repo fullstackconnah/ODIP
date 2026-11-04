@@ -1140,6 +1140,52 @@ public class PortalControllerTests
         Assert.Equal("Wasn't actually there.", reloaded.StatementText);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RespondToIncidentWitnessRequest_StampsTheIncidentUpdatedAt(bool approve)
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        var before = DateTime.UtcNow.AddDays(-1);
+        incident.UpdatedAt = before;
+        db.SaveChanges();
+        var witness = SeedIncidentWitness(db, incident.Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        if (approve) await controller.ApproveIncidentWitnessRequest(witness.Id, null, CancellationToken.None);
+        else await controller.DeclineIncidentWitnessRequest(witness.Id, null, CancellationToken.None);
+
+        Assert.True((await db.IncidentReports.SingleAsync()).UpdatedAt > before);
+    }
+
+    [Fact]
+    public async Task Update_AfterTheWitnessApproved_WithTheUpdatedAtReadBefore_Returns409()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var incident = SeedIncident(db, reporter.Id);
+        incident.UpdatedAt = DateTime.UtcNow.AddDays(-1);
+        db.SaveChanges();
+        var witness = SeedIncidentWitness(db, incident.Id, myUser.Id);
+        var readBefore = incident.UpdatedAt; // what the editor form was loaded from
+        await MakeController(db, tenant.Object, myUser.Id).ApproveIncidentWitnessRequest(
+            witness.Id, new PortalRespondIncidentWitnessRequestDto("I saw it."), CancellationToken.None);
+
+        var result = await new IncidentsController(db).Update(incident.Id, new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = incident.IncidentType, Severity = incident.Severity,
+            Title = incident.Title, Description = incident.Description, IncidentDateTime = incident.IncidentDateTime,
+            Status = IncidentStatus.Draft, ExpectedUpdatedAt = readBefore,
+        }, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("I saw it.", (await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id)).StatementText);
+    }
+
     [Fact]
     public async Task ApproveIncidentWitnessRequest_NotTheNamedWitness_Returns404()
     {
