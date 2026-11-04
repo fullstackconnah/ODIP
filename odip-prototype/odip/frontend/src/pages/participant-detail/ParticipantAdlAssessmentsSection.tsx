@@ -151,6 +151,7 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
   return (
     <div className="space-y-6">
       <FixedListFrame
+        framed
         title="Daily living"
         rows={[...personal, ...communityDomestic]}
         isAnswered={(a) => a.level != null || !!a.notes?.trim()}

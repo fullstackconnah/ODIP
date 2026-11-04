@@ -513,6 +513,15 @@ export function useUpsertCompatibility() {
   })
 }
 
+/** Writes one pairing without refetching, for a caller that queues several and refreshes once (the matrix's bulk set). */
+export function useCompatibilityWriter() {
+  const qc = useQueryClient()
+  return {
+    put: (data: UpsertCompatibilityDto) => apiPut<CompatibilityRowDto>('/rostering/compatibility', data),
+    refresh: () => qc.invalidateQueries({ queryKey: ['roster-compatibility'] }),
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // SHARED ERROR HELPERS
 // ══════════════════════════════════════════════════════════════

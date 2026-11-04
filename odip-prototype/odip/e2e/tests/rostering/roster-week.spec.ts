@@ -20,7 +20,7 @@ test('a name on the board opens their week, and a shift there opens its editor i
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
   await page.getByRole('link', { name: `Pw ${participant.token}`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/participants/${participant.id}\\?tab=people&section=week&week=${mon}$`));
-  await expect(page.getByRole('tab', { name: /^Week/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: /^Roster & staff match/ })).toHaveAttribute('aria-selected', 'true');
   const worker = page.getByRole('link', { name: `Wk ${staff.token}`, exact: true });
   await expect(worker).toBeVisible();
 
