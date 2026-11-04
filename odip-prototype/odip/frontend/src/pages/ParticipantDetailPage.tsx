@@ -46,6 +46,7 @@ import { managementLabel } from '@/lib/fundingPlan'
 import { ServicesCard } from './participant-detail/ServicesCard'
 import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFlags'
 import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
+import { TodayRoutinesCard } from './participant-detail/TodayRoutinesCard'
 import BudgetTrackCard from './participant-detail/BudgetTrackCard'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
 import { useParticipantTabCounts } from './participant-detail/useParticipantTabCounts'
@@ -453,7 +454,10 @@ export default function ParticipantDetailPage() {
             </section>
           )}
           <div className="grid items-start gap-[var(--section-gap)] lg:grid-cols-2">
-            <BeforeYouStartCard participant={p} />
+            <div className="flex flex-col gap-[var(--section-gap)]">
+              <BeforeYouStartCard participant={p} />
+              <TodayRoutinesCard participantId={id!} />
+            </div>
             <div className="flex flex-col gap-[var(--section-gap)]">
               <BudgetTrackCard participantId={id!} />
               {topic('Support profile review', 'reviewDate')}

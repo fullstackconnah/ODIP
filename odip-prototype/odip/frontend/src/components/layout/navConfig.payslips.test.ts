@@ -14,8 +14,8 @@ function accessFor(role: string | null): NavAccess {
 const shape = (entries: ReturnType<typeof resolveNav>) =>
   entries.map(entry => (entry.kind === 'group' ? `${entry.group.label}: ${entry.children.map(child => child.label).join(' | ')}` : entry.leaf.label))
 
-const connected: ModuleVisibilityDto = { hiddenAccommodation: false, hiddenVehicles: false, employmentHeroConnected: true }
-const notConnected: ModuleVisibilityDto = { hiddenAccommodation: false, hiddenVehicles: false, employmentHeroConnected: false }
+const connected: ModuleVisibilityDto = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, employmentHeroConnected: true }
+const notConnected: ModuleVisibilityDto = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, employmentHeroConnected: false }
 const leaf = (to: string) => navLeaves.find(candidate => candidate.to === to)!
 
 afterEach(() => localStorage.clear())

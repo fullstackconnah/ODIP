@@ -56,7 +56,8 @@ export default function BudgetTrackCard({ participantId, poolCount = 0 }: { part
   }
 
   const series = query.data
-  if (series.chart === 'None') return null
+  // A reply with no scopes (an empty or unexpected body) draws nothing, like no chart.
+  if (series.chart === 'None' || !series.scopes) return null
   if (series.chart === 'NoPricing') {
     return <p data-chart-state="no-pricing" className="text-[13px] text-[var(--color-muted-foreground)]">The chart needs the price list for this plan's dates before it can be drawn.</p>
   }

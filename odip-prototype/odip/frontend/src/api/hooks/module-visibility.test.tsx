@@ -8,14 +8,14 @@ import { useModuleVisibility, useUpdateModuleVisibility } from './settings'
 const original = apiClient.defaults.adapter
 afterEach(() => { apiClient.defaults.adapter = original; localStorage.clear() })
 const wrapper = (client: QueryClient) => ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
-const visible = { hiddenAccommodation: false, hiddenVehicles: false }
+const visible = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }
 
 describe('tenant workspace visibility transport', () => {
   it('never displays another organisation cache while a new tenant is loading or fails', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    apiClient.defaults.adapter = async config => ({ data: { data: { hiddenAccommodation: true, hiddenVehicles: true } }, status: 200, statusText: 'OK', headers: {}, config })
+    apiClient.defaults.adapter = async config => ({ data: { data: { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false } }, status: 200, statusText: 'OK', headers: {}, config })
     const hook = renderHook(() => { const query = useModuleVisibility(); return { data: query.data, isError: query.isError } }, { wrapper: wrapper(client) })
     await waitFor(() => expect(hook.result.current.data?.hiddenVehicles).toBe(true))
     let reject!: (error: Error) => void
@@ -27,7 +27,7 @@ describe('tenant workspace visibility transport', () => {
     await waitFor(() => expect(client.getQueryState(['module-visibility', 'tenant-b'])?.status).toBe('error'))
     await waitFor(() => expect(hook.result.current.isError).toBe(true))
     expect(hook.result.current.data).toBeUndefined()
-    expect(client.getQueryData(['module-visibility', 'tenant-a'])).toEqual({ hiddenAccommodation: true, hiddenVehicles: true })
+    expect(client.getQueryData(['module-visibility', 'tenant-a'])).toEqual({ hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false })
   })
   it('sends only both visibility fields and immediately updates only the current tenant cache', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantId: 'tenant-a' }))
@@ -37,12 +37,12 @@ describe('tenant workspace visibility transport', () => {
     const requests: unknown[] = []
     apiClient.defaults.adapter = async config => {
       requests.push({ method: config.method, url: config.url, body: JSON.parse(config.data) })
-      return { data: { data: { hiddenAccommodation: true, hiddenVehicles: false } }, status: 200, statusText: 'OK', headers: {}, config }
+      return { data: { data: { hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: false } }, status: 200, statusText: 'OK', headers: {}, config }
     }
     const hook = renderHook(() => useUpdateModuleVisibility(), { wrapper: wrapper(client) })
-    await act(async () => { await hook.result.current.mutateAsync({ hiddenAccommodation: true, hiddenVehicles: false }) })
-    expect(requests).toEqual([{ method: 'put', url: '/settings/module-visibility', body: { hiddenAccommodation: true, hiddenVehicles: false } }])
-    expect(client.getQueryData(['module-visibility', 'tenant-a'])).toEqual({ hiddenAccommodation: true, hiddenVehicles: false })
+    await act(async () => { await hook.result.current.mutateAsync({ hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: false }) })
+    expect(requests).toEqual([{ method: 'put', url: '/settings/module-visibility', body: { hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: false } }])
+    expect(client.getQueryData(['module-visibility', 'tenant-a'])).toEqual({ hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: false })
     expect(client.getQueryData(['module-visibility', 'tenant-b'])).toEqual(visible)
   })
 })

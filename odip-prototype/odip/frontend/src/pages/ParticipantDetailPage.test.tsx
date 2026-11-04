@@ -1800,6 +1800,7 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     }
     const { unmount: overview } = renderAtTab('participant-1', 'overview')
     expect(document.getElementById('before-you-start')).not.toBeNull()
+    expect(screen.getByRole('region', { name: 'Today’s routines' })).toBeInTheDocument()
     overview()
     for (const [tab, ids] of Object.entries(inventory)) {
       // The strip has a sub-tab for every id (a row without a node, or a node without a row, fails here), and each id's panel holds its section.
