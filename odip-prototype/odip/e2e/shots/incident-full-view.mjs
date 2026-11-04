@@ -72,7 +72,8 @@ async function openPage(browser, vp, { role = 'Admin', username = 'dev.admin', i
   const puts = []
   let release
   const held = new Promise((res) => { release = res })
-  await page.route('**/api/v1/**', (r) => r.fulfill({ json: envelope([]) }))
+  // Anything not listed here goes to the mock API, which answers sign-in and the shell.
+  for (const glob of ['**/api/v1/trips*', '**/api/v1/restrictive-practices*', '**/api/v1/incidents/inc-1/status-history', '**/api/v1/participants/*/medications*']) await page.route(glob, (r) => r.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers(role, username) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role, username) }))
   await page.route('**/api/v1/provider-settings', (r) => r.fulfill({ json: envelope(provider) }))
@@ -92,7 +93,9 @@ async function openPage(browser, vp, { role = 'Admin', username = 'dev.admin', i
   await btn.click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
   await page.goto(`${BASE_URL}/incidents/inc-1`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.getByRole('heading', { level: 3 }).first().waitFor({ state: 'visible', timeout: 60_000 })
+  try { await page.getByRole('heading', { level: 3 }).first().waitFor({ state: 'visible', timeout: 30_000 }) } catch (e) {
+    throw new Error(`no card heading at ${page.url()}: ${(await page.locator('body').innerText()).replace(/s+/g, ' ').slice(0, 160)}`)
+  }
   await page.waitForTimeout(400)
   return { context, page, puts, release }
 }
@@ -281,7 +284,8 @@ for (const vp of VPS) {
       await page.waitForTimeout(300)
       await noHScroll(page, t(`edit-${name}`))
       if (name === 'who' && !phone) {
-        await page.getByLabel('Incident Type').selectOption({ value: 'Other' })
+        await page.getByLabel('Incident Type *', { exact: true }).click()
+        await page.getByRole('option', { name: /^Other/ }).click()
         const note = page.getByText('Changing the type from Injury removes the recorded injuries when you save.')
         check(t('type change Injury to Other shows the removal warning'), await note.isVisible(), await note.count())
       }
