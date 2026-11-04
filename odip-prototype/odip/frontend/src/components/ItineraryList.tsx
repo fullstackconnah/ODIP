@@ -9,7 +9,7 @@ const columns: Column<ItineraryRow>[] = [
     render: r => (
       <>
         <span>{r.when}</span>
-        {r.time && <span className="md:block text-xs text-[var(--color-muted-foreground)]"> {r.time}</span>}
+        {r.time && <>{' '}<span className="md:block text-xs text-[var(--color-muted-foreground)]">{r.time}</span></>}
       </>
     ),
   },

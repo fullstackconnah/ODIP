@@ -66,6 +66,16 @@ describe('ItineraryTab — By day | List', () => {
     expect(screen.getByRole('radio', { name: 'List' })).toBeChecked()
   })
 
+  it('separates the date from the time with a text space (phone meta line)', () => {
+    renderTab()
+    fireEvent.click(screen.getByRole('radio', { name: 'List' }))
+    const cells = screen.getAllByText('Fri 06/11').map(d => d.parentElement?.textContent ?? '')
+    expect(cells.some(t => /^Fri 06\/11 \d/.test(t))).toBe(true)
+    // a space inside the time span collapses at the start of an inline run, so it must sit between the spans
+    const time = screen.getAllByText('Fri 06/11')[0].nextElementSibling
+    expect(time?.textContent).toBe(time?.textContent?.trim())
+  })
+
   it('falls back to By day on a garbage stored value', () => {
     localStorage.setItem('odip.itinerary.view', 'x')
     renderTab()
