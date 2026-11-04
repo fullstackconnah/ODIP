@@ -20,11 +20,12 @@ const h = vi.hoisted(() => ({
   checkRoutineMutateAsync: vi.fn(),
   uncheckRoutineMutateAsync: vi.fn(),
   recordMutateAsync: vi.fn(),
+  saveReasonMutateAsync: vi.fn(),
   mutation: (fn: unknown) => () => ({ mutateAsync: fn, isPending: false }),
 }))
 const {
   mockUsePortalShiftDetail, mockUseShiftNotes, startMutateAsync, finishMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync,
-  editBreakMutateAsync, deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync,
+  editBreakMutateAsync, deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync,
 } = h
 
 vi.mock('@/api/hooks', () => ({
@@ -40,6 +41,7 @@ vi.mock('@/api/hooks', () => ({
   useCheckRoutine: h.mutation(h.checkRoutineMutateAsync),
   useUncheckRoutine: h.mutation(h.uncheckRoutineMutateAsync),
   useRecordShiftDose: h.mutation(h.recordMutateAsync),
+  useSaveLocationReason: h.mutation(h.saveReasonMutateAsync),
   useStaff: () => ({ data: [] }),
 }))
 
@@ -198,7 +200,8 @@ function makeCompletion(overrides: Partial<NonNullable<PortalShiftDetailDto['com
 
 beforeEach(() => {
   for (const fn of [startMutateAsync, finishMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync, editBreakMutateAsync,
-    deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync]) fn.mockReset().mockResolvedValue(undefined)
+    deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync]) fn.mockReset().mockResolvedValue(undefined)
+  Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
   mockUsePortalShiftDetail.mockReset()
   mockUseShiftNotes.mockReset().mockReturnValue({ data: [] })
   localStorage.removeItem('odip_user')
@@ -208,6 +211,7 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.removeItem('odip_user')
   vi.unstubAllGlobals()
+  Reflect.deleteProperty(window, 'isSecureContext')
   // @ts-expect-error - test-only cleanup of a property the suites define per-test
   delete global.navigator.geolocation
 })
@@ -215,16 +219,20 @@ afterEach(() => {
 function grantGeolocation(latitude = -27.5, longitude = 153.02) {
   Object.defineProperty(global.navigator, 'geolocation', {
     configurable: true,
-    value: { getCurrentPosition: (success: (pos: unknown) => void) => success({ coords: { latitude, longitude } }) },
+    value: { getCurrentPosition: (success: (pos: unknown) => void) => success({ coords: { latitude, longitude, accuracy: 12 } }) },
   })
 }
 
 function declineGeolocation() {
   Object.defineProperty(global.navigator, 'geolocation', {
     configurable: true,
-    value: { getCurrentPosition: (_success: unknown, error: (err: unknown) => void) => error(new Error('User denied Geolocation')) },
+    value: { getCurrentPosition: (_success: unknown, error: (err: unknown) => void) => error({ code: 1 }) },
   })
 }
+
+const AT_LIBRARY = { name: 'Southside Library', address: null }
+/** A shift at a saved place: the only kind of Start that asks the phone where it is. */
+const placed = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ serviceLocation: AT_LIBRARY, ...over })
 
 
 const noteWith = (over: Record<string, unknown> = {}) => ({
@@ -312,24 +320,144 @@ describe('PortalShiftDetailPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/loading shift/i)
   })
 
-  it('starts the shift with a geolocation stamp when permission is granted', async () => {
+  it('starts a shift at a place with the phone fix and its accuracy', async () => {
     grantGeolocation(-27.5, 153.02)
-    show(makeDetail())
+    show(placed())
     fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
-    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { latitude: -27.5, longitude: 153.02, geolocationDeclined: false } }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { latitude: -27.5, longitude: 153.02, accuracyMetres: 12, geolocationDeclined: false } }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('starts the shift with geolocationDeclined when permission is denied', async () => {
-    declineGeolocation()
+  it('never asks the phone where it is when the shift has no service location', async () => {
+    const ask = vi.fn()
+    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: ask } })
     show(makeDetail())
     fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
-    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: false } }))
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('opens the no-fix sheet before Start when permission is denied, and does not start yet', async () => {
+    declineGeolocation()
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog', { name: "We couldn't check your location" })
+    expect(within(sheet).getByText('Location is turned off for Bunya Support on this phone.')).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(startMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('starts from the no-fix sheet as declined, carrying the typed reason', async () => {
+    declineGeolocation()
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog', { name: "We couldn't check your location" })
+    fireEvent.change(within(sheet).getByLabelText('Tell your coordinator why (optional)'), { target: { value: '  Phone location is off  ' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Start shift' }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true, locationReason: 'Phone location is off' } }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('starts from the no-fix sheet with no reason when none is typed', async () => {
+    declineGeolocation()
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Start shift' }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true, locationReason: null } }))
+  })
+
+  it('Try again asks the phone once more and starts with the fix when it answers', async () => {
+    declineGeolocation()
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog')
+    grantGeolocation(-27.5, 153.02)
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { latitude: -27.5, longitude: 153.02, accuracyMetres: 12, geolocationDeclined: false } }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('the insecure sheet says why and offers no Try again', async () => {
+    Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true })
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog', { name: "We couldn't check your location" })
+    expect(within(sheet).getByText("This web address can't use your location. Open Bunya Support from your usual secure link next time.")).toBeInTheDocument()
+    expect(within(sheet).queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Start shift' })).toBeEnabled()
+  })
+
+  it('Escape closes the no-fix sheet and the shift stays not started', async () => {
+    declineGeolocation()
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    await screen.findByRole('dialog')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(startMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('opens the off-site sheet after Start when the server says not at the location, and Send saves the note', async () => {
+    grantGeolocation()
+    startMutateAsync.mockResolvedValue({ serviceLocation: AT_LIBRARY, completion: { locationCheck: 'NotAtLocation', locationDistanceMetres: 850 } })
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog', { name: "You're about 850 m from Southside Library" })
+    expect(within(sheet).getByText("Your shift has started. Let your coordinator know why you're starting here.")).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Send' })).toBeDisabled()
+    fireEvent.change(within(sheet).getByRole('textbox'), { target: { value: ' Parked round the corner ' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(saveReasonMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', reason: 'Parked round the corner' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('Skip closes the off-site sheet without saving a note, and a far distance reads in kilometres', async () => {
+    grantGeolocation()
+    startMutateAsync.mockResolvedValue({ serviceLocation: AT_LIBRARY, completion: { locationCheck: 'NotAtLocation', locationDistanceMetres: 1200 } })
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog', { name: "You're about 1.2 km from Southside Library" })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Skip' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(saveReasonMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('a failed Send keeps the off-site sheet open and says so', async () => {
+    grantGeolocation()
+    startMutateAsync.mockResolvedValue({ serviceLocation: AT_LIBRARY, completion: { locationCheck: 'NotAtLocation', locationDistanceMetres: 850 } })
+    saveReasonMutateAsync.mockRejectedValue(new Error('offline'))
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    const sheet = await screen.findByRole('dialog')
+    fireEvent.change(within(sheet).getByRole('textbox'), { target: { value: 'Parked away' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Send' }))
+    expect(await within(sheet).findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it.each(['AtLocation', 'Unavailable', 'NoLocationSet'])('opens no sheet after Start when the check says %s', async check => {
+    grantGeolocation()
+    startMutateAsync.mockResolvedValue({ serviceLocation: AT_LIBRARY, completion: { locationCheck: check, locationDistanceMetres: 40 } })
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalled())
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('opens no sheet when the Start was queued offline (nothing came back)', async () => {
+    grantGeolocation()
+    show(placed())
+    fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalled())
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('fires Start once when tapped twice while the location is still being asked for', async () => {
     const answers: Array<(pos: unknown) => void> = []
     Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: (success: (pos: unknown) => void) => { answers.push(success) } } })
-    show(makeDetail())
+    show(placed())
     const start = screen.getByRole('button', { name: /start shift/i })
     fireEvent.click(start)
     fireEvent.click(start)
@@ -340,15 +468,16 @@ describe('PortalShiftDetailPage', () => {
     expect(startMutateAsync).toHaveBeenCalledTimes(1)
   })
 
-  it('starts the shift as declined after 10 s when the browser never answers the location prompt', async () => {
+  it('opens the no-fix sheet (timeout) after 10 s when the browser never answers the location prompt', async () => {
     vi.useFakeTimers()
     try {
       Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: () => {} } })
-      show(makeDetail())
+      show(placed())
       fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
       expect(screen.getByRole('button', { name: /starting/i })).toBeDisabled()
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
-      expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } })
+      expect(screen.getByText('Your phone took too long to find you.')).toBeInTheDocument()
+      expect(startMutateAsync).not.toHaveBeenCalled()
       expect(screen.queryByRole('button', { name: /starting/i })).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
@@ -575,8 +704,9 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(screen.queryByText('Due now')).not.toBeInTheDocument()
   })
 
-  it('with nothing to do every step is one tap, and Submit sends every key', async () => {
-    grantGeolocation()
+  it('with nothing to do every step is one tap, and Submit sends every key and never asks for a location', async () => {
+    const ask = vi.fn()
+    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: ask } })
     show(inProgress())
     toSubmit()
     expect(heading('Check and submit')).toBeInTheDocument()
@@ -584,11 +714,11 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
-        latitude: -27.5, longitude: 153.02, geolocationDeclined: false,
         actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
         handoverText: null, nothingToHandOver: true, nothingToNote: true,
       },
     }))
+    expect(ask).not.toHaveBeenCalled()
   })
 
   it('sends a written handover trimmed, limited to 2000 characters, and the No answer', async () => {
@@ -607,7 +737,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
-        geolocationDeclined: true, actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: false,
+        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: false,
         handoverText: 'All settled.', nothingToHandOver: false, nothingToNote: false,
       },
     }))
@@ -1097,7 +1227,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
-        geolocationDeclined: true, actualStart: '2026-08-16T22:55:00Z', actualEnd: '2026-08-17T06:50:00Z',
+        actualStart: '2026-08-16T22:55:00Z', actualEnd: '2026-08-17T06:50:00Z',
         timeAdjustmentReason: 'Arrived early, left at ten to five.', kilometres: 12.5, anythingToReport: null,
         handoverText: null, nothingToHandOver: true, nothingToNote: true,
       },
@@ -1114,7 +1244,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
-        geolocationDeclined: true, actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: 0, anythingToReport: null,
+        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: 0, anythingToReport: null,
         handoverText: null, nothingToHandOver: true, nothingToNote: true,
       },
     }))
@@ -1475,7 +1605,6 @@ describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
-        latitude: -27.5, longitude: 153.02, geolocationDeclined: false,
         actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
         handoverText: null, nothingToHandOver: true, nothingToNote: true,
       },

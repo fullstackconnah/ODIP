@@ -84,6 +84,22 @@ describe('offline queue', () => {
     ])
   })
 
+  it('a queued Start never keeps the phone fix; the reason stays', () => {
+    const q = make()
+    const r = q.enqueue(rec('start', { body: { latitude: -27.46977, longitude: 153.02512, accuracyMetres: 12, geolocationDeclined: false, locationReason: 'Parked round the corner' }, clientTimeField: 'startedAt' }))
+    expect(r.body).toEqual({ geolocationDeclined: false, locationReason: 'Parked round the corner' })
+    expect(JSON.stringify(localStorage)).not.toMatch(/27\.46977|153\.02512/)
+  })
+
+  it('a live Start with a lost response is queued without the fix, and the live send still had it', async () => {
+    const q = make()
+    online = true
+    answer = () => ({ kind: 'offline' })
+    const out = await q.sendOrQueue(rec('start', { body: { latitude: -27.5, longitude: 153.02, accuracyMetres: 9, geolocationDeclined: false }, clientTimeField: 'startedAt' }))
+    expect(sent[0].body).toMatchObject({ latitude: -27.5, longitude: 153.02, accuracyMetres: 9 })
+    expect(out.queued && out.record.body).toEqual({ geolocationDeclined: false })
+  })
+
   it('live attempt with a lost response, then replay reuses the same id', async () => {
     const q = make()
     online = true

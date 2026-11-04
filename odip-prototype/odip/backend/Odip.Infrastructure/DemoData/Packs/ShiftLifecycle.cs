@@ -86,14 +86,6 @@ internal static class ShiftLifecycle
             UpdatedAt = submittedAt,
         };
 
-        if (geo >= 2)
-        {
-            // Around the provider's office, a few hundred metres apart: plausible, and nowhere real.
-            completion.StartLatitude = -33.8688m + DemoIds.Pick(id, "lat-start", -30, 30) / 1000m;
-            completion.StartLongitude = 151.2093m + DemoIds.Pick(id, "lon-start", -30, 30) / 1000m;
-            completion.EndLatitude = -33.8688m + DemoIds.Pick(id, "lat-end", -30, 30) / 1000m;
-            completion.EndLongitude = 151.2093m + DemoIds.Pick(id, "lon-end", -30, 30) / 1000m;
-        }
         return completion;
     }
 

@@ -6853,12 +6853,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<decimal?>("EndLatitude")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("EndLongitude")
-                        .HasColumnType("numeric");
-
                     b.Property<bool>("GeolocationDeclined")
                         .HasColumnType("boolean");
 
@@ -6872,6 +6866,22 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<decimal?>("Kilometres")
                         .HasPrecision(6, 1)
                         .HasColumnType("numeric(6,1)");
+
+                    b.Property<int?>("LocationAccuracyMetres")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LocationCheck")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LocationCheckedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("LocationDistanceMetres")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LocationReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
 
                     b.Property<bool>("NothingToHandOver")
                         .HasColumnType("boolean");
@@ -6917,12 +6927,6 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("ShiftId")
                         .HasColumnType("uuid");
-
-                    b.Property<decimal?>("StartLatitude")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("StartLongitude")
-                        .HasColumnType("numeric");
 
                     b.Property<bool>("StartWasManual")
                         .HasColumnType("boolean");

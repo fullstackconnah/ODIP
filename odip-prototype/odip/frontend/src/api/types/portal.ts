@@ -209,18 +209,26 @@ export interface PortalServiceLocationDto {
 
 /** POST portal/shifts/{id}/start body. */
 export interface StartShiftDto {
+  /** The phone's fix, sent for the server to compare with the place and then drop: it is never stored, and never queued offline. */
   latitude?: number | null
   longitude?: number | null
+  accuracyMetres?: number | null
   geolocationDeclined: boolean
+  /** The worker's note when no fix was found (at most 300 characters; the server cuts longer). */
+  locationReason?: string | null
+}
+
+/** POST portal/shifts/{id}/location-reason body: the note after an off-site Start. */
+export interface LocationReasonDto {
+  reason: string | null
 }
 
 /** POST portal/shifts/{id}/finish body. `actualStart` is supplied only on the manual-start path
  * (Start was skipped) — see the design spec §3; the PR2 UI never sends it (no dedicated control
  * for that path), but the field is modelled for contract completeness. */
 export interface FinishShiftDto {
-  latitude?: number | null
-  longitude?: number | null
-  geolocationDeclined: boolean
+  /** Finish no longer asks for a location (owner, 2026-11-04); kept only so an old queued body still type-checks. */
+  geolocationDeclined?: boolean
   /** While the shift is in progress, the worker's corrected start, a UTC instant with Z, within 15 minutes of the stamp with a reason; on the manual-start path the real start. Null keeps the stamp. */
   actualStart?: string | null
   /** The worker's corrected end, a UTC instant with Z: up to 15 minutes before the Finish instant, with a reason. Null keeps the Finish instant. */
