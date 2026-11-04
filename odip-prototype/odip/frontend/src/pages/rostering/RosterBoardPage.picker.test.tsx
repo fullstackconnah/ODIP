@@ -288,13 +288,21 @@ describe('RosterBoardPage: the picker lists who is available that day', () => {
     expect(within(option(/^Kim Lee/)).getByText('Prefers this day')).toBeInTheDocument()
   })
 
-  it('makes the first Available row the active one on ArrowDown', async () => {
+  it('makes the first Available row the active one on ArrowDown, ahead of someone free with no record', async () => {
     const user = userEvent.setup()
-    withDays([{ staffId: 'staff-6', date: '2026-08-18', preferred: false }])
-    renderPage()
-    await user.click(screen.getByRole('button', { name: TUE_PLUS }))
-    await user.keyboard('{ArrowDown}')
-    expect(option(/^Kim Lee/)).toHaveAttribute('aria-selected', 'true')
+    h.staff.push({ id: 'staff-7', fullName: 'Abe Ray', isActive: true, region: 'North', hasExpiredQualifications: false })   // free at that time, no Available record
+    try {
+      withDays([{ staffId: 'staff-6', date: '2026-08-18', preferred: false }])
+      renderPage()
+      await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+      expect(groupLabels(picker())).toEqual(['Available that day', 'Free at this time', 'On another shift at this time', 'On leave that day'])
+      await user.keyboard('{ArrowDown}')
+      const active = option(/^Kim Lee/)
+      expect(active).toHaveAttribute('aria-selected', 'true')
+      const group = active.closest('[role="group"]') as HTMLElement
+      expect(document.getElementById(group.getAttribute('aria-labelledby') ?? '')).toHaveTextContent('Available that day')
+      expect(option(/^Abe Ray/)).toHaveAttribute('aria-selected', 'false')
+    } finally { h.staff.pop() }
   })
 
   it('draws no Available group when no days are sent', async () => {

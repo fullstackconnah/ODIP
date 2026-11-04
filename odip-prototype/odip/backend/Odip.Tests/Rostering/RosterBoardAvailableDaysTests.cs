@@ -4,6 +4,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -58,6 +59,33 @@ public class RosterBoardAvailableDaysTests
 
         Assert.Equal(new[] { Monday, Monday.AddDays(1) }, days.Select(d => d.Date));
         Assert.All(days, d => { Assert.Equal(samId, d.StaffId); Assert.True(d.Preferred); });
+    }
+
+    [Fact]
+    public async Task TheMondayAfterTheWeek_IsReturned_UnlessTheyAreOnLeaveThatDay()   // the picker checks a Sunday overnight shift against it
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var mondayAfter = Monday.AddDays(7);
+        Guid samId, leaveId;
+        using (var db = TestDb.Create(dbName))
+        {
+            var sam = Worker(db, TenantA, "Sam");
+            var lee = Worker(db, TenantA, "Lee");
+            Marked(db, sam.Id, AvailabilityType.Available, mondayAfter, mondayAfter);
+            Marked(db, lee.Id, AvailabilityType.Available, mondayAfter, mondayAfter);
+            db.LeaveRequests.Add(new LeaveRequest
+            {
+                Id = Guid.NewGuid(), TenantId = TenantA, UserId = lee.Id, LeaveType = LeaveType.Annual, StartDate = mondayAfter, EndDate = mondayAfter,
+                Status = LeaveStatus.Approved, RequestedByUserId = lee.Id, RequestedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            samId = sam.Id; leaveId = lee.Id;
+        }
+
+        var days = (await BoardAsync(dbName, TenantA, "participant")).StaffAvailableDays;
+
+        Assert.Contains(days, d => d.StaffId == samId && d.Date == mondayAfter);
+        Assert.DoesNotContain(days, d => d.StaffId == leaveId);
     }
 
     [Fact]
