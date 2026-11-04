@@ -346,7 +346,7 @@ describe('StaffPage — restoring an archived staff member', () => {
   it('sends the staff record\'s fields with isActive true, and none of the list-only fields', async () => {
     const user = userEvent.setup()
     mockUseStaff.mockReturnValue({
-      data: [makeStaff({ id: 's9', isActive: false, mobile: '0400 111 222', driverLicenceExpiryDate: '2027-03-01', isDriverEligible: true })],
+      data: [makeStaff({ id: 's9', isActive: false, mobile: '0400 111 222', driverLicenceExpiryDate: '2027-03-01', isDriverEligible: true, employmentType: 'Casual' })],
       isLoading: false,
     })
     renderPage()
@@ -361,7 +361,7 @@ describe('StaffPage — restoring an archived staff member', () => {
     expect(id).toBe('s9')
     expect(data).toMatchObject({
       firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com', role: 'SupportWorker', position: 'SupportWorker', region: 'North',
-      mobile: '0400 111 222', isDriverEligible: true, driverLicenceExpiryDate: '2027-03-01', isActive: true,
+      mobile: '0400 111 222', isDriverEligible: true, driverLicenceExpiryDate: '2027-03-01', isActive: true, employmentType: 'Casual',
     })
     expect(data.notes).toBeUndefined()
     for (const listOnly of ['id', 'fullName', 'username', 'hasExpiredQualifications']) expect(data).not.toHaveProperty(listOnly)

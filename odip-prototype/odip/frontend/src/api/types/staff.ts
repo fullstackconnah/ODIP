@@ -58,6 +58,7 @@ export interface CreateStaffDto {
   addressConfirmed?: boolean
   role: UserRole
   position: Position
+  employmentType?: EmploymentType | null
   mobile?: string
   region?: string
   isDriverEligible: boolean
@@ -199,6 +200,7 @@ export function toUpdateStaffDto(row: StaffListDto, patch: Partial<UpdateStaffDt
     email: row.email ?? '',
     role: row.role,
     position: row.position,
+    employmentType: row.employmentType,
     mobile: row.mobile ?? undefined,
     region: row.region ?? undefined,
     isDriverEligible: row.isDriverEligible,

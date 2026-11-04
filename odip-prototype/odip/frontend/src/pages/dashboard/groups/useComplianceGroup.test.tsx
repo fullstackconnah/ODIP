@@ -10,7 +10,7 @@ vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<ty
 
 const TODAY = '2026-10-14'
 const member = (o: Record<string, unknown> = {}) => ({
-  id: 's1', firstName: 'Sam', lastName: 'Lee', fullName: 'Sam Lee', role: 'SupportWorker', position: 'SupportWorker', email: 'sam@example.com',
+  id: 's1', firstName: 'Sam', lastName: 'Lee', fullName: 'Sam Lee', role: 'SupportWorker', position: 'SupportWorker', employmentType: 'PartTime', email: 'sam@example.com',
   mobile: '0400 000 000', region: 'Brisbane', isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false,
   isOvernightEligible: false, isActive: true, notes: 'Prefers mornings.', firstAidExpiryDate: '2026-10-03', driverLicenceExpiryDate: null,
   manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: '2099-01-01', ...o,
@@ -74,9 +74,9 @@ describe('Staff compliance group — Update expiry', () => {
     fireEvent.change(field, { target: { value: '2027-10-03' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // The WHOLE body, written out field by field (toUpdateStaffDto's 20 fields): the PUT rewrites the staff record, so nothing may be dropped.
+    // The WHOLE body, written out field by field (toUpdateStaffDto's 22 fields): the PUT rewrites the staff record, so nothing may be dropped.
     await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/staff/s1', {
-      firstName: 'Sam', lastName: 'Lee', email: 'sam@example.com', role: 'SupportWorker', position: 'SupportWorker',
+      firstName: 'Sam', lastName: 'Lee', email: 'sam@example.com', role: 'SupportWorker', position: 'SupportWorker', employmentType: 'PartTime',
       mobile: '0400 000 000', region: 'Brisbane',
       isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true,
       notes: 'Prefers mornings.',
