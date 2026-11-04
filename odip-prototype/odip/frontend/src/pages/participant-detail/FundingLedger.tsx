@@ -256,8 +256,8 @@ function PeriodStrip({ pool, selectedId, onSelect }: { pool: LedgerPool; selecte
                   labelled not confirmed here, in the cell it contributes to, as visible text. */}
               <span className="text-xs text-[var(--color-muted-foreground)] tabular-nums">
                 {pool.hasSetAside
-                  ? `${money(period.limit)} set aside${period.carried > 0 ? `, plus ${money(period.carried)} rolled over, not confirmed` : ''}`
-                  : `${money(period.limit)} from the plan${period.carried > 0 ? `, plus ${money(period.carried)} rolled over, not confirmed` : ''}`}
+                  ? `${money(period.limit)} set aside${period.carried > 0 ? `, plus ${money(period.carried)} rolled over${period.carriedSetByHand ? ' (set by hand)' : ', not confirmed'}` : ''}`
+                  : `${money(period.limit)} from the plan${period.carried > 0 ? `, plus ${money(period.carried)} rolled over${period.carriedSetByHand ? ' (set by hand)' : ', not confirmed'}` : ''}`}
               </span>
               <span className="text-xs text-[var(--color-muted-foreground)] tabular-nums">
                 {money(period.available)} available

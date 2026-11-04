@@ -105,6 +105,8 @@ export type BudgetRiskRow = {
   available: BudgetAmount
   /** How much of `available` is rolled over from earlier periods (the server's figure): not confirmed, because somebody else may have used it. 0 when none. */
   carried: BudgetAmount
+  /** `carried` was typed into the funding plan rather than worked out (the server's word). */
+  carriedSetByHand?: boolean
   /** What has been used against it: claimed plus pending. */
   used: BudgetAmount
   /** Available minus used, the server's: what is left, or, below zero, how far over the period already is. Nothing here subtracts. */
@@ -157,6 +159,10 @@ export type AgreementBudgetLine = {
   periodEnd: string
   /** What the agreement costs in this period. */
   cost: BudgetAmount
+  /** What rolled into this period from the one before (the server's figure); absent or 0 when nothing did. */
+  carriedIn?: number
+  /** `carriedIn` was typed into the funding plan rather than worked out. */
+  carriedSetByHand?: boolean
   /** What the period has left: available minus used. May be below zero. */
   remaining: BudgetAmount
   /** The server's verdict for this line: it fits, or it passes what is left by `overBy`. */

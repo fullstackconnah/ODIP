@@ -120,8 +120,8 @@ function UnpricedMark({ count }: { count: number }) {
  * words for a screen reader and a pointer, with the amount in the name; the line under the table says what it is for everybody else. It replaced a note under every such figure, which made those
  * rows two to three lines taller than the row token. Only ever drawn for a viewer who may see the figure, so it can say the amount.
  */
-function RolledOverMark({ amount }: { amount: number }) {
-  const words = rolledOverLabel(formatCurrency(amount))
+function RolledOverMark({ amount, setByHand }: { amount: number; setByHand: boolean }) {
+  const words = rolledOverLabel(formatCurrency(amount), setByHand)
   return (
     <span role="img" aria-label={words} title={words} className="mr-1 inline-flex align-middle text-[var(--color-muted-foreground)]">
       <CornerDownRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -183,7 +183,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
         >
           {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so, by a mark. The mark
               is BEFORE the figure: in a right-aligned money column a mark after it pushes the digits left of an unmarked row's, and the column no longer lines up on the decimal point. */}
-          {row.figures.visible && row.carried !== null && row.carried > 0 && <RolledOverMark amount={row.carried} />}
+          {row.figures.visible && row.carried !== null && row.carried > 0 && <RolledOverMark amount={row.carried} setByHand={row.carriedSetByHand === true} />}
           <BudgetFigure
             figures={row.figures}
             amount={row.available}

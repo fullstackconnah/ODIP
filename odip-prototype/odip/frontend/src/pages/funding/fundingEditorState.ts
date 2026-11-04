@@ -19,6 +19,8 @@ export interface EditorPeriod {
   planAmount: string
   /** '' = none. A pool has a set-aside on every period or on none. */
   setAside: string
+  /** The rolled-over amount typed by hand. '' = the ledger works it out. Never on a pool's first period. */
+  rollover: string
 }
 
 export interface EditorPool {
@@ -141,6 +143,7 @@ export function editorStateFromPlan(plan: FundingPlanDto): EditorState {
       setAsideZeroConfirmed: pool.setAsideTotal === 0,
       periods: pool.periods.map(period => ({
         periodStart: period.periodStart, periodEnd: period.periodEnd, planAmount: moneyText(period.planAmount), setAside: period.setAside === undefined ? '' : moneyText(period.setAside),
+        rollover: period.rolloverOverride === undefined ? '' : moneyText(period.rolloverOverride),
       })),
       edited: true, fromPlan: true, touched: false, setAsideByHand: pool.periods.some(period => period.setAside !== undefined),
     })),
@@ -165,6 +168,7 @@ export function proposedPeriods(state: Pick<EditorState, 'planStart' | 'planEnd'
     periodStart: period.periodStart, periodEnd: period.periodEnd,
     planAmount: total === null ? '' : moneyText(period.planAmount),
     setAside: setAside === null || period.setAside === undefined ? '' : moneyText(period.setAside),
+    rollover: '',   // a new period shape has no meaning for an old override
   }))
 }
 
@@ -275,7 +279,7 @@ function agreeSetAside(before: EditorPool, next: EditorPool): EditorPool {
 }
 
 /** A period's amount changed by hand: the pool's periods stop following the typed totals, and a set-aside typed into a period is the person's own from then on. */
-export function withPeriodEdit(state: EditorState, key: string, index: number, patch: Partial<Pick<EditorPeriod, 'planAmount' | 'setAside'>>): EditorState {
+export function withPeriodEdit(state: EditorState, key: string, index: number, patch: Partial<Pick<EditorPeriod, 'planAmount' | 'setAside' | 'rollover'>>): EditorState {
   return {
     ...state,
     pools: state.pools.map(pool => (pool.key !== key
@@ -353,7 +357,7 @@ export interface PoolProblems {
   total?: string
   setAside?: string
   /** By period index. */
-  periods: Record<number, { planAmount?: string; setAside?: string }>
+  periods: Record<number, { planAmount?: string; setAside?: string; rollover?: string }>
   general: string[]
 }
 
@@ -384,6 +388,15 @@ function amountProblem(text: string, required: boolean, requiredMessage: string)
   const value = moneyOf(text)
   if (value === null) return NOT_AN_AMOUNT
   return value > MAX_AMOUNT ? TOO_LARGE : undefined
+}
+
+/** The server's rules for a rolled-over amount, said beside the box: an amount, at most the ceiling, and not on the pool's first period. */
+function rolloverProblem(text: string, index: number): string | undefined {
+  if (isBlank(text)) return undefined
+  if (index === 0) return 'Nothing rolls over into the first period.'
+  const value = moneyOf(text)
+  if (value === null) return NOT_AN_AMOUNT
+  return value > MAX_AMOUNT ? 'The most a rolled-over amount can be is $99,999,999.99.' : undefined
 }
 
 function dayProblem(text: string, missing: string): string | undefined {
@@ -421,14 +434,15 @@ export function validate(state: EditorState): Problems {
     if (typeof state.periodLengthMonths === 'number') {
       const anySetAside = pool.periods.some(period => !isBlank(period.setAside))
       pool.periods.forEach((period, index) => {
-        const row: { planAmount?: string; setAside?: string } = {}
+        const row: { planAmount?: string; setAside?: string; rollover?: string } = {}
         row.planAmount = amountProblem(period.planAmount, true, 'Enter an amount.')
         if (anySetAside && isBlank(period.setAside)) row.setAside = 'Give a set-aside for every period, or for none.'
         else row.setAside = amountProblem(period.setAside, false, '')
         const planValue = moneyOf(period.planAmount)
         const asideValue = moneyOf(period.setAside)
         if (!row.setAside && planValue !== null && asideValue !== null && toCents(asideValue) > toCents(planValue)) row.setAside = 'More than the plan amount.'
-        if (row.planAmount || row.setAside) found.periods[index] = row
+        row.rollover = rolloverProblem(period.rollover, index)
+        if (row.planAmount || row.setAside || row.rollover) found.periods[index] = row
       })
       const sums = poolSums(pool)
       if (!found.setAside && sums.setAsideMissing) found.general.push(SET_ASIDE_NOT_APPLIED)
@@ -474,6 +488,7 @@ export function toSaveBody(state: EditorState): SaveFundingPlanDto {
         : pool.periods.map(period => ({
           periodStart: period.periodStart, periodEnd: period.periodEnd, planAmount: moneyOf(period.planAmount) as number,
           ...(isBlank(period.setAside) ? {} : { setAside: moneyOf(period.setAside) as number }),
+          ...(isBlank(period.rollover) ? {} : { rolloverOverride: moneyOf(period.rollover) as number }),
         })),
     })),
   }
