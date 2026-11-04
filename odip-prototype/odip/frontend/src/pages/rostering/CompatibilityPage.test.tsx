@@ -156,6 +156,32 @@ describe('CompatibilityPage: the table', () => {
     expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's2', participantId: 'p1', level: 'Allowed', reason: null })
   })
 
+  it('Undo after Remove No puts the No and its reason back', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility?view=table')
+    await screen.findByRole('grid')
+    cellFor('Alex Rivera', 'Morgan Lee').focus()
+    await user.keyboard('{Delete}')
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove No' }))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(mockApiPut).toHaveBeenLastCalledWith('/rostering/compatibility', { staffId: 's2', participantId: 'p1', level: 'Excluded', rank: null, reason: 'Past conflict' })
+  })
+
+  it('Undo after Mark No puts the earlier tier back', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility?view=table')
+    await screen.findByRole('grid')
+    cellFor('Jamie Chen', 'Morgan Lee').focus()
+    await user.keyboard('n')
+    const dialog = await screen.findByRole('alertdialog')
+    await user.type(within(dialog).getByLabelText(/Reason/), 'Not a fit')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as No' }))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(mockApiPut).toHaveBeenLastCalledWith('/rostering/compatibility', { staffId: 's2', participantId: 'p2', level: 'Backup', rank: null, reason: null })
+  })
+
   it('has no write controls for a reader', async () => {
     perms.canWrite = false
     renderPage('/rostering/compatibility?view=table')

@@ -77,7 +77,11 @@ await step('empty', async () => {
 await step('filled', async () => {
   const { context, page, puts } = await open(1280, 800, { rows: fixtureRows() })
   await page.getByRole('grid').waitFor({ state: 'visible', timeout: 15000 })
-  await shot(page, 'table-filled-1280')
+  // The bottom of the scroll box, full page: the last row and its edge, not just the top.
+  await page.evaluate(() => { const b = document.querySelector('table[role="grid"]').parentElement; b.scrollTop = b.scrollHeight })
+  await page.waitForTimeout(300)
+  await shot(page, 'table-filled-1280', { fullPage: true })
+  await page.evaluate(() => { const b = document.querySelector('table[role="grid"]').parentElement; b.scrollTop = 0 })
   // Sticky header and first column, measured against the scroll box.
   const sticky = await page.evaluate(async () => {
     const grid = document.querySelector('table[role="grid"]'), box = grid.parentElement, r = (el) => el.getBoundingClientRect()
@@ -110,8 +114,18 @@ await step('filled', async () => {
   const dlg = page.getByRole('alertdialog'); await dlg.waitFor({ state: 'visible', timeout: 5000 })
   const dtext = await dlg.innerText()
   await shot(page, 'table-bulk-confirm-1280')
-  results.bulk = { dialog: dtext.replace(/\s+/g, ' ').slice(0, 300), mentionsPreferred: /clears the preferred worker/i.test(dtext), pass: /clears the preferred worker/i.test(dtext) }
+  results.bulk = { dialog: dtext.replace(/\s+/g, ' ').slice(0, 300), mentionsPreferred: /may lose their preferred worker/i.test(dtext), pass: /may lose their preferred worker/i.test(dtext) }
   await dlg.getByRole('button', { name: 'Cancel' }).click()
+  await context.close()
+})
+// 1280 as Admin: the reach line shows its Change link.
+await step('admin', async () => {
+  const { context, page } = await open(1280, 800, { rows: fixtureRows(), role: 'Admin' })
+  await page.getByRole('grid').waitFor({ state: 'visible', timeout: 15000 })
+  const link = page.getByRole('link', { name: 'Change' })
+  const visible = await link.isVisible().catch(() => false)
+  await shot(page, 'table-filled-admin-1280', { fullPage: true })
+  results.admin = { changeLinkVisible: visible, pass: visible }
   await context.close()
 })
 // 900 touch: coarse-pointer target sizes (the table shows from md up).
@@ -127,7 +141,7 @@ await step('touch900', async () => {
   await cellOf(page, 1, 1).focus()
   await page.keyboard.press('Enter')
   await page.getByRole('menu').waitFor({ state: 'visible', timeout: 5000 })
-  const menuMin = await page.evaluate(() => Math.min(...[...document.querySelectorAll('[role="menuitem"]')].map((i) => i.getBoundingClientRect().height)))
+  const menuMin = await page.evaluate(() => Math.min(...[...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')].map((i) => i.getBoundingClientRect().height)))
   await shot(page, 'table-touch-menu-900')
   results.touch900 = { coarse, ...sizes, menuItemMinH: rnd(menuMin), pass: coarse && sizes.cellMinW >= 44 && sizes.cellMinH >= 44 && sizes.kebabMinW >= 44 && sizes.kebabMinH >= 44 && menuMin >= 44 && !sizes.hScroll }
   await context.close()
@@ -141,7 +155,7 @@ await step('phone390', async () => {
   results.phone390 = { ...m, pass: !m.grid && !m.tableSegment && !m.hScroll }
   await context.close()
 })
-const allPass = Object.keys(notes).length === 0 && ['empty', 'sticky', 'focus', 'bulk', 'touch900', 'phone390'].every((k) => results[k] && results[k].pass)
+const allPass = Object.keys(notes).length === 0 && ['empty', 'sticky', 'focus', 'bulk', 'admin', 'touch900', 'phone390'].every((k) => results[k] && results[k].pass)
 const out = { allPass, results, notes }
 writeFileSync(path.join(OUT_DIR, 'checks.json'), JSON.stringify(out, null, 1))
 await browser.close(); console.log('[ct1] DONE'); console.log(JSON.stringify(out))

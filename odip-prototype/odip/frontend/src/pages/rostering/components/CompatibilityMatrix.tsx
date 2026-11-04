@@ -16,7 +16,9 @@ import { RANKED_LEVELS } from '@/pages/rostering/lib/compatibilityOrder'
 type RankedLevel = (typeof RANKED_LEVELS)[number]
 type Person = { id: string; fullName: string }
 type Cell = { level: CompatibilityLevel; rank: number }
-type Write = UpsertCompatibilityDto & { reason: string | null }
+export type Write = UpsertCompatibilityDto & { reason: string | null }
+/** A change the page made (Mark No, Remove No): the writes that put it back, offered as the matrix's Undo. */
+export type NoUndo = { writes: Write[]; message: string }
 type Bulk = { axis: 'row' | 'column'; level: RankedLevel | 'Allowed'; name: string; writes: Write[]; skippedNo: number; same: number; preferredLost: number }
 
 // shortcut: no virtualisation, revisit past ~100 x 100 cells
@@ -55,7 +57,7 @@ const cellTone = (c: Cell) =>
  * through ONE serial queue (the server renumbers a tier with no lock, so two parallel writes could land on the same rank). A No is never
  * set or cleared here without the page's dialog. A bulk set skips No cells and refetches once at its end.
  */
-export function CompatibilityMatrix({ rows, participants, staff, canWrite, participantQuery, onParticipantQuery, staffQuery, onStaffQuery, onMarkNo, onRemoveNo }: {
+export function CompatibilityMatrix({ rows, participants, staff, canWrite, participantQuery, onParticipantQuery, staffQuery, onStaffQuery, onMarkNo, onRemoveNo, noUndo }: {
   rows: CompatibilityRowDto[]
   participants: Person[]
   staff: Person[]
@@ -67,6 +69,8 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
   /** Opens the Mark as No dialog for a pair that is not No yet, or the Edit reason one for a pair that is. */
   onMarkNo: (staffId: string, participantId: string) => void
   onRemoveNo: (row: CompatibilityRowDto) => void
+  /** Set by the page after a confirmed Mark No or Remove No; a new object offers a new Undo. */
+  noUndo?: NoUndo | null
 }) {
   const writer = useCompatibilityWriter()
   const gridRef = useRef<HTMLTableElement>(null)
@@ -78,7 +82,7 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
 
   const [active, setActive] = useState({ r: 0, c: 0 })
   const [hover, setHover] = useState<string | null>(null)
-  const [menu, setMenu] = useState<{ index: number; top: number; left: number } | null>(null)
+  const [menu, setMenu] = useState<{ index: number; top: number; left: number; above: number } | null>(null)
   const [overlay, setOverlay] = useState<Record<string, Cell>>({})
   const [progress, setProgress] = useState<{ i: number; n: number } | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
@@ -132,8 +136,11 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
 
   /** Puts the writes on the serial queue, shows them at once, and refetches once after the last. */
   function run(writes: Write[], announce: string, restore: Write[] | null, labelOf: (w: Write) => string) {
+    setUndo(null)
     const ov = { ...overlayRef.current }
     for (const w of writes) ov[keyOf(w.participantId, w.staffId)] = { level: w.level, rank: ranked(w.level) ? w.rank ?? nextRank(w.participantId, w.level, ov) : 0 }
+    // The entries this run shows: when it ends it drops only these, so a later write to the same cell keeps its own.
+    const own = writes.map(w => [keyOf(w.participantId, w.staffId), ov[keyOf(w.participantId, w.staffId)]] as const)
     setOv(ov)
     setPendingCount(c => c + writes.length)
     setError(null)
@@ -151,7 +158,7 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
       }
       await writer.refresh().catch(() => {})
       const left = { ...overlayRef.current }
-      for (const w of writes) delete left[keyOf(w.participantId, w.staffId)]
+      for (const [k, entry] of own) if (left[k] === entry) delete left[k]
       setOv(left)
       setProgress(null)
       setPendingCount(c => c - writes.length)
@@ -185,7 +192,7 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     // Clearing sends no reason, as the board's "Remove from list" does; every other write keeps the row's reason (the save overwrites it).
     const w: Write = { staffId, participantId, level, rank: null, reason: level === 'Allowed' ? null : byKey.get(keyOf(participantId, staffId))?.reason ?? null }
     const place = level === 'Allowed' ? 0 : nextRank(participantId, level, overlayRef.current)
-    const lost = cur.level === 'Preferred' && level !== 'Preferred' ? ` ${s} is no longer ${p}’s preferred worker.` : ''
+    const lost = cur.level === 'Preferred' && level !== 'Preferred' ? ` If ${s} is ${p}’s preferred worker, this clears it.` : ''
     run([w], `${p}: ${s} ${level === 'Allowed' ? 'is no longer listed' : `is now ${level} #${place}`}.${lost}`, [restoreOf(w)], () => s)
   }
 
@@ -219,7 +226,14 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     if (!undo) return
     const ps = (w: Write) => nameOf(participants, w.participantId)
     run(undo, 'Undone.', null, w => `${ps(w)} and ${nameOf(staff, w.staffId)}`)
-    setUndo(null)
+  }
+
+  // A new offer from the page replaces the Undo (set during render, once per offer).
+  const [offered, setOffered] = useState<NoUndo | null>(null)
+  if (noUndo && noUndo !== offered) {
+    setOffered(noUndo)
+    setUndo(noUndo.writes)
+    setStatus(noUndo.message)
   }
 
   const cur = (r: number, c: number) => (pageRows[r] && cols[c] ? { p: pageRows[r], s: cols[c] } : null)
@@ -250,8 +264,11 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     const el = gridRef.current?.querySelector<HTMLElement>('td[tabindex="0"]')
     const box = el?.getBoundingClientRect()
     if (!box || !x0) return
+    const level = cellAt(x0.p.id, x0.s.id).level
     const items = menuItems(cellAt(x0.p.id, x0.s.id))
-    setMenu({ index: Math.max(0, items.findIndex(i => !i.disabled)), top: box.bottom + 4, left: Math.max(8, Math.min(box.left, window.innerWidth - 184)) })
+    // Opens on the checked tier, else the first enabled row.
+    const checked = items.findIndex(i => !i.disabled && i.value === level)
+    setMenu({ index: checked >= 0 ? checked : Math.max(0, items.findIndex(i => !i.disabled)), top: box.bottom + 4, above: box.top - 4, left: Math.max(8, Math.min(box.left, window.innerWidth - 184)) })
   }
 
   const x0 = cur(at, ac)
@@ -262,21 +279,42 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     refocus.current = true
   }
 
+  // Focus sits on the menu's active row while it is open, so the menu takes its own keys.
+  function onMenuKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (!menu || !x0) return
+    const k = e.key
+    const items = menuItems(cellAt(x0.p.id, x0.s.id))
+    const step = (d: number) => {
+      let i = menu.index
+      do i = (i + d + items.length) % items.length; while (items[i].disabled)
+      setMenu({ ...menu, index: i })
+    }
+    if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); step(k === 'ArrowDown' ? 1 : -1) }
+    else if (k === 'Enter' || k === ' ') { e.preventDefault(); choose(items[menu.index].value) }
+    // Escape closes the menu only: a dialog or panel around the page must not close with it.
+    else if (k === 'Escape' || k === 'Tab') { e.preventDefault(); e.stopPropagation(); setMenu(null); refocus.current = true }
+  }
+
+  const headerButton = (selector: string) => {
+    const b = gridRef.current?.querySelector<HTMLElement>(selector)
+    b?.focus()
+    return !!b
+  }
+
+  // The header ⋯ buttons are out of the tab order (one tab stop for the grid); ArrowDown or ArrowRight from one goes back into it.
+  function leaveHeader(e: KeyboardEvent<HTMLElement>, axis: 'column' | 'row', i: number) {
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowRight') || (e.target as HTMLElement).getAttribute('aria-expanded') !== 'false') return
+    e.preventDefault()
+    e.stopPropagation()
+    if (axis === 'column') moveTo(at, i)
+    else moveTo(i, ac)
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLTableSectionElement>) {
     if (R === 0 || C === 0) return
     const k = e.key
-    if (menu) {
-      const items = menuItems(cellAt(x0!.p.id, x0!.s.id))
-      const step = (d: number) => {
-        let i = menu.index
-        do i = (i + d + items.length) % items.length; while (items[i].disabled)
-        setMenu({ ...menu, index: i })
-      }
-      if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); step(k === 'ArrowDown' ? 1 : -1) }
-      else if (k === 'Enter' || k === ' ') { e.preventDefault(); choose(items[menu.index].value) }
-      else if (k === 'Escape' || k === 'Tab') { if (k === 'Escape') e.preventDefault(); setMenu(null); refocus.current = true }
-      return
-    }
+    if (k === 'ArrowUp' && at === 0 && headerButton(`thead th:nth-child(${ac + 2}) button`)) return e.preventDefault()
+    if (k === 'ArrowLeft' && ac === 0 && headerButton(`tbody tr:nth-child(${at + 1}) th button`)) return e.preventDefault()
     const ctrl = e.ctrlKey || e.metaKey
     const nav: Record<string, [number, number]> = {
       ArrowLeft: [at, ac - 1], ArrowRight: [at, ac + 1], ArrowUp: [at - 1, ac], ArrowDown: [at + 1, ac],
@@ -284,7 +322,7 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     }
     if (nav[k]) { e.preventDefault(); return moveTo(...nav[k]) }
     if (!canWrite) return
-    if (ctrl && k.toLowerCase() === 'z') { e.preventDefault(); return doUndo() }
+    if (ctrl && k.toLowerCase() === 'z') { e.preventDefault(); return busy ? undefined : doUndo() }
     if (ctrl || e.altKey) return
     const lower = k.toLowerCase()
     if (KEY_LEVEL[lower]) { e.preventDefault(); setTier(x0!.p.id, x0!.s.id, KEY_LEVEL[lower]) }
@@ -314,7 +352,14 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     window.addEventListener('resize', close)
     return () => { document.removeEventListener('mousedown', away); window.removeEventListener('resize', close) }
   }, [menu])
-  useLayoutEffect(() => { if (menu) menuRef.current?.querySelector<HTMLElement>('[data-active="true"]')?.scrollIntoView?.({ block: 'nearest' }) }, [menu])
+  // Placed before paint: below the cell, or above it when the menu would run off the bottom. Then focus follows the active row.
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!menu || !el) return
+    const h = el.offsetHeight
+    el.style.top = `${menu.top + h > window.innerHeight ? Math.max(8, menu.above - h) : menu.top}px`
+    el.querySelector<HTMLElement>('[data-active="true"]')?.focus({ preventScroll: true })
+  }, [menu])
 
   const hoverCell = hover ? (() => { const [pid, sid] = hover.split(':'); return { p: nameOf(participants, pid), s: nameOf(staff, sid), pid, sid } })() : null
   const info = hoverCell ?? (x0 ? { p: x0.p.fullName, s: x0.s.fullName, pid: x0.p.id, sid: x0.s.id } : null)
@@ -327,20 +372,21 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
     const items: DropdownItem[] = [...RANKED_LEVELS.map(l => ({ value: l, label: `Set all shown to ${l}` })), { value: 'Allowed', label: 'Clear all shown' }]
     return (
       <Dropdown variant="icon" label={`Options for ${name}`} icon={<MoreHorizontal className="h-5 w-5" aria-hidden="true" />} items={items}
-        onSelect={v => openBulk(axis, id, v as RankedLevel | 'Allowed')} disabled={busy} triggerClassName={KEBAB} />
+        onSelect={v => openBulk(axis, id, v as RankedLevel | 'Allowed')} disabled={busy} triggerClassName={KEBAB} tabIndex={-1} />
     )
   }
 
   const headBase = 'sticky bg-card border-b border-border font-normal'
   const levelWord = bulk?.level === 'Allowed' ? 'Clear' : `Set`
+  const skipped = (n: number) => `${n} marked No ${n === 1 ? 'is' : 'are'} skipped.`
   const bulkMessage = bulk && (
     bulk.writes.length === 0
-      ? `Nothing to change for ${bulk.name}.${bulk.skippedNo ? ` ${bulk.skippedNo} marked No are skipped.` : ''}${bulk.same ? ` ${bulk.same} already ${bulk.level === 'Allowed' ? 'Allowed' : bulk.level}.` : ''}`
+      ? `Nothing to change for ${bulk.name}.${bulk.skippedNo ? ` ${skipped(bulk.skippedNo)}` : ''}${bulk.same ? ` ${bulk.same} already ${bulk.level === 'Allowed' ? 'Allowed' : bulk.level}.` : ''}`
       : [
         `${levelWord} ${plural(bulk.writes.length, 'pairing')}${bulk.level === 'Allowed' ? '' : ` to ${bulk.level}`} for ${bulk.name}?`,
-        bulk.skippedNo ? `${bulk.skippedNo} marked No ${bulk.skippedNo === 1 ? 'is' : 'are'} skipped.` : '',
-        bulk.same ? `${bulk.same} already ${bulk.level === 'Allowed' ? 'Allowed' : bulk.level} stay as they are.` : '',
-        bulk.preferredLost ? `This also clears the preferred worker for ${plural(bulk.preferredLost, 'participant')}.` : '',
+        bulk.skippedNo ? skipped(bulk.skippedNo) : '',
+        bulk.same ? `${bulk.same} already ${bulk.level === 'Allowed' ? 'Allowed' : bulk.level} ${bulk.same === 1 ? 'stays as it is' : 'stay as they are'}.` : '',
+        bulk.preferredLost ? `Up to ${plural(bulk.preferredLost, 'participant')} may lose their preferred worker.` : '',
       ].filter(Boolean).join(' ')
   )
 
@@ -397,7 +443,7 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
                   return (
                     <th key={s.id} scope="col" title={s.fullName} className={cn(headBase, 'top-0 z-20 w-14 min-w-14 px-0 py-1 text-xs', ci === ac && 'bg-[var(--color-accent)]')}>
                       <span className="flex flex-col items-center leading-tight"><span className="font-medium">{first}</span><span className="text-muted-foreground">{last || ' '}</span></span>
-                      <span className="flex justify-center">{bulkMenu('column', s.id, s.fullName)}</span>
+                      <span className="flex justify-center" onKeyDownCapture={e => leaveHeader(e, 'column', ci)}>{bulkMenu('column', s.id, s.fullName)}</span>
                     </th>
                   )
                 })}
@@ -407,7 +453,7 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
               {pageRows.map((p, ri) => (
                 <tr key={p.id}>
                   <th scope="row" className={cn('sticky left-0 z-10 border-b border-border bg-card px-3 text-left text-sm font-medium', ri === at && 'bg-[var(--color-accent)]')}>
-                    <span className="flex items-center justify-between gap-1">
+                    <span className="flex items-center justify-between gap-1" onKeyDownCapture={e => leaveHeader(e, 'row', ri)}>
                       <span className="min-w-0 [overflow-wrap:anywhere]">{p.fullName}</span>
                       {bulkMenu('row', p.id, p.fullName)}
                     </span>
@@ -459,23 +505,27 @@ export function CompatibilityMatrix({ rows, participants, staff, canWrite, parti
           ref={menuRef}
           role="menu"
           aria-label={`Set ${x0.s.fullName} for ${x0.p.fullName}`}
+          onKeyDown={onMenuKeyDown}
           style={{ position: 'fixed', top: menu.top, left: menu.left, zIndex: 9999 }}
           className="w-44 rounded-md bg-[var(--color-popover)] shadow-[var(--shadow-float)]"
         >
           {menuItems(cellAt(x0.p.id, x0.s.id)).map((item, i) => {
             const current = cellAt(x0.p.id, x0.s.id).level === item.value
+            // The three tiers are a choice of one (radios); No… and Clear are actions.
+            const tier = (RANKED_LEVELS as readonly string[]).includes(item.value)
             return (
               <div
                 key={item.value}
-                role="menuitem"
+                role={tier ? 'menuitemradio' : 'menuitem'}
+                aria-checked={tier ? current : undefined}
+                tabIndex={-1}
                 aria-disabled={item.disabled || undefined}
-                aria-current={current || undefined}
                 data-active={i === menu.index}
                 onMouseDown={e => e.preventDefault()}
                 onMouseEnter={() => !item.disabled && setMenu(m => m && { ...m, index: i })}
                 onClick={() => !item.disabled && choose(item.value)}
                 className={cn(
-                  'flex min-h-[var(--tap-min)] items-center justify-between px-3 py-1.5 text-sm',
+                  'flex min-h-[var(--tap-min)] items-center justify-between px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]',
                   item.disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
                   i === menu.index && !item.disabled && 'bg-[var(--color-surface-container-low)]',
                 )}

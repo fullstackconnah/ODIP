@@ -129,7 +129,7 @@ describe('CompatibilityMatrix', () => {
     await user.keyboard('b')
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(putCalls()[0]).toEqual({ staffId: 's1', participantId: 'p1', level: 'Backup', rank: null, reason: 'Knows the insulin routine' })
-    expect(await screen.findByText(/Sam Taylor is no longer Alex Rivera’s preferred worker/)).toBeInTheDocument()
+    expect(await screen.findByText(/If Sam Taylor is Alex Rivera’s preferred worker, this clears it\./)).toBeInTheDocument()
 
     await user.click(await screen.findByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
@@ -178,7 +178,7 @@ describe('CompatibilityMatrix', () => {
     cell('Jamie Chen', 'Sam Taylor').focus()
     await user.keyboard('{Enter}')
     const menu = await screen.findByRole('menu')
-    await user.click(within(menu).getByRole('menuitem', { name: 'Emergency' }))
+    await user.click(within(menu).getByRole('menuitemradio', { name: 'Emergency' }))
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(putCalls()[0]).toMatchObject({ staffId: 's1', participantId: 'p2', level: 'Emergency', rank: null })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
@@ -225,7 +225,7 @@ describe('CompatibilityMatrix', () => {
     await user.click(await screen.findByRole('option', { name: 'Set all shown to Backup' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent('Set 3 pairings to Backup for Sam Taylor?')
-    expect(dialog).toHaveTextContent('This also clears the preferred worker for 1 participant.')
+    expect(dialog).toHaveTextContent('Up to 1 participant may lose their preferred worker.')
     await user.click(within(dialog).getByRole('button', { name: 'Set 3' }))
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(3))
     expect(putCalls().find(b => b.participantId === 'p1')).toMatchObject({ reason: 'Keeps routine', level: 'Backup', rank: null })
@@ -283,6 +283,146 @@ describe('CompatibilityMatrix', () => {
     expect(screen.getAllByRole('rowheader')).toHaveLength(50)
     await user.click(screen.getByRole('button', { name: 'Show all 60' }))
     expect(screen.getAllByRole('rowheader')).toHaveLength(60)
+  })
+
+  // A PUT that waits for release(), like a slow network; the next PUT after it is the normal mock.
+  function holdNextPut() {
+    let release!: () => void
+    const gate = new Promise<void>(res => { release = res })
+    const original = mockApiPut.getMockImplementation()!
+    mockApiPut.mockImplementationOnce(async (...args: unknown[]) => { await gate; return original(...(args as [string, never])) })
+    return release
+  }
+  const settle = () => new Promise(r => setTimeout(r, 60))
+
+  it('ignores Ctrl+Z while a write is in flight', async () => {
+    const user = userEvent.setup()
+    renderMatrix()
+    await screen.findByRole('grid')
+    cell('Alex Rivera', 'Casey Wong').focus()
+    await user.keyboard('b')
+    await screen.findByRole('button', { name: 'Undo' })
+    const release = holdNextPut()
+    await user.keyboard('e')
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    await user.keyboard('{Control>}z{/Control}')
+    release()
+    await settle()
+    expect(mockApiPut).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows E, never B, on a cell written B then E while the first save finishes', async () => {
+    const user = userEvent.setup()
+    renderMatrix()
+    await screen.findByRole('grid')
+    const release1 = holdNextPut()
+    const release2 = holdNextPut()
+    cell('Jamie Chen', 'Sam Taylor').focus()
+    await user.keyboard('b')
+    await user.keyboard('e')
+    expect(cell('Jamie Chen', 'Sam Taylor')).toHaveTextContent('E1')
+    release1()
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    await settle()
+    expect(cell('Jamie Chen', 'Sam Taylor')).toHaveTextContent('E1')
+    release2()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('is now Emergency #1'))
+    expect(cell('Jamie Chen', 'Sam Taylor')).toHaveTextContent('E1')
+  })
+
+  it('moves focus into the menu, onto the checked tier, and back to the cell on Escape', async () => {
+    const user = userEvent.setup()
+    const outer = vi.fn()
+    document.addEventListener('keydown', outer)
+    renderMatrix()
+    await screen.findByRole('grid')
+    cell('Alex Rivera', 'Morgan Lee').focus()
+    await user.keyboard('{Enter}')
+    const backup = await screen.findByRole('menuitemradio', { name: 'Backup' })
+    expect(backup).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menuitemradio', { name: 'Preferred' })).toHaveAttribute('aria-checked', 'false')
+    await waitFor(() => expect(document.activeElement).toBe(backup))
+    await user.keyboard('{ArrowDown}')
+    expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: 'Emergency' }))
+    outer.mockClear()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(outer).not.toHaveBeenCalled()
+    await waitFor(() => expect(document.activeElement).toBe(cell('Alex Rivera', 'Morgan Lee')))
+    document.removeEventListener('keydown', outer)
+  })
+
+  it('opens the menu above a cell near the bottom of the screen', async () => {
+    const user = userEvent.setup()
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 200 })
+    try {
+      renderMatrix()
+      await screen.findByRole('grid')
+      const c = cell('Jamie Chen', 'Sam Taylor')
+      c.getBoundingClientRect = () => ({ top: 716, bottom: 760, left: 100, right: 156, width: 56, height: 44, x: 100, y: 716, toJSON: () => ({}) })
+      c.focus()
+      await user.keyboard('{Enter}')
+      const menu = await screen.findByRole('menu')
+      expect(menu.style.top).toBe('512px')
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original)
+    }
+  })
+
+  it('has one tab stop for the whole grid, and reaches the header buttons by arrow keys', async () => {
+    const user = userEvent.setup()
+    renderMatrix()
+    const grid = await screen.findByRole('grid')
+    expect(grid.querySelectorAll('[tabindex="0"], button:not([tabindex="-1"]), a[href], input, select, textarea')).toHaveLength(1)
+    cell('Alex Rivera', 'Sam Taylor').focus()
+    await user.keyboard('{ArrowUp}')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Options for Sam Taylor' }))
+    await user.keyboard('{ArrowDown}')
+    expect(document.activeElement).toBe(cell('Alex Rivera', 'Sam Taylor'))
+    await user.keyboard('{ArrowLeft}')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Options for Alex Rivera' }))
+    await user.keyboard('{ArrowRight}')
+    expect(document.activeElement).toBe(cell('Alex Rivera', 'Sam Taylor'))
+  })
+
+  it('writes the singular for one pairing: "1 marked No is skipped", "1 already Backup stays"', async () => {
+    const user = userEvent.setup()
+    renderMatrix()
+    await screen.findByRole('grid')
+    await user.click(screen.getByRole('button', { name: 'Options for Kit Doyle' }))
+    await user.click(await screen.findByRole('option', { name: 'Set all shown to Backup' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('1 marked No is skipped.')
+    expect(dialog).toHaveTextContent('1 already Backup stays as it is.')
+  })
+
+  it('writes the plural for several: "2 already Backup stay as they are"', async () => {
+    const user = userEvent.setup()
+    rows = [row('p1', 's1', 'Backup', 1), row('p1', 's2', 'Backup', 2)]
+    renderMatrix()
+    await screen.findByRole('grid')
+    await user.click(screen.getByRole('button', { name: 'Options for Alex Rivera' }))
+    await user.click(await screen.findByRole('option', { name: 'Set all shown to Backup' }))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('2 already Backup stay as they are.')
+  })
+
+  it('offers the Undo the page hands over, and sends its writes', async () => {
+    const user = userEvent.setup()
+    const noUndo = { message: 'Marked No: Sam Taylor and Jamie Chen.', writes: [{ staffId: 's1', participantId: 'p2', level: 'Backup' as const, rank: 1, reason: null }] }
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    function WithOffer() {
+      const all = useAllCompatibility()
+      if (!all.data) return null
+      return <CompatibilityMatrix rows={all.data} participants={PEOPLE} staff={STAFF} canWrite participantQuery="" onParticipantQuery={() => {}} staffQuery="" onStaffQuery={() => {}} onMarkNo={() => {}} onRemoveNo={() => {}} noUndo={noUndo} />
+    }
+    render(<QueryClientProvider client={qc}><WithOffer /></QueryClientProvider>)
+    await screen.findByRole('grid')
+    expect(screen.getByRole('status')).toHaveTextContent('Marked No: Sam Taylor and Jamie Chen.')
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putCalls()[0]).toEqual(noUndo.writes[0])
   })
 
   it('says so when nothing is set yet', async () => {

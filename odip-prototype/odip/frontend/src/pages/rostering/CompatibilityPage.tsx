@@ -21,7 +21,7 @@ import { useAllCompatibility, useParticipants, useStaff, useUpsertCompatibility 
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
 import { TierBoard } from './components/TierBoard'
-import { CompatibilityMatrix } from './components/CompatibilityMatrix'
+import { CompatibilityMatrix, type NoUndo } from './components/CompatibilityMatrix'
 import { CompatibilityReachLine } from './components/CompatibilityReachLine'
 
 // Only Preferred (green) and No (red) carry colour; Backup and Emergency stay neutral, as on the participant card.
@@ -54,6 +54,8 @@ export default function CompatibilityPage() {
   const [removing, setRemoving] = useState<CompatibilityRowDto | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
+  const [noUndo, setNoUndo] = useState<NoUndo | null>(null)
+  if (!showTable && noUndo) setNoUndo(null) // leaving the table drops its Undo
 
   const activeStaff = useMemo(
     () => (staff.data ?? []).filter(s => s.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
@@ -121,6 +123,14 @@ export default function CompatibilityPage() {
     })
   }
 
+  // The table's Undo puts the pair back as `before` had it (no row: Allowed). The board has no Undo.
+  function offerUndo(staffId: string, participantId: string, before: CompatibilityRowDto | undefined, message: string) {
+    if (!showTable) return
+    const level = before?.level ?? 'Allowed'
+    const rank = before && before.rank > 0 ? before.rank : null
+    setNoUndo({ message, writes: [{ staffId, participantId, level, rank, reason: before?.reason ?? null }] })
+  }
+
   function submit() {
     if (!draft) return
     const reason = draft.reason.trim()
@@ -128,7 +138,9 @@ export default function CompatibilityPage() {
       { staffId: draft.staffId, participantId: draft.participantId, level: 'Excluded', reason },
       {
         onSuccess: () => {
-          setAnnouncement(editing ? 'Reason saved.' : `Marked No: ${staffName(draft.staffId)} and ${participantName(draft.participantId)}.`)
+          const message = editing ? 'Reason saved.' : `Marked No: ${staffName(draft.staffId)} and ${participantName(draft.participantId)}.`
+          setAnnouncement(message)
+          offerUndo(draft.staffId, draft.participantId, pair || undefined, message)
           setDraft(null)
         },
         onError: err => setDialogError(extractErrorMessage(err, "Couldn't save that change. Please try again.")),
@@ -143,7 +155,11 @@ export default function CompatibilityPage() {
     upsert.mutate(
       { staffId: row.staffId, participantId: row.participantId, level: 'Allowed', reason: null },
       {
-        onSuccess: () => setAnnouncement(`Removed No: ${row.staffName} and ${row.participantName}.`),
+        onSuccess: () => {
+          const message = `Removed No: ${row.staffName} and ${row.participantName}.`
+          setAnnouncement(message)
+          offerUndo(row.staffId, row.participantId, row, message)
+        },
         onError: err => setSaveError(extractErrorMessage(err, "Couldn't save that change. Please try again.")),
       },
     )
@@ -252,6 +268,7 @@ export default function CompatibilityPage() {
             else openNew({ staffId, participantId, fixedPair: true })
           }}
           onRemoveNo={setRemoving}
+          noUndo={noUndo}
         />
       )}
 
