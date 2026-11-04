@@ -150,19 +150,28 @@ public class IncidentReviewTests
     [Fact]
     public async Task Review_BySuperAdminViewingAsATenant_SavesAndReadsTheFields()
     {
-        var tenant = Guid.NewGuid();
-        using var db = TestDb.Create(viewingAs: tenant);
-        var (admin, incident) = Seed(db, reviewed: false);
-        db.ChangeTracker.Clear();
-        // The seeded rows carry their own tenant; move them to the one being viewed so the SuperAdmin context sees them.
-        var rows = await db.IncidentReports.IgnoreQueryFilters().ToListAsync();
-        rows.ForEach(r => r.TenantId = tenant);
-        await db.SaveChangesAsync();
-        var controller = As(db, "SuperAdmin", admin.Id);
+        var name = Guid.NewGuid().ToString();
+        Guid tenant, incidentId, superId;
+        using (var seed = TestDb.Create(name))
+        {
+            var (admin, incident) = Seed(seed, reviewed: false);
+            (tenant, incidentId) = (incident.TenantId!.Value, incident.Id);
+            // A SuperAdmin belongs to no organisation (TenantId is not nullable, so it is Guid.Empty).
+            var super = new User { Id = Guid.NewGuid(), TenantId = Guid.Empty, FirstName = "Sue", LastName = "Super", Username = "sue", Email = "sue@example.com", IsActive = true };
+            seed.Users.Add(super);
+            seed.SaveChanges();
+            superId = super.Id;
+        }
+        // The tenant filter really applies here: the SuperAdmin's own row is outside it.
+        using var db = TestDb.ForTenant(name, tenant);
+        var controller = As(db, "SuperAdmin", superId);
 
-        Assert.IsType<OkObjectResult>((await controller.RecordReview(incident.Id, new RecordIncidentReviewDto { ReviewNotes = "Super review.", Status = IncidentStatus.UnderReview }, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.RecordReview(incidentId, new RecordIncidentReviewDto { ReviewNotes = "Super review.", Status = IncidentStatus.UnderReview }, CancellationToken.None)).Result);
 
-        Assert.Equal("Super review.", (await DetailAsync(controller, incident.Id)).ReviewNotes);
+        Assert.Equal("Super review.", (await DetailAsync(controller, incidentId)).ReviewNotes);
+        // Tenant Admins and Coordinators still see who reviewed.
+        Assert.Equal("Sue Super", (await DetailAsync(As(db, "Admin", Guid.NewGuid()), incidentId)).ReviewedByName);
+        Assert.Equal("Sue Super", (await DetailAsync(As(db, "Coordinator", Guid.NewGuid()), incidentId)).ReviewedByName);
     }
 
     [Fact]

@@ -51,6 +51,8 @@ try {
       await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30_000 })
       await pinCoarse()
       const review = page.locator('[data-testid="incident-review"]')
+      // `natural` grows the viewport to the page height, so the fixed bottom tab bar sits below the card and the whole card, status history included, is in the crop.
+      const crop = { touch: !!vp.touch, natural: !!vp.touch }
       const noOverflow = async (label) => {
         const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }))
         check(`no horizontal scroll (${label})`, ctx, o, o.sw <= o.iw)
@@ -77,7 +79,7 @@ try {
         check('Admin sees the empty review', ctx, await review.innerText(), (await review.innerText()).includes('Not reviewed yet.'))
         const record = review.getByRole('button', { name: 'Record review' })
         await tap(record, 'Record review button')
-        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-empty-${vp.name}.png`), { touch: !!vp.touch })))
+        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-empty-${vp.name}.png`), crop)))
         await record.click()
         const notes = review.getByLabel(/Review notes/)
         await notes.waitFor({ timeout: 10_000 })
@@ -90,18 +92,41 @@ try {
         await notes.fill('Spoke with the team. Footwear check added to the pre-walk list.')
         await review.getByLabel('Actions taken').fill('Wet-weather route added.')
         await noOverflow('form open')
-        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-form-${vp.name}.png`), { touch: !!vp.touch })))
-        await review.getByRole('button', { name: 'Save review' }).click()
+        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-form-${vp.name}.png`), crop)))
+        const save = review.getByRole('button', { name: 'Save review' })
+        if (vp.touch) {
+          // Error state: the save fails, then the notes are cleared so the field message and the failure Callout show together.
+          const isReviewPut = (r) => r.request().method() === 'PUT' && r.request().url().endsWith('/review')
+          await page.route('**/api/v1/incidents/**', (r) => isReviewPut(r) ? r.fulfill({ status: 500, json: { success: false, data: null, message: 'Server error', errors: [] } }) : r.fallback())
+          await save.click()
+          await review.getByText("Couldn't save the review. Try again.").waitFor({ timeout: 10_000 })
+          await notes.fill('')
+          const errText = await review.innerText()
+          check('error state shows the field message and the failure Callout', ctx, errText, errText.includes('Add review notes.') && errText.includes("Couldn't save the review. Try again."))
+          checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-form-error-${vp.name}.png`), crop)))
+          await notes.fill('Spoke with the team. Footwear check added to the pre-walk list.')
+          await page.unroute('**/api/v1/incidents/**')
+          // Saving state: hold the response so the button reads "Saving..." for the capture.
+          let release
+          const held = new Promise((res) => { release = res })
+          await page.route('**/api/v1/incidents/**', async (r) => { if (isReviewPut(r)) { await held; await r.continue() } else await r.fallback() })
+          await save.click()
+          await review.getByRole('button', { name: 'Saving...' }).waitFor({ timeout: 10_000 })
+          checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-form-saving-${vp.name}.png`), crop)))
+          release()
+        } else {
+          await save.click()
+        }
         await review.getByText('Reviewed by').waitFor({ timeout: 15_000 })
         check('saved review shows the reviewer and notes', ctx, await review.innerText(), (await review.innerText()).includes('Footwear check added'))
         await tap(review.getByRole('button', { name: 'Update review' }), 'Update review button')
-        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-saved-${vp.name}.png`), { touch: !!vp.touch })))
+        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `admin-saved-${vp.name}.png`), crop)))
       } else {
         const text = await review.innerText()
         check('Coordinator reads the saved review', ctx, text, text.includes('Reviewed by') && text.includes('No further action'))
         const buttons = await review.getByRole('button').count()
         check('Coordinator has no edit button', ctx, buttons, buttons === 0)
-        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `coordinator-read-${vp.name}.png`), { touch: !!vp.touch })))
+        checks.push(checkCropHolds(await cropElement(page, review, path.join(OUT_DIR, `coordinator-read-${vp.name}.png`), crop)))
       }
       await noOverflow('page')
       checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${role}-${vp.name}.png`), { touch: !!vp.touch })).checks)

@@ -2245,7 +2245,7 @@ public record IncidentDetailDto : IncidentListDto
     /// <summary>The provider zone (IANA id) the due lines and the Compliance step are shown in.</summary>
     public string TimeZoneId { get; init; } = string.Empty;
     public Guid? ReviewedByStaffId { get; init; }
-    public string? ReviewedByName { get; init; }
+    public string? ReviewedByName { get; set; }
     public DateTime? ReviewedAt { get; init; }
     public string? ReviewNotes { get; init; }
     public string? CorrectiveActions { get; init; }

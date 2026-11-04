@@ -568,6 +568,13 @@ public class IncidentsController : ControllerBase
             }).FirstOrDefaultAsync(ct);
 
         if (item == null) return NotFound(ApiResponse<IncidentDetailDto>.Fail("Incident not found"));
+        // A SuperAdmin reviewer has no organisation, so the filtered navigation above comes back empty; read the name alone past the Tenant filter.
+        if (item.ReviewedByStaffId is { } reviewerId && item.ReviewedByName == null)
+        {
+            var reviewer = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Where(u => u.Id == reviewerId)
+                .Select(u => new { u.FirstName, u.LastName }).FirstOrDefaultAsync(ct);
+            if (reviewer != null) item.ReviewedByName = (reviewer.FirstName + " " + reviewer.LastName).Trim();
+        }
         return Ok(ApiResponse<IncidentDetailDto>.Ok(item));
     }
 
@@ -976,7 +983,8 @@ public class IncidentsController : ControllerBase
         if (!Enum.IsDefined(dto.Status))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Status is not valid."));
         if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId)
-            || !await _db.Users.AnyAsync(u => u.Id == callerId, ct))
+            // A SuperAdmin has no organisation, so the Tenant filter would hide their own account while viewing as a tenant.
+            || !await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == callerId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Your user account could not be found."));
 
         var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
