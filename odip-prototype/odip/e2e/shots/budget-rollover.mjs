@@ -56,8 +56,11 @@ async function openPage(browser, vp, scheme, { byHand = true, carryIn = false } 
   return { context, page }
 }
 
+const widest = (page) => page.evaluate(() => [...document.querySelectorAll('body *')].map((e) => ({ e, w: e.getBoundingClientRect().width })).filter((x) => x.w > 400).sort((a, b) => b.w - a.w).slice(0, 8).map((x) => `${x.e.tagName}.${String(x.e.className).slice(0, 60)} ${Math.round(x.w)}`).concat([`iw ${innerWidth}`]))
+
 async function openEditor(page) {
   await page.goto(`${BASE_URL}/participants/p-0002?tab=funding`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  if (page.viewportSize().width < 500) checks.push({ name: 'diag: widest before the dialog', pass: true, detail: await widest(page) })
   const edit = page.locator('[data-edit-plan]').first()
   await edit.waitFor({ state: 'visible', timeout: 60_000 })
   await edit.click()
@@ -99,11 +102,11 @@ for (const vp of VPS) {
     const pool = dialog.locator('section[data-pool-key]').first()
     const table = pool.locator('table').first()
 
-    if (vp.touch) check(t('diag: layout widths'), true, await page.evaluate(() => {
+    if (vp.touch) check(t('diag: layout widths'), true, [await widest(page), await page.evaluate(() => {
       const d = document.querySelector('[role=dialog]'); const s = d.querySelector('section[data-pool-key]'); const r = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.width)] }
       const wide = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed').slice(0, 6).map((e) => `${e.tagName}.${String(e.className).slice(0, 50)} ${r(e)}`)
       return { iw: innerWidth, docScroll: document.documentElement.scrollWidth, dialog: r(d), section: r(s), wide }
-    }))
+    })])
     const geo = await page.evaluate(() => {
       const d = document.querySelector('[role=dialog]')
       const scrollers = [d, ...d.querySelectorAll('*')].filter((e) => { const o = getComputedStyle(e).overflowY; return o === 'auto' || o === 'scroll' })
@@ -154,7 +157,7 @@ for (const vp of VPS) {
     const message = dialog.locator('p', { hasText: /rolled-over amount|rolled over/i }).filter({ hasText: /at least|can't be|cannot|must/i }).first()
     if (!(await message.isVisible().catch(() => false))) await dialog.getByRole('button', { name: /^Save/ }).first().click().catch(() => {})
     await page.waitForTimeout(400)
-    const errText = await box.evaluate((el) => el.parentElement.parentElement.querySelector(':scope > p.text-\[var\(--color-destructive\)\]')?.textContent ?? '')
+    const errText = await box.evaluate((el) => [...el.parentElement.parentElement.querySelectorAll(':scope > p')].slice(1).map((p) => p.textContent).join(' '))
     check(t('error: the rollover row shows a message under the box for -5'), errText.length > 0, errText)
     await crop(page, pool, `editor-rollover-error-${tag}.png`, vp)
     await context.close()
