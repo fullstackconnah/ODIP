@@ -99,17 +99,29 @@ try {
     if (role === 'Admin') check(`${n} Admin card has 7 named rows`, rows.rows.map((x) => x.name), rows.rows.length === 7 && rows.rows.every((x) => x.name.length > 0))
     check(`${n} card link fill`, rows.bg, rows.bg.every((b) => b === 'rgba(0, 0, 0, 0)'))
     check(`${n} card link tones`, rows.tones, rows.tones.quiet === null || (rows.tones.quiet !== rows.tones.filled && rows.tones.quietContrast >= 4.5 && rows.tones.filledContrast >= 4.5))
+    // Whole-card captures: instant scroll, fixed/sticky chrome hidden, document-space clips (boundingBox is viewport-space, so add the scroll offset).
     await card.scrollIntoViewIfNeeded()
     await page.mouse.move(0, 0)
-    await page.waitForTimeout(200)
-    // The whole card element, padded.
-    const cardBox = await card.locator('xpath=../..').boundingBox()
     const pad = 16
-    await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-card.png`), fullPage: true, clip: { x: Math.max(0, cardBox.x - pad), y: cardBox.y - pad, width: Math.min(vp.width, cardBox.width + 2 * pad), height: cardBox.height + 2 * pad } })
+    const geo2 = await page.evaluate(() => {
+      document.documentElement.style.scrollBehavior = 'auto'
+      for (const el of document.querySelectorAll('body *')) { const p = getComputedStyle(el).position; if (p === 'fixed' || p === 'sticky') el.style.visibility = 'hidden' }
+      const root = [...document.querySelectorAll('h3')].find((h) => h.textContent === 'In this profile').parentElement.parentElement
+      const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height } }
+      const c = rect(root), col = rect(root.parentElement), next = root.nextElementSibling ? rect(root.nextElementSibling) : c
+      const hit = [...document.querySelectorAll('body *')].filter((el) => ['fixed', 'sticky'].includes(getComputedStyle(el).position) && getComputedStyle(el).visibility !== 'hidden').length
+      return { c, col, bottom: Math.max(c.y + c.h, next.y + next.h), hit }
+    })
+    await page.waitForTimeout(200)
+    check(`${n} no fixed overlay over the card`, geo2.hit, geo2.hit === 0)
+    const cw = Math.min(vp.width, geo2.c.w + 2 * pad), ch = geo2.c.h + 2 * pad
+    await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-card.png`), fullPage: true, clip: { x: Math.max(0, geo2.c.x - pad), y: geo2.c.y - pad, width: cw, height: ch } })
+    check(`${n} card image holds the whole card`, [ch, geo2.c.h], ch >= geo2.c.h)
     if (role === 'Admin' && !vp.mobile) {
-      // The budget card with the map card under it: their column, padded.
-      const col = await card.locator('xpath=../../..').boundingBox()
-      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-column.png`), fullPage: true, clip: { x: Math.max(0, col.x - pad), y: col.y - pad, width: col.width + 2 * pad, height: Math.min(col.height, 1400) + 2 * pad } })
+      // The Overview column from its top: budget card, then "In this profile", then the next card.
+      const y0 = Math.max(0, geo2.col.y - pad), h = geo2.bottom + pad - y0
+      await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${role}-overview-column.png`), fullPage: true, clip: { x: Math.max(0, geo2.col.x - pad), y: y0, width: geo2.col.w + 2 * pad, height: h } })
+      check(`${n} column clip spans top to next card`, [y0, geo2.c.y, geo2.bottom], y0 < geo2.c.y && geo2.bottom >= geo2.c.y + geo2.c.h)
     }
 
     // The section line: on a 3+ section chip only, links at the touch floor, at most 3 lines at 390, a click lands on its section.
