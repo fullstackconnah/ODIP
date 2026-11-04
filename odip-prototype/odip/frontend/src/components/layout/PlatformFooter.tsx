@@ -11,13 +11,13 @@ type Variant = 'shell' | 'public'
  * the last thing in AppLayout's column, carries its clearance (main used to). public: one centred column, like the pages it closes.
  */
 const FRAME: Record<Variant, string> = {
-  shell: 'px-[var(--gutter,20px)] pb-[calc(var(--mobile-nav-h)+0.75rem)] lg:pb-3 lg:group-has-[[data-fit-screen]]/shell:pb-0',
+  shell: 'px-[var(--gutter,20px)] pb-[calc(var(--mobile-nav-h)+0.75rem)] lg:pb-3',
   public: 'mx-auto w-full max-w-3xl px-[var(--gutter,20px)] pb-[calc(var(--safe-bottom)+0.75rem)]',
 }
 
 /** Facts first, links after: one row in the shell from md (facts at the start, links at the end), otherwise stacked and centred. */
 const ROW: Record<Variant, string> = {
-  shell: 'flex flex-col items-center gap-y-1 text-center md:flex-row md:flex-wrap md:justify-between md:gap-x-6 md:text-left lg:group-has-[[data-fit-screen]]/shell:flex-nowrap',
+  shell: 'flex flex-col items-center gap-y-1 text-center md:flex-row md:flex-wrap md:justify-between md:gap-x-6 md:text-left',
   public: 'flex flex-col items-center gap-y-1 text-center',
 }
 
@@ -59,8 +59,8 @@ export default function PlatformFooter({ variant, support = true, info = PLATFOR
   const email = support ? facts.supportEmail : null
   return (
     <footer className={FRAME[variant]}>
-      <div className={`border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-muted-foreground)] ${variant === 'shell' ? 'lg:group-has-[[data-fit-screen]]/shell:pt-0.5' : ''}`}>
-        <p className={variant === 'shell' ? 'mb-2 hidden max-w-[68ch] md:block lg:group-has-[[data-fit-screen]]/shell:hidden' : 'mx-auto mb-2 max-w-[68ch] text-center text-[13px]'}>
+      <div className="border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-muted-foreground)]">
+        <p className={variant === 'shell' ? 'mb-2 hidden max-w-[68ch] md:block' : 'mx-auto mb-2 max-w-[68ch] text-center text-[13px]'}>
           {ACKNOWLEDGEMENT_OF_COUNTRY}
         </p>
         <div className={ROW[variant]}>

@@ -108,6 +108,50 @@ public class RosteringRulesSettingTests
     }
 
     [Fact]
+    public async Task Get_WithNoRow_SaysTheAutoRosterReachIs3()
+    {
+        var (_, controller) = Create(A);
+        Assert.Equal(3, Data(await controller.Get(default)).AutoRosterReach);
+    }
+
+    [Fact]
+    public async Task Update_OfOnlyTheAutoRosterReach_StoresIt_AndKeepsEveryOtherField()
+    {
+        var (db, controller) = Create(A);
+        db.AppSettings.Add(Stored(A));
+        await db.SaveChangesAsync();
+
+        var saved = Data(await controller.Update(new UpdateAppSettingsDto { AutoRosterReach = 1 }, default));
+
+        Assert.Equal((21, 30, 20, 14, 1), (saved.QualificationWarningDays, saved.WeeklyHoursWarning, saved.VarianceReviewMinutes, saved.PlanExpiryWarningDays, saved.AutoRosterReach));
+        Assert.Equal(1, (await db.AppSettings.SingleAsync()).AutoRosterReach);
+        Assert.Equal(1, Data(await controller.Get(default)).AutoRosterReach);
+    }
+
+    [Fact]
+    public async Task Update_LeavingTheAutoRosterReachOut_KeepsTheStoredReach()
+    {
+        var (db, controller) = Create(A);
+        var row = Stored(A);
+        row.AutoRosterReach = 0;
+        db.AppSettings.Add(row);
+        await db.SaveChangesAsync();
+
+        var saved = Data(await controller.Update(new UpdateAppSettingsDto { VarianceReviewMinutes = 40 }, default));
+
+        Assert.Equal(0, saved.AutoRosterReach);
+        Assert.Equal(0, (await db.AppSettings.SingleAsync()).AutoRosterReach);
+    }
+
+    [Theory]
+    [InlineData(-1, false)] [InlineData(0, true)] [InlineData(3, true)] [InlineData(4, false)]
+    public void TheAutoRosterReach_IsBounded_0To3(int reach, bool valid)
+    {
+        var dto = new UpdateAppSettingsDto { AutoRosterReach = reach };
+        Assert.Equal(valid, Validator.TryValidateObject(dto, new ValidationContext(dto), null, true));
+    }
+
+    [Fact]
     public async Task Update_ForOrganisationA_LeavesOrganisationBsRowUnchanged()
     {
         var (db, controller) = Create(A);

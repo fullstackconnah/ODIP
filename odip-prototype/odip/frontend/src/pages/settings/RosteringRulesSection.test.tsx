@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import RosteringRulesSection from './RosteringRulesSection'
 
-const { settingsData, mutate } = vi.hoisted(() => ({ settingsData: { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30 }, mutate: vi.fn() }))
+const { settingsData, mutate } = vi.hoisted(() => ({ settingsData: { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30, autoRosterReach: 3 }, mutate: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useSettings: () => ({ data: settingsData, isError: false, refetch: vi.fn() }),
   useUpdateSettings: () => ({ mutate, isPending: false }),
@@ -18,15 +18,18 @@ function renderSection(readOnly = false) {
 beforeEach(() => { mutate.mockReset() })
 
 describe('Rostering rules', () => {
-  it('shows both figures with their guidance', () => {
+  it('shows the figures and the reach with their guidance', () => {
     renderSection()
     expect(screen.getByLabelText('Weekly hours')).toHaveValue(38)
     expect(screen.getByLabelText('Shift review minutes')).toHaveValue(15)
     expect(screen.getByText(/38 unless you change it/)).toBeInTheDocument()
     expect(screen.getByText(/15 unless you change it/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Auto-roster places freely')).toHaveValue('3')
+    expect(screen.getByRole('option', { name: 'Anyone not marked No' })).toBeInTheDocument()
+    expect(screen.getByText(/Anyone not marked No unless you change it/)).toBeInTheDocument()
   })
 
-  it('saves exactly the two fields it owns, then says Saved', async () => {
+  it('saves exactly the three fields it owns, then says Saved', async () => {
     const user = userEvent.setup()
     mutate.mockImplementation((_body, opts) => opts.onSuccess())
     renderSection()
@@ -37,9 +40,19 @@ describe('Rostering rules', () => {
     await user.type(minutes, '20')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(mutate.mock.calls[0][0]).toEqual({ weeklyHoursWarning: 38, varianceReviewMinutes: 20 })
+    expect(mutate.mock.calls[0][0]).toEqual({ weeklyHoursWarning: 38, varianceReviewMinutes: 20, autoRosterReach: 3 })
     expect(screen.getByRole('status')).toHaveTextContent('Saved')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it('saves a changed reach as a number', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation((_body, opts) => opts.onSuccess())
+    renderSection()
+    await user.selectOptions(screen.getByLabelText('Auto-roster places freely'), 'Through Backup')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mutate.mock.calls[0][0]).toEqual({ weeklyHoursWarning: 38, varianceReviewMinutes: 15, autoRosterReach: 1 })
   })
 
   it('keeps the figures and says why when the server refuses', async () => {
@@ -91,6 +104,7 @@ describe('Rostering rules', () => {
     expect(screen.getByText(/only an admin can change these/i)).toBeInTheDocument()
     expect(screen.getByLabelText('Weekly hours')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('Shift review minutes')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Auto-roster places freely')).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 })

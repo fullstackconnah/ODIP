@@ -686,7 +686,7 @@ export default function AppLayout() {
       </aside>
 
       {/* Main area */}
-      <div className={`flex-1 min-w-0 print:ml-0! ${collapsed ? 'lg:ml-16 lg:duration-[140ms]' : 'lg:ml-[232px] lg:duration-[160ms]'} lg:transition-[margin-left] lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none group/shell flex flex-col min-h-screen lg:has-[[data-fit-screen]]:h-dvh`}>
+      <div className={`flex-1 min-w-0 print:ml-0! ${collapsed ? 'lg:ml-16 lg:duration-[140ms]' : 'lg:ml-[232px] lg:duration-[160ms]'} lg:transition-[margin-left] lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none group/shell flex flex-col min-h-screen`}>
         {/* Top bar — fixed 48px */}
         <header className="print:hidden sticky top-0 z-30 h-[calc(3rem+var(--safe-top))] pt-[var(--safe-top)] bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[var(--shadow-hairline)]">
           <div className="flex items-center justify-between gap-2 h-full pl-[max(var(--gutter,20px),var(--safe-left))] pr-[max(var(--gutter,20px),var(--safe-right))]">
@@ -754,7 +754,7 @@ export default function AppLayout() {
           PlatformFooter (variant="shell"), the last thing in this column, carries it below lg (--mobile-nav-h, the safe area and
           0.75rem). The footer always renders, because its Accessibility link is unconditional, so nothing can end up behind the nav.
         */}
-        <main id="main" tabIndex={-1} className="flex-1 min-h-0 print:p-0 px-[var(--gutter,20px)] pt-4 pb-6 focus:outline-none lg:has-[[data-fit-screen]]:pb-2 lg:has-[[data-fit-screen]]:flex lg:has-[[data-fit-screen]]:flex-col">
+        <main id="main" tabIndex={-1} className="flex-1 min-h-0 print:p-0 px-[var(--gutter,20px)] pt-4 pb-6 focus:outline-none lg:has-[[data-fit-screen]]:pb-0 lg:has-[[data-fit-screen]]:flex lg:has-[[data-fit-screen]]:flex-col lg:has-[[data-fit-screen]]:flex-none lg:has-[[data-fit-screen]]:h-[calc(100dvh-3rem-var(--safe-top))]">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}

@@ -1832,7 +1832,8 @@ const tripVehicleAssignments = {
 }
 
 // Settings (AppSettingsDto)
-const appSettings = { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30 }
+const appSettings = { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30, autoRosterReach: 3 }
+autoRosterMock.reach = () => appSettings.autoRosterReach
 
 // Leave requests (LeaveRequestDto) + recurring unavailability (RecurringUnavailabilityDto) —
 // offline preview fixtures for the coordinator LeaveApprovalsPage and self-service
@@ -3360,6 +3361,7 @@ const postRoutes = [
 // PUT /staff-availability/:id deliberately has no entry here — it falls through to the generic
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
+  ['settings', (body) => Object.assign(appSettings, body)],
   ...packageRoutesPut,
   // The upsert never deletes: a row set back to Allowed stays, as on the server.
   ['rostering/compatibility', (body) => {

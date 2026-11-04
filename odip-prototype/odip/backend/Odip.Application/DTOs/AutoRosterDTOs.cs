@@ -31,6 +31,9 @@ public record AutoRosterSplitDto
     public TimeOnly CutAt { get; init; }
     public AutoRosterSegmentDto First { get; init; } = new();
     public AutoRosterSegmentDto Second { get; init; } = new();
+    /// <summary>Either part is past the organisation's auto-roster reach; omitted when false so the default draft is unchanged.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool NeedsLook { get; init; }
 }
 
 public record AutoRosterSegmentDto
@@ -58,6 +61,9 @@ public record AutoRosterChangeDto
     public string? RegularAway { get; init; }
     public List<RosterFindingDto> Warnings { get; init; } = new();
     public List<AutoRosterAlternateDto> Alternates { get; init; } = new();
+    /// <summary>A non-regular pick past the organisation's auto-roster reach ("Needs a look"); omitted when false so the default draft is unchanged.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool NeedsLook { get; init; }
 }
 
 public record AutoRosterAlternateDto
@@ -66,6 +72,8 @@ public record AutoRosterAlternateDto
     public string StaffName { get; init; } = string.Empty;
     public AutoRosterPick Pick { get; init; }
     public int? Rank { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool NeedsLook { get; init; }
 }
 
 /// <summary>One person's week: their goal (and whether it is the default for their employment type), what is already rostered and what this draft adds.</summary>
