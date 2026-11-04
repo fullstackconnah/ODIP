@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useApprovalPreview, useApproveServiceAgreementDraft } from '@/api/hooks'
-import type { ApprovalActivationDto, ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, ServiceAgreementDraftDto } from '@/api/types'
+import type { AgreementAgreedHow, AgreementContactDto, AgreementShareRowDto, ApprovalActivationDto, ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, ServiceAgreementDraftDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Modal } from '@/components/Modal'
 import { PageState } from '@/components/PageState'
+import { SelectField } from '@/components/SelectField'
+import { TextField } from '@/components/TextField'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
@@ -74,6 +76,23 @@ type ApprovalDialogProps = {
   onGoToShifts?: (blockId: string) => void
   /** The server answered that a newer save has replaced this agreement (409 draft-superseded) to the preview or the approval: the page reads the agreement again. */
   onSuperseded?: () => void
+  /** The people who could have agreed (the contacts and the participant), for the optional "Agreed by" record. Absent for a role that may not send: the dialog then has no such fields. */
+  contacts?: AgreementContactDto[]
+  /** The link that was sent, when one is live: its contact and Email start the two fields. */
+  sentTo?: AgreementShareRowDto
+}
+
+const HOW_OPTIONS: { value: AgreementAgreedHow; label: string }[] = [
+  { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }, { value: 'InPerson', label: 'In person' }, { value: 'Other', label: 'Other' },
+]
+
+// The participant has no person id; the select needs a value for them.
+const contactKey = (contact: AgreementContactDto) => contact.personId ?? 'participant'
+
+/** The contact the live link went to (matched on the address, which the share row keeps), as the value "Agreed by" starts on. */
+const sentKey = (contacts: AgreementContactDto[] | undefined, sentTo: AgreementShareRowDto | undefined) => {
+  const match = sentTo && contacts?.find(contact => contact.email?.toLowerCase() === sentTo.recipientEmail.toLowerCase())
+  return match ? contactKey(match) : ''
 }
 
 /**
@@ -84,17 +103,22 @@ type ApprovalDialogProps = {
  * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind. That hold ends when the request does: an answer, or the time limit
  * (APPROVE_TIMEOUT_MS), after which it says no answer came back, to check the card, and that approving again is safe.
  */
-export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, activatesName, onGoToShifts, onSuperseded }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, activatesName, onGoToShifts, onSuperseded, contacts, sentTo }: ApprovalDialogProps) {
   const preview = useApprovalPreview(participantId, draft.id, open)
   const approve = useApproveServiceAgreementDraft()
   const [acknowledged, setAcknowledged] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const supersededSeen = useRef(false)
+  // Who agreed and how: optional, and left out of the request when not set. A link that was sent starts them on its contact and Email.
+  const startBy = sentKey(contacts, sentTo)
+  const [agreedBy, setAgreedBy] = useState(startBy)
+  const [otherName, setOtherName] = useState('')
+  const [how, setHow] = useState<AgreementAgreedHow | ''>(startBy ? 'Email' : '')
   // A dialog that is opened again starts clean: the box is unticked and the last refusal is not there.
   const [seenOpen, setSeenOpen] = useState(open)
   if (seenOpen !== open) {
     setSeenOpen(open)
-    if (!open) { setAcknowledged(false); setFailure(null) }
+    if (!open) { setAcknowledged(false); setFailure(null) } else { setAgreedBy(startBy); setOtherName(''); setHow(startBy ? 'Email' : '') }
   }
 
   const data = preview.data
@@ -116,7 +140,16 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
 
   const submit = () => {
     setFailure(null)
-    approve.mutate({ participantId, draftId: draft.id, acknowledgeOverlaps: needsAcknowledgement && acknowledged }, {
+    const who = contacts?.find(contact => contactKey(contact) === agreedBy)
+    const typed = otherName.trim()
+    approve.mutate({
+      participantId, draftId: draft.id, acknowledgeOverlaps: needsAcknowledgement && acknowledged,
+      // A contact goes by person id (the server copies their name); the participant and a typed name go by name.
+      ...(who?.personId && { agreedByPersonId: who.personId }),
+      ...(who && !who.personId && { agreedByName: who.name }),
+      ...(agreedBy === 'other' && typed && { agreedByName: typed }),
+      ...(how && { agreedHow: how }),
+    }, {
       onSuccess: answer => onApproved(answer?.activation ?? null),
       onError: error => setFailure(timedOut(error) ? { timedOut: true, messages: [TIMED_OUT_MESSAGE] } : { timedOut: false, messages: failureMessages(error) }),
     })
@@ -144,6 +177,22 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
         {data && (blocked
           ? <Reasons reasons={data.reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
           : <WhatItDoes participantId={participantId} draft={draft} preview={data} activatesName={activatesName} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}
+        {data && !blocked && contacts && contacts.length > 0 && (
+          <section aria-labelledby="agreed-heading" className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
+            <h4 id="agreed-heading" className="font-semibold">Who agreed (optional)</h4>
+            <p className="text-[var(--color-muted-foreground)]">Record who agreed to it and how. It is kept with the approval and cannot be changed afterwards.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SelectField
+                label="Agreed by"
+                value={agreedBy}
+                onChange={event => setAgreedBy(event.target.value)}
+                options={[{ value: '', label: 'Not recorded' }, ...contacts.map(contact => ({ value: contactKey(contact), label: `${contact.name} (${contact.roles})` })), { value: 'other', label: 'Someone else' }]}
+              />
+              <SelectField label="How" value={how} onChange={event => setHow(event.target.value as AgreementAgreedHow | '')} options={[{ value: '', label: 'Not recorded' }, ...HOW_OPTIONS]} />
+            </div>
+            {agreedBy === 'other' && <TextField label="Their name" value={otherName} maxLength={200} onChange={event => setOtherName(event.target.value)} />}
+          </section>
+        )}
         {failure && (failure.timedOut
           // No answer is not a refusal: it may well have been approved, so this says to look, not that it failed. The exits are back (the request is over), and approving again is safe.
           ? <Callout tone="warning" title="No answer came back">{failure.messages[0]}</Callout>
