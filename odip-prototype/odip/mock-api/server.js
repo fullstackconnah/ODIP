@@ -2926,6 +2926,13 @@ const routes = [
     if (searchParams.get('needsAttention') === 'true') list = list.filter((i) => i.isOverdue24h || (i.status !== 'Resolved' && i.status !== 'Closed'))
     return paged(list)
   }],
+  // IC7: newest first, the first row is the report itself. The server reads these from the audit trail and returns no other detail.
+  ['incidents/:id/status-history', (id) => {
+    const i = incidents.find((x) => x.id === id) || incidents[0]
+    const rows = [{ at: '2026-07-11T21:05:00Z', byName: i.reportedByName, from: null, to: 'Submitted' }]
+    if (i.status !== 'Submitted' && i.status !== 'Draft') rows.unshift({ at: '2026-07-12T09:30:00Z', byName: 'Callum Radford', from: 'Submitted', to: i.status })
+    return rows
+  }],
   ['incidents/:id', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]
     return { ...i, ...(incidentDetailExtras[i.id] || {}) }
@@ -3321,6 +3328,15 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ['settings', (body) => Object.assign(appSettings, body)],
+  // IC7: the Admin review. The reviewer and the date are the server's, as on the real endpoint.
+  ['incidents/:id/review', (id, body) => {
+    const i = incidents.find((x) => x.id === id)
+    if (!i) return respond(404, failEnvelope(null, ['Incident not found']))
+    if (!String(body.reviewNotes || '').trim()) return respond(400, failEnvelope(null, ['Add review notes (up to 4000 characters).']))
+    i.status = body.status
+    incidentDetailExtras[id] = { ...(incidentDetailExtras[id] || {}), reviewedByStaffId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewNotes: body.reviewNotes, correctiveActions: body.correctiveActions ?? null }
+    return i
+  }],
   ...packageRoutesPut,
   // The upsert never deletes: a row set back to Allowed stays, as on the server.
   ['rostering/compatibility', (body) => {
