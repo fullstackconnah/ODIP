@@ -49,6 +49,8 @@ import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
 import { TodayRoutinesCard } from './participant-detail/TodayRoutinesCard'
 import BudgetTrackCard from './participant-detail/BudgetTrackCard'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
+import { SectionLine } from './participant-detail/SectionLine'
+import { ProfileMapCard } from './participant-detail/ProfileMapCard'
 import { useParticipantTabCounts } from './participant-detail/useParticipantTabCounts'
 import {
   NEW_TABS, PARTICIPANT_TAB_KEYS, useParticipantTabRedirect, useParticipantGoTo, useScrollToHash, useParticipantSection, visibleSubTabs, nestedSectionTarget,
@@ -127,9 +129,8 @@ export default function ParticipantDetailPage() {
   const inCommunityStream = !!p && parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
   const earlierChecklist = p && inCommunityStream ? answeredChecklist(p).length : 0
   // The sub-tabs of the open tab: the rows this role and participant can see. Above the early returns, so the hooks keep their order.
-  const rows = tab === 'overview' ? [] : visibleSubTabs(tab, {
-    rostering: canAccessRostering, planBudget: canManageFunding, claims: canAccessClaims, history: canSeeHistory,
-  })
+  const gates = { rostering: canAccessRostering, planBudget: canManageFunding, claims: canAccessClaims, history: canSeeHistory }
+  const rows = tab === 'overview' ? [] : visibleSubTabs(tab, gates)
   const { section, setSection, selectTab } = useParticipantSection(tab, rows)
   useScrollToHash(id, nestedSectionTarget(rows, searchParams.get('section')))
   // An open SectionEditPanel with unsaved edits holds the register; a tab or sub-tab switch then asks before it unmounts the draft.
@@ -315,6 +316,13 @@ export default function ParticipantDetailPage() {
       panelId: r.id === active ? `sub-${tab}-panel` : undefined,
     }
   })
+  // The Overview map: each tab this role sees with its visible chips; the count is the tab's badge, a chip is quiet as in the strip.
+  const profileLines = tabKeys.filter((k): k is GroupedTabKey => k !== 'overview').map(k => ({
+    tab: k,
+    label: NEW_TABS.find(t => t.id === k)!.label,
+    count: k === 'health' || k === 'daily' || k === 'people' || k === 'records' ? counts[k] : undefined,
+    chips: visibleSubTabs(k, gates).map(r => ({ id: r.id, label: r.label, quiet: !r.list && !members(k, r).some(c => c.has) })),
+  }))
   // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
   // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
   const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
@@ -433,6 +441,7 @@ export default function ParticipantDetailPage() {
                 idPrefix={`sub-${tab}`}
               />
             </div>}
+            <SectionLine tab={tab} sections={members(tab, rows.find(r => r.id === section)!).map(c => ({ id: c.id, title: c.title, has: c.has }))} />
             <div role="tabpanel" id={`sub-${tab}-panel`} {...(rows.length > 1 ? { 'aria-labelledby': `sub-${tab}-tab-${section}` } : { 'aria-label': NEW_TABS.find(t => t.id === tab)!.label })} tabIndex={0} className={`${rows.length > 1 ? 'mt-6' : 'mt-3'} rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2`}>
               <div key={section}>{panelBody(tab, rows.find(r => r.id === section)!)}</div>
             </div>
@@ -480,6 +489,7 @@ export default function ParticipantDetailPage() {
             </div>
             <div className="flex flex-col gap-[var(--section-gap)]">
               <BudgetTrackCard participantId={id!} />
+              <ProfileMapCard lines={profileLines} />
               {topic('Support profile review', 'reviewDate')}
             </div>
           </div>
