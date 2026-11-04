@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { toUpdateStaffDto, type StaffListDto } from './staff'
 
-// UpdateStaff is a full-replace PUT built from the list row by two pages (the qualifications page and the staff list's status change), about 20 fields each:
+// UpdateStaff is a full-replace PUT built from the list row by two pages (the qualifications page and the staff list's status change), 22 fields each:
 // a field added to the type and not to both copies would be erased by the next status click.
 
 const row: StaffListDto = {
@@ -24,6 +24,14 @@ describe('toUpdateStaffDto', () => {
 
   it('keeps the goal hours, so a status click does not clear them', () => {
     expect(toUpdateStaffDto({ ...row, goalWeeklyHours: 30 }, { isActive: false }).goalWeeklyHours).toBe(30)
+  })
+
+  it('keeps the employment type, so a status click does not clear it', () => {
+    expect(toUpdateStaffDto({ ...row, employmentType: 'Casual' }, { isActive: false }).employmentType).toBe('Casual')
+  })
+
+  it('sends an explicit null when the row has no employment type, so clearing it still works', () => {
+    expect(toUpdateStaffDto({ ...row, employmentType: null }, { isActive: false }).employmentType).toBeNull()
   })
 
   it('leaves out the list-only fields, sends nothing for what is empty on the row, and keeps an email the row lacks as an empty string', () => {
