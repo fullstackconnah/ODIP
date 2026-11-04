@@ -351,6 +351,49 @@ describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
     expect(within(dialog).getByText('The worker said there was something to report.')).toBeInTheDocument()
   })
 
+  it.each([
+    ['AtLocation', { locationDistanceMetres: 40, locationAccuracyMetres: 15 }, 'At location (40 m, accuracy 15 m).'],
+    ['AtLocation', { locationDistanceMetres: 40, locationAccuracyMetres: null }, 'At location (40 m).'],
+    ['NotAtLocation', { locationDistanceMetres: 850, locationReason: 'Parked round the corner' }, 'Not at location (850 m away): Parked round the corner'],
+    ['NotAtLocation', { locationDistanceMetres: 850, locationReason: null }, 'Not at location (850 m away). No reason given.'],
+    ['Unavailable', { locationReason: 'Started offline' }, 'Location not available: Started offline'],
+    ['Unavailable', { locationReason: null }, 'Location not available. No reason given.'],
+  ] as const)('says where the shift started in the review dialog: %s %j', async (locationCheck, extra, line) => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ locationCheck, ...extra }) })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(within(screen.getByRole('alertdialog')).getByText(line)).toBeInTheDocument()
+  })
+
+  it('puts the location line straight after the start-change line, as plain text', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ timesAdjusted: true })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({
+      data: makeCompletionDetail({
+        actualStart: '2026-09-07T21:55:00Z', originalActualStart: '2026-09-07T22:02:00Z', timesAdjusted: true, timeAdjustmentReason: 'Early.',
+        locationCheck: 'AtLocation', locationDistanceMetres: 40, locationAccuracyMetres: 15,
+      }),
+    })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    const items = within(screen.getByRole('alertdialog')).getAllByRole('listitem').map(li => li.textContent)
+    const at = items.findIndex(t => t?.startsWith('At location'))
+    expect(items[at - 1]).toMatch(/^Start /)
+    expect(items[at + 1]).toBe('Reason: Early.')
+    expect(within(screen.getByRole('alertdialog')).getByText('At location (40 m, accuracy 15 m).').className).not.toMatch(/rounded|bg-/)
+  })
+
+  it.each([['NoLocationSet' as const], [null], [undefined]])('has no location line when the check is %s', async locationCheck => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ locationCheck }) })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(screen.queryByText(/at location|location not available/i)).not.toBeInTheDocument()
+  })
+
   it('says nothing extra for a completion the worker did not change', async () => {
     const user = userEvent.setup()
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })

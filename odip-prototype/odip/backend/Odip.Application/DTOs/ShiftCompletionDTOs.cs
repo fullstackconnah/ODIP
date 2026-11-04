@@ -18,8 +18,18 @@ public record StartShiftDto
     [Range(-180.0, 180.0)]
     public decimal? Longitude { get; init; }
     public bool GeolocationDeclined { get; init; }
+    /// <summary>The phone's reported accuracy in metres. A double with no range, so any number binds; the server clamps it (never a 400 on Start).</summary>
+    public double? AccuracyMetres { get; init; }
+    /// <summary>Why there is no fix, typed before Start. Trimmed and cut to 300 by the server (never a 400 on Start).</summary>
+    public string? LocationReason { get; init; }
     /// <summary>When the phone recorded the tap, if it was sent late (UTC). Null: the server clock stamps it.</summary>
     public DateTime? StartedAt { get; init; }
+}
+
+/// <summary>POST portal/shifts/{id}/location-reason body: why the worker started away from the place. Text only, never a coordinate.</summary>
+public record LocationReasonDto
+{
+    public string? Reason { get; init; }
 }
 
 /// <summary>Start Break body. Optional as a whole: an old client posts none.</summary>
@@ -187,7 +197,13 @@ public record ShiftCompletionDto(
     /// <summary>"Anything to report?" at Finish: true, false, or null when skipped.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport,
     /// <summary>The worker sent a time recorded offline; the review page marks it.</summary>
-    bool SentFromOffline);
+    bool SentFromOffline,
+    // ── Location check at Start: the answer only, never where the phone was ──
+    /// <summary>Null when the shift was not checked (rows before the check, a manual start).</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] LocationCheckStatus? LocationCheck = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? LocationDistanceMetres = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? LocationAccuracyMetres = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? LocationReason = null);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>

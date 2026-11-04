@@ -97,6 +97,14 @@ describe('offline-aware portal hooks', () => {
     expect(offlineQueue.getSnapshot()).toMatchObject([{ kind: 'start', shiftId: 's1', path: '/portal/shifts/s1/start', method: 'POST', body: { geolocationDeclined: true }, clientTimeField: 'startedAt', status: 'waiting' }])
   })
 
+  it('an offline Start keeps no coordinates in the queue, only the declined flag and the reason', async () => {
+    online.mockReturnValue(false)
+    const { result } = renderHook(() => useStartShift(), { wrapper: wrapper(newClient()) })
+    await result.current.mutateAsync({ id: 's1', data: { latitude: -27.46977, longitude: 153.02512, accuracyMetres: 8, geolocationDeclined: false, locationReason: 'Gate was locked' } })
+    expect(offlineQueue.getSnapshot()).toMatchObject([{ kind: 'start', body: { geolocationDeclined: false, locationReason: 'Gate was locked' } }])
+    expect(JSON.stringify(localStorage)).not.toMatch(/27\.46977|153\.02512/)
+  })
+
   it('the queued Start reads as In progress on the shift detail', async () => {
     writeSaved('u1', 'detail:s1', detail)
     online.mockReturnValue(false)

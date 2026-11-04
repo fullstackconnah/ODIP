@@ -111,7 +111,7 @@ public sealed class DemoTenantGuard
                 nameof(ShiftCompletion.ReviewedByUserId), nameof(ShiftCompletion.ReviewedAt), nameof(ShiftCompletion.ReviewOutcome),
                 nameof(ShiftCompletion.ActualEnd), nameof(ShiftCompletion.SubmittedAt), nameof(ShiftCompletion.VarianceMinutesEnd),
                 nameof(ShiftCompletion.HandoverText), nameof(ShiftCompletion.NothingToHandOver), nameof(ShiftCompletion.NothingToNoteConfirmed),
-                nameof(ShiftCompletion.EndLatitude), nameof(ShiftCompletion.EndLongitude), nameof(ShiftCompletion.UpdatedAt),
+                nameof(ShiftCompletion.LocationReason), nameof(ShiftCompletion.UpdatedAt),
             },
             // A running break is ended when its shift is finished.
             [typeof(ShiftBreak)] = new HashSet<string> { nameof(ShiftBreak.EndedAt), nameof(ShiftBreak.EditedAt), nameof(ShiftBreak.UpdatedAt) },
