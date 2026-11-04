@@ -84,6 +84,7 @@ public class ParticipantIdMaskEndpointScanTests
 
     private static readonly Dictionary<string, string> UntypedAllowList = new()
     {
+        ["AgreementShareController.Pdf"] = "the agreement PDF the contact is sent by email: it carries the participant NDIS number by design (D14), behind an unguessable single-agreement token; the JSON action has a typed DTO with no such field (2026-11-04)",
         ["AuthController.DevUsers"] = "no participant ID fields in this controller (grep-checked 2026-10-25)",
         ["AuthController.DevWhoAmi"] = "dev-only identity echo; no participant ID fields in this controller (grep-checked 2026-10-25)",
         ["AuthController.Logout"] = "no participant ID fields in this controller (grep-checked 2026-10-25)",

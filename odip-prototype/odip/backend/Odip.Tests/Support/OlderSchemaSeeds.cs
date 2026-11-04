@@ -12,6 +12,7 @@ internal static class OlderSchemaSeeds
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
         ("AppSettings", "HiddenTrips", "boolean NOT NULL DEFAULT FALSE"),
+        ("AppSettings", "AutoRosterReach", "integer NOT NULL DEFAULT 3"),
         ("IncidentReports", "AmbulanceOfficerName", "character varying(100)"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
@@ -35,6 +36,9 @@ internal static class OlderSchemaSeeds
         ("ProviderSettings", "TradingName", "character varying(200)"),
         ("ProviderSettings", "UpdatedAt", "timestamp without time zone"),
         ("ProviderSettings", "Website", "character varying(500)"),
+        ("ServiceAgreementDraftApprovals", "AgreedByName", "character varying(200)"),
+        ("ServiceAgreementDraftApprovals", "AgreedByPersonId", "uuid"),
+        ("ServiceAgreementDraftApprovals", "AgreedHow", "integer"),
         ("ServiceAgreementDrafts", "IsOngoing", "boolean"),
         ("ServiceAgreementDrafts", "OriginalAgreementEndDate", "date"),
         ("ShiftBreaks", "WithParticipant", "boolean"),

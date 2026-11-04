@@ -53,14 +53,14 @@ public class AutoRosterPlannerTests
             return shift;
         }
 
-        public async Task<AutoRosterPlan> PlanAsync(bool reversePool = false, Func<IAutoRosterOracle, IAutoRosterOracle>? wrap = null)
+        public async Task<AutoRosterPlan> PlanAsync(bool reversePool = false, Func<IAutoRosterOracle, IAutoRosterOracle>? wrap = null, int reach = 3)
         {
             await Db.SaveChangesAsync();
             var availability = new RosterAvailability(Db, new StaffUnavailabilityQuery(Db));
             var snapshot = await availability.LoadAsync(Pool.Select(w => w.Id).ToList(), [Mia.Id], Monday, Monday.AddDays(6), default);
             var pool = reversePool ? Enumerable.Reverse(Pool).ToList() : Pool;
             var open = reversePool ? Enumerable.Reverse(Open).ToList() : Open;
-            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady), (wrap ?? (o => o))(new SnapshotAutoRosterOracle(snapshot)));
+            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady, reach), (wrap ?? (o => o))(new SnapshotAutoRosterOracle(snapshot)));
         }
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
@@ -382,5 +382,88 @@ public class AutoRosterPlannerTests
             [AutoRosterRecommendationKind.OverGoal, AutoRosterRecommendationKind.Override, AutoRosterRecommendationKind.Soft],
             uncovered.Recommendations.Select(r => r.Kind));
         Assert.Equal([hal.Id, pat.Id, sue.Id], uncovered.Recommendations.Select(r => r.StaffId!.Value));
+    }
+
+    // Compat PR 1b: the reach only flags ("Needs a look"); it never changes who is proposed.
+    private static async Task<(World World, AutoRosterWorker Pat, AutoRosterWorker Bea, AutoRosterWorker Emmy, AutoRosterWorker Una, AutoRosterWorker Rae)> ReachWorld()
+    {
+        var w = new World();
+        var pat = w.Worker("Pat", 38, level: CompatibilityLevel.Preferred, rank: 1);
+        var bea = w.Worker("Bea", 38, level: CompatibilityLevel.Backup, rank: 1);
+        var emmy = w.Worker("Emmy", 38, level: CompatibilityLevel.Emergency, rank: 1);
+        var una = w.Worker("Una", 38);
+        var rae = w.Worker("Rae", 38, level: CompatibilityLevel.Emergency, rank: 2);
+        w.Shift(0, 9, 13);
+        var regularShift = w.Shift(1, 9, 13);
+        w.Regulars[regularShift.ShiftPatternId!.Value] = rae.Id;
+        await w.Db.SaveChangesAsync();
+        return (w, pat, bea, emmy, una, rae);
+    }
+
+    private static string Who(AutoRosterPlan p) => string.Join("|", p.Placements.Select(x => $"{x.ShiftId}:{x.StaffId}:{x.Pick}/" + string.Join(",", x.Alternates.Select(a => a.StaffId))))
+        + "#" + string.Join(",", p.Uncovered.Select(u => u.ShiftId)) + "#" + string.Join(",", p.Splits.Select(s => $"{s.ShiftId}:{s.FirstStaffId}:{s.SecondStaffId}"));
+
+    [Fact]
+    public async Task Reach_NeverChangesWhoIsProposed_AndAtTheDefaultNothingIsFlagged()
+    {
+        var (w, _, _, _, _, _) = await ReachWorld();
+        await using var world = w;
+
+        var plans = new List<AutoRosterPlan>();
+        for (var reach = 0; reach <= 3; reach++) plans.Add(await w.PlanAsync(reach: reach));
+
+        Assert.All(plans, p => Assert.Equal(Who(plans[0]), Who(p)));
+        var shipped = plans[3];
+        Assert.DoesNotContain(shipped.Placements, p => p.NeedsLook || p.Alternates.Any(a => a.NeedsLook));
+        Assert.DoesNotContain(shipped.Splits, s => s.NeedsLook);
+    }
+
+    [Fact]
+    public async Task Reach0_FlagsTheAlternatesThatAreBackupOrLower_AndFollowsThemToTheDto()
+    {
+        var (w, pat, bea, emmy, _, rae) = await ReachWorld();
+        await using var world = w;
+
+        var plan = await w.PlanAsync(reach: 0);
+
+        var first = plan.Placements[0];
+        Assert.Equal(pat.Id, first.StaffId);
+        Assert.False(first.NeedsLook);
+        Assert.Equal([bea.Id, emmy.Id, rae.Id], first.Alternates.Select(a => a.StaffId));
+        Assert.All(first.Alternates, a => Assert.True(a.NeedsLook));
+    }
+
+    [Fact]
+    public async Task Reach1_FlagsAnEmergencyPick_ButNotARegularAtEmergency()
+    {
+        await using var w = new World();
+        w.Worker("Pat", 38, level: CompatibilityLevel.Excluded);
+        w.Worker("Bea", 38, level: CompatibilityLevel.Excluded);
+        var emmy = w.Worker("Emmy", 38, level: CompatibilityLevel.Emergency, rank: 1);
+        var rae = w.Worker("Rae", 38, level: CompatibilityLevel.Emergency, rank: 2);
+        var open = w.Shift(0, 9, 13);
+        var regularShift = w.Shift(1, 9, 13);
+        w.Regulars[regularShift.ShiftPatternId!.Value] = rae.Id;
+
+        var plan = await w.PlanAsync(reach: 1);
+
+        var emergency = plan.Placements.Single(p => p.ShiftId == open.Id);
+        Assert.Equal((emmy.Id, true), (emergency.StaffId, emergency.NeedsLook));
+        var regular = plan.Placements.Single(p => p.ShiftId == regularShift.Id);
+        Assert.Equal((AutoRosterPick.Regular, false), (regular.Pick, regular.NeedsLook));
+    }
+
+    [Fact]
+    public async Task Reach1_FlagsAnUnlistedPick_ButNotAtReach3()
+    {
+        await using var w = new World();
+        w.Worker("Pat", 38, level: CompatibilityLevel.Excluded);
+        var una = w.Worker("Una", 38);
+        w.Shift(0, 9, 13);
+
+        var flagged = (await w.PlanAsync(reach: 1)).Placements[0];
+        Assert.Equal((una.Id, true), (flagged.StaffId, flagged.NeedsLook));
+        var shipped = (await w.PlanAsync(reach: 3)).Placements[0];
+        Assert.Equal((una.Id, false), (shipped.StaffId, shipped.NeedsLook));
     }
 }

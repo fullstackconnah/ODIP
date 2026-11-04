@@ -689,6 +689,7 @@ export interface AutoRosterAlternateDto {
   staffName: string
   pick: AutoRosterPick
   rank?: number | null
+  needsLook?: boolean
 }
 
 export interface AutoRosterChangeDto {
@@ -707,6 +708,8 @@ export interface AutoRosterChangeDto {
   regularAway?: string | null
   warnings: RosterFindingDto[]
   alternates: AutoRosterAlternateDto[]
+  /** A non-regular pick past the organisation's auto-roster reach ("Needs a look"); absent when false. */
+  needsLook?: boolean
 }
 
 export interface AutoRosterHoursDto {
@@ -747,6 +750,8 @@ export interface AutoRosterSplitDto {
   cutAt: string
   first: { staffId: string; staffName: string }
   second: { staffId: string; staffName: string }
+  /** Either part is past the reach; absent when false. */
+  needsLook?: boolean
 }
 
 export interface AutoRosterDraftDto {

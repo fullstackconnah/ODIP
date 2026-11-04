@@ -113,6 +113,58 @@ public class AutoRosterControllerTests
         return c;
     }
 
+    // Golden body captured on origin/main ffd9307c BEFORE the reach change: the default reach (3) must leave the draft byte-identical (compat PR 1b, check 14).
+    private const string DefaultReachGolden = "{\"WeekStart\":\"2026-11-02\",\"GeneratedAt\":\"2026-11-01T02:00:00Z\",\"Changes\":[{\"ShiftId\":\"00000000-0000-0000-0000-0000000000c1\",\"ParticipantId\":\"00000000-0000-0000-0000-0000000000b1\",\"ParticipantName\":\"Mia Test\",\"ServiceDate\":\"2026-11-03\",\"StartTime\":\"09:00:00\",\"EndTime\":\"13:00:00\",\"StaffId\":\"00000000-0000-0000-0000-0000000000a1\",\"StaffName\":\"Pat Test\",\"Pick\":\"Preferred\",\"Rank\":1,\"UnderGoal\":true,\"Warnings\":[],\"Alternates\":[{\"StaffId\":\"00000000-0000-0000-0000-0000000000a2\",\"StaffName\":\"Quinn Test\",\"Pick\":\"Allowed\"}]}],\"Hours\":[{\"StaffId\":\"00000000-0000-0000-0000-0000000000a1\",\"StaffName\":\"Pat Test\",\"GoalHours\":19,\"GoalIsDefault\":true,\"RosteredHours\":0,\"DraftHours\":4},{\"StaffId\":\"00000000-0000-0000-0000-0000000000a2\",\"StaffName\":\"Quinn Test\",\"GoalHours\":19,\"GoalIsDefault\":true,\"RosteredHours\":0,\"DraftHours\":0}],\"Uncovered\":[],\"Splits\":[]}";
+
+    private static User Fixed(Guid id, string name) => new()
+    {
+        Id = id, TenantId = TenantA, FirstName = name, LastName = "Test", Username = name, Email = $"{name}@example.com",
+        Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true, WorkerScreeningNumber = "WSC-1", WorkerScreeningExpiryDate = new DateOnly(2030, 1, 1),
+    };
+
+    [Fact]
+    public async Task AutoRoster_AtTheDefaultReach_GivesTheBodyItAlwaysDid()
+    {
+        using var db = TestDb.Create();
+        db.Users.Add(Fixed(Guid.Parse("00000000-0000-0000-0000-0000000000a1"), "Pat"));
+        db.Users.Add(Fixed(Guid.Parse("00000000-0000-0000-0000-0000000000a2"), "Quinn"));
+        var mia = db.Participants.Add(new Participant { Id = Guid.Parse("00000000-0000-0000-0000-0000000000b1"), TenantId = TenantA, FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-0000000000c1"), TenantId = TenantA, ParticipantId = mia.Id, ServiceDate = Monday.AddDays(1), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft, ShiftPatternId = Guid.Parse("00000000-0000-0000-0000-0000000000d1"),
+        });
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility { Id = Guid.NewGuid(), TenantId = TenantA, UserId = Guid.Parse("00000000-0000-0000-0000-0000000000a1"), ParticipantId = mia.Id, Level = CompatibilityLevel.Preferred, Rank = 1 });
+        await db.SaveChangesAsync();
+
+        var ok = Assert.IsType<OkObjectResult>((await Controller(db, TenantA).AutoRoster(Monday.AddDays(2), default)).Result);
+        var options = new System.Text.Json.JsonSerializerOptions();
+        Odip.Api.Serialization.ApiJsonOptions.Configure(options);
+        var body = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<ApiResponse<AutoRosterDraftDto>>(ok.Value).Data, options);
+
+        Assert.Equal(DefaultReachGolden, body);
+    }
+
+    [Fact]
+    public async Task AutoRoster_ReadsTheOrganisationsReach_AndFlagsTheAlternateBeyondIt()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var (mia, _) = OpenShift(db, "Mia", TenantA);
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility { Id = Guid.NewGuid(), TenantId = TenantA, UserId = pat.Id, ParticipantId = mia.Id, Level = CompatibilityLevel.Preferred, Rank = 1 });
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = TenantA, AutoRosterReach = 0 });
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = TenantB, AutoRosterReach = 3 });
+        await db.SaveChangesAsync();
+
+        var ok = Assert.IsType<OkObjectResult>((await Controller(db, TenantA).AutoRoster(Monday.AddDays(2), default)).Result);
+        var change = Assert.Single(Assert.IsType<ApiResponse<AutoRosterDraftDto>>(ok.Value).Data!.Changes);
+
+        Assert.Equal((pat.Id, false), (change.StaffId, change.NeedsLook));
+        var alternate = Assert.Single(change.Alternates);
+        Assert.Equal((quinn.Id, true), (alternate.StaffId, alternate.NeedsLook));
+    }
+
     private static AutoRosterApplyDto Rows(params (Guid Shift, Guid Staff)[] rows) => new() { Rows = rows.Select(r => new AutoRosterApplyRowDto { ShiftId = r.Shift, StaffId = r.Staff }).ToList() };
 
     private static AutoRosterApplyResultDto Result(ActionResult<ApiResponse<AutoRosterApplyResultDto>> r) =>

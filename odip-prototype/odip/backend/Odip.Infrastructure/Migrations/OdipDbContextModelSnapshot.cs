@@ -266,6 +266,9 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AutoRosterReach")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("HiddenAccommodation")
                         .HasColumnType("boolean");
 
@@ -4552,6 +4555,16 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AgreedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("AgreedByPersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AgreedHow")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ApprovedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4715,6 +4728,75 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("DraftId");
 
                     b.ToTable("ServiceAgreementDraftLines");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementShare", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("OpenedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("RecipientName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("RecipientPersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SendError")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SentByName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("SentByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "DraftId", "SentAt");
+
+                    b.ToTable("ServiceAgreementShares");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.StaffAssignment", b =>
@@ -8009,6 +8091,17 @@ namespace Odip.Infrastructure.Migrations
                 {
                     b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
                         .WithMany("Lines")
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Draft");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementShare", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
+                        .WithMany()
                         .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

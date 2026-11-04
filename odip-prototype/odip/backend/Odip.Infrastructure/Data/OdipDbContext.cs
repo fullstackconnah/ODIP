@@ -35,6 +35,7 @@ public class OdipDbContext : DbContext
     public DbSet<ServiceAgreementDraftLine> ServiceAgreementDraftLines => Set<ServiceAgreementDraftLine>();
     public DbSet<ServiceAgreementDraftBlock> ServiceAgreementDraftBlocks => Set<ServiceAgreementDraftBlock>();
     public DbSet<ServiceAgreementDraftApproval> ServiceAgreementDraftApprovals => Set<ServiceAgreementDraftApproval>();
+    public DbSet<ServiceAgreementShare> ServiceAgreementShares => Set<ServiceAgreementShare>();
     public DbSet<ElectronicSigningSnapshot> ElectronicSigningSnapshots => Set<ElectronicSigningSnapshot>();
     public DbSet<ElectronicSigningEvidence> ElectronicSigningEvidence => Set<ElectronicSigningEvidence>();
     public DbSet<Contact> Contacts => Set<Contact>();
@@ -1804,10 +1805,24 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ApprovedByName).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.AgreedByName).HasMaxLength(200);
             entity.HasOne(e => e.Draft).WithMany().HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.DraftId).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
+        });
+        // An emailed read-only link to a revision (agreement PR 3). The token hash is unique; deleting the revision takes its links with it.
+        modelBuilder.Entity<ServiceAgreementShare>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TokenHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.RecipientName).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.RecipientEmail).HasMaxLength(254).IsRequired();
+            entity.Property(e => e.SentByName).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.SendError).HasMaxLength(30);
+            entity.HasOne(e => e.Draft).WithMany().HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.DraftId, e.SentAt });
         });
         modelBuilder.Entity<ServiceAgreementDraftLine>(entity =>
         {
@@ -2198,6 +2213,8 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ServiceAgreementDraft>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceAgreementDraftApproval>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ServiceAgreementShare>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ElectronicSigningSnapshot>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

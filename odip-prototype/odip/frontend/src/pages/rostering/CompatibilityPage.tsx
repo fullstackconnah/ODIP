@@ -13,13 +13,15 @@ import { ParticipantPicker } from '@/components/ParticipantPicker'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { DataTable, RowMenu, type Column } from '@/components/DataTable'
+import { BackButton } from '@/components/BackButton'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { usePermissions } from '@/lib/permissions'
-import { extractErrorMessage } from '@/lib/utils'
+import { cn, extractErrorMessage } from '@/lib/utils'
 import type { Tone } from '@/lib/tone'
 import { useAllCompatibility, useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
+import { TierBoard } from './components/TierBoard'
 
 // Only Preferred (green) and No (red) carry colour; Backup and Emergency stay neutral, as on the participant card.
 const MARK: Record<Exclude<CompatibilityLevel, 'Allowed'>, { label: string; tone: Tone }> = {
@@ -29,13 +31,15 @@ const MARK: Record<Exclude<CompatibilityLevel, 'Allowed'>, { label: string; tone
   Excluded: { label: 'No', tone: 'danger' },
 }
 
-type View = 'all' | 'no' | 'prefs'
+type Filter = 'all' | 'no' | 'prefs'
 
-type Draft = { staffId: string; participantId: string; reason: string; fixedPair: boolean }
+// fixedPair: both people are known (the dialog shows no pickers). fixedParticipant: only the participant is (the board's "+ Mark No").
+type Draft = { staffId: string; participantId: string; reason: string; fixedPair: boolean; fixedParticipant?: boolean }
 
 export default function CompatibilityPage() {
   const { canWrite } = usePermissions()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
+  const allPairings = params.get('view') === 'all'
   // INTAKE-08: drafts are out; the list keeps today's scope (active staff, ready participants).
   const participants = useParticipants(CAN_RECEIVE_SERVICES)
   const staff = useStaff()
@@ -43,7 +47,7 @@ export default function CompatibilityPage() {
   const upsert = useUpsertCompatibility()
 
   const [query, setQuery] = useState(params.get('q') ?? '')
-  const [view, setView] = useState<View>('all')
+  const [filter, setFilter] = useState<Filter>('all')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [removing, setRemoving] = useState<CompatibilityRowDto | null>(null)
@@ -66,7 +70,32 @@ export default function CompatibilityPage() {
     return q ? inScope.filter(r => r.staffName.toLowerCase().includes(q) || r.participantName.toLowerCase().includes(q)) : inScope
   }, [inScope, query])
   const noCount = searched.filter(r => r.level === 'Excluded').length
-  const rows = view === 'no' ? searched.filter(r => r.level === 'Excluded') : view === 'prefs' ? searched.filter(r => r.level !== 'Excluded') : searched
+  const rows = filter === 'no' ? searched.filter(r => r.level === 'Excluded') : filter === 'prefs' ? searched.filter(r => r.level !== 'Excluded') : searched
+
+  // The board's participant list: the same scope, filtered by the search, with each one's counts.
+  const counts = useMemo(() => {
+    const m = new Map<string, { listed: number; no: number }>()
+    for (const r of inScope) {
+      const c = m.get(r.participantId) ?? { listed: 0, no: 0 }
+      if (r.level === 'Excluded') c.no++
+      else c.listed++
+      m.set(r.participantId, c)
+    }
+    return m
+  }, [inScope])
+  const listed = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return (participants.data ?? []).filter(p => !q || p.fullName.toLowerCase().includes(q))
+  }, [participants.data, query])
+  const chosen = (participants.data ?? []).find(p => p.id === params.get('participant'))
+  const current = chosen ?? listed[0]   // from md up the first participant shows without writing the URL
+  const setParam = (key: string, value: string | null) =>
+    setParams(p => { const n = new URLSearchParams(p); if (value) n.set(key, value); else n.delete(key); return n }, { replace: true })
+  const metaFor = (id: string) => {
+    if (all.isLoading) return ''
+    const c = counts.get(id)
+    return [c?.listed && `${c.listed} listed`, c?.no && `${c.no} No`].filter(Boolean).join(' · ') || 'Nothing listed'
+  }
 
   const isLoading = participants.isLoading || staff.isLoading || all.isLoading
   const isError = participants.isError || staff.isError || all.isError
@@ -75,11 +104,17 @@ export default function CompatibilityPage() {
   const pair = draft && inScope.find(r => r.staffId === draft.staffId && r.participantId === draft.participantId)
   const staffName = (id: string) => activeStaff.find(s => s.id === id)?.fullName ?? ''
   const participantName = (id: string) => (participants.data ?? []).find(p => p.id === id)?.fullName ?? ''
-  const editing = !!draft && (draft.fixedPair || pair?.level === 'Excluded')
+  // Only a pair that is already No is an edit: marking No from a chip fixes both people but is still a new mark.
+  const editing = pair?.level === 'Excluded'
 
-  function openNew() {
+  function openNew(next: Partial<Draft> = {}) {
     setDialogError(null)
-    setDraft({ staffId: '', participantId: '', reason: '', fixedPair: false })
+    setDraft({ staffId: '', participantId: '', reason: '', fixedPair: false, ...next })
+  }
+
+  function openEdit(r: CompatibilityRowDto) {
+    setDialogError(null)
+    setDraft({ staffId: r.staffId, participantId: r.participantId, reason: r.reason ?? '', fixedPair: true })
   }
 
   function pick(next: Partial<Draft>) {
@@ -149,7 +184,7 @@ export default function CompatibilityPage() {
         <RowMenu
           name={`${r.staffName} and ${r.participantName}`}
           items={[
-            { label: 'Edit reason', icon: <Pencil className="w-4 h-4" aria-hidden="true" />, onSelect: () => { setDialogError(null); setDraft({ staffId: r.staffId, participantId: r.participantId, reason: r.reason ?? '', fixedPair: true }) } },
+            { label: 'Edit reason', icon: <Pencil className="w-4 h-4" aria-hidden="true" />, onSelect: () => openEdit(r) },
             { label: 'Remove No', icon: <Undo2 className="w-4 h-4" aria-hidden="true" />, onSelect: () => setRemoving(r) },
           ]}
         />
@@ -165,8 +200,17 @@ export default function CompatibilityPage() {
         title="Compatibility"
         subtitle="Pairings that differ from the default. A worker marked No can’t be rostered for that participant."
         count={isLoading || isError ? undefined : inScope.length}
-        action={canWrite && !noPeopleYet ? <Button onClick={openNew}>Mark as No</Button> : undefined}
+        action={canWrite && !noPeopleYet ? <Button onClick={() => openNew()}>Mark as No</Button> : undefined}
       />
+
+      {!noPeopleYet && (
+        <ToggleGroup
+          ariaLabel="View"
+          value={allPairings ? 'all' : 'participant'}
+          onChange={key => setParam('view', key === 'all' ? 'all' : null)}
+          options={[{ key: 'participant', label: 'By participant' }, { key: 'all', label: 'All pairings' }]}
+        />
+      )}
 
       {saveError && (
         <Callout
@@ -185,24 +229,68 @@ export default function CompatibilityPage() {
         <EmptyState icon={Users} title="Nothing to match yet" description="Add at least one staff member and one participant first." />
       )}
 
-      {nothingMarked && (
+      {!noPeopleYet && !allPairings && (
+        <div className="md:grid md:grid-cols-[15.5rem_minmax(0,1fr)] md:items-start md:gap-6">
+          {/* Below md the list and the board are two steps: the list until a participant is chosen, then the board. */}
+          <nav aria-label="Participants" className={cn('space-y-2 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto', chosen && 'max-md:hidden')}>
+            <SearchInput value={query} onChange={setQuery} placeholder="Search participants" className="w-full" />
+            {listed.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No participants match “{query.trim()}”.</p>
+            ) : (
+              <ul>
+                {listed.map(p => (
+                  <li key={p.id}>
+                    <Link
+                      to={{ search: `?${new URLSearchParams({ ...Object.fromEntries(params), participant: p.id })}` }}
+                      aria-current={p.id === current?.id ? 'page' : undefined}
+                      className={cn(
+                        'flex min-h-11 flex-col justify-center rounded-[var(--radius-sm)] px-3 py-1 hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
+                        p.id === current?.id && 'bg-[var(--color-accent)]',
+                      )}
+                    >
+                      <span className="text-sm font-medium">{p.fullName}</span>
+                      <span className="text-xs text-muted-foreground">{metaFor(p.id)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </nav>
+          {current && (
+            <div className={cn('min-w-0 space-y-4', !chosen && 'max-md:hidden')}>
+              <BackButton variant="link" label="participants" onBack={() => setParam('participant', null)} className="md:hidden" />
+              <h2 className="text-lg font-semibold">{current.fullName}</h2>
+              <TierBoard
+                key={current.id}
+                participantId={current.id}
+                participantName={current.fullName}
+                onMarkNo={staffId => openNew(staffId ? { staffId, participantId: current.id, fixedPair: true } : { participantId: current.id, fixedParticipant: true })}
+                onEditNo={openEdit}
+                onRemoveNo={setRemoving}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {allPairings && nothingMarked && (
         <EmptyState
           icon={Users}
           title="No pairings marked yet"
           description="Every worker can be rostered for every participant. Mark a pairing No when a worker must not work with someone. Preferred, backup and emergency staff are set on each participant’s Rostering tab."
-          action={canWrite ? { label: 'Mark as No', onClick: openNew } : undefined}
+          action={canWrite ? { label: 'Mark as No', onClick: () => openNew() } : undefined}
         />
       )}
 
-      {!noPeopleYet && !nothingMarked && (
+      {allPairings && !noPeopleYet && !nothingMarked && (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <SearchInput value={query} onChange={setQuery} placeholder="Search staff or participants" className="w-full max-w-md sm:w-auto sm:flex-1" />
             <ToggleGroup
               ariaLabel="Show"
               disabled={isLoading}
-              value={view}
-              onChange={key => setView(key as View)}
+              value={filter}
+              onChange={key => setFilter(key as Filter)}
               options={[
                 { key: 'all', label: `All ${searched.length}` },
                 { key: 'no', label: `No ${noCount}` },
@@ -253,9 +341,11 @@ export default function CompatibilityPage() {
                     placeholder="Choose a staff member"
                   />
                 </FormField>
-                <FormField label="Participant" required>
-                  <ParticipantPicker value={draft.participantId} onChange={participantId => pick({ participantId })} placeholder="Choose a participant" />
-                </FormField>
+                {!draft.fixedParticipant && (
+                  <FormField label="Participant" required>
+                    <ParticipantPicker value={draft.participantId} onChange={participantId => pick({ participantId })} placeholder="Choose a participant" />
+                  </FormField>
+                )}
               </>
             )}
             {pair && pair.level !== 'Excluded' && (

@@ -111,15 +111,17 @@ public sealed class ServiceAgreementApprovalService
 
     // ── Approve ───────────────────────────────────────────────────────────────────
 
-    public async Task<ApprovalOutcome> ApproveAsync(Guid tenantId, Guid participantId, Guid draftId, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct)
+    public async Task<ApprovalOutcome> ApproveAsync(Guid tenantId, Guid participantId, Guid draftId, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct, ApprovalAgreed? agreed = null)
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
         if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: false, ct);
         if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
+        var (agreedBy, refusal) = await ResolveAgreedAsync(tenantId, participantId, agreed, ct);
+        if (refusal is not null) return new ApprovalOutcome(ApprovalStatus.Refused, Errors: new[] { refusal });
 
         try
         {
-            return await ApproveCoreAsync(tenantId, found.Value.Draft, found.Value.Participant, acknowledgeOverlaps, caller, ct);
+            return await ApproveCoreAsync(tenantId, found.Value.Draft, found.Value.Participant, acknowledgeOverlaps, caller, ct, agreedBy);
         }
         // Another change to the participant's roster held the lock for too long: nothing was changed.
         catch (RosterBusyException busy)
@@ -292,7 +294,29 @@ public sealed class ServiceAgreementApprovalService
     private static ApprovalOutcome Superseded(int newestVersion, bool preview = false) => new(ApprovalStatus.Superseded, Errors: new[] { SupersededMessage }, NewestVersion: newestVersion,
         Preview: preview ? new DraftApprovalPreviewDto { CanApprove = false, Reasons = [new ApprovalReasonDto { Code = "Superseded", Message = SupersededMessage }] } : null);
 
-    private async Task<ApprovalOutcome> ApproveCoreAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct)
+    /// <summary>
+    /// Who agreed and how, as the approver said it. A contact is named by <see cref="PersonId"/> (their name is copied at approval); otherwise a typed <see cref="Name"/> is kept.
+    /// </summary>
+    public sealed record ApprovalAgreed(Guid? PersonId, string? Name, AgreementAgreedHow? How);
+
+    /// <summary>Checks what the approver said about who agreed: an undefined way, a name over 200 characters, or a person who is not a contact of this participant is refused (400). The name is read from the person's record, never taken from the request.</summary>
+    private async Task<(ApprovalAgreed? Agreed, string? Refusal)> ResolveAgreedAsync(Guid tenantId, Guid participantId, ApprovalAgreed? agreed, CancellationToken ct)
+    {
+        if (agreed is null) return (null, null);
+        if (agreed.How is { } how && !Enum.IsDefined(how)) return (null, "Choose how it was agreed from the list.");
+        var name = string.IsNullOrWhiteSpace(agreed.Name) ? null : agreed.Name.Trim();
+        if (name is { Length: > 200 }) return (null, "The name of who agreed is too long (200 characters at most).");
+        if (agreed.PersonId is { } personId)
+        {
+            var person = await _db.ParticipantContactRoles.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Include(r => r.Person)
+                .Where(r => r.TenantId == tenantId && r.ParticipantId == participantId && r.PersonId == personId && r.Person != null).Select(r => r.Person!).FirstOrDefaultAsync(ct);
+            if (person is null) return (null, "That person isn't a contact of this participant.");
+            name = person.FullName;
+        }
+        return (agreed with { Name = name }, null);
+    }
+
+    private async Task<ApprovalOutcome> ApproveCoreAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct, ApprovalAgreed? agreed = null)
     {
         // Approved already: the same answer again, nothing written.
         if (await _db.ServiceAgreementDraftApprovals.AsNoTracking().AnyAsync(a => a.DraftId == draft.Id, ct))
@@ -318,6 +342,7 @@ public sealed class ServiceAgreementApprovalService
             Id = Guid.NewGuid(), TenantId = draft.TenantId, DraftId = draft.Id, ParticipantId = draft.ParticipantId, DraftVersion = draft.Version,
             ApprovedAt = _clock.GetUtcNow().UtcDateTime, ApprovedByUserId = caller.UserId, ApprovedByName = caller.Name,
             PatternsCreated = plan.NewPatterns.Count, PatternsEnded = plan.ToEnd.Count,
+            AgreedByName = agreed?.Name, AgreedByPersonId = agreed?.PersonId, AgreedHow = agreed?.How,
         };
 
         _db.ShiftPatterns.AddRange(plan.NewPatterns);
@@ -342,6 +367,8 @@ public sealed class ServiceAgreementApprovalService
         }
 
         _db.ServiceAgreementDraftApprovals.Add(approval);
+        // An approved plan is no longer one to be agreed to: the emailed links for this revision and the older ones stop working in the save that approves it, and a failed approval leaves them live.
+        await AgreementShareService.RevokeLiveAsync(_db, tenantId, draft.ParticipantId, draft.Version, approval.ApprovedAt, ct);
         await _db.SaveChangesAsync(ct);
         // The board lock began the transaction and the participant's joined it: committing it commits both.
         await board.CommitAsync(ct);
@@ -757,7 +784,8 @@ public sealed class ServiceAgreementApprovalService
         return caller.Roles.Any(role => allowed.Contains(role, StringComparer.OrdinalIgnoreCase));
     }
 
-    private static ApprovalOutcome NotAnApprover() => new(ApprovalStatus.NotAnApprover, Errors: new[] { "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing." });
+    public const string NotAnApproverMessage = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing.";
+    private static ApprovalOutcome NotAnApprover() => new(ApprovalStatus.NotAnApprover, Errors: new[] { NotAnApproverMessage });
 
     // ── Reading ───────────────────────────────────────────────────────────────────
 
@@ -838,6 +866,7 @@ public sealed class ServiceAgreementApprovalService
                 if (pattern.EffectiveTo is null || pattern.EffectiveTo > lastDay) pattern.EffectiveTo = lastDay;
             _db.Shifts.RemoveRange(removable);
             _db.AuditLogs.Add(AgreementAudit.Row(draftId, AuditAction.Updated, $"Ended early: last day {Day(lastDay)}", caller, _clock.GetUtcNow()));
+            await AgreementShareService.RevokeLiveAsync(_db, tenantId, participantId, draft.Version, _clock.GetUtcNow().UtcDateTime, ct, onlyDraftId: draftId);
             await _db.SaveChangesAsync(ct);
             await board.CommitAsync(ct);
 
