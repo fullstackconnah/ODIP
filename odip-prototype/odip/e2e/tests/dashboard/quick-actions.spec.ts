@@ -48,8 +48,9 @@ test.describe('dashboard quick actions', () => {
   });
 
   test('a coordinator approves a clean shift completion on the dashboard row', async ({ page, session }) => {
-    const from = providerClock(2);
-    const to = providerClock(8);
+    // The worker starts and finishes at once, so both stamps must sit within ShiftTimeRules.OffRosterMinutes (5) of the roster or the shift needs review.
+    const from = providerClock(-2);
+    const to = providerClock(3);
     test.skip(from.date !== to.date, 'too close to midnight in Sydney for a same-day shift');
     const participant = await makeParticipant(session);
     const staff = await makeStaff(session);

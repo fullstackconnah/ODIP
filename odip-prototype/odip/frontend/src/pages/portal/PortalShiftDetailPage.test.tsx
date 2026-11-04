@@ -206,9 +206,12 @@ beforeEach(() => {
   mockUseShiftNotes.mockReset().mockReturnValue({ data: [] })
   localStorage.removeItem('odip_user')
   sessionStorage.clear()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-08-16T23:00:30Z'))   // 09:00:30 in Brisbane: 30 seconds into the rostered start
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   localStorage.removeItem('odip_user')
   vi.unstubAllGlobals()
   Reflect.deleteProperty(window, 'isSecureContext')
@@ -469,7 +472,9 @@ describe('PortalShiftDetailPage', () => {
   })
 
   it('opens the no-fix sheet (timeout) after 10 s when the browser never answers the location prompt', async () => {
+    vi.useRealTimers()
     vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-16T23:00:30Z'))
     try {
       Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: () => {} } })
       show(placed())
@@ -1234,6 +1239,35 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     }))
   })
 
+  it('a finish 10 minutes early asks why; the answer is sent as finishTimeReason, and an empty box still submits without it', async () => {
+    open()
+    moveFinish('2026-08-17T16:50', 'Left early.')
+    change('Why are you finishing 10 minutes early? (optional)', '  Participant went out  ')
+    toStepFive()
+    submitAnyway()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    expect(finishMutateAsync.mock.calls[0][0].data).toMatchObject({ finishTimeReason: 'Participant went out', timeAdjustmentReason: 'Left early.' })
+    expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('startTimeReason')
+  })
+
+  it('Add a reason on the Submit step lands on step 1 with focus in the reason box', async () => {
+    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ step: 'submit', reached: 'submit', finishAsked: false, nothingToNote: true, nothingToHandOver: true, anythingToReport: 'no' }))
+    vi.setSystemTime(new Date('2026-08-17T07:07:30Z'))   // 17:07:30, seven minutes past the 17:00 rostered end
+    show(inProgress())
+    fireEvent.click(screen.getByRole('button', { name: 'Add a reason' }))
+    expect(heading('Your times')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText(/^Why are you finishing \d+ minutes late/)).toHaveFocus())
+  })
+
+  it('leaves finishTimeReason out when the box is empty, and never blocks Submit', async () => {
+    open()
+    moveFinish('2026-08-17T16:50', 'Left early.')
+    toStepFive()
+    submitAnyway()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('finishTimeReason')
+  })
+
   it("a Change left on the recorded minute sends nothing and needs no reason; '0' km sends 0", async () => {
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
@@ -1647,5 +1681,87 @@ describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
     forward('Submit shift')
     expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
     expect(finishMutateAsync).not.toHaveBeenCalled()
+  })
+})
+
+describe('PortalShiftDetailPage: the time check before Start (W2)', () => {
+  const at = (iso: string) => vi.setSystemTime(new Date(iso))   // the shift is rostered 09:00 Brisbane, 2026-08-16T23:00:00Z
+  const startButton = () => screen.getByRole('button', { name: /start shift/i })
+
+  it('opens the sheet 12 minutes early, names the minutes, and does not start yet', async () => {
+    at('2026-08-16T22:48:00Z')
+    show(makeDetail())
+    fireEvent.click(startButton())
+    expect(await screen.findByRole('dialog', { name: "You're starting 12 minutes early" })).toBeInTheDocument()
+    expect(startMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('names a late start the same way', async () => {
+    at('2026-08-16T23:07:00Z')
+    show(makeDetail())
+    fireEvent.click(startButton())
+    expect(await screen.findByRole('dialog', { name: "You're starting 7 minutes late" })).toBeInTheDocument()
+  })
+
+  it('sends the typed reason as startTimeReason, trimmed', async () => {
+    at('2026-08-16T22:48:00Z')
+    show(makeDetail())
+    fireEvent.click(startButton())
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByText('Your shift is rostered to start at 9:00 am.')).toBeInTheDocument()
+    expect(within(sheet).getByLabelText('Why are you starting early? (optional)')).toHaveFocus()
+    fireEvent.change(within(sheet).getByLabelText('Why are you starting early? (optional)'), { target: { value: '  Bus was early  ' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Start shift' }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: false, startTimeReason: 'Bus was early' } }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('still starts with an empty box, and sends no startTimeReason', async () => {
+    at('2026-08-16T22:48:00Z')
+    show(makeDetail())
+    fireEvent.click(startButton())
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Start shift' }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledTimes(1))
+    expect(startMutateAsync.mock.calls[0][0].data).not.toHaveProperty('startTimeReason')
+  })
+
+  it('Not yet closes the sheet and sends nothing', async () => {
+    at('2026-08-16T22:48:00Z')
+    show(makeDetail())
+    fireEvent.click(startButton())
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Not yet' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(startMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('opens no sheet 4 minutes early, and Start goes at once', async () => {
+    at('2026-08-16T22:56:00Z')
+    show(makeDetail())
+    fireEvent.click(startButton())
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the sheet open and says why when Start fails', async () => {
+    at('2026-08-16T22:48:00Z')
+    startMutateAsync.mockRejectedValueOnce(new Error('offline'))
+    show(makeDetail())
+    fireEvent.click(startButton())
+    const sheet = await screen.findByRole('dialog')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Start shift' }))
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent(/couldn't start this shift/i)
+  })
+
+  it('asks about the time first, then the location, and carries the reason into the location Start', async () => {
+    at('2026-08-16T22:48:00Z')
+    const ask = vi.fn()
+    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: (ok: (p: unknown) => void) => { ask(); ok({ coords: { latitude: -27.5, longitude: 153.02, accuracy: 12 } }) } } })
+    show(placed())
+    fireEvent.click(startButton())
+    const sheet = await screen.findByRole('dialog')
+    expect(ask).not.toHaveBeenCalled()
+    fireEvent.change(within(sheet).getByLabelText(/^Why are you starting (early|late)\? \(optional\)$/), { target: { value: 'Early handover' } })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Start shift' }))
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { latitude: -27.5, longitude: 153.02, accuracyMetres: 12, geolocationDeclined: false, startTimeReason: 'Early handover' } }))
   })
 })

@@ -185,6 +185,11 @@ function BreaksBlock({ c, first, staffFirst, pendingKind, onChange }: {
   )
 }
 
+/** "Started 12 min early. Reason: …" or "… No reason given." for a start or finish more than 5 minutes off the roster. */
+function offRosterLine(what: 'Started' | 'Finished', variance: number, reason: string | null | undefined) {
+  return `${what} ${Math.abs(variance)} min ${variance < 0 ? 'early' : 'late'}. ${reason ? `Reason: ${reason}` : 'No reason given.'}`
+}
+
 /** What the worker confirmed at Finish (My shifts redesign): moved times with the stamps they replaced, the reason, kilometres, the report answer. */
 function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}, breaks }: {
   c: ShiftCompletionDto; canEditTravel?: boolean; onTravelOpenChange?: (open: boolean) => void; breaks?: { first: string; staffFirst: string; pendingKind?: boolean; onChange?: (breakId: string, withParticipant: boolean) => void }
@@ -193,7 +198,9 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
   const lines = [
     c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
     locationCheckLine(c),
+    c.offRosterStart && offRosterLine('Started', c.varianceMinutesStart, c.startTimeReason),
     c.originalActualEnd && c.actualEnd && `Finish ${t(c.originalActualEnd)}, changed to ${t(c.actualEnd)}.`,
+    c.offRosterFinish && offRosterLine('Finished', c.varianceMinutesEnd, c.finishTimeReason),
     c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
     c.kilometres != null && `${c.kilometres} km driven with the participant`,
     (c.preShiftTravelMinutes != null || c.preShiftTravelKilometres != null) && `Trip to the participant: ${travelLabel(c.preShiftTravelMinutes ?? null, c.preShiftTravelKilometres ?? null)}`,
@@ -337,6 +344,10 @@ export default function CompletionReviewPage() {
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
             {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
           </span>
+          {row.offRoster && (
+            // Words, not colour alone: the start or a set finish is more than 5 minutes off the roster, whatever the outlier setting says.
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Off roster</span>
+          )}
           {row.timesAdjusted && (
             // An adjustment is not a compliance warning, so it takes the info tone (SHAPE §7).
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.info.solid}`}>Times adjusted by the worker</span>

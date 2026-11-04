@@ -33,6 +33,22 @@ public class EmploymentHeroTimesheetPayloadTests
     }
 
     [Fact]
+    public void Build_OffRosterCompletion_SendsActualTimes_InPr1()   // pins PR1: an off-roster shift is paid as worked (rostered 09:00-15:00, worked 08:40-15:20)
+    {
+        var c = ACompletion();
+        c.ActualStart = new DateTime(2026, 10, 13, 21, 40, 0, DateTimeKind.Utc);
+        c.ActualEnd = new DateTime(2026, 10, 14, 4, 20, 0, DateTimeKind.Utc);
+        c.VarianceMinutesStart = -20;
+        c.VarianceMinutesEnd = 20;
+        c.StartTimeReason = "Bus was early";
+
+        var line = Built(AShift(), c);
+
+        Assert.Equal("2026-10-14T08:40:00", line.StartTime);
+        Assert.Equal("2026-10-14T15:20:00", line.EndTime);
+    }
+
+    [Fact]
     public void Breaks_are_sent_as_unpaid_intervals_clamped_to_the_worked_span()
     {
         var c = ACompletion();

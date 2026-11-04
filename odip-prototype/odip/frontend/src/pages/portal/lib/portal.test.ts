@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasEnded, pickCurrentShift, portalStatusLabel, rosteredInstants } from './portal'
+import { hasEnded, minutesWords, offRosterMinutes, pickCurrentShift, portalStatusLabel, rosteredInstants } from './portal'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import type { PortalShiftSummaryDto } from '@/api/types'
 
@@ -65,4 +65,15 @@ describe('the list rules', () => {
 it('reads the rostered times in the provider zone, the end on the next day overnight', () => {
   expect(rosteredInstants({ serviceDate: '2026-08-17', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true, timeZoneId: 'Australia/Brisbane' }))
     .toEqual({ start: '2026-08-17T12:00:00Z', end: '2026-08-17T21:00:00Z' })
+})
+
+it('names the minutes off roster only past five whole minutes, signed (early is negative)', () => {
+  expect(offRosterMinutes('2026-08-17T09:05:29Z', '2026-08-17T09:00:00Z')).toBeNull()
+  expect(offRosterMinutes('2026-08-17T09:05:31Z', '2026-08-17T09:00:00Z')).toBe(6)
+  expect(offRosterMinutes('2026-08-17T08:54:00Z', '2026-08-17T09:00:00Z')).toBe(-6)
+  expect(offRosterMinutes('2026-08-17T08:55:00Z', '2026-08-17T09:00:00Z')).toBeNull()
+})
+
+it('words minutes, switching to hours from 60', () => {
+  expect([12, -12, 1, 60, 65, 120].map(minutesWords)).toEqual(['12 minutes', '12 minutes', '1 minute', '1 hour', '1 hour 5 minutes', '2 hours'])
 })

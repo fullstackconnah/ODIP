@@ -1,7 +1,10 @@
 // The finish flow's entries survive leaving the page (Yes on "Anything to report?" opens the incident form; a reload; Back to shift) in
 // sessionStorage, per shift. Every access is wrapped: storage can be missing or throw (private window, blocked site data), and the flow
 // must work without it. Every field is type-checked on load, so a draft from an older build loads closed instead of breaking.
+import type { PortalShiftDetailDto } from '@/api/types'
+import { offRosterMinutes, rosteredInstants } from '../lib/portal'
 import { FINISH_STEPS, type FinishStepKey } from './checklist'
+import { providerLocalToUtcInstant } from './shiftTime'
 
 export interface EndDraft {
   /** The open step, or null while the flow is closed (the worker went back to the shift). */
@@ -12,6 +15,10 @@ export interface EndDraft {
   startOverride: string | null
   endOverride: string | null
   adjustmentReason: string
+  /** The one optional box that explains an off-roster start and/or finish (W2). */
+  timeReason: string
+  /** Whether step 1 was asking about the finish when it was last open: the Submit step only nudges for a finish that drifted off roster after that. */
+  finishAsked: boolean
   /** The kilometre field as typed. */
   kilometres: string
   /** The four provider-travel fields as typed: the trip to the participant, then the trip after the shift. */
@@ -28,7 +35,7 @@ export interface EndDraft {
 }
 
 export const EMPTY_END_DRAFT: EndDraft = {
-  step: null, reached: 'times', startOverride: null, endOverride: null, adjustmentReason: '', kilometres: '',
+  step: null, reached: 'times', startOverride: null, endOverride: null, adjustmentReason: '', timeReason: '', finishAsked: false, kilometres: '',
   preTravelMinutes: '', preTravelKilometres: '', postTravelMinutes: '', postTravelKilometres: '',
   anythingToReport: null, handoverText: '', nothingToNote: false, nothingToHandOver: false, timesSig: null,
 }
@@ -49,6 +56,8 @@ export function loadEndDraft(shiftId: string): EndDraft | null {
       startOverride: textOrNull(d.startOverride),
       endOverride: textOrNull(d.endOverride),
       adjustmentReason: text(d.adjustmentReason),
+      timeReason: text(d.timeReason),
+      finishAsked: d.finishAsked === true,
       kilometres: text(d.kilometres),
       preTravelMinutes: text(d.preTravelMinutes),
       preTravelKilometres: text(d.preTravelKilometres),
@@ -71,4 +80,18 @@ export function saveEndDraft(shiftId: string, draft: EndDraft): void {
 
 export function clearEndDraft(shiftId: string): void {
   try { sessionStorage.removeItem(key(shiftId)) } catch { /* nothing to clear */ }
+}
+
+/** Minutes off the rostered finish, and off the rostered start when Start did not already ask (a moved or manual start with no reason saved); null within 5. */
+export function timeQuestions(shift: PortalShiftDetailDto, draft: EndDraft, now: Date): { start: number | null; finish: number | null } {
+  const tz = shift.timeZoneId
+  const c = shift.completion
+  const rostered = rosteredInstants(shift)
+  const startIso = (draft.startOverride ? providerLocalToUtcInstant(draft.startOverride, tz) : null) ?? c?.actualStart ?? null
+  const endIso = (draft.endOverride ? providerLocalToUtcInstant(draft.endOverride, tz) : null) ?? now.toISOString()
+  const startAsked = !!startIso && !c?.startTimeReason && (draft.startOverride !== null || !c?.actualStart)
+  return {
+    start: startAsked && rostered.start ? offRosterMinutes(startIso, rostered.start) : null,
+    finish: rostered.end ? offRosterMinutes(endIso, rostered.end) : null,
+  }
 }
