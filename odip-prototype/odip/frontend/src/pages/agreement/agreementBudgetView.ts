@@ -59,6 +59,8 @@ export function agreementBudgetView(participantId: string, state: AgreementCheck
       periodStart: period.periodStart,
       periodEnd: period.periodEnd,
       cost: period.agreementCost,
+      carriedIn: period.carriedIn,
+      carriedSetByHand: period.carriedSetByHand,
       remaining: period.remaining,
       withinLimit: !(period.overBy > 0),
       overBy: period.overBy > 0 ? period.overBy : null,

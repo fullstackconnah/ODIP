@@ -220,6 +220,50 @@ public class AgreementCheckTests
         Assert.Equal((TwoBlocks, 100m + rolled, 0m, 100m + rolled, TwoBlocks - (100m + rolled)), Figures(core.Periods[1]));
     }
 
+    private static AgreementCheckRequestDto BlocksFrom(DateOnly from, params PlanBlock[] blocks) => new() { Blocks = blocks.ToList(), PeriodFrom = from, PeriodTo = To };
+
+    [Fact]
+    public async Task Check_and_ledger_agree_when_rollover_is_set_by_hand()
+    {
+        using var a = await ArrangeAsync();
+        // October has $1,000 unspent, so November would carry $1,000; the coordinator typed $500. The agreement costs money in November only, so the check and the ledger read the same Available.
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 1000m), Month(11, 100m) with { Rollover = 500m }, Month(12, 1000m)));
+
+        var core = Assert.Single(Body(await a.Controller().Check(a.Person.Id, BlocksFrom(D(2026, 11, 2), Mondays()), CancellationToken.None)).Pools);
+        var ledger = (await a.Kit.Ledger.GetLedgerAsync(a.Kit.TenantId, a.Person.Id, CancellationToken.None))!.Pools.Single().Periods;
+
+        var november = Assert.Single(core.Periods);
+        Assert.Equal((500m, 600m, true), (november.CarriedIn, november.Available, november.CarriedSetByHand));
+        Assert.Equal((500m, 600m, true), (ledger[1].Carried, ledger[1].Available, ledger[1].CarriedSetByHand));
+        Assert.False(ledger[0].CarriedSetByHand);
+    }
+
+    [Fact]
+    public async Task A_stored_rollover_on_the_pools_first_period_is_not_reported_as_set_by_hand()
+    {
+        using var a = await ArrangeAsync();
+        // Nothing rolls into a pool's first period, so a stored amount there changes nothing and must not be called a typed one.
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 1000m) with { Rollover = 500m }, Month(11, 100m), Month(12, 1000m)));
+
+        var ledger = (await a.Kit.Ledger.GetLedgerAsync(a.Kit.TenantId, a.Person.Id, CancellationToken.None))!.Pools.Single().Periods;
+
+        Assert.Equal((0m, false), (ledger[0].Carried, ledger[0].CarriedSetByHand));
+    }
+
+    [Fact]
+    public async Task An_agreement_that_spends_in_the_first_period_does_not_change_the_hand_set_rollover()
+    {
+        using var a = await ArrangeAsync();
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 1000m), Month(11, 100m) with { Rollover = 500m }, Month(12, 1000m)));
+
+        var core = Assert.Single(Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None)).Pools);
+        var ledger = (await a.Kit.Ledger.GetLedgerAsync(a.Kit.TenantId, a.Person.Id, CancellationToken.None))!.Pools.Single().Periods;
+
+        Assert.Equal(500m, core.Periods[1].CarriedIn);
+        Assert.Equal(500m, ledger[1].Carried);
+        Assert.Equal(core.Periods[1].Available, ledger[1].Available);
+    }
+
     [Fact]
     public async Task RemainingIsAvailableMinusUsed_NotMinusWhatIsBookedAhead()
     {

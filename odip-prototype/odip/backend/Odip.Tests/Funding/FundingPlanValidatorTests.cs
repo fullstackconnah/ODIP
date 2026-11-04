@@ -48,6 +48,65 @@ public class FundingPlanValidatorTests
     private static void AssertRefused(List<string> errors, string phrase) =>
         Assert.True(errors.Any(e => e.Contains(phrase, StringComparison.OrdinalIgnoreCase)), $"Expected an error containing \"{phrase}\" but got:\n  " + string.Join("\n  ", errors));
 
+    // ── Rolled-over amount set by hand ──────────────────────────────────────
+
+    private static SaveFundingPlanDto WithRollover(decimal? rollover, int period = 1, bool reverse = false)
+    {
+        var periods = Quarters();
+        periods[period] = periods[period] with { RolloverOverride = rollover };
+        if (reverse) periods.Reverse();
+        return Plan(Core(periods: periods));
+    }
+
+    [Fact]
+    public void ARolloverOnALaterPeriod_IsAccepted_AtZeroAndAtTheMaximum()
+    {
+        Assert.Empty(FundingPlanValidator.Validate(WithRollover(0m)));
+        Assert.Empty(FundingPlanValidator.Validate(WithRollover(500.25m)));
+        Assert.Empty(FundingPlanValidator.Validate(WithRollover(FundingPlanValidator.MaxAmount)));
+    }
+
+    [Fact]
+    public void ANegativeRollover_IsRefused()
+    {
+        var errors = FundingPlanValidator.Validate(WithRollover(-1m));
+
+        Assert.Contains(errors, e => e.StartsWith("A rolled-over amount cannot be negative (the period starting"));
+    }
+
+    [Fact]
+    public void ARolloverAboveTheMaximum_IsRefused()
+    {
+        AssertRefused(FundingPlanValidator.Validate(WithRollover(FundingPlanValidator.MaxAmount + 0.01m)), "A rolled-over amount can be at most $");
+    }
+
+    [Fact]
+    public void ARolloverWithPartsOfACent_IsRefused()
+    {
+        AssertRefused(FundingPlanValidator.Validate(WithRollover(10.005m)), "A rolled-over amount is in dollars and cents");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]   // periods sent newest first: the first period is the earliest by date, not the first in the list
+    public void ARolloverOnThePoolsFirstPeriod_IsRefused(bool reverse)
+    {
+        var errors = FundingPlanValidator.Validate(WithRollover(100m, period: 0, reverse: reverse));
+
+        AssertRefused(errors, "Nothing rolls over into the first period");
+    }
+
+    [Fact]
+    public void ARolloverOnAPeriodWithNoStart_SkipsTheFirstPeriodRule()
+    {
+        var periods = Quarters();
+        periods[0] = periods[0] with { PeriodStart = null, RolloverOverride = 100m };
+
+        var errors = FundingPlanValidator.Validate(Plan(Core(periods: periods)));
+
+        Assert.DoesNotContain(errors, e => e.Contains("Nothing rolls over"));
+    }
+
     // ── A good plan ─────────────────────────────────────────────────────────
 
     [Fact]

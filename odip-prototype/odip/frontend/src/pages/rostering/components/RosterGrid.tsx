@@ -1,5 +1,6 @@
 import { useRef, type ReactNode, type RefObject } from 'react'
 import type { RosterBoardDto, ShiftDto } from '@/api/types'
+import { useWindowFirstScrollUp } from '@/hooks/useWindowFirstScrollUp'
 import { UnfilledLane } from './UnfilledLane'
 import { StaffRow } from './StaffRow'
 import { ParticipantRow } from './ParticipantRow'
@@ -77,8 +78,10 @@ const follow = (from: Scroller, to: Scroller) => {
 function Frames({ strip, header, hidden, children }: { strip?: ReactNode; header: ReactNode; hidden?: boolean; children: ReactNode }) {
   const headRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useWindowFirstScrollUp(rootRef)
   return (
-    <div className={ROOT} aria-hidden={hidden || undefined}>
+    <div ref={rootRef} className={ROOT} aria-hidden={hidden || undefined}>
       <div className={BAND}>
         {strip}
         <div ref={headRef} onScroll={() => follow(headRef, bodyRef)} className={HEAD_FRAME} style={BOARD_FRAME_STYLE}>

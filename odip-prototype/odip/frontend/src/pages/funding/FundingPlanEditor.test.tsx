@@ -3,15 +3,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { FundingPlanEditor, type FundingPlanEditorProps } from './FundingPlanEditor'
 import { PACE_CATEGORIES, plan, pool, quarters } from '@/test/fixtures/funding'
+import { ledgerPeriod, ledgerPool, participantLedger } from '@/test/fixtures/ledger'
 
 // The plan budget editor (budget phase 1): plan fields, pools (Core flexible, stated), periods PROPOSED from the dates and the length with amounts split by days and still editable,
 // the sum message, plain-words validation beside the fields, the request bodies, the server's reasons (400), the stale-revision flow (409: "Load the latest", input kept), and the "Plan not shared yet" skip that simply closes.
 
-const { create, update, categories, plans } = vi.hoisted(() => ({
+const { create, update, categories, plans, ledger } = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   categories: vi.fn(),
   plans: vi.fn(),
+  ledger: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -19,6 +21,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateFundingPlan: () => ({ mutate: update, isPending: false }),
   usePaceCategories: categories,
   useFundingPlans: plans,
+  useFundingLedger: ledger,
 }))
 
 function renderEditor(props: Partial<FundingPlanEditorProps> = {}) {
@@ -43,6 +46,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   categories.mockReturnValue({ data: PACE_CATEGORIES })
   plans.mockReturnValue({ data: undefined, refetch: vi.fn() })
+  ledger.mockReturnValue({ data: undefined, isLoading: false, isError: false })
 })
 
 describe('editor: a new plan', () => {
@@ -1298,5 +1302,104 @@ describe('editor: a typed zero set-aside is "none" until the person confirms it 
     expect(within(coreCard()).getByText(ZERO_LINE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect((update.mock.calls[0][0].body.pools[0].periods as { setAside?: number }[]).map(period => period.setAside)).toEqual([0, 0, 0, 0])
+  })
+})
+
+describe('editor: the rolled-over amount of each period', () => {
+  const rolled = (index: number) => within(coreCard()).getAllByLabelText(/^Rolled over, /)[index]
+  const stored = plan({ revision: 4 })
+  const withLedger = (periods = [ledgerPeriod({ id: 'p1', periodStart: '2026-07-01', periodEnd: '2026-09-30', carried: 0 })]) => {
+    ledger.mockReturnValue({ data: participantLedger({ pools: [ledgerPool({ periods })] }), isLoading: false, isError: false })
+  }
+
+  it('has a box for every period after the first, with the worked-out amount in it as a hint, and none for the first', () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    renderEditor({ plan: stored })
+
+    expect(within(coreCard()).getAllByLabelText(/^Rolled over, /)).toHaveLength(3)
+    expect(rolled(0)).toHaveValue('')
+    expect(rolled(0)).toHaveAttribute('placeholder', '500.00')
+    expect(rolled(2)).toHaveAttribute('placeholder', '2820.00')
+    expect(within(coreCard()).getByText('Worked out from what was left unspent: $500.00')).toBeInTheDocument()
+    expect(within(coreCard()).getByText('Nothing rolls over into the first period.')).toBeInTheDocument()
+    expect(within(coreCard()).getByText('Worked out from the amounts above as saved.')).toBeInTheDocument()
+  })
+
+  it('saves an amount typed in a box, says it was set by hand with the worked-out one beside it, and "Use worked-out amount" empties the box', async () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: stored })
+
+    await user.type(rolled(0), '750')
+    expect(within(coreCard()).getByText('Set by hand. Worked out: $500.00.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(update.mock.calls[0][0].body.pools[0].periods.map((p: { rolloverOverride?: number }) => p.rolloverOverride)).toEqual([undefined, 750, undefined, undefined])
+
+    await user.click(within(coreCard()).getByRole('button', { name: 'Use worked-out amount' }))
+    expect(rolled(0)).toHaveValue('')
+  })
+
+  it('shows a saved override in its box and sends it back, because a save replaces the plan', async () => {
+    const saved = plan({ revision: 4, pools: [pool({ periods: quarters(2000, 1000).map((p, i) => (i === 2 ? { ...p, rolloverOverride: 125.5 } : p)) })] })
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: saved })
+
+    expect(rolled(1)).toHaveValue('125.50')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(update.mock.calls[0][0].body.pools[0].periods[2].rolloverOverride).toBe(125.5)
+  })
+
+  it('says why there is no worked-out figure: loading, failed, nothing left over, or a plan that is not running yet', () => {
+    ledger.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    const loading = renderEditor({ plan: stored })
+    expect(within(coreCard()).getAllByText('Working out the rolled-over amount…')).toHaveLength(3)
+    loading.unmount()
+
+    ledger.mockReturnValue({ data: undefined, isLoading: false, isError: true })
+    const failed = renderEditor({ plan: stored })
+    expect(within(coreCard()).getAllByText('Couldn’t work out the rolled-over amount. You can still type one.')).toHaveLength(3)
+    failed.unmount()
+
+    withLedger([ledgerPeriod({ id: 'p1', periodStart: '2026-07-01', periodEnd: '2026-09-30', carried: 0 }), ledgerPeriod({ id: 'p2', periodStart: '2026-10-01', periodEnd: '2026-12-31', carried: 0 })])
+    const none = renderEditor({ plan: stored })
+    expect(within(coreCard()).getByText('Nothing was left unspent last period.')).toBeInTheDocument()
+    none.unmount()
+
+    ledger.mockReturnValue({ data: participantLedger({ planId: 'another-plan' }), isLoading: false, isError: false })
+    renderEditor({ plan: stored })
+    expect(within(coreCard()).getAllByText('Worked out once the period before has ended.')).toHaveLength(3)
+  })
+
+  it('puts the error right under the box, before the use-worked-out button, and links it to the box', async () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: stored })
+
+    await user.type(rolled(1), '-5')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    const error = within(coreCard()).getByText("A rolled-over amount can't be less than $0.00.")
+    const button = within(coreCard()).getAllByRole('button', { name: 'Use worked-out amount' })[0]
+
+    expect(error.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(rolled(1)).toHaveAttribute('aria-describedby', error.id)
+  })
+
+  it('says typed rollovers were cleared when the periods are split again', async () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: stored })
+
+    await user.type(rolled(1), '750')
+    day('Plan end', '2027-03-31')
+
+    expect(screen.getByText('Rolled-over amounts you typed were cleared because the periods changed.')).toBeInTheDocument()
+  })
+
+  it('refuses an amount above the most a rolled-over amount can be, beside the box, and saves nothing', async () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: stored })
+
+    await user.type(rolled(0), '100000000')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(update).not.toHaveBeenCalled()
+    expect(within(coreCard()).getByText('The most a rolled-over amount can be is $99,999,999.99.')).toBeInTheDocument()
   })
 })

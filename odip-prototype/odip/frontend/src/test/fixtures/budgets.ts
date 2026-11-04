@@ -59,7 +59,7 @@ export function participantAlerts(participantId: string, participantName: string
 
 export function agreementPeriod(overrides: Partial<AgreementCheckPeriod> = {}): AgreementCheckPeriod {
   return {
-    periodId: 'period-q2', periodStart: '2026-10-01', periodEnd: '2026-12-31', isCurrent: true, agreementCost: 2355.5, available: 4000, used: 880, remaining: 3120, overBy: 0, ...overrides,
+    periodId: 'period-q2', periodStart: '2026-10-01', periodEnd: '2026-12-31', isCurrent: true, agreementCost: 2355.5, carriedIn: 0, carriedSetByHand: false, available: 4000, used: 880, remaining: 3120, overBy: 0, ...overrides,
   }
 }
 

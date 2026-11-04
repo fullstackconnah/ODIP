@@ -18,6 +18,28 @@ import { AGREEMENT_NO_BUDGET, AGREEMENT_OTHER_FUNDED, AGREEMENT_WARNING_ONLY, NO
 const renderView = (view: AgreementBudgetBreakdownView) => render(<MemoryRouter><AgreementBudgetBreakdown view={view} /></MemoryRouter>)
 const dollarsIn = (element: HTMLElement) => element.outerHTML.match(/\$[\d,]+(?:\.\d{2})?/g) ?? []
 
+describe('AgreementBudgetBreakdown: the rolled-over amount', () => {
+  it('says what rolled in from the last period when it is worked out: not confirmed', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [agreementLine({ carriedIn: 500, carriedSetByHand: false })] })] }))
+
+    expect(screen.getByText('Includes $500.00 rolled over from the last period, not confirmed.')).toBeInTheDocument()
+  })
+
+  it('says "set by hand" when the rolled-over amount was typed into the plan', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [agreementLine({ carriedIn: 500, carriedSetByHand: true })] })] }))
+
+    expect(screen.getByText('Includes $500.00 rolled over from the last period (set by hand).')).toBeInTheDocument()
+  })
+
+  it('says nothing when nothing rolled in, or the figures are withheld', () => {
+    const { unmount } = renderView(breakdown({ pools: [agreementPool({ lines: [agreementLine({ carriedIn: 0 })] })] }))
+    expect(screen.queryByText(/rolled over/)).not.toBeInTheDocument()
+    unmount()
+    renderView(breakdown({ figures: { visible: false, reason: 'Not shown to your role' }, pools: [agreementPool({ lines: [agreementLine({ carriedIn: 500 })] })] }))
+    expect(screen.queryByText(/rolled over/)).not.toBeInTheDocument()
+  })
+})
+
 describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
   it('says the check is under way, and states no figure', () => {
     renderView({ status: 'loading', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null })
