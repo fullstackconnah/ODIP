@@ -173,6 +173,14 @@ describe('IntakeWizardPage', () => {
     expect(await screen.findByRole('button', { name: /ndis & funding/i, current: 'step' })).toBeInTheDocument()
   })
 
+  it('shows the dash, not the words "Not recorded", for an unanswered yes/no on Review', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await walkToReview(user)
+    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+    expect(screen.getByText('CALD').nextElementSibling).toHaveTextContent('—')
+  })
+
   it('walks every create-mode step to Review while optional Intake fields remain blank', async () => {
     const user = userEvent.setup()
     renderPage()
