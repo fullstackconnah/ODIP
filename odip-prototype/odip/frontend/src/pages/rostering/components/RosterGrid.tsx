@@ -56,9 +56,10 @@ const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${R
  * sideways inside its own box). A sticky header only sticks to its nearest scroller and any overflow-x ancestor is one, so the day header is split off into its own band that sticks under the app bar,
  * with the staff strip above it; the two scrollers share one scrollLeft (Frames). `min-[1500px]:[--roster-sticky-col:280px]` is the wide-screen column width (see STICKY_COL), set on the root so both read it.
  */
-const ROOT = 'min-[1500px]:[--roster-sticky-col:280px]'
-// 3rem is the app bar (AppLayout), 9rem = that + the band (strip 52 + header 34, rounded up): a keyboard-focused chip never rests under the band.
-const BAND = 'sticky top-[calc(3rem+var(--safe-top))] z-20 bg-[var(--color-background)]'
+// From lg the board is the screen's scroller (owner, 2026-11-04): the page fits the viewport (AppLayout's has-[[data-fit-screen]]), this root takes the height left and scrolls vertically inside itself, and the band pins at its top.
+const ROOT = 'min-[1500px]:[--roster-sticky-col:280px] lg:min-h-0 lg:flex-1 lg:overflow-y-auto'
+// Below lg the window scrolls: 3rem is the app bar (AppLayout), 9rem = that + the band (strip 52 + header 34, rounded up): a keyboard-focused chip never rests under the band. From lg the band pins to the scroller's own top.
+const BAND = 'sticky top-[calc(3rem+var(--safe-top))] z-20 bg-[var(--color-background)] lg:top-0'
 const HEAD_FRAME = 'overflow-x-auto overflow-y-hidden [scrollbar-width:none] rounded-t-[var(--radius-md)] border border-b-0 border-border'
 const BODY_FRAME = 'overflow-x-auto overflow-y-hidden rounded-b-[var(--radius-md)] border border-t-0 border-border [&_:is(button,a,[tabindex])]:scroll-mt-36'
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.

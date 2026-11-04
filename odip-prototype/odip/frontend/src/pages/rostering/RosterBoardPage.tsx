@@ -719,7 +719,9 @@ export default function RosterBoardPage() {
     </Button>
   )
   const publishButton = canWrite && publishable.length > 0 && <Button size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
-  const statusLine = showBanner ? (
+  // The drafts banner is the Publish bar (owner, 2026-11-04): the foot of the page, pinned, so Publish week stays in reach while the board scrolls. A reader sees it without the button. It sits in the page flow after the board, so it never covers the last row; bg-background because rows scroll under it.
+  const publishBar = showBanner ? (
+    <div data-publish-bar className="sticky bottom-[var(--mobile-nav-h)] z-20 bg-background lg:bottom-0">
     <Callout
       tone="warning"
       // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
@@ -731,7 +733,9 @@ export default function RosterBoardPage() {
     >
       {bannerBlockedLine(blocked.length)}
     </Callout>
-  ) : hasNotice ? (
+    </div>
+  ) : null
+  const statusLine = !showBanner && hasNotice ? (
     <Callout tone="info" icon={Hourglass} announce={false} title={`${plural(waiting.length, 'agreement')} waiting for approval`} className="items-center!" actions={agreementsButton}>
       {null}
     </Callout>
@@ -739,7 +743,7 @@ export default function RosterBoardPage() {
   const transientShown = !!assignError || !!startNotice || !!regularNotice || !!skippedNotice
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div data-fit-screen className="flex flex-col gap-[var(--section-gap)] animate-fade-in lg:min-h-0 lg:flex-1">
       <AnnouncementRegion message={announcement} />
       {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
           instead of being spaced apart by the page's --section-gap. */}
@@ -937,6 +941,8 @@ export default function RosterBoardPage() {
           ) : grid}
         </DropStateContext.Provider>
       )}
+
+      {publishBar}
 
       <ShiftSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
