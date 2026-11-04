@@ -124,7 +124,7 @@ public sealed class AgreementCheckService
             // Walk ALL the pool's periods in date order, the ones the agreement does not touch too: their unspent money carries on, and what the agreement spends in an earlier period is not there
             // for a later one (AgreementCarry). Only the periods the agreement touches are answered.
             var ordered = pool.Periods.OrderBy(p => p.Period.PeriodStart).ToList();
-            var walk = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, p.Used, byPeriod.GetValueOrDefault(p.Period.Id))).ToList());
+            var walk = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, p.Used, byPeriod.GetValueOrDefault(p.Period.Id), p.Period.RolloverOverride)).ToList());
             var periods = new List<AgreementCheckPeriodDto>();
             var alreadyOver = 0m;
             for (var i = 0; i < ordered.Count; i++)
@@ -134,7 +134,7 @@ public sealed class AgreementCheckService
                 periods.Add(new AgreementCheckPeriodDto
                 {
                     PeriodId = p.Period.Id, PeriodStart = p.Period.PeriodStart, PeriodEnd = p.Period.PeriodEnd, IsCurrent = p.IsCurrent, AgreementCost = cost,
-                    Available = walk[i].Available, Used = p.Used, Remaining = walk[i].Remaining, OverBy = walk[i].OverBy,
+                    Available = walk[i].Available, CarriedIn = walk[i].CarriedIn, CarriedSetByHand = p.CarriedSetByHand, Used = p.Used, Remaining = walk[i].Remaining, OverBy = walk[i].OverBy,
                 });
                 alreadyOver += walk[i].AlreadyOverBy;
             }

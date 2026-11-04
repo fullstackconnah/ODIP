@@ -52,7 +52,7 @@ export function poolSentence(pool: LedgerPool, period: LedgerPeriod): string {
   const name = pool.kind === 'CoreFlexible' ? 'Core' : pool.name
   const of = pool.hasSetAside ? `the ${money(period.available)} set aside` : `the plan's ${money(period.available)}`
   const when = period.isCurrent ? 'this period' : 'in the last period'
-  const rolled = period.carried > 0 ? `, including ${money(period.carried)} rolled over, not confirmed` : ''
+  const rolled = period.carried > 0 ? `, including ${money(period.carried)} rolled over${period.carriedSetByHand ? ' (set by hand)' : ', not confirmed'}` : ''
   const stand = period.remaining >= 0 ? `${money(period.remaining)} left of ${of}` : `${money(-period.remaining)} over ${of}`
   // When the NDIA has refused a claim of this pool for want of funds, ODIP's arithmetic may still say fine: say whose figures these are, beside the NDIA's word, with the pool's name ("Core, by ODIP's
   // figures: ...") so the sentence has one colon.

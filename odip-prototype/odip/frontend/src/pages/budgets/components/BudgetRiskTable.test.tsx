@@ -206,6 +206,13 @@ describe('BudgetRiskTable: a real row', () => {
     expect(within(cellOf('Plain Person', 'Available')).queryByRole('img')).not.toBeInTheDocument()
   })
 
+  it('words the mark "set by hand" when the rolled-over amount was typed into the plan, and the legend stays the same', () => {
+    renderTable(readyTable([riskRow({ id: 'a', participantLabel: 'Typed Person', available: 3473.32, carried: 448.66, carriedSetByHand: true })]))
+
+    const mark = within(cellOf('Typed Person', 'Available')).getByRole('img', { name: 'Includes $448.66 rolled over (set by hand)' })
+    expect(mark).toHaveAttribute('title', 'Includes $448.66 rolled over (set by hand)')
+  })
+
   // Money columns line up on the decimal point. The mark used to sit to the right of the figure in a right-aligned column, so a marked figure's digits ended about 18px left of an unmarked one's:
   // it sits to the LEFT of the figure now, and the digits keep the column's right edge.
   it('puts the roll-forward mark before the figure, so a marked Available ends where an unmarked one does', () => {

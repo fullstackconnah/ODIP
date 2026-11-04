@@ -37,6 +37,10 @@ public record AgreementCheckPeriodDto
     /// With no agreement cost in the earlier periods it is the ledger's own figure.
     /// </summary>
     public decimal Available { get; init; }
+    /// <summary>What carried into this period in the walk: the part of <see cref="Available"/> above the period's limit.</summary>
+    public decimal CarriedIn { get; init; }
+    /// <summary>True when <see cref="CarriedIn"/> is the amount typed into the funding plan.</summary>
+    public bool CarriedSetByHand { get; init; }
     /// <summary>Claimed plus pending (the ledger's figure). What is booked ahead is not taken off: it is not used yet.</summary>
     public decimal Used { get; init; }
     /// <summary>Available minus used.</summary>

@@ -344,6 +344,7 @@ public sealed class FundingPlanService
         period.PeriodEnd = dto.PeriodEnd!.Value;
         period.PlanAmount = dto.PlanAmount!.Value;
         period.SetAside = dto.SetAside;
+        period.RolloverOverride = dto.RolloverOverride;
     }
 
     private static List<SaveFundingPeriodDto> OrderedPeriods(SaveFundingPoolDto pool) => pool.Periods!.OrderBy(p => p.PeriodStart).ToList();
@@ -425,7 +426,7 @@ public sealed class FundingPlanService
             SetAsideTotal = periods.Count > 0 && periods.All(p => p.SetAside is not null) ? periods.Sum(p => p.SetAside!.Value) : null,
             Periods = periods.Select(p => new FundingPeriodDto
             {
-                Id = p.Id, Position = p.Position, PeriodStart = p.PeriodStart, PeriodEnd = p.PeriodEnd, PlanAmount = p.PlanAmount, SetAside = p.SetAside,
+                Id = p.Id, Position = p.Position, PeriodStart = p.PeriodStart, PeriodEnd = p.PeriodEnd, PlanAmount = p.PlanAmount, SetAside = p.SetAside, RolloverOverride = p.RolloverOverride,
             }).ToList(),
         };
     }

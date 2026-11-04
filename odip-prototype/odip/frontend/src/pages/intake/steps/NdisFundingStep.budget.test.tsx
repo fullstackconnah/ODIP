@@ -13,6 +13,7 @@ const { useFundingPlans, create, update } = vi.hoisted(() => ({ useFundingPlans:
 
 vi.mock('@/api/hooks', () => ({
   useFundingPlans,
+  useFundingLedger: () => ({ data: undefined, isLoading: false, isError: false }),
   useCreateFundingPlan: () => ({ mutate: create, isPending: false }),
   useUpdateFundingPlan: () => ({ mutate: update, isPending: false }),
   usePaceCategories: () => ({ data: PACE_CATEGORIES }),

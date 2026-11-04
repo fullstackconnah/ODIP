@@ -39,6 +39,8 @@ export interface FundingPeriodDto {
   planAmount: number
   /** The organisation's share; absent when none is recorded (the limit is then the plan amount). */
   setAside?: number
+  /** The rolled-over amount typed by hand; absent when the ledger works it out. */
+  rolloverOverride?: number
 }
 
 export interface FundingPoolDto {
@@ -93,6 +95,8 @@ export interface SaveFundingPeriodDto {
   periodEnd: string
   planAmount: number
   setAside?: number
+  /** Absent = worked out by the ledger (a save replaces the plan, so leaving it out clears a typed amount). */
+  rolloverOverride?: number
 }
 
 export interface SaveFundingPoolDto {
@@ -173,6 +177,10 @@ export interface LedgerFigures {
   limit: number
   /** What earlier periods of the plan left unspent, rolled forward. Not confirmed: others may have used it. */
   carried: number
+  /** What the earlier periods left unspent, worked out from the ledger alone; absent on a pool's plan total. Differs from `carried` only when `carriedSetByHand`. */
+  carriedWorkedOut?: number
+  /** `carried` was typed into the funding plan. */
+  carriedSetByHand?: boolean
   available: number
   claimed: number
   pending: number
@@ -376,6 +384,8 @@ export interface BudgetListRow {
   available: number
   /** How much of `available` is rolled over from earlier periods of the plan (0 when none): not confirmed, because somebody else may have used it. */
   carried: number
+  /** `carried` was typed into the funding plan rather than worked out. */
+  carriedSetByHand?: boolean
   /** Claimed plus pending. */
   used: number
   /** Available minus used: what is left, or, below zero, how far over the period already is. The server works it out, so no screen subtracts. */
@@ -441,6 +451,10 @@ export interface AgreementCheckPeriod {
   isCurrent: boolean
   /** What the agreement costs in this period. */
   agreementCost: number
+  /** What rolled into this period from the one before once the agreement has spent its share of the earlier ones (the server's walk). */
+  carriedIn: number
+  /** The period's rollover was typed into the funding plan rather than worked out. */
+  carriedSetByHand: boolean
   /** The period's limit plus what earlier periods would leave unspent once this agreement had spent its share of them (the ledger's figure when no earlier period has an agreement cost). */
   available: number
   /** Claimed plus pending (the ledger's figure). */
