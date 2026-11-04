@@ -2463,4 +2463,79 @@ public class IncidentsControllerTests
 
         Assert.Empty(await db.BookingTasks.Where(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition).ToListAsync());
     }
+
+    // ── ExpectedUpdatedAt: a stale form is refused instead of deleting newer data ────────────
+
+    /// <summary>A saved incident with one Approved staff witness who left a statement, its UpdatedAt pinned to a value with sub-millisecond ticks.</summary>
+    private static async Task<(OdipDbContext Db, IncidentsController Controller, User Reporter, IncidentReport Incident, IncidentWitness Witness)> ArrangeAnsweredWitnessAsync()
+    {
+        var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var staff = SeedUser(db, firstName: "Priya", lastName: "Nair");
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, IncidentType.PropertyDamage, rpType: null), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        incident.UpdatedAt = new DateTime(2026, 11, 3, 1, 2, 3, DateTimeKind.Utc).AddTicks(1234);
+        var witness = new IncidentWitness
+        {
+            Id = Guid.NewGuid(), IncidentReportId = incident.Id, WitnessUserId = staff.Id, WitnessName = staff.FullName,
+            WitnessStatus = WitnessStatus.Approved, WitnessRespondedAt = DateTime.UtcNow, StatementText = "I saw the whole thing.",
+        };
+        db.IncidentWitnesses.Add(witness);
+        await db.SaveChangesAsync();
+        return (db, controller, reporter, incident, witness);
+    }
+
+    private static UpdateIncidentDto StaleCheckDto(Guid reporterId, DateTime? expectedUpdatedAt, params CreateIncidentWitnessDto[] witnesses) => new()
+    {
+        ReportedByStaffId = reporterId, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Medium,
+        Title = "Incident title", Description = "What happened.", IncidentDateTime = new DateTime(2026, 8, 30, 10, 0, 0, DateTimeKind.Utc),
+        Status = IncidentStatus.Draft, ExpectedUpdatedAt = expectedUpdatedAt, Witnesses = witnesses.ToList(),
+    };
+
+    [Fact]
+    public async Task Update_WithAnOutdatedExpectedUpdatedAt_Returns409_AndKeepsTheAnsweredWitness()
+    {
+        var (db, controller, reporter, incident, witness) = await ArrangeAnsweredWitnessAsync();
+        using var _ = db;
+
+        // The form was loaded before the witness answered, so it leaves that witness out.
+        var result = await controller.Update(incident.Id, StaleCheckDto(reporter.Id, incident.UpdatedAt.AddSeconds(-1)), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(conflict.Value);
+        Assert.Equal("Someone else changed this incident after you opened it. Cancel, then edit it again to see their changes.", Assert.Single(body.Errors!));
+        var kept = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        Assert.Equal(WitnessStatus.Approved, kept.WitnessStatus);
+        Assert.Equal("I saw the whole thing.", kept.StatementText);
+    }
+
+    [Theory]
+    [InlineData(DateTimeKind.Utc)]
+    [InlineData(DateTimeKind.Unspecified)] // what the database hands back
+    public async Task Update_WithTheStoredUpdatedAtTruncatedToTheMillisecond_Saves(DateTimeKind kind)
+    {
+        var (db, controller, reporter, incident, witness) = await ArrangeAnsweredWitnessAsync();
+        using var _ = db;
+        var echoed = DateTime.SpecifyKind(new DateTime(incident.UpdatedAt.Ticks - incident.UpdatedAt.Ticks % TimeSpan.TicksPerMillisecond), kind);
+        Assert.NotEqual(incident.UpdatedAt.Ticks, echoed.Ticks); // the echo really lost its sub-millisecond ticks
+
+        var result = await controller.Update(incident.Id,
+            StaleCheckDto(reporter.Id, echoed, new CreateIncidentWitnessDto { Id = witness.Id, WitnessUserId = witness.WitnessUserId, WitnessName = witness.WitnessName }),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("I saw the whole thing.", (await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id)).StatementText);
+    }
+
+    [Fact]
+    public async Task Update_WithoutExpectedUpdatedAt_SavesAsToday()
+    {
+        var (db, controller, reporter, incident, _) = await ArrangeAnsweredWitnessAsync();
+        using var _d = db;
+
+        var result = await controller.Update(incident.Id, StaleCheckDto(reporter.Id, null), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
 }
