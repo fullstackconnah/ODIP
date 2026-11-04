@@ -23,7 +23,7 @@ const addDays = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDa
 const shift = (o) => ({ id: 'sh', participantId: 'p-0001', participantName: 'Liam Okafor', staffId: 's-2', staffName: 'Owen Brandt', serviceDate: '', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null, notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false, ...o })
 const person = (id, first, last) => ({ id, firstName: first, lastName: last, fullName: `${first} ${last}`, username: first.toLowerCase(), role: 'SupportWorker', position: 'SupportWorker', email: null, mobile: null, region: null, isDriverEligible: true, isFirstAidQualified: true, isMedicationCompetent: true, isManualHandlingCompetent: true, isOvernightEligible: true, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null, manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningExpiryDate: null, hasExpiredQualifications: false, notes: null })
 // Staff-list order is by last name. Yara is Preferred but listed last, so the Preferred-first sort shows.
-const STAFF = [person('s-6', 'Hana', 'Bell'), person('s-2', 'Owen', 'Brandt'), person('s-3', 'Lena', 'Cho'), person('s-7', 'Bartholomew', 'Featherstonehaugh-Smythe'), person('s-8', 'Zoe', 'Free'), person('s-1', 'Yara', 'Young')]
+const STAFF = [person('s-6', 'Hana', 'Bell'), person('s-2', 'Owen', 'Brandt'), person('s-3', 'Lena', 'Cho'), person('s-7', 'Bartholomew', 'Featherstonehaugh-Smythe-Cholmondeley-Worthington'), person('s-8', 'Zoe', 'Free'), person('s-1', 'Yara', 'Young')]
 
 let monday = null
 const day = (i) => addDays(monday, i)
