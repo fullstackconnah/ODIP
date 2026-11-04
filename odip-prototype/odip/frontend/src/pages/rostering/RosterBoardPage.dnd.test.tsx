@@ -366,6 +366,16 @@ describe('RosterBoardPage: Publish week', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
+  it('hides the Publish pill while a person is carried, so drops reach the cells under it, and brings it back after', async () => {
+    renderPage()
+    const pill = (document.querySelector('[data-publish-bar]') as HTMLElement).firstElementChild as HTMLElement
+    expect(pill).not.toHaveClass('pointer-events-none')
+    act(() => { h.dnd.props!.onDragStart({ active: { id: 'carried', data: { current: sam } } } as never) })
+    expect(pill).toHaveClass('opacity-0', 'pointer-events-none')
+    await drop(sam, null)
+    expect(pill).not.toHaveClass('opacity-0')
+  })
+
   it('shows a refusal in the error Callout, and is offered on a phone too', async () => {
     const user = userEvent.setup()
     h.screen.belowMd = true

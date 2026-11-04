@@ -25,6 +25,12 @@ describe('motion polish CSS contract', () => {
     expect(css).toMatch(/@keyframes foldIn \{\s*from \{ opacity: 0; \}/)
   })
 
+  it("raises the Publish pill with the install card's keyframes, and only fades under reduced motion", () => {
+    expect(css).toMatch(/\.publish-float \{ animation: installIn 200ms cubic-bezier\(0\.2, 0, 0, 1\); \}/)
+    const reduce = mediaBlock('prefers-reduced-motion: reduce', '.publish-float')
+    expect(reduce).toMatch(/\.publish-float \{ animation: installFadeIn 150ms linear !important; \}/)
+  })
+
   it('keeps spinners turning under reduced motion (a loading signal is essential motion)', () => {
     const reduce = mediaBlock('prefers-reduced-motion: reduce', '.animate-spin')
     expect(reduce).toMatch(/\.animate-spin \{[^}]*animation-duration: 1s !important;[^}]*animation-iteration-count: infinite !important;/)

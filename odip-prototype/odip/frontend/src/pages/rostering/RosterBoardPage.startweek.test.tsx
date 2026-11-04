@@ -98,12 +98,16 @@ describe('the Publish banner', () => {
     expect(title.closest('[role="alert"]')).toBeNull()
     const bar = document.querySelector('[data-publish-bar]') as HTMLElement
     expect(bar).toContainElement(title)
-    // The foot of the page, pinned: above the bottom nav below lg, at the foot of the fitted page from lg.
+    // A floating pill (owner, 2026-11-05): the last child of the board scroller, pinned above the bottom nav below lg and to the scroller foot from lg, with nothing painted outside the pill.
+    expect(bar.parentElement).toHaveClass('lg:overflow-y-auto')
     expect(bar.parentElement?.lastElementChild).toBe(bar)
-    expect(bar).toHaveClass('sticky', 'lg:bottom-0')
+    expect(bar).toHaveClass('sticky', 'lg:bottom-0', 'pointer-events-none')
+    expect(bar).not.toHaveClass('bg-background')
     expect(bar.className).toContain('bottom-[var(--mobile-nav-h)]')
-    const waiting = within(bar).getByRole('button', { name: '1 agreement waiting' })
-    expect(title.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(bar.firstElementChild).toHaveClass('publish-float', 'pointer-events-auto')
+    // The agreements button lives in the status line above the board, so the bar holds only the publish actions.
+    expect(within(bar).queryByRole('button', { name: /agreement.* waiting/ })).toBeNull()
+    expect(screen.getByRole('button', { name: '1 agreement waiting' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Publish week' })).toHaveLength(1)
     expect(within(bar).getByRole('button', { name: 'Publish week' })).toHaveClass(PRIMARY)
     expect(screen.queryByText('4 drafts')).not.toBeInTheDocument()
