@@ -174,9 +174,9 @@ public class IncidentsControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var reporter = SeedUser(db); // default Role = Admin (enum ordinal 0) — also a valid recipient
-        var coordinator = SeedUser(db, firstName: "Cara", lastName: "Coord");
+        var coordinator = SeedUser(db, reporter.TenantId, firstName: "Cara", lastName: "Coord");
         coordinator.Role = UserRole.Coordinator;
-        var supportWorker = SeedUser(db, firstName: "Sam", lastName: "Support");
+        var supportWorker = SeedUser(db, reporter.TenantId, firstName: "Sam", lastName: "Support");
         supportWorker.Role = UserRole.SupportWorker;
         db.SaveChanges();
         var participant = SeedParticipant(db);
