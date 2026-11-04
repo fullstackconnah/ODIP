@@ -2519,6 +2519,18 @@ const rosterPatterns = [
 const rosterShifts = []
 let rosterCounter = 0
 const startedWeeks = new Set([BOARD_FIXTURE_WEEK])   // the fixture week reads as started; others show the Start overlay
+// Agreement PR3b: the contacts a revision can be sent to, and the links sent (by draft id). A send to c-fail or c-config gives the two refusals the server gives; a send to c-opened or
+// c-expired is recorded as already opened or already expired, so a screenshot can reach those lines without waiting a month.
+const AGREEMENT_CONTACTS = [
+  { personId: 'c-1', name: 'Jo Lee', roles: 'Guardian', email: 'jo.lee@example.com', isDefault: true },
+  { personId: 'c-opened', name: 'Sam Park', roles: 'Plan nominee', email: 'sam.park@example.com', isDefault: false },
+  { personId: 'c-expired', name: 'Ari Cole', roles: 'Guardian', email: 'ari.cole@example.com', isDefault: false },
+  { personId: 'c-fail', name: 'Lee Fail', roles: 'Guardian', email: 'lee.fail@example.com', isDefault: false },
+  { personId: 'c-config', name: 'Kim Config', roles: 'Guardian', email: 'kim.config@example.com', isDefault: false },
+  { personId: 'c-none', name: 'Pat Nominee', roles: 'Plan nominee', isDefault: false },
+  { name: 'Marcus Tran', roles: 'Participant', email: 'marcus.tran@example.com', isDefault: false },
+]
+const agreementShares = {}
 const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, startedWeeks, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
 
 function draftDto(participantId, version, body, quoteResult, lines) {
@@ -2724,6 +2736,14 @@ const routes = [
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return result.preview
   }],
+  // Send to a contact (agreement PR3b): who an agreement can go to, and the links sent so far (newest first). No link or hash is ever in this answer, as on the server.
+  ['participants/:id/service-agreement-drafts/:id/sharing', (participantId, draftId) => ({ contacts: AGREEMENT_CONTACTS, shares: agreementShares[draftId] || [] })],
+  // The public page behind the emailed link (no session). mock-valid reads; mock-expired and anything else is the one fixed 404 the server gives.
+  ['public/agreement-share/:id', (token) => (token === 'mock-valid'
+    ? { providerName: 'Ability Options', participantName: 'Marcus Tran', startDate: '2026-10-01', endDate: '2027-06-30', isOngoing: false, periodText: '1 October 2026 to 30 June 2027',
+      lines: [{ item: 'Assistance with self-care', quantity: 120, unit: 'hour', unitPrice: 70.23, total: 8427.6 }, { item: 'Community participation', quantity: 60, unit: 'hour', unitPrice: 67.56, total: 4053.6 }],
+      total: 12481.2, contactEmail: 'office@abilityoptions.example', contactPhone: '07 5550 0100', expiresAt: '2026-12-03T01:00:00Z' }
+    : respond(404, failEnvelope(null, ['Not found.'])))],
   // Populate roster (S11): what each started week is missing, then one week at a time.
   ['participants/:id/service-agreement-drafts/:id/populate-preview', (participantId, draftId) => {
     const result = planApproval.populatePreview(approvalStore, participantId, draftId)
@@ -3126,7 +3146,28 @@ const postRoutes = [
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
+    // PR3b: who agreed and how is kept with the approval (the name of a contact comes from the contact).
+    const who = AGREEMENT_CONTACTS.find((contact) => contact.personId && contact.personId === (body && body.agreedByPersonId))
+    if (result.draft.approval && body && (who || body.agreedByName || body.agreedHow)) {
+      Object.assign(result.draft.approval, { agreedByName: who ? who.name : body.agreedByName, agreedHow: body.agreedHow })
+    }
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
+  ['participants/:id/service-agreement-drafts/:id/send', (participantId, draftId, body) => {
+    const draft = (serviceAgreementDrafts[participantId] || []).find((d) => d.id === draftId)
+    if (!draft) return respond(404, failEnvelope(null, ['Draft not found.']))
+    if (draft.approval || (body && body.expectedVersion !== draft.version)) return respond(409, failEnvelope(null, ['This agreement has changed. Reload it and try again.']))
+    const to = AGREEMENT_CONTACTS.find((contact) => (contact.personId || null) === ((body && body.personId) || null))
+    if (!to || !to.email) return respond(400, failEnvelope(null, ['Choose a contact with an email address.']))
+    if (to.personId === 'c-fail') return { sent: false, error: 'Failed' }
+    if (to.personId === 'c-config') return { sent: false, error: 'NotConfigured' }
+    const now = Date.now()
+    const day = 86_400_000
+    const row = { sentAt: new Date(now).toISOString(), expiresAt: new Date(now + 30 * day).toISOString(), recipientName: to.name, recipientEmail: to.email }
+    if (to.personId === 'c-opened') row.openedAt = new Date(now + 3_600_000).toISOString()
+    if (to.personId === 'c-expired') { row.sentAt = new Date(now - 40 * day).toISOString(); row.expiresAt = new Date(now - 10 * day).toISOString() }
+    agreementShares[draftId] = [row, ...(agreementShares[draftId] || [])]
+    return { sent: true, error: null }
   }],
   ['participants/:id/service-agreement-drafts/:id/populate', (participantId, draftId, body) => {
     const result = planApproval.populate(approvalStore, participantId, draftId, body)

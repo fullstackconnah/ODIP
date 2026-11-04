@@ -26,6 +26,7 @@ const IntakeWizardPage = React.lazy(() => import('./pages/intake/IntakeWizardPag
 const ProfileWizardPage = React.lazy(() => import('./pages/profile/ProfileWizardPage'))
 // cg03: the public, session-free caregiver profile form — see its route placement below.
 const CaregiverWizardPage = React.lazy(() => import('./pages/caregiver/CaregiverWizardPage'))
+const SharedAgreementPage = React.lazy(() => import('./pages/agreement-share/SharedAgreementPage'))
 const ParticipantDetailPage = React.lazy(() => import('./pages/ParticipantDetailPage'))
 const ServiceAgreementDraftPage = React.lazy(() => import('./pages/ServiceAgreementDraftPage'))
 // cg04: admin review surfaces for caregiver-submitted forms — see route placement below.
@@ -134,6 +135,8 @@ const router = createBrowserRouter(
       {/* Caregiver profile form — public, token-authenticated, deliberately OUTSIDE the
           authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}
       <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />
+      {/* A service agreement sent to a contact (PR3b): public, token-authenticated, read and download only, outside the shell like the caregiver form. */}
+      <Route path="/agreement/:token" element={<SharedAgreementPage />} />
       {/* The accessibility statement: public, outside the shell, so a signed-out reader is never sent to /login. */}
       <Route path="/accessibility" element={<AccessibilityPage />} />
       <Route element={<UiPreferencesProvider><ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary></UiPreferencesProvider>}>

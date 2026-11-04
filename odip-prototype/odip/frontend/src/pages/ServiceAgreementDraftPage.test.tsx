@@ -7,9 +7,9 @@ import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate, populateMutate } = vi.hoisted(() => ({
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate, populateMutate, sharing } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
-  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(), approveMutate: vi.fn(), populateMutate: vi.fn(),
+  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(), approveMutate: vi.fn(), populateMutate: vi.fn(), sharing: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -28,6 +28,8 @@ vi.mock('@/api/hooks', () => ({
   usePlanBudget: (...args: unknown[]) => budget(...args),
   usePlanPeriodQuote: () => ({ data: undefined, isError: false, isFetching: false, failureCount: 0 }),
   useAgreementCheck: () => check(),
+  useAgreementSharing: () => sharing(),
+  useSendAgreement: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 // The editor has its own tests: here it is a marker that says how the agreement opened it.
@@ -72,6 +74,7 @@ beforeEach(() => {
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
+  sharing.mockReturnValue({ data: { contacts: [{ personId: 'c-1', name: 'Jo Lee', roles: 'Guardian', email: 'jo@example.com', isDefault: true }], shares: [] } })
   createMutate.mockReset(); downloadMutate.mockReset(); approveMutate.mockReset(); previewFor.mockReset(); editor.mockReset()
   pricingSettings.mockReturnValue(makeSettings())
   oldDraft.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
@@ -364,6 +367,51 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(stepButton('Save'))
     expect(screen.getByRole('button', { name: 'Download agreement PDF' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirm service needs' })).not.toBeInTheDocument()
+  })
+
+  describe('send to a contact', () => {
+    const saved = (changes: Partial<ServiceAgreementDraftDto> = {}) => drafts.mockReturnValue({ data: [draft(changes)], isLoading: false, isError: false, refetch: refetchDrafts })
+    const share = { sentAt: '2026-11-03T01:00:00Z', expiresAt: '2026-12-03T01:00:00Z', recipientName: 'Jo Lee', recipientEmail: 'jo@example.com' }
+
+    it('offers Send to a contact beside approval, and says nothing until something was sent', async () => {
+      saved()
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(stepButton('Save'))
+      expect(screen.getByRole('button', { name: 'Send to a contact' })).toBeInTheDocument()
+      expect(screen.queryByText(/not opened yet/)).not.toBeInTheDocument()
+    })
+
+    it('hides it from somebody who cannot change the agreement', async () => {
+      asRole('ReadOnly')
+      saved()
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(stepButton('Save'))
+      expect(screen.queryByRole('button', { name: 'Send to a contact' })).not.toBeInTheDocument()
+    })
+
+    it('hides it on an approved revision', async () => {
+      saved({ approval })
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(stepButton('Save'))
+      expect(screen.queryByRole('button', { name: 'Send to a contact' })).not.toBeInTheDocument()
+    })
+
+    it('says when it was sent and not opened, then when it was opened', async () => {
+      saved()
+      sharing.mockReturnValue({ data: { contacts: [], shares: [share] } })
+      const user = userEvent.setup()
+      const { unmount } = renderPage()
+      await user.click(stepButton('Save'))
+      expect(screen.getByText('Sent to Jo Lee on 3 Nov 2026 \u00b7 not opened yet')).toBeInTheDocument()
+      unmount()
+      sharing.mockReturnValue({ data: { contacts: [], shares: [{ ...share, openedAt: '2026-11-04T01:00:00Z' }] } })
+      renderPage()
+      await user.click(stepButton('Save'))
+      expect(screen.getByText(/Sent to Jo Lee on 3 Nov 2026 \u00b7 opened 4 Nov 2026/)).toBeInTheDocument()
+    })
   })
 
   it('shows what is saved to somebody who cannot change it, with Close in place of Save', async () => {
