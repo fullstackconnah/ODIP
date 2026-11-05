@@ -95,7 +95,7 @@ public class EmploymentHeroLeaveRulesTests
     {
         Assert.True(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.Build(ALeave(LeaveType.Sick), "42", new("5", null, null, null)).WaitReason));
         Assert.True(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.Build(ALeave(), "abc", Mapped).WaitReason));
-        Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.WeekendMessage));
+        Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.NoWorkdaysMessage));
         Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroTimesheets.BusyMessage));
         Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroTimesheets.NotLinkedReason));
         Assert.False(EmploymentHeroLeave.IsWaiting(null));

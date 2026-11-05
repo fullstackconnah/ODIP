@@ -16,7 +16,8 @@ public static class EmploymentHeroLeave
 {
     public const string FromEhMessage = "This leave was entered in Employment Hero. Change or cancel it there.";
     public const string CancelFinalisedMessage = "Cancelled in Bunya Support after the pay run was finalised: fix it in Employment Hero";
-    public const string WeekendMessage = "This leave falls only on weekends or public holidays, so Bunya Support has no standard hours to send. Enter it in Employment Hero if it is paid.";
+    public const string NoWorkdaysMessage = "This leave falls only on weekends or public holidays, so Bunya Support has no hours to send. Enter it in Employment Hero if it is paid.";
+    public const string EditedToNoWorkdaysMessage = "This leave now falls only on weekends or public holidays. Employment Hero still has the earlier request with its old hours: change or delete it there.";
     public const string GaveUpMessage = "We stopped trying after six tries.";
     public const string CreateFinalisedMessage = "Sent after the pay run was finalised: enter it in Employment Hero";
     public const string LinkClashMessage = "We couldn't link this leave to Employment Hero's copy.";
