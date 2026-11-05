@@ -183,6 +183,8 @@ public static class DbSeeder
             // method (medications/notes/routines/risk entries all key off specific indices that
             // stop at 19).
             new() { Id = Guid.Parse("d3000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Priya", IsDraft = true, Notes = "Phone screening only — still need DOB, NDIS number, funding source, and living arrangement." },
+            // Retention demo and E2E: archived 8 years ago with nothing linked to him, so the E2E can purge him for good without touching any other spec's data.
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000099"), TenantId = demoTenantId, Gender = Gender.Male, FirstName = "Harold", LastName = "Whitby", DateOfBirth = new DateOnly(1950, 3, 2), NdisNumber = "430567999", PlanType = PlanType.SelfManaged, IsActive = false, RetentionStartsOn = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-8)) },
         };
         // FUND-02: derive FundingSource from the pre-existing FundingOrganisation text using the
         // exact same rule the AddParticipantFundingSource migration applies to real rows on

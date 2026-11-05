@@ -92,25 +92,51 @@ public class DataExportController : ControllerBase
         // A stale or mistyped X-View-As-Tenant: never a complete-looking ZIP of empty files, nor an audit row for no organisation.
         if (name is null) return NotFound(ApiResponse<bool>.Fail("Organisation not found."));
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        return await StreamZipAsync($"bunya-support-export-{Slug(name)}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip", tenantId,
+            (output, generatedAt) => DataExportWriter.WriteAsync(output, _db, tenantId, ExportTables.All, generatedAt, Build, ct),
+            new AuditLog { EntityType = nameof(Tenant), EntityId = tenantId }, ct);
+    }
+
+    /// <summary>
+    /// One participant's data (Settings → Data retention, before a purge): the files hold only what the purge would delete (ExportTables.ForParticipantAsync).
+    /// Its audit row is the participant's, never a Tenant row, so Data export's "Last exported" line doesn't move. The purge deletes the row with the participant's other audit
+    /// rows; the PurgeRecord is the lasting trace.
+    /// </summary>
+    [HttpGet("participants/{participantId:guid}")]
+    [ServiceFilter(typeof(DataExportConcurrencyFilter))]
+    public async Task<IActionResult> DownloadParticipant(Guid participantId, CancellationToken ct)
+    {
+        if (Organisation is not { } tenantId) return NoOrganisationResult();
+
+        var person = await _db.Participants.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking()
+            .Where(p => p.TenantId == tenantId && p.Id == participantId).Select(p => new { p.FirstName, p.LastName }).FirstOrDefaultAsync(ct);
+        if (person is null) return NotFound(ApiResponse<bool>.Fail("Participant not found."));
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        var tables = await ExportTables.ForParticipantAsync(_db, tenantId, participantId, ct);
+        return await StreamZipAsync($"bunya-support-participant-{Slug($"{person.FirstName} {person.LastName}")}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip", tenantId,
+            (output, generatedAt) => DataExportWriter.WriteAsync(output, _db, tenantId, tables, generatedAt, Build, ct, participantId),
+            new AuditLog { EntityType = nameof(Participant), EntityId = participantId }, ct);
+    }
+
+    private async Task<IActionResult> StreamZipAsync(string fileName, Guid tenantId, Func<Stream, DateTime, Task> write, AuditLog audit, CancellationToken ct)
+    {
         // ZipArchive writes its headers synchronously in .NET, which Kestrel refuses unless the request allows it: this request only.
         if (HttpContext.Features.Get<IHttpBodyControlFeature>() is { } body) body.AllowSynchronousIO = true;
         Response.ContentType = "application/zip";
-        Response.Headers.ContentDisposition = $"attachment; filename=\"bunya-support-export-{Slug(name)}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip\"";
+        Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
         Response.Headers.CacheControl = "no-store";
 
         var zipComplete = false;
         try
         {
             await Response.StartAsync(ct);
-            await DataExportWriter.WriteAsync(Response.Body, _db, tenantId, ExportTables.All, _clock.GetUtcNow().UtcDateTime, Build, ct);
+            await write(Response.Body, _clock.GetUtcNow().UtcDateTime);
             zipComplete = true;
             // After the last byte, so a download that fails never moves the "last exported" line.
-            _db.AuditLogs.Add(new AuditLog
-            {
-                Id = Guid.NewGuid(), EntityType = nameof(Tenant), EntityId = tenantId, Action = AuditAction.Exported, ChangedAt = _clock.GetUtcNow(),
-                ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
-                ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
-            });
+            audit.Id = Guid.NewGuid(); audit.Action = AuditAction.Exported; audit.ChangedAt = _clock.GetUtcNow();
+            audit.ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null;
+            audit.ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name);
+            _db.AuditLogs.Add(audit);
             // Its own token, not ct: a client that leaves once it has the last byte still has the whole export, and this row is its only trace.
             // Bounded, so a stuck save can't hold the request (and its connection) open.
             using var auditTimeout = new CancellationTokenSource(AuditSaveTimeout);

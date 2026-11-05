@@ -85,6 +85,8 @@ public abstract record PurgeStep(string Table)
     public abstract IQueryable<Guid>? Ids(PurgeScope s);
     public abstract Task<int> CountAsync(PurgeScope s, CancellationToken ct);
     public abstract Task<int> DeleteAsync(PurgeScope s, CancellationToken ct);
+    /// <summary>The rows themselves, for the per-participant export: the same query the purge deletes, so the file holds exactly what is gone.</summary>
+    public abstract IQueryable<object> Query(PurgeScope s);
     public abstract Type Entity { get; }
 }
 
@@ -94,6 +96,8 @@ public sealed record PurgeStep<E>(string Table, Func<PurgeScope, IQueryable<E>> 
     public override IQueryable<Guid>? Ids(PurgeScope s) => HasId ? Rows(s).Select(e => EF.Property<Guid>(e, "Id")) : null;
     public override Task<int> CountAsync(PurgeScope s, CancellationToken ct) => Rows(s).CountAsync(ct);
     public override Task<int> DeleteAsync(PurgeScope s, CancellationToken ct) => Rows(s).ExecuteDeleteAsync(ct);
+    // Bytes left unread, as the organisation export does: the intake PDFs are read once, for documents/.
+    public override IQueryable<object> Query(PurgeScope s) => DataExport.ExportTables.WithoutBytes(s.Db, Rows(s).AsNoTracking());
 }
 
 /// <summary>
@@ -174,6 +178,15 @@ public static class PurgePlan
         Step("InAppNotifications", s => s.Q<InAppNotification>().Where(n => n.TenantId == s.T && (n.EntityId == s.X || s.PurgedIds.Contains(n.EntityId)))),
         Step("Participants", s => s.Q<Participant>().Where(p => p.TenantId == s.T && p.Id == s.X)),
     ];
+
+    /// <summary>A scope with every step's ids collected, in order, so the polymorphic steps (which read <c>PurgedIds</c>) see them. For the export; the purge collects as it deletes.</summary>
+    public static async Task<PurgeScope> ScopeAsync(OdipDbContext db, Guid tenantId, Guid participantId, CancellationToken ct)
+    {
+        var scope = new PurgeScope(db, tenantId, participantId);
+        foreach (var step in Steps)
+            if (step.Ids(scope) is { } ids) foreach (var id in await ids.ToListAsync(ct)) scope.Purged.Add(id);
+        return scope;
+    }
 
     /// <summary>The rows each table holds for the participant, for the due list. Counts the same queries the purge deletes.</summary>
     public static async Task<Dictionary<string, int>> CountAsync(OdipDbContext db, Guid tenantId, Guid participantId, CancellationToken ct)
