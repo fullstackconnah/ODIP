@@ -145,6 +145,8 @@ public record TripBarDto
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
     public bool IsDriver { get; init; }
+    /// <summary>Staff the trip still needs (0 when covered, unset or past fixing); the board marks the bar when above 0.</summary>
+    public int StaffShort { get; init; }
 }
 
 /// <summary>

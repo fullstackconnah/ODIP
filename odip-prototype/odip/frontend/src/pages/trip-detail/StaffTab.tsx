@@ -24,6 +24,7 @@ import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { modalGrid } from '@/lib/formGrid'
+import { TONE } from '@/lib/tone'
 
 const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
 
@@ -254,7 +255,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
           <div className="flex items-center justify-between gap-4">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isStaffed
               ? 'bg-[var(--color-primary-fixed)]/30 text-[var(--color-success)]'
-              : 'bg-[var(--color-error-container)]/60 text-[var(--color-destructive)]'}`}>
+              : TONE.warning.solid}`}>
               <span>{formatRatio(assigned, trip.staffRequired ?? '?')} staff</span>
               <span className="text-xs font-normal">({trip.calculatedStaffRequired.toFixed(2)} required from ratios)</span>
               {!isStaffed && <span className="text-xs">— need {required - assigned} more</span>}

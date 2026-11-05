@@ -392,6 +392,8 @@ export interface TripBarDto {
   startDate: string
   endDate: string
   isDriver: boolean
+  /** Staff the trip still needs; 0 when covered, unset or past fixing. */
+  staffShort: number
 }
 
 export interface LeaveBarDto {

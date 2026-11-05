@@ -316,6 +316,17 @@ public class RosteringController : ControllerBase
             }
         }
 
+        // Staff each trip on the board still needs. Counts every non-cancelled assignment on the trip, so it ignores the board's staff filter; one grouped query, not one per bar.
+        async Task<Dictionary<Guid, int>> AssignedByTripAsync(IEnumerable<Guid> tripIds)
+        {
+            var ids = tripIds.Distinct().ToList();
+            return await _db.StaffAssignments
+                .Where(a => ids.Contains(a.TripInstanceId) && a.Status != AssignmentStatus.Cancelled)
+                .GroupBy(a => a.TripInstanceId)
+                .Select(g => new { TripId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.TripId, x => x.Count, ct);
+        }
+
         RosterBoardDto board;
 
         if (groupByValue == RosterBoardGroupBy.Participant)
@@ -332,11 +343,13 @@ public class RosteringController : ControllerBase
                             && b.TripInstance.StartDate <= end)
                 .ToListAsync(ct);
             var weekTripBars = weekBookings.Where(b => b.TripInstance.EndDate >= start).ToList();
+            var assignedByTrip = await AssignedByTripAsync(weekTripBars.Select(b => b.TripInstanceId));
 
             TripBarDto ToParticipantTripBar(ParticipantBooking b) => new()
             {
                 TripInstanceId = b.TripInstanceId, TripCode = b.TripInstance.TripCode, TripName = b.TripInstance.TripName,
-                StartDate = b.TripInstance.StartDate, EndDate = b.TripInstance.EndDate, IsDriver = false
+                StartDate = b.TripInstance.StartDate, EndDate = b.TripInstance.EndDate, IsDriver = false,
+                StaffShort = TripStaffing.StaffShort(b.TripInstance, assignedByTrip.GetValueOrDefault(b.TripInstanceId))
             };
 
             var participantRows = new List<RosterParticipantRowDto>();
@@ -384,6 +397,7 @@ public class RosteringController : ControllerBase
         else
         {
             var rows = new List<RosterStaffRowDto>();
+            var assignedByTrip = await AssignedByTripAsync(weekTripAssignments.Where(a => a.AssignmentStart <= end).Select(a => a.TripInstanceId));
 
             foreach (var staff in activeStaff.Where(s => staffId is null || s.Id == staffId))
             {
@@ -396,7 +410,8 @@ public class RosteringController : ControllerBase
                 var myTripBars = weekTripAssignments.Where(a => a.UserId == staff.Id && a.AssignmentStart <= end).Select(a => new TripBarDto
                 {
                     TripInstanceId = a.TripInstanceId, TripCode = a.TripInstance.TripCode, TripName = a.TripInstance.TripName,
-                    StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver
+                    StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver,
+                    StaffShort = TripStaffing.StaffShort(a.TripInstance, assignedByTrip.GetValueOrDefault(a.TripInstanceId))
                 }).ToList();
 
                 var myLeave = weekWindows
