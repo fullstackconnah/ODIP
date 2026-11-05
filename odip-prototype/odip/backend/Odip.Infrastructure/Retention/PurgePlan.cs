@@ -134,6 +134,7 @@ public static class PurgePlan
         Step("ShiftPatterns", s => s.Q<ShiftPattern>().Where(p => p.TenantId == s.T && p.ParticipantId == s.X)),
         Step("StaffParticipantCompatibilities", s => s.Q<StaffParticipantCompatibility>().Where(c => c.TenantId == s.T && c.ParticipantId == s.X)),
         Step("MedicationAdministrations", s => s.Q<MedicationAdministration>().Where(m => s.MedAdministrations.Contains(m.Id))),
+        Step("RestrictivePracticeMonthlyReports", s => s.Q<RestrictivePracticeMonthlyReport>().Where(r => s.Practices.Contains(r.RestrictivePracticeId))),
         Step("RestrictivePractices", s => s.Q<RestrictivePractice>().Where(r => s.Practices.Contains(r.Id))),
         Step("ParticipantMedications", s => s.Q<ParticipantMedication>().Where(m => m.TenantId == s.T && m.ParticipantId == s.X)),
         Step("ServiceAgreementShares", s => s.Q<ServiceAgreementShare>().Where(h => h.TenantId == s.T && (h.ParticipantId == s.X || s.Drafts.Contains(h.DraftId)))),
