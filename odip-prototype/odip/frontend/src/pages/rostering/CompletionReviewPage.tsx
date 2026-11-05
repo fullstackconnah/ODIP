@@ -21,6 +21,7 @@ import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/uti
 import { formatVarianceMinutes } from './lib/roster'
 import { formatServiceDate, plural } from '@/lib/format'
 import { unbroken } from '@/lib/intakeBooking'
+import { noBreakRefs } from '@/lib/noBreakRef'
 import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { Modal } from '@/components/Modal'
@@ -304,6 +305,7 @@ export default function CompletionReviewPage() {
   const approveCompletion = useApproveCompletion()
   const setBreakKind = useSetBreakKind()
   const decideExtraTime = useDecideExtraTime()
+  const [claimedOn, setClaimedOn] = useState<string | null>(null)   // the claim that already holds the shift when a decision is saved: a claim is never re-billed
   const returnCompletion = useReturnCompletion()
   const approveBatch = useApproveCompletionsBatch()
 
@@ -347,12 +349,14 @@ export default function CompletionReviewPage() {
     try {
       const saved = await decideExtraTime.mutateAsync({ shiftId: decideTarget.shiftId, decision })
       setDecideTarget({ ...decideTarget, extraTime: saved.extraTime ?? decideTarget.extraTime })
+      setClaimedOn(saved.claimReference ?? null)
     } catch { setDecideError(true) }
   }
 
   function closeDecide() {
     if (decideExtraTime.isPending) return
     setDecideError(false)
+    setClaimedOn(null)
     setDecideTarget(null)
   }
 
@@ -562,6 +566,11 @@ export default function CompletionReviewPage() {
             ) : (
               <ExtraTimeChoiceGroup row={decideTarget} value={EXTRA_TIME_CHOICE[decideTarget.extraTime]} onChange={decide}
                 disabled={decideExtraTime.isPending} saving={decideExtraTime.isPending ? decideExtraTime.variables?.decision : null} />
+            )}
+            {claimedOn && (
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                Already claimed at rostered hours on {noBreakRefs(claimedOn)}. To claim the extra time, delete that draft claim and claim again, or add a manual claim.
+              </p>
             )}
             {decideError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't save. Try again.</p>}
           </div>

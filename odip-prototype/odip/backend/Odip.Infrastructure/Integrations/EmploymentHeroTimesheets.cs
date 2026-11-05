@@ -74,11 +74,14 @@ public static class EmploymentHeroTimesheets
     }
 
     /// <summary>The instants a shift is paid between, and whether unapproved extra time was held back. A Pending or Declined decision holds each side that added time (an early start, a late finish, over 5 minutes) at the rostered instant; a late start or early finish stays actual. A window that would invert (worked wholly outside the roster) sends the actual span. The one place the hold lives: <see cref="Build"/> and the Payroll page both call it.</summary>
-    public static (DateTime Start, DateTime End, bool Held) PaidWindow(Shift s, ShiftCompletion c, TimeZoneInfo providerZone)
+    public static (DateTime Start, DateTime End, bool Held) PaidWindow(Shift s, ShiftCompletion c, TimeZoneInfo providerZone) => PaidWindow(s, c, providerZone, c.ExtraTime);
+
+    /// <summary>The same window for a decision other than the one on the completion: pay passes the completion's own (null and Approved send the actual times); a shift claim passes <c>ExtraTime ?? Pending</c>.</summary>
+    public static (DateTime Start, DateTime End, bool Held) PaidWindow(Shift s, ShiftCompletion c, TimeZoneInfo providerZone, ExtraTimeDecision? decision)
     {
         var start = c.ActualStart;
         var end = c.ActualEnd ?? c.ActualStart;
-        if (c.ExtraTime is not (ExtraTimeDecision.Pending or ExtraTimeDecision.Declined) || s.NightType == SleepoverType.Sleepover) return (start, end, false);
+        if (decision is not (ExtraTimeDecision.Pending or ExtraTimeDecision.Declined) || s.NightType == SleepoverType.Sleepover) return (start, end, false);
         var (rStart, rEnd) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(s, string.IsNullOrEmpty(c.TimeZoneId) ? providerZone.Id : c.TimeZoneId);
         var paidStart = c.VarianceMinutesStart < -ShiftTimeRules.OffRosterMinutes && rStart > start ? rStart : start;
         var paidEnd = c.VarianceMinutesEnd > ShiftTimeRules.OffRosterMinutes && rEnd < end ? rEnd : end;

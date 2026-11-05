@@ -207,10 +207,9 @@ public class ShiftClaimGenerationServiceTests
     }
 
     [Fact]
-    public async Task GenerateDraftClaimAsync_UsesRosteredHours_NotClockedTimes()
+    public async Task GenerateDraftClaimAsync_UsesPaidWindow_NotRawClockTimes()
     {
-        // Billing is against rostered hours (Shift.DurationHours), not ShiftCompletion's actual
-        // clocked times — the office already accepted any variance at Approve time.
+        // Billing is against the pay window (W2 PR3): the late start is worked time, the late finish is held at the rostered 17:00 until a coordinator approves it.
         using var db = CreateDb();
         SeedProviderSettings(db);
         var participant = SeedParticipant(db);
@@ -220,10 +219,11 @@ public class ShiftClaimGenerationServiceTests
         db.ShiftCompletions.Add(new ShiftCompletion
         {
             Id = Guid.NewGuid(), TenantId = TenantId, ShiftId = shift.Id,
-            ActualStart = new DateTime(2026, 9, 7, 9, 30, 0, DateTimeKind.Utc),
-            ActualEnd = new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc), // 8.5 clocked hours
+            ActualStart = new DateTime(2026, 9, 6, 23, 10, 0, DateTimeKind.Utc),   // 09:10 Sydney
+            ActualEnd = new DateTime(2026, 9, 7, 7, 20, 0, DateTimeKind.Utc),      // 17:20 Sydney
+            VarianceMinutesStart = 10, VarianceMinutesEnd = 20, ExtraTime = ExtraTimeDecision.Pending,
             TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(),
-            StartedAt = new DateTime(2026, 9, 7, 9, 30, 0, DateTimeKind.Utc), IsActive = true,
+            StartedAt = new DateTime(2026, 9, 6, 23, 10, 0, DateTimeKind.Utc), IsActive = true,
         });
         await db.SaveChangesAsync();
 
@@ -231,8 +231,8 @@ public class ShiftClaimGenerationServiceTests
         var claim = await service.GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
 
         var line = await db.ClaimLineItems.SingleAsync(l => l.TripClaimId == claim.Id);
-        Assert.Equal(8m, line.Hours); // rostered, not the 8.5 clocked hours
-        Assert.Equal(80m, line.TotalAmount);
+        Assert.Equal(7.83m, line.Hours); // 09:10 to the held 17:00, not the 8.17 clocked hours
+        Assert.Equal(78.30m, line.TotalAmount);
     }
 
     [Fact]

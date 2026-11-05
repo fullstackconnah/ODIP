@@ -328,6 +328,14 @@ describe('ClaimsTab — shifts priced with a caveat (review F2)', () => {
     return user
   }
 
+  it('does not say shifts could not be priced when only extra time was left out', async () => {
+    const extra = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 'sh-1', serviceDate: '2026-02-03', description: 'Extra time 08:40–09:00 · 20 min', reason: 'Sam Lee: over budget.', extraTimeOnly: true }
+    await generateWith({ leftOut: [extra], flagged: [] })
+
+    expect(screen.getByText('Claim TC-4301-20260214 was made for $640.00.')).toBeInTheDocument()
+    expect(screen.queryByText(/could be priced/)).not.toBeInTheDocument()
+  })
+
   it('stays after generating to name the shifts that carry a caveat, even when none was left out', async () => {
     const user = await generateWith({ leftOut: [], flagged: [flagged] })
 

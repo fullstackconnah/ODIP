@@ -314,7 +314,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
           {/* A completed shift this claim cannot price is left out and stays waiting: never dropped silently. */}
           {previewData.leftOut && previewData.leftOut.length > 0 && (
             <div className="mt-[var(--section-gap)]">
-              <LeftOutCallout items={shiftItems(previewData.leftOut)} heading={`${plural(previewData.leftOut.length, 'shift')} will be left out of this claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
+              <LeftOutCallout items={shiftItems(previewData.leftOut)} heading={`${plural(wholeShifts(previewData.leftOut), 'shift')} will be left out of this claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
             </div>
           )}
 
@@ -331,10 +331,10 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
             {generated.claimReference ? `Claim ${generated.claimReference} was made` : 'The claim was made'}
             {generated.totalAmount != null ? ` for ${formatCurrency(generated.totalAmount)}` : ''}
             {/* "From the shifts that could be priced" is only true when some could not: a claim whose only note is a caveat has every shift of the range in it. */}
-            {(generated.leftOut?.length ?? 0) > 0 ? ', from the shifts that could be priced' : ''}.
+            {wholeShifts(generated.leftOut ?? []) > 0 ? ', from the shifts that could be priced' : ''}.
           </p>
           {generated.leftOut && generated.leftOut.length > 0 && (
-            <LeftOutCallout items={shiftItems(generated.leftOut)} heading={`${plural(generated.leftOut.length, 'shift')} ${generated.leftOut.length === 1 ? 'was' : 'were'} left out of the claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
+            <LeftOutCallout items={shiftItems(generated.leftOut)} heading={`${plural(wholeShifts(generated.leftOut), 'shift')} ${wholeShifts(generated.leftOut) === 1 ? 'was' : 'were'} left out of the claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
           )}
           {generated.flagged && generated.flagged.length > 0 && <FlaggedShifts shifts={generated.flagged} />}
         </div>
@@ -344,5 +344,6 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
 }
 
 /** The completed shifts a shift claim leaves out: each with its date, what it is and why. */
+const wholeShifts = (shifts: ShiftClaimLeftOutDto[]) => shifts.filter(s => !s.extraTimeOnly).length
 const shiftItems = (shifts: ShiftClaimLeftOutDto[]) =>
-  shifts.map(s => ({ key: s.shiftId, lead: <span className="tabular-nums">{formatDateAu(s.serviceDate)}</span>, description: s.description, reason: s.reason, action: heldClaimLink(s) }))
+  shifts.map(s => ({ key: s.shiftId, lead: <span className="tabular-nums">{formatDateAu(s.serviceDate)}</span>, description: s.description, reason: s.reason, action: heldClaimLink(s), extraTime: s.extraTimeOnly }))

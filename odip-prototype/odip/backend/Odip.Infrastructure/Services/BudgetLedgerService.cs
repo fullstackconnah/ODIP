@@ -67,6 +67,41 @@ public sealed class BudgetLedgerService
         return all.TryGetValue(participantId, out var ledger) ? LedgerDto(ledger) : null;
     }
 
+    /// <summary>
+    /// Under a hard limit, which approved extra time does not fit (W2 PR3): the shifts' extra-time increments against each period's headroom, in service-date order, a shift's extra time taken only when every one
+    /// of its increments fits. The ledger already counts these shifts at their worked hours, so the headroom is Available less Forecast without this batch's increments, then the increments taken so far. Forecast, not
+    /// Used, because a hard limit protects the booked-ahead shifts too. Returns the shifts that do not fit, each with "{pool} for {period}". An increment outside every pool or period has no limit and fits.
+    /// </summary>
+    public async Task<IReadOnlyList<(Guid ShiftId, string Over)>> ExtraTimeOverBudgetAsync(Guid tenantId, Guid participantId, IReadOnlyList<(Guid ShiftId, DateOnly ServiceDate, IReadOnlyList<ShiftCostPart> Increment)> extras, CancellationToken ct)
+    {
+        var refused = new List<(Guid, string)>();
+        if (extras.Count == 0) return refused;
+        if (!(await ComputeAsync(tenantId, new[] { participantId }, ct)).TryGetValue(participantId, out var ledger) || ledger.Ledger is not { } plan) return refused;
+        var planType = await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && p.Id == participantId).Select(p => p.PlanType).FirstAsync(ct);
+
+        (Guid PeriodId, string Name, decimal Headroom, string Text)? Place(ShiftCostPart part)
+        {
+            var place = BudgetLedgerCalculator.Place(plan.Plan, new LedgerItem { Kind = LedgerRowKind.FutureShift, Group = LedgerGroup.BookedAhead, Amount = 0m, Date = part.Date, PaceCategory = part.PaceCategory, PlanType = planType });
+            if (place.Placement != LedgerPlacement.InPeriod) return null;
+            var period = plan.Pools.First(p => p.Pool.Id == place.Pool!.Id).Periods.First(p => p.Period.Id == place.Period!.Id);
+            return (period.Period.Id, place.Pool!.Name, period.Available - period.Forecast, string.Create(CultureInfo.InvariantCulture, $"{place.Pool.Name} for {period.Period.PeriodStart:d MMM yyyy}–{period.Period.PeriodEnd:d MMM yyyy}"));
+        }
+        // The ledger holds every increment of this batch already; take them all out, then give them back in order.
+        var baselineAdded = new Dictionary<Guid, decimal>();
+        foreach (var part in extras.SelectMany(e => e.Increment))
+            if (Place(part) is { } at) baselineAdded[at.PeriodId] = baselineAdded.GetValueOrDefault(at.PeriodId) + part.Amount;
+        var taken = new Dictionary<Guid, decimal>();
+        foreach (var extra in extras.OrderBy(e => e.ServiceDate))
+        {
+            var needs = extra.Increment.Select(part => (Part: part, At: Place(part))).Where(n => n.At is not null).GroupBy(n => n.At!.Value.PeriodId).ToList();
+            var over = needs.Select(g => (g.First().At!.Value, Amount: g.Sum(n => n.Part.Amount)))
+                .FirstOrDefault(n => n.Item1.Headroom + baselineAdded[n.Item1.PeriodId] - taken.GetValueOrDefault(n.Item1.PeriodId) - n.Amount < 0m);
+            if (over.Item1.Text is { } text) { refused.Add((extra.ShiftId, text)); continue; }
+            foreach (var g in needs) taken[g.Key] = taken.GetValueOrDefault(g.Key) + g.Sum(n => n.Part.Amount);
+        }
+        return refused;
+    }
+
     // ── Many participants at once ───────────────────────────────────────────
 
     /// <summary>
@@ -129,12 +164,14 @@ public sealed class BudgetLedgerService
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
         // A completed, unclaimed shift is estimated at what its claim will say: rostered hours minus the breaks taken alone (W9).
         var aloneBreaks = await ShiftAloneBreaks.LoadAsync(_db, shiftRows.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.Id).ToList(), ct);
+        // ...and at the hours worked (W2 PR3), the window its claim will use: approved extra time is in it, held extra time is not.
+        var completions = await ShiftClaimWindow.LoadAsync(_db, shiftRows.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.Id).ToList(), ct);
         var peopleById = withPlan.ToDictionary(p => p.Id);
         var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, peopleById[s.ParticipantId].MmLevel)).ToList(), ct);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
-        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks));
+        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks, completions));
         AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
@@ -475,12 +512,17 @@ public sealed class BudgetLedgerService
     /// The ledger items of a shift: one for each part of it, a date and a PACE category (<see cref="ShiftPriceEstimator.PartsOf"/>), so the ledger counts the shift exactly as the claim lines it becomes are filed. Kind and group come
     /// from the shift (completed, past or ahead); only the part's own date places it in a period. A shift with no price is one $0 item that says why.
     /// </summary>
-    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks)
+    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks, Dictionary<Guid, ShiftCompletion> completions)
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
-        var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
-        var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.NightType, pricing.ZoneOf(shift));
-        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.ZoneOf(shift), unclaimed);
+        // A completed shift is described and priced on the window its claim will use; any other shift is rostered.
+        var window = shift.Status == ShiftStatus.Completed && completions.TryGetValue(shift.Id, out var completion)
+            ? ShiftClaimWindow.For(new Shift { ServiceDate = shift.ServiceDate, StartTime = shift.Start, EndTime = shift.End, EndsNextDay = shift.EndsNextDay, NightType = shift.NightType }, completion, pricing.ZoneOf(shift)).Priced
+            : null;
+        var (start, end, endsNextDay) = window is null ? (shift.Start, shift.End, shift.EndsNextDay) : (window.Start, window.End, window.EndsNextDay);
+        var hours = Shift.HoursBetween(start, end, endsNextDay);
+        var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, start, end, endsNextDay, shift.NightType, pricing.ZoneOf(shift));
+        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, start, end, endsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.ZoneOf(shift), unclaimed);
         // The travel counts in the shift's pool like the claim lines it becomes; its caveat is for the claim, not a ledger note, so the note below is the estimator's own.
         var counted = outcome.IsPriced ? ShiftTravelPricer.Apply(outcome, travel, shift.ServiceDate, state, travelPolicy.KmRate, pricing.ShiftRows(shift.SupportGroupCode).Concat(pricing.PersonalCare).ToList(), travelPolicy.TravelRows) : outcome;
 
@@ -499,7 +541,7 @@ public sealed class BudgetLedgerService
                 Group = completed || past ? LedgerGroup.Pending : LedgerGroup.BookedAhead,
                 Date = part.Date, Amount = part.Amount, PaceCategory = part.PaceCategory, PlanType = person.PlanType,
                 Id = shift.Id, ShiftId = shift.Id,
-                Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {quantity}"),
+                Description = string.Create(CultureInfo.InvariantCulture, $"Shift {start:HH:mm}–{end:HH:mm} · {quantity}"),
                 Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
                 // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
                 // worked out fully (no shift is flagged now that every band is priced; kept for a future caveat) carries the estimator's caveat.

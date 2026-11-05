@@ -217,7 +217,9 @@ public record ShiftCompletionDto(
     bool OffRosterStart = false,
     bool OffRosterFinish = false,
     /// <summary>Null: no extra time. Pending and Declined are held at rostered hours in Employment Hero; Approved sends the actual times.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] ExtraTimeDecision? ExtraTime = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] ExtraTimeDecision? ExtraTime = null,
+    /// <summary>Set only by the extra-time decision: the reference of the claim that still counts for this shift, so the office is told the shift was claimed before the decision (claims never re-bill). Otherwise null.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ClaimReference = null);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>

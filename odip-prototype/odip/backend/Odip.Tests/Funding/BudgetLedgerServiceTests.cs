@@ -1099,7 +1099,7 @@ public class BudgetLedgerServiceTests
         Assert.Equal(40, largeAnswer.Count);
         Assert.All(largeAnswer.Values, l => Assert.Equal(480m + 100m, Q2Of(l.Ledger!).Used));
         Assert.Equal(smallCount, largeCount);        // the catalogue and the holidays are read once, and nothing is a query per participant
-        Assert.InRange(largeCount, 1, 17);   // provider travel adds its fixed reads: settings, completions, patterns, agreement blocks; the alone breaks add one (W9)
+        Assert.InRange(largeCount, 1, 18);   // provider travel adds its fixed reads: settings, completions, patterns, agreement blocks; the alone breaks add one (W9), the claim windows one (W2 PR3)
     }
 
     [Fact]
@@ -1118,7 +1118,7 @@ public class BudgetLedgerServiceTests
         await kit.Ledger.ForClaimAsync(kit.TenantId, claim.Id, Ct);
         var detailCount = detail[0];
 
-        Assert.InRange(previewCount, 1, 18);   // the alone breaks add one (W9)
-        Assert.InRange(detailCount, 1, 18);   // likewise
+        Assert.InRange(previewCount, 1, 19);   // the alone breaks add one (W9), the claim windows one (W2 PR3)
+        Assert.InRange(detailCount, 1, 19);   // likewise
     }
 }

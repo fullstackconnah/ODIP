@@ -190,6 +190,8 @@ public class ShiftPriceUnclaimedTests
         kit.Db.ServiceLocations.Add(place);
         shift.ServiceLocationId = place.Id;
         completion.TimeZoneId = "Australia/Perth";
+        completion.ActualStart = PerthAt(9);   // a Perth shift is worked in Perth time: Arrange's Sydney instants would be 06:00-14:00 there, and the claim bills the hours worked
+        completion.ActualEnd = PerthAt(17);
         // 15:00-15:30 Perth (minutes 360-390 of the 09:00-17:00 shift) is 18:00 in Sydney (UTC+11 in October): outside the shift, so the Sydney count would take nothing off.
         kit.Db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftCompletionId = completion.Id, CreatedByUserId = Guid.NewGuid(), StartedAt = PerthAt(15), EndedAt = PerthAt(15, 30) });
         kit.Db.SaveChanges();
