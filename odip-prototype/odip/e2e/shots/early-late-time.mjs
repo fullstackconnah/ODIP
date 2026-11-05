@@ -1,4 +1,5 @@
 // Early/late shift time PR1: the Start time-check sheet, the Finish reason box, the Submit drift line and the coordinator's review row and detail.
+// PR2 adds the Approve dialog's extra-time choice (approve-extra-time-choice) and the later decision dialog (detail-extra-time-decide).
 // Captures plus numeric checks. Exit 1 on any failure.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/early-late-time.mjs <outdir>
 // Sign-in is stubbed with page.route; the worker's shift and the coordinator's completion are the mock API's, patched in flight. The clock is pinned (NOW)
@@ -29,6 +30,12 @@ function wall(date, tz) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(date).map((x) => [x.type, x.value]))
   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}:${p.second}` }
 }
+
+// A queue row with extra time: actual 20 minutes before the rostered start and after the rostered end (8 h 40 min against the roster), as `decision` stands.
+const extraTimeRow = (row, decision, status = row.status) => ({
+  status, extraTime: decision, offRoster: true, varianceMinutesStart: -20, varianceMinutesEnd: 20,
+  actualStart: new Date(Date.parse(row.rosteredStart) - 20 * 60_000).toISOString(), actualEnd: new Date(Date.parse(row.rosteredEnd) + 20 * 60_000).toISOString(),
+})
 
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
@@ -198,7 +205,7 @@ for (const vp of VPS) {
       const response = await r.fetch()
       const body = await response.json()
       const list = Array.isArray(body?.data) ? body.data : body?.data?.items
-      if (Array.isArray(list) && list[0]) Object.assign(list[0], { offRoster: true, varianceMinutesStart: -12, varianceMinutesEnd: 8 })
+      if (Array.isArray(list) && list[0]) Object.assign(list[0], { offRoster: true, varianceMinutesStart: -12, varianceMinutesEnd: 8, ...extraTimeRow(list[0], 'Pending') })
       await r.fulfill({ response, json: body })
     })
     await page.route('**/api/v1/rostering/shifts/*/completion', async (r) => {
@@ -226,8 +233,58 @@ for (const vp of VPS) {
     await noHScroll(page, t('review-detail-reasons'))
     if (vp.touch) await tapTargets(dialog, t('review-detail-reasons'))
     await crop(page, dialog, `review-detail-reasons-${tag}.png`, vp)
+
+    // approve-extra-time-choice: nothing chosen yet; each option at least 44 high at 390 and not cut off (check 7); the helper line is the plan's copy
+    const group = dialog.getByRole('radiogroup', { name: 'Extra time' })
+    await group.waitFor({ state: 'visible', timeout: 10_000 })
+    const radios = group.getByRole('radio')
+    const facts = await radios.evaluateAll((els) => els.map((e) => ({ text: e.textContent.trim(), h: Math.round(e.getBoundingClientRect().height * 10) / 10, cut: e.scrollWidth > e.clientWidth, on: e.getAttribute('aria-checked') })))
+    check(t('approve-extra-time-choice: two options, nothing chosen'), facts.length === 2 && facts.every((f) => f.on === 'false'), facts)
+    check(t('approve-extra-time-choice: option labels read Pay actual time / Pay rostered hours with their durations'), /^Pay actual time \(\d+ h 40 min\)$/.test(facts[0]?.text) && /^Pay rostered hours \(\d+ h\)$/.test(facts[1]?.text), facts.map((f) => f.text))
+    if (vp.touch) check(t('approve-extra-time-choice: each option at least 44 high'), facts.every((f) => f.h >= 43.5), facts.map((f) => f.h))
+    check(t('approve-extra-time-choice: option text not truncated'), facts.every((f) => !f.cut), facts.map((f) => f.cut))
+    const helper = dialog.getByText("If you don't choose now, Employment Hero gets the rostered hours until you do.")
+    check(t('approve-extra-time-choice: the helper line is shown'), await helper.isVisible())
+    await fontAtLeast(helper, 12, t('approve-extra-time-choice helper'))
+    const approveBtn = dialog.getByRole('button', { name: /^Approve$/ })
+    check(t('approve-extra-time-choice: Approve stays enabled with nothing chosen'), await approveBtn.isEnabled())
+    await noHScroll(page, t('approve-extra-time-choice'))
+    if (vp.touch) await tapTargets(dialog, t('approve-extra-time-choice'))
+    await crop(page, dialog, `approve-extra-time-choice-${tag}.png`, vp)
+    await radios.nth(1).click()
+    check(t('approve-extra-time-choice: Pay rostered hours reads as chosen'), (await radios.nth(1).getAttribute('aria-checked')) === 'true')
     await context.close()
   } catch (e) { check(t('review states ran'), false, String(e.message).split('\n')[0]) }
+
+  // detail-extra-time-decide: a Completed row with extra time not paid; the Extra time button opens the decision dialog
+  try {
+    const { context, page } = await openPage(browser, vp, { role: 'Admin', username: 'dev.admin' })
+    await page.route('**/api/v1/rostering/completions*', async (r) => {
+      const response = await r.fetch()
+      const body = await response.json()
+      const list = Array.isArray(body?.data) ? body.data : body?.data?.items
+      if (Array.isArray(list) && list[0]) Object.assign(list[0], extraTimeRow(list[0], 'Declined', 'Completed'))
+      await r.fulfill({ response, json: body })
+    })
+    await page.goto(`${BASE_URL}/rostering/completions`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    const open = page.getByRole('button', { name: /^Extra time for / }).first()
+    await open.waitFor({ state: 'visible', timeout: 60_000 })
+    await page.waitForTimeout(400)
+    await open.click()
+    const dialog = page.getByRole('dialog', { name: 'Extra time' })
+    await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+    await page.waitForTimeout(400)
+    const radios = dialog.getByRole('radiogroup', { name: 'Extra time' }).getByRole('radio')
+    const facts = await radios.evaluateAll((els) => els.map((e) => ({ text: e.textContent.trim(), h: Math.round(e.getBoundingClientRect().height * 10) / 10, cut: e.scrollWidth > e.clientWidth, on: e.getAttribute('aria-checked') })))
+    check(t('detail-extra-time-decide: the standing decision is shown (rostered hours chosen)'), facts.length === 2 && facts[0].on === 'false' && facts[1].on === 'true', facts)
+    check(t('detail-extra-time-decide: the state is named in words'), await dialog.getByText('Extra time not paid', { exact: true }).isVisible())
+    if (vp.touch) check(t('detail-extra-time-decide: each option at least 44 high'), facts.every((f) => f.h >= 43.5), facts.map((f) => f.h))
+    check(t('detail-extra-time-decide: option text not truncated'), facts.every((f) => !f.cut), facts.map((f) => f.cut))
+    await noHScroll(page, t('detail-extra-time-decide'))
+    if (vp.touch) await tapTargets(dialog, t('detail-extra-time-decide'))
+    await crop(page, dialog, `detail-extra-time-decide-${tag}.png`, vp)
+    await context.close()
+  } catch (e) { check(t('decide state ran'), false, String(e.message).split('\n')[0]) }
 }
 await browser.close()
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1

@@ -6857,6 +6857,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int?>("ExtraTime")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FinishTimeReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");

@@ -48,6 +48,84 @@ public class EmploymentHeroTimesheetPayloadTests
         Assert.Equal("2026-10-14T15:20:00", line.EndTime);
     }
 
+    private static ShiftCompletion Worked(int startVar, int endVar, ExtraTimeDecision? extra, int startH, int startM, int endH, int endM)   // rostered 09:00-15:00 Sydney (22:00Z-04:00Z); clock times are Sydney local
+    {
+        var c = ACompletion();
+        c.ActualStart = new DateTime(2026, 10, 14, startH, startM, 0, DateTimeKind.Utc).AddHours(-11);
+        c.ActualEnd = new DateTime(2026, 10, 14, endH, endM, 0, DateTimeKind.Utc).AddHours(-11);
+        c.VarianceMinutesStart = startVar;
+        c.VarianceMinutesEnd = endVar;
+        c.ExtraTime = extra;
+        return c;
+    }
+
+    [Fact]
+    public void Build_ExtraTimePending_HoldsAtRosteredHours()   // the money rule: unapproved extra time is not sent
+    {
+        var line = Built(AShift(), Worked(-20, 20, ExtraTimeDecision.Pending, 8, 40, 15, 20));
+
+        Assert.Equal("2026-10-14T09:00:00", line.StartTime);
+        Assert.Equal("2026-10-14T15:00:00", line.EndTime);
+    }
+
+    [Fact]
+    public void Build_ExtraTimeDeclined_HoldsAtRostered_KeepsLateStartActual()
+    {
+        var line = Built(AShift(), Worked(10, 20, ExtraTimeDecision.Declined, 9, 10, 15, 20));
+
+        Assert.Equal("2026-10-14T09:10:00", line.StartTime);
+        Assert.Equal("2026-10-14T15:00:00", line.EndTime);
+    }
+
+    [Fact]
+    public void Build_ExtraTimeApproved_SendsActual()
+    {
+        var line = Built(AShift(), Worked(-20, 20, ExtraTimeDecision.Approved, 8, 40, 15, 20));
+
+        Assert.Equal("2026-10-14T08:40:00", line.StartTime);
+        Assert.Equal("2026-10-14T15:20:00", line.EndTime);
+    }
+
+    [Fact]
+    public void Build_NoExtraTime_HashUnchanged()   // a null decision hashes exactly as an approved one: rows sent before PR2 are never re-sent
+    {
+        var none = EmploymentHeroTimesheets.Build(AShift(), Worked(-20, 20, null, 8, 40, 15, 20), [], "42", Mapped, Sydney);
+        var approved = EmploymentHeroTimesheets.Build(AShift(), Worked(-20, 20, ExtraTimeDecision.Approved, 8, 40, 15, 20), [], "42", Mapped, Sydney);
+
+        Assert.Equal(approved.Hash, none.Hash);
+        Assert.Equal("2026-10-14T08:40:00", none.Line!.StartTime);
+    }
+
+    [Fact]
+    public void Build_Declined_ClampsBreakToPaidWindow()
+    {
+        var c = Worked(0, 20, ExtraTimeDecision.Declined, 9, 0, 15, 20);
+        var inSydney = new DateTime(2026, 10, 14, 14, 55, 0, DateTimeKind.Utc).AddHours(-11);
+
+        var line = Built(AShift(), c, [Break(inSydney, 20)]);
+
+        Assert.Equal("2026-10-14T14:55:00", line.Breaks.Single().StartTime);
+        Assert.Equal("2026-10-14T15:00:00", line.Breaks.Single().EndTime);
+    }
+
+    [Fact]
+    public void Build_ExtraTimePending_NoOverlapWithRoster_SendsActual()   // worked 07:00-08:30 against a 09:00-15:00 roster: clamping would invert the span
+    {
+        var line = Built(AShift(), Worked(-120, -390, ExtraTimeDecision.Pending, 7, 0, 8, 30));
+
+        Assert.Equal("2026-10-14T07:00:00", line.StartTime);
+        Assert.Equal("2026-10-14T08:30:00", line.EndTime);
+    }
+
+    [Fact]
+    public void Build_ExtraTimePending_ClampsOnlyTheSideOverFiveMinutes()   // start 3 min early is within the line, finish 20 late is held
+    {
+        var line = Built(AShift(), Worked(-3, 20, ExtraTimeDecision.Pending, 8, 57, 15, 20));
+
+        Assert.Equal("2026-10-14T08:57:00", line.StartTime);
+        Assert.Equal("2026-10-14T15:00:00", line.EndTime);
+    }
+
     [Fact]
     public void Breaks_are_sent_as_unpaid_intervals_clamped_to_the_worked_span()
     {

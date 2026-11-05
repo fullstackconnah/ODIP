@@ -8,8 +8,10 @@ import { emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
 const {
   mockUseCompletions, mockUseCompletion, mockUseStaff,
-  mockApproveMutateAsync, mockReturnMutateAsync, mockApproveBatchMutateAsync, mockEditTravelMutateAsync, mockUsePricing, mockSetKindMutateAsync, kindState,
+  mockApproveMutateAsync, mockReturnMutateAsync, mockApproveBatchMutateAsync, mockEditTravelMutateAsync, mockUsePricing, mockSetKindMutateAsync, kindState, mockDecideMutateAsync, decideState,
 } = vi.hoisted(() => ({
+  mockDecideMutateAsync: vi.fn(),
+  decideState: { pending: false, variables: undefined as { decision: string } | undefined },
   mockSetKindMutateAsync: vi.fn(),
   kindState: { pending: false },
   mockUseCompletions: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock('@/api/hooks', () => ({
   useReturnCompletion: () => ({ mutateAsync: mockReturnMutateAsync, isPending: false }),
   useApproveCompletionsBatch: () => ({ mutateAsync: mockApproveBatchMutateAsync, isPending: false }),
   useEditCompletionTravel: () => ({ mutateAsync: mockEditTravelMutateAsync, isPending: false }),
+  useDecideExtraTime: () => ({ mutateAsync: mockDecideMutateAsync, isPending: decideState.pending, variables: decideState.variables }),
   useSetBreakKind: () => ({ mutateAsync: mockSetKindMutateAsync, isPending: kindState.pending }),
   usePlanPricingSettings: mockUsePricing,
 }))
@@ -120,6 +123,9 @@ beforeEach(() => {
   mockApproveMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail())
   mockReturnMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail())
   mockApproveBatchMutateAsync.mockReset().mockResolvedValue([])
+  mockDecideMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail({ extraTime: 'Approved' }))
+  decideState.pending = false
+  decideState.variables = undefined
   mockEditTravelMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail())
   mockUsePricing.mockReturnValue({ data: { claimProviderTravel: true } })
 })
@@ -616,5 +622,123 @@ describe('CompletionReviewPage: breaks with the participant (W9)', () => {
     const { dialog } = await openDialog(makeCompletionDetail(), 'approve')
     expect(within(dialog).queryByText(/Unpaid breaks/)).not.toBeInTheDocument()
     expect(within(dialog).queryByRole('radiogroup')).not.toBeInTheDocument()
+  })
+})
+
+describe('CompletionReviewPage extra time', () => {
+  // Rostered 08:00-16:00 (8 h), actual 07:40-16:20 (8 h 40 min): an early start and a late finish.
+  const extra = (o: Partial<CompletionQueueItemDto> = {}) => makeQueueItem({
+    actualStart: '2026-09-08T07:40:00Z', actualEnd: '2026-09-08T16:20:00Z', varianceMinutesStart: -20, varianceMinutesEnd: 20, offRoster: true, extraTime: 'Pending', ...o,
+  })
+  const showQueue = (...rows: CompletionQueueItemDto[]) => mockUseCompletions.mockReturnValue({ data: makePaged(rows), isLoading: false, isError: false, refetch: vi.fn() })
+
+  it('approves with no extra-time choice and sends only the shift id', async () => {
+    const user = userEvent.setup()
+    showQueue(extra())
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    const dialog = screen.getByRole('alertdialog')
+    const group = within(dialog).getByRole('radiogroup', { name: 'Extra time' })
+    expect(within(group).getAllByRole('radio').map(r => r.getAttribute('aria-checked'))).toEqual(['false', 'false'])   // nothing is chosen for them
+    expect(within(group).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' })).toBeInTheDocument()
+    expect(within(dialog).getByText("If you don't choose now, Employment Hero gets the rostered hours until you do.")).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
+
+    expect(mockApproveMutateAsync).toHaveBeenCalledWith('shift-1')
+  })
+
+  it('approves with "Pay rostered hours" and sends decline', async () => {
+    const user = userEvent.setup()
+    showQueue(extra())
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    const dialog = screen.getByRole('alertdialog')
+    await user.click(within(dialog).getByRole('radio', { name: 'Pay rostered hours (8 h)' }))
+    await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
+
+    expect(mockApproveMutateAsync).toHaveBeenCalledWith({ shiftId: 'shift-1', extraTime: 'decline' })
+  })
+
+  it('shows no choice in the Approve dialog when the shift has no extra time', async () => {
+    const user = userEvent.setup()
+    showQueue(makeQueueItem())
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+
+    expect(within(screen.getByRole('alertdialog')).queryByRole('radiogroup', { name: 'Extra time' })).not.toBeInTheDocument()
+  })
+
+  it('labels each row by its extra-time decision, in words', () => {
+    showQueue(extra({ shiftId: 'a' }), extra({ shiftId: 'b', status: 'Completed', extraTime: 'Approved' }), extra({ shiftId: 'c', status: 'Completed', extraTime: 'Declined' }))
+    renderPage()
+
+    for (const label of ['Extra time to decide', 'Extra time paid', 'Extra time not paid']) expect(screen.getByText(label)).toBeInTheDocument()
+  })
+
+  it('decides a completed shift later with "Pay extra time" semantics: the endpoint gets approve', async () => {
+    const user = userEvent.setup()
+    showQueue(extra({ status: 'Completed', extraTime: 'Declined' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^extra time for jack o'sullivan with liam okafor on /i }))
+    const dialog = screen.getByRole('dialog', { name: 'Extra time' })
+    expect(within(dialog).getByRole('radio', { name: 'Pay rostered hours (8 h)' })).toHaveAttribute('aria-checked', 'true')   // the standing decision
+    await user.click(within(dialog).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' }))
+
+    expect(mockDecideMutateAsync).toHaveBeenCalledWith({ shiftId: 'shift-1', decision: 'approve' })
+    await waitFor(() => expect(within(dialog).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' })).toHaveAttribute('aria-checked', 'true'))
+  })
+
+  it('keeps the old choice and says so when the save fails', async () => {
+    const user = userEvent.setup()
+    mockDecideMutateAsync.mockRejectedValue(new Error('boom'))
+    showQueue(extra({ status: 'Completed', extraTime: 'Declined' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^extra time for /i }))
+    const dialog = screen.getByRole('dialog', { name: 'Extra time' })
+    await user.click(within(dialog).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent("Couldn't save. Try again.")
+    expect(within(dialog).getByRole('radio', { name: 'Pay rostered hours (8 h)' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('reads Saving… on the pressed option while the save is in flight', async () => {
+    const user = userEvent.setup()
+    decideState.pending = true
+    decideState.variables = { decision: 'approve' }
+    showQueue(extra({ status: 'Completed', extraTime: 'Declined' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^extra time for /i }))
+    const dialog = screen.getByRole('dialog', { name: 'Extra time' })
+
+    expect(within(dialog).getByRole('radio', { name: 'Saving…' })).toBeDisabled()
+  })
+
+  it('offers no Extra time button to a read-only user', () => {
+    setUserRole('ReadOnly')
+    showQueue(extra({ status: 'Completed', extraTime: 'Approved' }))
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /^extra time for /i })).not.toBeInTheDocument()
+    expect(screen.getByText('Extra time paid')).toBeInTheDocument()
+  })
+
+  it('shows a Completed shift past the 62-day window read-only, with the reason', async () => {
+    const user = userEvent.setup()
+    showQueue(extra({ status: 'Completed', extraTime: 'Pending', serviceDate: '2026-01-05' }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^extra time for /i }))
+
+    const dialog = within(screen.getByRole('dialog', { name: 'Extra time' }))
+    expect(dialog.getByText(/more than 62 days old, so Employment Hero can't be updated from here/)).toBeInTheDocument()
+    expect(dialog.queryByRole('radio')).not.toBeInTheDocument()
+    expect(dialog.queryByRole('button', { name: /pay extra time/i })).not.toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Done' })).toBeInTheDocument()
   })
 })

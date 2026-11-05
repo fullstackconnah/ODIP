@@ -9,6 +9,14 @@ public enum ReviewOutcome
     Returned = 1
 }
 
+/// <summary>A coordinator's call on the paid time a worker added by starting early or finishing late. Pending and Declined are held at rostered hours in Employment Hero; Approved sends the actual times.</summary>
+public enum ExtraTimeDecision
+{
+    Pending = 0,
+    Approved = 1,
+    Declined = 2
+}
+
 /// <summary>
 /// One worker Start/Finish submission against a <see cref="Shift"/>, and the office's review of
 /// it (design spec §1). "At most one active" per Shift is enforced by
@@ -54,6 +62,8 @@ public class ShiftCompletion : ITenantEntity
     public string? StartTimeReason { get; set; }
     /// <summary>Why the worker finished more than <see cref="ShiftTimeRules.OffRosterMinutes"/> minutes off the roster (optional, trimmed, max 500). A re-Finish after a Return replaces it.</summary>
     public string? FinishTimeReason { get; set; }
+    /// <summary>Null: no extra time (nothing early at Start or late at Finish over <see cref="ShiftTimeRules.OffRosterMinutes"/>). Set at Finish; a re-Finish resets it.</summary>
+    public ExtraTimeDecision? ExtraTime { get; set; }
 
     /// <summary>True when Finish supplied ActualStart because Start was skipped.</summary>
     public bool StartWasManual { get; set; }
@@ -140,6 +150,9 @@ public static class ShiftTimeRules
     public const int MaxReasonLength = 500;
 
     public static bool IsOffRoster(int varianceMinutes) => Math.Abs(varianceMinutes) > OffRosterMinutes;
+
+    /// <summary>Only the sides that add paid time: an early start or a late finish.</summary>
+    public static bool HasExtraTime(int varianceMinutesStart, int varianceMinutesEnd) => varianceMinutesStart < -OffRosterMinutes || varianceMinutesEnd > OffRosterMinutes;
 
     /// <summary>The worker's typed reason: trimmed, empty is none, cut to the column length (never a 400 on Start or Finish).</summary>
     public static string? CleanReason(string? reason)

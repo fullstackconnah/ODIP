@@ -57,13 +57,13 @@ public static class EmploymentHeroTimesheets
         }
         else
         {
-            var to = c.ActualEnd ?? c.ActualStart;
-            start = Local(c.ActualStart);
+            var (paidStart, to, _) = PaidWindow(s, c, providerZone);
+            start = Local(paidStart);
             end = Local(to);
-            instants.AddRange([Minute(c.ActualStart), Minute(to)]);
+            instants.AddRange([Minute(paidStart), Minute(to)]);
             foreach (var b in breaks.OrderBy(b => b.StartedAt))   // clamped exactly as ShiftBreakRules.NetWorked clamps
             {
-                var from = b.StartedAt < c.ActualStart ? c.ActualStart : b.StartedAt;
+                var from = b.StartedAt < paidStart ? paidStart : b.StartedAt;
                 var until = b.EndedAt is { } e && e < to ? e : to;
                 if (until > from && Local(until) != Local(from)) { sent.Add(new EhBreak(Local(from), Local(until), b.WithParticipant)); instants.AddRange([Minute(from), Minute(until)]); }   // a sub-minute break would go zero-length
             }
@@ -71,6 +71,18 @@ public static class EmploymentHeroTimesheets
         // The break kind (WithParticipant) is not hashed: it is frozen at Approve. Hash it if that ever changes.
         var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new object[] { employeeId, s.NightType, instants }, EmploymentHeroClient.WireJson)));
         return new(new EhTimesheetLine(null, employeeId, start, end, sent, workTypeId, c.Id.ToString("D")), null, hash);
+    }
+
+    /// <summary>The instants a shift is paid between, and whether unapproved extra time was held back. A Pending or Declined decision holds each side that added time (an early start, a late finish, over 5 minutes) at the rostered instant; a late start or early finish stays actual. A window that would invert (worked wholly outside the roster) sends the actual span. The one place the hold lives: <see cref="Build"/> and the Payroll page both call it.</summary>
+    public static (DateTime Start, DateTime End, bool Held) PaidWindow(Shift s, ShiftCompletion c, TimeZoneInfo providerZone)
+    {
+        var start = c.ActualStart;
+        var end = c.ActualEnd ?? c.ActualStart;
+        if (c.ExtraTime is not (ExtraTimeDecision.Pending or ExtraTimeDecision.Declined) || s.NightType == SleepoverType.Sleepover) return (start, end, false);
+        var (rStart, rEnd) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(s, string.IsNullOrEmpty(c.TimeZoneId) ? providerZone.Id : c.TimeZoneId);
+        var paidStart = c.VarianceMinutesStart < -ShiftTimeRules.OffRosterMinutes && rStart > start ? rStart : start;
+        var paidEnd = c.VarianceMinutesEnd > ShiftTimeRules.OffRosterMinutes && rEnd < end ? rEnd : end;
+        return paidEnd <= paidStart ? (start, end, false) : (paidStart, paidEnd, paidStart != start || paidEnd != end);
     }
 
     private static string Minute(DateTime utc) => (utc.Ticks / TimeSpan.TicksPerMinute).ToString(CultureInfo.InvariantCulture);
