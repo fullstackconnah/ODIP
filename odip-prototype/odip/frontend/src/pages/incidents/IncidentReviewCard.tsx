@@ -89,7 +89,7 @@ export function IncidentReviewCard({ incident, canEdit, editing: editingProp, on
             <SelectField label="Status" value={status} onChange={(e) => setStatus(e.target.value)} options={STATUS_OPTIONS} />
             {save.isError && <Callout tone="error">Couldn&apos;t save the review. Try again.</Callout>}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="ghost" size="md" onClick={close} className="w-full sm:w-auto">Cancel</Button>
+              <Button variant="ghost" size="md" onClick={close} disabled={save.isPending} className="w-full sm:w-auto">Cancel</Button>
               <Button type="submit" size="md" disabled={save.isPending} className="w-full sm:w-auto">{save.isPending ? 'Saving...' : 'Save review'}</Button>
             </div>
           </form>
