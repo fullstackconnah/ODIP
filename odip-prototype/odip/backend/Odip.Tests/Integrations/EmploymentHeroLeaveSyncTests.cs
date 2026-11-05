@@ -113,10 +113,33 @@ public class EmploymentHeroLeaveSyncTests
 
         Assert.Equal(0, Count(eh, HttpMethod.Post, Requests42));
         var row = Assert.Single(await RowsAsync(db, EmploymentHeroOutboxKind.Leave));
-        Assert.Equal((EmploymentHeroOutboxStatus.NeedsAttention, EmploymentHeroLeave.WeekendMessage), (row.Status, row.LastError));
+        Assert.Equal((EmploymentHeroOutboxStatus.NeedsAttention, EmploymentHeroLeave.NoWorkdaysMessage), (row.Status, row.LastError));
     }
 
     // ── Changes ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task An_edited_leave_that_falls_only_on_a_holiday_flags_the_request_EH_still_has()
+    {
+        var (db, tenant, _, clock, worker, monday) = await OrgAsync();
+        await using var _ = db;
+        (await db.ProviderSettings.SingleAsync(p => p.TenantId == tenant)).State = "NSW";
+        var leave = await ApprovedLeaveAsync(db, tenant, worker, monday, monday.AddDays(4));
+        var eh = Eh();
+        var sync = Sync(eh, clock);
+        await sync.RunAsync(db, tenant, false, default);
+
+        db.PublicHolidayOverrides.Add(new PublicHolidayOverride { Id = Guid.NewGuid(), Date = monday.AddDays(2), State = null, Name = "Test holiday", Source = "test" });
+        leave.StartDate = monday.AddDays(2);
+        leave.EndDate = monday.AddDays(2);
+        await db.SaveChangesAsync();
+        await sync.RunAsync(db, tenant, false, default);
+
+        Assert.Equal(1, Count(eh, HttpMethod.Post, Requests42));
+        Assert.Equal(0, Count(eh, HttpMethod.Put, Requests42 + "/9001"));
+        var row = Assert.Single(await RowsAsync(db, EmploymentHeroOutboxKind.Leave));
+        Assert.Equal((EmploymentHeroOutboxStatus.NeedsAttention, "9001", EmploymentHeroLeave.EditedToNoWorkdaysMessage), (row.Status, row.ExternalId, row.LastError));
+    }
 
     [Fact]
     public async Task An_edited_leave_is_put_to_the_same_request()
