@@ -92,6 +92,14 @@ public static class DbSeeder
         if (usersAdded)
             await context.SaveChangesAsync(ct);
 
+        // E2E needs an organisation Admin that Firebase-less dev login can reach. Seeded only where dev login is on, so live never gains it.
+        var demoAdminId = Guid.Parse("b2000000-0000-0000-0000-000000000005");
+        if (DevAuth.IsEnabled() && !await context.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == demoAdminId, ct))
+        {
+            context.Users.Add(new User { Id = demoAdminId, TenantId = demoTenantId, Username = "demo.admin", Email = "demo.admin@demo.odip.com.au", FirstName = "Demo", LastName = "Admin", Role = UserRole.Admin });
+            await context.SaveChangesAsync(ct);
+        }
+
         // Ensure SuperAdmin user exists for Connah tenant
         var connahTenantId = new Guid("00000000-0000-0000-0000-000000000001");
         var superAdminExists = await context.Users

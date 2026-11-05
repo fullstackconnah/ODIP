@@ -17,6 +17,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Support;
 using Xunit;
 
 namespace Odip.Tests.Controllers;
@@ -27,6 +28,7 @@ namespace Odip.Tests.Controllers;
 /// user row is found whatever case it was stored in (rows written before the email-identity rule existed are mixed-case, and no
 /// migration repairs them), on both the tenant path and the SuperAdmin path.
 /// </summary>
+[Collection(DevAuthEnvCollection.Name)]
 public partial class AuthControllerExchangeTests
 {
     private const string TenantDomain = "acme.example.com";
