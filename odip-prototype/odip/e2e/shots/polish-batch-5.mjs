@@ -17,7 +17,7 @@ prepareOutDir(OUT_DIR)
 const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const failEnvelope = (message) => ({ success: false, data: null, message, errors: [message] })
 const devUsers = envelope([{ username: 'dev.admin', role: 'Admin', tenantName: 'Sample Support Co' }])
-const devLogin = envelope({ id: '00000000-0000-0000-0000-0000000000a1', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.admin', fullName: 'Dev Admin', role: 'Admin', tenantName: 'Sample Support Co', tenantId: 'tenant-0001' })
+const devLogin = envelope({ id: '00000000-0000-0000-0000-0000000000a1', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.admin', fullName: 'Dev Admin', role: 'Admin', tenantName: 'Sample Support Co' })
 
 const checks = []
 const check = (name, pass, detail = '') => {
@@ -28,7 +28,7 @@ let lastPage
 const safe = async (name, fn) => {
   try { await fn() } catch (e) {
     let seen = ''
-    try { seen = `${lastPage.url()} :: ${(await lastPage.locator('body').innerText({ timeout: 3000 })).replace(/\s+/g, ' ').slice(0, 400)}` } catch {}
+    try { seen = `${lastPage.url()} :: bad ${JSON.stringify(lastPage.bad ?? [])} :: ${(await lastPage.locator('main').first().innerText({ timeout: 3000 })).replace(/\s+/g, ' ').slice(0, 400)}` } catch {}
     check(`${name} (script error)`, false, `${String(e.message).split('\n')[0]} | ${seen}`)
   }
 }
@@ -58,6 +58,7 @@ async function openPage(context, touchCdp) {
 const gotoReady = async (page, url, dark) => {
   await page.goto(`${BASE_URL}${url}`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   lastPage = page
+  if (!page.bad) { page.bad = []; page.on('response', (r) => { if (r.status() >= 400 && page.bad.length < 6) page.bad.push(`${r.status()} ${r.url().replace(BASE_URL, '')}`) }) }
   await page.locator('main, form').first().waitFor({ state: 'visible', timeout: 60_000 })
   await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {})
   if (dark) await page.evaluate(() => { document.documentElement.dataset.theme = 'dark' })
