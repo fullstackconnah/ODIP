@@ -211,8 +211,8 @@ async function claimsReady(page, vp) {
   const tag = `CK1 ${vp.name}`
   await page.route('**/api/v1/claim-hub/lines', (r) => r.fulfill({ json: envelope(hubLines) }))
   await gotoReady(page, '/claims', false)
-  const panel = page.locator('[role="tabpanel"]:visible').first()
-  await panel.waitFor({ state: 'visible', timeout: 90_000 })
+  const panel = page.locator('main')
+  await panel.getByText("can't be claimed as a short-notice").first().waitFor({ state: 'attached', timeout: 90_000 })
   if (vp.width >= 768) {
     const th = page.locator('th').filter({ hasText: /^Checks$/ }).first()
     await th.waitFor({ state: 'visible', timeout: 90_000 })
