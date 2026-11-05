@@ -5,7 +5,7 @@ import { extractErrorMessage } from '@/lib/utils'
 /** What Settings reads from usePermissions() to decide who sees, and who may change, each section. */
 export type SettingsPerms = Pick<
   ReturnType<typeof usePermissions>,
-  'isSuperAdmin' | 'isAdmin' | 'isCoordinator' | 'hasOrganisation' | 'canEditProviderSettings' | 'canImportData' | 'canManageIntegrations'
+  'isSuperAdmin' | 'isAdmin' | 'isCoordinator' | 'hasOrganisation' | 'canEditProviderSettings' | 'canImportData' | 'canDownloadRegisters' | 'canManageIntegrations'
 > & {
   /** Trips and holidays are switched off for the organisation: their Settings sections leave the rail (links still open). */
   hiddenTrips?: boolean
@@ -72,8 +72,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'referral-sources', label: 'Referral sources', group: 'Content', visible: withOrganisation, description: 'Who sends you enquiries. Coordinators pick one on each enquiry.' },
   { key: 'holidays', label: 'Public holidays', group: 'Content', wide: true, visible: p => !p.isSuperAdmin && p.hasOrganisation, description: HOLIDAYS },
   { key: 'import', label: 'Import data', group: 'Data', wide: true, visible: p => p.canImportData, description: 'Bring participants and staff in from a spreadsheet, and undo an import that went wrong.' },
-  // Data export (#243): the same gate as Import data. DataExportController admits an Admin, or a SuperAdmin viewing an organisation.
-  { key: 'export', label: 'Data export', group: 'Data', visible: p => p.canImportData, description: 'Download everything your organisation has in Bunya Support, as CSV files.' },
+  // Data export (#243): the full export is gated like Import data; the registers card (B9) also opens it to a Coordinator.
+  { key: 'export', label: 'Data export', group: 'Data', visible: p => p.canImportData || p.canDownloadRegisters, description: "Download your organisation's data and registers as CSV files." },
   // Employment Hero (EH PR 1): EmploymentHeroController admits an Admin, or a SuperAdmin viewing an organisation.
   { key: 'integrations', label: 'Integrations', group: 'Data', wide: true, visible: p => p.canManageIntegrations, description: 'Connect Bunya Support to the other systems you use, such as Employment Hero.' },
   { key: 'failed-sends', label: 'Failed sends', group: 'Data', wide: true, visible: p => p.isAdmin, description: "Emails we couldn't deliver for your organisation. Retry one, or send a test email to check sending works." },

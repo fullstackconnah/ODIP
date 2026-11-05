@@ -24,6 +24,8 @@ internal static class OlderSchemaSeeds
         ("ShiftCompletions", "StartTimeReason", "character varying(500)"),
         ("ShiftCompletions", "FinishTimeReason", "character varying(500)"),
         ("ShiftCompletions", "ExtraTime", "integer"),
+        ("Participants", "RetentionStartsOn", "date"),
+        ("Participants", "RetentionStartEstimated", "boolean NOT NULL DEFAULT FALSE"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
         ("IncidentReports", "FireOfficerName", "character varying(100)"),

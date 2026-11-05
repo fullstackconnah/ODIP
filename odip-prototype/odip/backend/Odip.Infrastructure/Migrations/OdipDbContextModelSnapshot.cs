@@ -2457,6 +2457,12 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("ResidentialInfo")
                         .HasColumnType("text");
 
+                    b.Property<bool>("RetentionStartEstimated")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("RetentionStartsOn")
+                        .HasColumnType("date");
+
                     b.Property<bool?>("RidsLogged")
                         .HasColumnType("boolean");
 
@@ -4273,6 +4279,63 @@ namespace Odip.Infrastructure.Migrations
                             StartTime = new TimeOnly(19, 0, 0),
                             State = "SA"
                         });
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.PurgeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ClaimBatchFilesCleared")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ConfirmedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfirmedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly>("DueOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("RetentionStartEstimated")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("RetentionStartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("RowCounts")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EntityType", "EntityId")
+                        .IsUnique();
+
+                    b.ToTable("PurgeRecords");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ReferralSource", b =>

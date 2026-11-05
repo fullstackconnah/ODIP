@@ -185,4 +185,22 @@ public class ClaimBatchPostgresTests : IClassFixture<PostgresFixture>
         Assert.NotEmpty(log.Sql);
         Assert.DoesNotContain(log.Sql, sql => sql.Contains("\"ClaimBatches\"") && sql.Contains("\"Content\""));
     }
+
+    [SkippableFact(DisplayName = "Postgres: the managed list translates the participant chain and pages")]
+    public async Task Managed_translates_the_participant_chain_and_pages()
+    {
+        // Postgres enforces the booking's trip foreign key, so shift lines stand in; the override half of the rule runs on InMemory (ClaimBatchManagedTests).
+        using var f = await NewAsync();
+        var (plan, _, _) = f.AddClaim(plan: PlanType.PlanManaged, shiftLines: true);
+        var (self, _, _) = f.AddClaim(plan: PlanType.SelfManaged, shiftLines: true);
+        f.AddClaim(plan: PlanType.AgencyManaged, shiftLines: true);
+
+        var first = await f.Service.ManagedAsync(f.TenantId, [PlanType.PlanManaged, PlanType.SelfManaged], 1, 1, default);
+        var onlySelf = await f.Service.ManagedAsync(f.TenantId, [PlanType.SelfManaged], 1, 50, default);
+
+        Assert.Equal(2, first.TotalCount);
+        Assert.Single(first.Items);
+        Assert.Equal(self.Id, Assert.Single(onlySelf.Items).ClaimId);
+        Assert.NotEqual(plan.Id, self.Id);
+    }
 }

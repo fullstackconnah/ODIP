@@ -238,7 +238,10 @@ public enum TaskType
     RestrictivePracticeRegisterAddition,
     // The 5-day detailed report to the NDIS Commission for an incident reportable within 24 hours (incident clock).
     // Persisted as an integer (21): append-only, never renumber.
-    IncidentCommissionDetailedReport
+    IncidentCommissionDetailedReport,
+    // One task per organisation while participant records are due for purge after their 7-year retention period (RetentionScanBackgroundService).
+    // Persisted as an integer (22): append-only, never renumber.
+    RetentionPurgeDue
 }
 
 public enum TaskPriority
@@ -547,7 +550,7 @@ public enum AuditAction
     Created,
     Updated,
     Deleted,
-    /// <summary>The organisation's full data export was downloaded: EntityType "Tenant", EntityId the organisation, no Changes. Stored as its name.</summary>
+    /// <summary>A download of the organisation's data. EntityType "Tenant" = the full export (EntityId the organisation, no Changes); EntityType "Register" = one register CSV (EntityId the organisation, Changes names the register, the range and the row count). Stored as its name.</summary>
     Exported
 }
 

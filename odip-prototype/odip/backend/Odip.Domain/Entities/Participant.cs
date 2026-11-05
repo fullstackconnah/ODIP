@@ -513,6 +513,15 @@ public class Participant : ITenantEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// The provider-local date this participant was archived: the start of the 7-year retention clock (RetentionClock). Null while active and for drafts.
+    /// The record is due for purge 7 years after the LATER of this and its last service, claim or incident (RetentionClock.EffectiveStartsAsync).
+    /// </summary>
+    public DateOnly? RetentionStartsOn { get; set; }
+
+    /// <summary>True only when <see cref="RetentionStartsOn"/> was backfilled from the audit log or UpdatedAt rather than recorded at archive time.</summary>
+    public bool RetentionStartEstimated { get; set; }
+
     // Navigation properties
     public SupportProfile? SupportProfile { get; set; }
     public ICollection<ParticipantBooking> Bookings { get; set; } = new List<ParticipantBooking>();

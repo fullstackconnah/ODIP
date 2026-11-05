@@ -44,3 +44,19 @@ describe('canImportData (Settings → Import data)', () => {
     expect(screen.getByText('Wizard')).toBeInTheDocument()
   })
 })
+
+describe('canDownloadRegisters (Settings → Data export → Registers for auditors)', () => {
+  afterEach(() => sessionStorage.clear())
+
+  it.each([
+    ['Admin', undefined, true],
+    ['Coordinator', undefined, true],
+    ['SuperAdmin', 'tenant-1', true],
+    ['SuperAdmin', undefined, false],
+    ['SupportWorker', undefined, false],
+    ['ReadOnly', undefined, false],
+  ] as const)('%s viewing %s: %s', (role, tenant, expected) => {
+    signIn(role, tenant)
+    expect(renderHook(() => usePermissions()).result.current.canDownloadRegisters).toBe(expected)
+  })
+})

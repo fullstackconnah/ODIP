@@ -11,6 +11,7 @@ using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Retention;
 using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
@@ -915,6 +916,7 @@ public sealed class ServiceAgreementApprovalService
         participant.IsDraft = false;
         participant.UpdatedAt = DateTime.UtcNow;
         participant.IsActive = true;
+        RetentionClock.OnActiveChanged(participant, true); // a draft that was archived (an import undo) carries a clock; going live stops it
         await PopulateStartedWeeksAsync(participant.TenantId, participant.Id, ct, lockWait);
         await _db.SaveChangesAsync(ct);
         return null;

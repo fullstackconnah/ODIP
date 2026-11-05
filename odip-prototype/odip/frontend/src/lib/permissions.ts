@@ -283,6 +283,8 @@ export function usePermissions() {
      * not viewing an organisation (an import belongs to one), so: an Admin, or a SuperAdmin viewing as an organisation.
      */
     canImportData: isAdmin || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
+    // RegistersController: the office roles, plus a SuperAdmin viewing an organisation. The complaints register stays with canImportData.
+    canDownloadRegisters: isAdmin || isCoordinator || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
 
     /**
      * Settings → Integrations (Employment Hero). EmploymentHeroController admits Admin and SuperAdmin and refuses a SuperAdmin who is not viewing an
