@@ -241,7 +241,19 @@ public enum TaskType
     IncidentCommissionDetailedReport,
     // One task per organisation while participant records are due for purge after their 7-year retention period (RetentionScanBackgroundService).
     // Persisted as an integer (22): append-only, never renumber.
-    RetentionPurgeDue
+    RetentionPurgeDue,
+    // One task per compliance date from 90 days before it falls due (ComplianceScanBackgroundService), an Admin's only. Persisted as an integer (23): append-only, never renumber.
+    ComplianceDue
+}
+
+/// <summary>What a compliance date is for (Settings > Compliance dates). Persisted as an integer: append-only, never renumber.</summary>
+public enum ComplianceKind
+{
+    Registration = 0,
+    Audit = 1,
+    MidTermAudit = 2,
+    Insurance = 3,
+    KeyPersonnel = 4,
 }
 
 public enum TaskPriority

@@ -100,7 +100,7 @@ export default function TasksPage() {
     },
     // Column budget (density §4): at 1280 the box is ~1006px. Order is identity, status, when, then the rest, so Status is on screen before the
     // table scrolls (it sat late and fell under the pinned actions, "In Progre"). Every column stays (L3-04): what does not fit scrolls under the
-    // edge fade, with the task pinned. Task 13rem (two lines), Trip 9rem, Owner and Type 7rem.
+    // edge fade, with the task pinned. Task 13rem (three lines), Trip 9rem, Owner and Type 7rem.
     // On the phone card the title and status make the title line; due, priority, trip and owner are one muted line, and the type is on the task.
     {
       key: 'title',
@@ -112,11 +112,11 @@ export default function TasksPage() {
       // The title is the way in when the task has one, so there is no separate "Open" column. The review of an emergency names the participant and the day LAST,
       // which a one-line cap cuts, so every title gets two lines before an ellipsis, with the full text in the tooltip. The cap sits on the link itself (a wrapper would clip its focus ring).
       render: (t) => t.linkTo ? (
-        <Link to={t.linkTo} title={t.title} className={`line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
+        <Link to={t.linkTo} title={t.title} className={`line-clamp-3 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
       ) : isReadOnly && !isBudgetReview(t) ? (
         // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
-        <Link to={`/tasks/${t.id}/edit`} title={t.title} className={`line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
-      ) : <CellText lines={2} className="max-md:line-clamp-2 break-words md:max-w-[13rem]">{t.title}</CellText>,
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className={`line-clamp-3 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
+      ) : <CellText lines={3} className="max-md:line-clamp-2 break-words md:max-w-[13rem]">{t.title}</CellText>,
     },
     {
       key: 'status',

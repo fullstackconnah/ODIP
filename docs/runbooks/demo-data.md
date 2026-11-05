@@ -47,6 +47,7 @@ what `DEMO_DATA_PACKS` takes.
 | Name | Writes |
 |---|---|
 | `provider-settings` | the provider settings row (state and time zone), when the tenant has none |
+| `compliance-dates` | three sample compliance dates (registration, insurance, mid-term audit), when the tenant has none |
 | `staff-credentials` | moves the expiry dates on existing staff (columns only, never identity or role) |
 | `compatibility` | staff and participant compatibility cells |
 | `emergency-contacts` | people and the contact roles that link them to participants |
@@ -181,8 +182,10 @@ DELETE FROM "NotificationLogs"
   WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND (substr("Id"::text, 15, 1) = '8' OR "OutboxId" IN (SELECT "Id" FROM demo_outbox));
 DELETE FROM "NotificationOutbox"
   WHERE "Id" IN (SELECT "Id" FROM demo_outbox);
+-- Compliance-date tasks the nightly scan made have random ids; their source key holds the item id, which is version 8 for a demo item.
 DELETE FROM "BookingTasks"
-  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
+  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND (substr("Id"::text, 15, 1) = '8'
+    OR ("SourceKey" LIKE 'compliance:%' AND substr(split_part("SourceKey", ':', 2), 15, 1) = '8'));
 DELETE FROM "IncidentInjuries"
   WHERE "IncidentReportId" IN (SELECT "Id" FROM demo_incident);
 DELETE FROM "IncidentWitnesses"
@@ -225,6 +228,8 @@ DELETE FROM "ParticipantContactRoles"
     AND (substr("Id"::text, 15, 1) = '8' OR "PersonId" IN (SELECT "Id" FROM demo_person));
 DELETE FROM "People"
   WHERE "Id" IN (SELECT "Id" FROM demo_person);
+DELETE FROM "ComplianceItems"
+  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
 DELETE FROM "ProviderSettings"
   WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
 

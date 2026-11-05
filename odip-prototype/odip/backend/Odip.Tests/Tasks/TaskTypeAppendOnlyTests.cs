@@ -17,7 +17,7 @@ public class TaskTypeAppendOnlyTests
             "AccommodationRequest", "AccommodationConfirmation", "VehicleRequest", "VehicleConfirmation", "ParticipantConfirmation", "FamilyContact", "InvoiceOop", "StaffingAllocation",
             "RiskReview", "MedicationCheck", "PreDeparture", "PostTrip", "InsuranceConfirmation", "GenerateNdisClaims", "Other",
             "LeaveCoverage", "IncidentQscReport", "MedicationWitness", "FlaggedNoteFollowUp",
-            "BudgetEmergencyReview", "RestrictivePracticeRegisterAddition", "IncidentCommissionDetailedReport", "RetentionPurgeDue",
+            "BudgetEmergencyReview", "RestrictivePracticeRegisterAddition", "IncidentCommissionDetailedReport", "RetentionPurgeDue", "ComplianceDue",
         };
 
         Assert.Equal(expected, Enum.GetNames<TaskType>());
@@ -26,5 +26,6 @@ public class TaskTypeAppendOnlyTests
         Assert.Equal(20, (int)TaskType.RestrictivePracticeRegisterAddition);
         Assert.Equal(21, (int)TaskType.IncidentCommissionDetailedReport);
         Assert.Equal(22, (int)TaskType.RetentionPurgeDue);
+        Assert.Equal(23, (int)TaskType.ComplianceDue);
     }
 }
