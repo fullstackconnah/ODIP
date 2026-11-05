@@ -76,6 +76,8 @@ public class TasksController : ControllerBase
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
         // The Admin's review of an emergency over budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
         if (!BudgetReviewAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.BudgetEmergencyReview);
+        // The records-due-for-deletion task counts archived participants: an Admin only.
+        if (!RetentionPurgeAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.RetentionPurgeDue);
         if (tripId.HasValue) query = query.Where(t => t.TripInstanceId == tripId.Value);
         if (status == TaskItemStatus.Overdue)
         {
@@ -128,7 +130,8 @@ public class TasksController : ControllerBase
     {
         var t = await _db.BookingTasks.Include(x => x.TripInstance).Include(x => x.Owner)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (t == null || (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MaySee(User))) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
+        if (t == null || (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MaySee(User))
+            || (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MaySee(User))) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
         return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
@@ -599,9 +602,11 @@ public class DashboardController : ControllerBase
 
         // The Admin's review of an emergency over budget is left out for a role that may not see budget standing, in the counts (the phase 3 review, C7).
         var mayReview = BudgetReviewAudience.MaySee(User);
+        var mayPurge = RetentionPurgeAudience.MaySee(User);
         var overdueTaskCount = await _db.BookingTasks
             .Where(TaskOverdue.IsOverdueExpr(today))
             .Where(t => mayReview || t.TaskType != TaskType.BudgetEmergencyReview)
+            .Where(t => mayPurge || t.TaskType != TaskType.RetentionPurgeDue)
             .CountAsync(ct);
 
         var upcomingTripIds = upcomingTrips.Select(t => t.Id).ToList();
@@ -633,7 +638,7 @@ public class DashboardController : ControllerBase
             UpcomingTripCount = upcomingTrips.Count,
             // The Active tab's rule: a draft is not counted, even one marked active (Participant.IsActive defaults to true) or whose services have begun.
             ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
-            OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
+            OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && (mayPurge || t.TaskType != TaskType.RetentionPurgeDue) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
             OverdueTaskCount = overdueTaskCount,
             ConflictCount = conflictCount,
             TripsMissingAccommodation = upcomingTripIds.Count - tripsWithAccommodation.Count,

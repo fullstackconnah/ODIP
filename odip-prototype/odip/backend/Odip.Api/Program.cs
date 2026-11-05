@@ -297,6 +297,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroTimesh
 builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroLeaveSync>();
 // Every minute, each connected organisation: approved hours go to Employment Hero as timesheets. Same EmploymentHero:Enabled switch.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroTimesheetBackgroundService>();
+// Nightly: one task for the Admin when archived records pass their 7 years. Retention:ScanEnabled (default false) keeps it off until the Settings screen ships.
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RetentionScanBackgroundService>();
 
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH

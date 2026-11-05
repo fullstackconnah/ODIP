@@ -143,7 +143,7 @@ public class ParticipantStatusEndpointTests
         var saved = await fx.Db.Participants.SingleAsync();
         var after = Scalars(saved);
         var changed = after.Keys.Where(k => before[k] != after[k]).OrderBy(k => k).ToList();
-        Assert.Equal(["IsActive", "UpdatedAt"], changed);
+        Assert.Equal(["IsActive", "RetentionStartsOn", "UpdatedAt"], changed); // archiving also starts the retention clock
         var audit = Assert.Single(UpdatedAuditRows(fx.Db, participant.Id));
         Assert.Equal("Casey Coordinator", audit.ChangedByName);
         Assert.Equal(("True", "False"), Changes(audit)["IsActive"]);
