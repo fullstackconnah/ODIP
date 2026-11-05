@@ -6,6 +6,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
 import DataExportTab from './DataExportTab'
 import { formatDateTimeAu } from '@/lib/format'
+import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
+
+const perms = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('@/lib/permissions', () => ({ usePermissions: () => perms.current }))
 
 const { get, getWithDefault } = vi.hoisted(() => ({ get: vi.fn(), getWithDefault: vi.fn() }))
 vi.mock('@/api/client', async () => {
@@ -33,6 +37,7 @@ const renderTab = (client = new QueryClient({ defaultOptions: { queries: { retry
 const downloadButton = () => screen.getByRole('button', { name: /^(Download all data|Preparing export…|Downloading…)$/ })
 
 beforeEach(() => {
+  perms.current = SETTINGS_PERMS.Admin
   saved = []
   getWithDefault.mockResolvedValue(null)
   window.URL.createObjectURL = vi.fn(() => 'blob:export')
@@ -177,5 +182,22 @@ describe('DataExportTab', () => {
     await act(async () => response.resolve(zipResponse))
     expect(await screen.findByText('Export saved')).toBeInTheDocument()
     expect(saved).toEqual(['bunya-support-export-sunrise-care-2026-10-14.zip'])
+  })
+
+  it('as a Coordinator shows only the registers card and never asks for the last full export', () => {
+    perms.current = SETTINGS_PERMS.Coordinator
+    renderTab()
+    expect(screen.getByRole('heading', { level: 3, name: 'Registers for auditors' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Export all your data' })).toBeNull()
+    expect(getWithDefault).not.toHaveBeenCalled()
+  })
+
+  it('offers Complaints to an Admin but not to a Coordinator', () => {
+    renderTab()
+    expect(screen.getByRole('option', { name: 'Complaints' })).toBeInTheDocument()
+    cleanup()
+    perms.current = SETTINGS_PERMS.Coordinator
+    renderTab()
+    expect(screen.queryByRole('option', { name: 'Complaints' })).toBeNull()
   })
 })
