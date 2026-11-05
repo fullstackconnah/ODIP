@@ -137,6 +137,9 @@ public static class AuditedEntities
         // Onboarding import: who imported which file, and who undid it (spec: both are audited).
         typeof(ImportBatch),
         typeof(ImportBatchItem),
+
+        // Compliance dates: a date can be deleted outright (and a key personnel label is a person), so who changed or removed one, and when, must be recoverable.
+        typeof(ComplianceItem),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

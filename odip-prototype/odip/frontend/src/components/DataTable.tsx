@@ -314,9 +314,9 @@ function plainTextOf<T>(row: T, col: Column<T>, content: ReactNode): string | nu
  * min-[1792px]:max-w-*`). For a link, put the truncation on the link itself, not on a wrapper: the
  * wrapper's `overflow: hidden` would clip the link's focus ring.
  */
-export function CellText({ children, title, className = '', lines = 1 }: { children: ReactNode; title?: string; className?: string; lines?: 1 | 2 }) {
+export function CellText({ children, title, className = '', lines = 1 }: { children: ReactNode; title?: string; className?: string; lines?: 1 | 2 | 3 }) {
   const full = title ?? (typeof children === 'string' ? children : undefined)
-  return <span className={`block ${lines === 2 ? 'md:line-clamp-2 md:whitespace-normal' : 'md:truncate'} ${className}`} title={full}>{children}</span>
+  return <span className={`block ${lines === 3 ? 'md:line-clamp-3 md:whitespace-normal' : lines === 2 ? 'md:line-clamp-2 md:whitespace-normal' : 'md:truncate'} ${className}`} title={full}>{children}</span>
 }
 
 // ── Component ────────────────────────────────────────────────────

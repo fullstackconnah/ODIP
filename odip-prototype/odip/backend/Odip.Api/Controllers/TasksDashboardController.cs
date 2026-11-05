@@ -76,8 +76,8 @@ public class TasksController : ControllerBase
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
         // The Admin's review of an emergency over budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
         if (!BudgetReviewAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.BudgetEmergencyReview);
-        // The records-due-for-deletion task counts archived participants: an Admin only.
-        if (!RetentionPurgeAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.RetentionPurgeDue);
+        // The records-due-for-deletion and compliance-date tasks are an Admin only.
+        if (!RetentionPurgeAudience.MaySee(User)) query = query.Where(t => !RetentionPurgeAudience.AdminOnlyTypes.Contains(t.TaskType));
         if (tripId.HasValue) query = query.Where(t => t.TripInstanceId == tripId.Value);
         if (status == TaskItemStatus.Overdue)
         {
@@ -131,7 +131,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.Include(x => x.TripInstance).Include(x => x.Owner)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null || (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MaySee(User))
-            || (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MaySee(User))) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
+            || (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MaySee(User))) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
         return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
@@ -144,7 +144,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
-        if (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
+        if (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
         if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
             return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
@@ -182,7 +182,7 @@ public class TasksController : ControllerBase
     {
         // Only the server raises the review of an emergency (with the shift): nobody but an Admin can make one by hand.
         if (dto.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
-        if (dto.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
+        if (RetentionPurgeAudience.IsAdminOnly(dto.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
 
         if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
@@ -235,7 +235,7 @@ public class TasksController : ControllerBase
         var isReview = t.TaskType == TaskType.BudgetEmergencyReview || dto.TaskType == TaskType.BudgetEmergencyReview;
         if (isReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
         // Likewise the records-due task is an Admin's: no Coordinator completes, cancels, deletes or retypes it, or retypes another task into it.
-        if ((t.TaskType == TaskType.RetentionPurgeDue || dto.TaskType == TaskType.RetentionPurgeDue) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
+        if ((RetentionPurgeAudience.IsAdminOnly(t.TaskType) || RetentionPurgeAudience.IsAdminOnly(dto.TaskType)) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
 
         // Whoever completes the review owns it, unless the request names an owner: that is how the shift panel can say who reviewed the emergency.
         var ownerId = dto.OwnerId;
@@ -267,7 +267,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<bool>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
-        if (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
+        if (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (t.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled || t.TaskType == TaskType.LeaveCoverage)
             return Conflict(ApiResponse<bool>.Fail("Task is already closed or cannot be marked done here."));
 
@@ -287,7 +287,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<bool>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
-        if (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
+        if (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         t.Status = TaskItemStatus.Cancelled; t.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
@@ -612,7 +612,7 @@ public class DashboardController : ControllerBase
         var overdueTaskCount = await _db.BookingTasks
             .Where(TaskOverdue.IsOverdueExpr(today))
             .Where(t => mayReview || t.TaskType != TaskType.BudgetEmergencyReview)
-            .Where(t => mayPurge || t.TaskType != TaskType.RetentionPurgeDue)
+            .Where(t => mayPurge || !RetentionPurgeAudience.AdminOnlyTypes.Contains(t.TaskType))
             .CountAsync(ct);
 
         var upcomingTripIds = upcomingTrips.Select(t => t.Id).ToList();
@@ -648,7 +648,7 @@ public class DashboardController : ControllerBase
             UpcomingTripCount = upcomingTrips.Count,
             // The Active tab's rule: a draft is not counted, even one marked active (Participant.IsActive defaults to true) or whose services have begun.
             ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
-            OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && (mayPurge || t.TaskType != TaskType.RetentionPurgeDue) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
+            OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && (mayPurge || !RetentionPurgeAudience.AdminOnlyTypes.Contains(t.TaskType)) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
             OverdueTaskCount = overdueTaskCount,
             ConflictCount = conflictCount,
             TripsMissingAccommodation = upcomingTripIds.Count - tripsWithAccommodation.Count,

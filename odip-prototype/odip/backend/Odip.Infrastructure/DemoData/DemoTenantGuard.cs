@@ -58,6 +58,7 @@ public sealed class DemoTenantGuard
     public static readonly IReadOnlySet<Type> AdditionTypes = new HashSet<Type>
     {
         typeof(ProviderSettings),
+        typeof(ComplianceItem),
         typeof(StaffParticipantCompatibility),
         typeof(ShiftPattern),
         typeof(Shift),
