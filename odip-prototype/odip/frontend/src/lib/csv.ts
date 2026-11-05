@@ -7,7 +7,7 @@ export function csvCell(value: CsvValue): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2)
   if (typeof value === 'boolean') return String(value)
-  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+  const text = /^\s*[=+\-@]|^[\t\r]/.test(value) ? `'${value}` : value
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 

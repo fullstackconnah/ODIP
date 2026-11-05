@@ -2,7 +2,7 @@
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots e2e/shots/support-type.mjs <outdir>
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, overlapCheck, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -140,13 +140,6 @@ const SCENES = [
   { tag: '390-dark', width: 390, height: 844, touch: true, scheme: 'dark' },
 ]
 
-// Run inside the crop with nothing hidden: the element lies inside the clip, and the topmost thing at its centre is the element or inside it (fixed or sticky chrome over it fails).
-const overlapProbe = (loc, clip) => loc.evaluate((el, c) => {
-  const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-  return { inClip: r.left >= c.x - 1 && r.top >= c.y - 1 && r.right <= c.x + c.width + 1 && r.bottom <= c.y + c.height + 1, covered: !hit || !el.contains(hit), hit: hit ? hit.tagName + '.' + String(hit.className).split(' ')[0] : null }
-}, clip)
-const overlapCheck = (file, m) => ({ name: `crop is clear of fixed or sticky chrome: ${file}`, pass: m.inClip && !m.covered, detail: m })
-
 const dialogOf = (page) => page.getByRole('dialog').last()
 const fieldLocator = (page) => dialogOf(page).locator('label', { hasText: /^Support type$/ }).locator('xpath=..')
 const rowLocator = (page) => dialogOf(page).locator('label', { hasText: /^Ratio$/ }).locator('xpath=../..')
@@ -174,9 +167,9 @@ async function capture(page, s, state, mode, { full = false } = {}) {
   const m = await measure(page)
   console.log(`[support-type] ${s.tag} ${state} ${JSON.stringify(m)}`)
   judge(t, state, s, m)
-  const crop = await cropElement(page, fieldLocator(page), path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, also: rowLocator(page), during: (clip) => overlapProbe(fieldLocator(page), clip) })
+  const crop = await cropElement(page, fieldLocator(page), path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, also: rowLocator(page), during: (clip) => overlapCheck(fieldLocator(page), clip, `${state}-${s.tag}.png`) })
   checks.push(checkCropHolds({ ...crop, touch: s.touch }))
-  checks.push(overlapCheck(`${state}-${s.tag}.png`, crop.measured))
+  checks.push(crop.measured)
   if (full) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${state}-${s.tag}.png`), { touch: s.touch })).checks)
   return m
 }
@@ -229,9 +222,9 @@ async function ambiguityRefusal(page, s) {
   check(t('10 refusal copy is the exact sentence'), m.text === AMBIGUOUS, m.text)
   check(t('10 refusal text fits its Callout'), m.sw <= m.cw, { sw: m.sw, cw: m.cw })
   check(t('10 refusal contrast >= 4.5'), m.contrast >= 4.5, m.contrast)
-  const crop = await cropElement(page, callout, path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, during: (clip) => overlapProbe(callout, clip) })
+  const crop = await cropElement(page, callout, path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, during: (clip) => overlapCheck(callout, clip, `${state}-${s.tag}.png`) })
   checks.push(checkCropHolds({ ...crop, touch: s.touch }))
-  checks.push(overlapCheck(`${state}-${s.tag}.png`, crop.measured))
+  checks.push(crop.measured)
   await closePanel(page)
   const discard = page.getByRole('button', { name: /^(Discard|Discard changes|Leave)$/ })
   if (await discard.first().isVisible().catch(() => false)) await discard.first().click()
