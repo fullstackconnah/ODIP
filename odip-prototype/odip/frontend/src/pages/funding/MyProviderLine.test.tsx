@@ -6,14 +6,14 @@ import { plan } from '@/test/fixtures/funding'
 
 // The "my provider" line on the Funding tab's current plan: whether we are recorded as the participant's my provider for this plan, and the modal that changes it.
 
-const { mutate, providerSettings, state } = vi.hoisted(() => ({ mutate: vi.fn(), providerSettings: { data: undefined as unknown }, state: { isPending: false, error: null as unknown } }))
-vi.mock('@/api/hooks', () => ({ useProviderSettings: () => providerSettings, useSetMyProvider: () => ({ mutate, isPending: state.isPending, error: state.error }) }))
+const { mutate, providerToday, state } = vi.hoisted(() => ({ mutate: vi.fn(), providerToday: { data: undefined as unknown }, state: { isPending: false, error: null as unknown } }))
+vi.mock('@/api/hooks', () => ({ useProviderTodayQuery: () => providerToday, useSetMyProvider: () => ({ mutate, isPending: state.isPending, error: state.error }) }))
 
 beforeEach(() => {
   vi.clearAllMocks()
   state.isPending = false
   state.error = null
-  providerSettings.data = undefined
+  providerToday.data = undefined
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-03T03:00:00Z'))
 })
@@ -106,7 +106,7 @@ describe('My provider line', () => {
   // 14:30 UTC on 5 Nov is already 6 Nov in Sydney: a Requested date of 6 Nov is today for the organisation, not the future.
   it("accepts today on the organisation's calendar, which the browser's clock still calls tomorrow", async () => {
     vi.setSystemTime(new Date('2026-11-05T14:30:00Z'))
-    providerSettings.data = { timeZoneId: 'Australia/Sydney', state: 'NSW' }
+    providerToday.data = { date: '2026-11-06' }
     show({ myProvider: 'Requested', myProviderOn: '2026-11-01' })
     await user().click(screen.getByRole('button', { name: 'Update' }))
     const field = screen.getByLabelText('Requested on')
