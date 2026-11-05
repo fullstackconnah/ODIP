@@ -117,18 +117,18 @@ async function scheduleRun(browser, tag, vp, shots) {
     return { scrollW: document.documentElement.scrollWidth, innerW: innerWidth, heads: heads.map((t) => {
       const line = t.querySelector('div.flex-wrap'); const pieces = line ? [...line.children] : []
       const note = pieces.find((p) => /\\bshort\\b/.test(p.textContent))
-      return { name: t.querySelector('div[title]')?.title ?? '', h: t.getBoundingClientRect().height, hasShort: /\\bshort\\b/.test(t.textContent), noteContrast: note ? contrast(note) : null,
+      return { name: t.querySelector('div[title]')?.title ?? '', h: t.getBoundingClientRect().height, hasShort: !!note, text: t.textContent.slice(-60), noteContrast: note ? contrast(note) : null,
         pieceFits: pieces.every((p) => p.scrollWidth <= p.clientWidth + 1) } }) } })()`)
   const byName = new Map(trips.map((t) => [t.tripName, t.staffShort]))
   const expectShort = m.heads.filter((h) => byName.get(h.name) > 0).length
   check(`${tag}: some trip is short and some covered in the fixture`, expectShort > 0 && expectShort < m.heads.length, [expectShort, m.heads.length])
   check(`${tag}: no page overflow`, m.scrollW <= m.innerW, [m.scrollW, m.innerW])
-  check(`${tag}: "short" only in the short trips' headers`, m.heads.every((h) => h.hasShort === (byName.get(h.name) > 0)), m.heads.map((h) => [h.name, h.hasShort]))
+  check(`${tag}: "short" only in the short trips' headers`, m.heads.every((h) => h.hasShort === (byName.get(h.name) > 0)), m.heads.map((h) => [h.name, h.hasShort, h.text]))
   check(`${tag}: header pieces do not wrap inside`, m.heads.every((h) => h.pieceFits))
   check(`${tag}: "N short" contrast >= 4.5`, m.heads.filter((h) => h.hasShort).every((h) => h.noteContrast >= 4.5), m.heads.map((h) => h.noteContrast))
   const hs = m.heads.filter((h) => h.hasShort).map((h) => h.h); const hc = m.heads.filter((h) => !h.hasShort).map((h) => h.h)
   check(`${tag}: a short header grows at most one line (<= 22px) over a covered one`, !hs.length || !hc.length || Math.max(...hs) - Math.min(...hc) <= 22, [hs, hc])
-  const th = (short) => page.locator('thead th').filter({ hasText: 'staff' }).filter({ hasText: short ? /\bshort\b/ : /^((?!\bshort\b)[\s\S])*$/ }).first()
+  const th = (short) => page.locator('thead th').filter({ hasText: 'staff' }).filter(short ? { hasText: 'short' } : { hasNotText: 'short' }).first()
   for (const [short, file] of shots) { await th(short).evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' })); const r = await cropElement(page, th(short), path.join(OUT_DIR, file), { touch }); checks.push(checkCropHolds(r)) }
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `schedule-full-${vp.width}${vp.dark ? '-dark' : ''}.png`), { touch })).checks)
   await context.close()
