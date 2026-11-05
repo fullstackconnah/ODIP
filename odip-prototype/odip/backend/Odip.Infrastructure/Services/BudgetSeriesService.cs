@@ -123,7 +123,7 @@ public sealed class BudgetSeriesService
         if (segments.Count == 0) return (new BudgetExpectedDto { Status = BudgetExpectedStatus.NoAgreement }, null, new());
 
         var lists = await AgreementPriceLists.ListAsync(_db, ct);
-        var priceStamp = string.Join("|", lists.Select(l => $"{l.Version}@{l.Start:yyyy-MM-dd}")) + "#" + await _db.SupportCatalogueItems.CountAsync(ct);
+        var priceStamp = string.Join("|", lists.Select(l => $"{l.Version}@{l.Start:yyyy-MM-dd}")) + "#" + await _db.SupportCatalogueItems.CountAsync(ct) + "g" + CatalogueImportService.Generation;
         var planType = await _db.Participants.AsNoTracking().Where(p => p.Id == participantId && p.TenantId == tenantId).Select(p => p.PlanType).FirstAsync(ct);
 
         var lines = new List<(Guid PoolId, DatedAmount Line)>();
@@ -142,7 +142,7 @@ public sealed class BudgetSeriesService
                     if (lease is null) return unavailable;
                     reduction = await PriceAsync(tenantId, draft, ct);
                     if (reduction is null) return unavailable;
-                    // shortcut: prices edited in place within a version, a public-holiday sync and a pricing-settings change keep the old quote for up to 1 hour; add an eviction signal from CatalogueImportService / settings save if users notice.
+                    // shortcut: the stamp moves on a catalogue import (any row added, updated or end-dated), so a public-holiday sync and a pricing-settings save still keep the old quote for up to 1 hour; add an eviction signal from those saves if users notice.
                     _cache.Set(key, reduction, QuoteLifetime);
                 }
 
