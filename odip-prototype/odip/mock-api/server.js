@@ -3370,6 +3370,8 @@ const postRoutes = [
   ['problem-reports', (body) => (typeof body.text === 'string' && body.text.trim()
     ? respond(201, ok({ id: 'pr-' + Date.now(), status: 'Sent' }))
     : respond(400, failEnvelope(null, ['Write a few words about what went wrong.'])))],
+  // Front-end crash reports: the real endpoint only writes a log line.
+  ['client-errors', () => respond(204, null)],
   ['admin/whats-new', (body) => {
     const row = whatsNewSave({ id: 'wn-' + String(whatsNewRows.length + 1).padStart(4, '0'), key: 'admin-' + Date.now(), publishedAtUtc: new Date().toISOString() }, body)
     whatsNewRows.unshift(row)

@@ -23,10 +23,15 @@ public class ClientErrorsControllerTests
     private sealed class Capture : ILogger<ClientErrorsController>
     {
         public List<(LogLevel Level, string Message, Dictionary<string, object?> Props)> Entries { get; } = new();
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        private Dictionary<string, object?> _scope = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+        {
+            _scope = ((IEnumerable<KeyValuePair<string, object?>>)state).ToDictionary(p => p.Key, p => p.Value);
+            return null;
+        }
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception), ((IEnumerable<KeyValuePair<string, object?>>)state!).ToDictionary(p => p.Key, p => p.Value)));
+            Entries.Add((logLevel, formatter(state, exception), ((IEnumerable<KeyValuePair<string, object?>>)state!).Concat(_scope).ToDictionary(p => p.Key, p => p.Value)));
     }
 
     private static (ClientErrorsController Controller, Capture Log) Make()

@@ -40,8 +40,9 @@ public class ClientErrorsController : ControllerBase
         if (!Kinds.Contains(kind)) return BadRequest(ApiResponse<object>.Fail("Unknown kind."));
 
         var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : (Guid?)null;
-        _logger.LogWarning("Client error {Kind} at {Path}: {Message} {UserId} {TenantId} {Stack} {ComponentStack}",
-            kind, Line(request.Path, 200), message, userId, _tenant.TenantId, Cut(request.Stack, 4000), Cut(request.ComponentStack, 4000));
+        // The stacks and ids ride in a scope, not the message template, so a stack with line breaks cannot forge a log line.
+        using (_logger.BeginScope(new Dictionary<string, object?> { ["UserId"] = userId, ["TenantId"] = _tenant.TenantId, ["Stack"] = Cut(request.Stack, 4000), ["ComponentStack"] = Cut(request.ComponentStack, 4000) }))
+            _logger.LogWarning("Client error {Kind} at {Path}: {Message}", kind, Line(request.Path, 200), message);
         return NoContent();
     }
 
