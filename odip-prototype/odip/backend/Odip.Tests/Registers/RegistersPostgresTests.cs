@@ -31,7 +31,7 @@ public class RegistersPostgresTests : IClassFixture<PostgresFixture>
             admin.SaveChanges();
             foreach (var (tenant, mark) in new[] { (a, "ALPHA"), (b, "BRAVO") })
             {
-                var user = new User { Id = Guid.NewGuid(), TenantId = tenant, FirstName = mark, LastName = "Staff", Email = $"{Guid.NewGuid():N}@x.test", IsActive = true };
+                var user = new User { Id = Guid.NewGuid(), TenantId = tenant, FirstName = mark, LastName = "Staff", Email = $"{Guid.NewGuid():N}@x.test", Username = Guid.NewGuid().ToString("N"), IsActive = true };
                 var p = new Participant { Id = Guid.NewGuid(), TenantId = tenant, FirstName = mark, LastName = "Participant", IsActive = true };
                 admin.Users.Add(user);
                 admin.Participants.Add(p);
@@ -48,7 +48,7 @@ public class RegistersPostgresTests : IClassFixture<PostgresFixture>
         foreach (var (register, marker) in new[] { ("incidents", "ALPHA-incident"), ("complaints", "ALPHA-complaint"), ("restrictive-practices", "ALPHA-practice"), ("risks", "ALPHA-risk"), ("staff-credentials", "ALPHA") })
         {
             await using var db = PostgresFixture.NewContext(cs, DataExportTestKit.Tenant(a));
-            var c = new RegistersController(db, DataExportTestKit.Tenant(a));
+            var c = new RegistersController(db, DataExportTestKit.Tenant(a)) { ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() } };
             var from = new DateOnly(2026, 1, 1);
             var to = new DateOnly(2026, 12, 31);
             IActionResult result = register switch
@@ -63,7 +63,7 @@ public class RegistersPostgresTests : IClassFixture<PostgresFixture>
             Assert.Contains(marker, text);
             Assert.DoesNotContain("BRAVO", text);
             Assert.StartsWith("\uFEFF", text);
-            Assert.Equal(register == "risks" ? 3 : 2, DataExportTestKit.ParseCsv(text.TrimStart('﻿')).Count); // header, the row (risks: a risk entry and a community access item)
+            Assert.Equal(register == "risks" ? 3 : 2, DataExportTestKit.ParseCsv(text.TrimStart((char)0xFEFF)).Count); // header, the row (risks: a risk entry and a community access item)
         }
     }
 }
