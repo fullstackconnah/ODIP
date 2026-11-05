@@ -25,7 +25,8 @@ namespace Odip.Tests.Rostering;
 public class RosterStartWeekPostgresTests : IClassFixture<PostgresFixture>
 {
     private readonly PostgresFixture _pg;
-    public RosterStartWeekPostgresTests(PostgresFixture pg) => _pg = pg;
+    private readonly Xunit.Abstractions.ITestOutputHelper _out;
+    public RosterStartWeekPostgresTests(PostgresFixture pg, Xunit.Abstractions.ITestOutputHelper output) { _pg = pg; _out = output; }
 
     private void RequirePostgres() => Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
 
@@ -122,6 +123,67 @@ public class RosterStartWeekPostgresTests : IClassFixture<PostgresFixture>
         }
 
         Assert.Equal((0, 0), await CountsAsync(tenantId));
+    }
+
+    [SkippableFact]
+    public async Task Start_WithAParticipantLockStuck_ReleasesTheBoardWithinTheCap()
+    {
+        RequirePostgres();
+        var (tenantId, miaId) = await MiaWithAWeekOfPatternsAsync();
+
+        await using var holder = Open(tenantId);
+        await using var held = await RosterGenerationLock.AcquireAsync(holder, miaId, default);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        await using (var starter = Open(tenantId))
+            Assert.Null(ConflictCode(await StartController(starter, tenantId, TimeSpan.FromSeconds(10)).StartWeek(Monday, default)));   // busy, not roster-week-started
+        clock.Stop();
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"Start held the board for {clock.Elapsed}");
+        Assert.Equal((0, 0), await CountsAsync(tenantId));
+        await using var third = Open(tenantId);
+        await using var board = await RosterGenerationLock.AcquireAsync(third, tenantId, default, TimeSpan.FromMilliseconds(500), scope: "roster-board");   // the board is free at once
+    }
+
+    /// <summary>A measurement, not a guard: how long Start takes for N participants of one organisation. Runs only with ODIP_MEASURE=1; asserts completion, never time.</summary>
+    [SkippableTheory]
+    [InlineData(50)]
+    [InlineData(150)]
+    [InlineData(400)]
+    public async Task Measure_StartWeekDuration(int participants)
+    {
+        RequirePostgres();
+        Skip.IfNot(Environment.GetEnvironmentVariable("ODIP_MEASURE") == "1", "ODIP_MEASURE=1 is not set - a measurement, not a guard.");
+        var (db0, tenantId) = await _pg.NewTenantContextAsync();
+        await db0.DisposeAsync();
+        var patterns = 0;
+        await using (var seed = Open(tenantId))
+        {
+            for (var i = 0; i < participants; i++)
+            {
+                var p = seed.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = $"P{i}", LastName = "Test", IsActive = true }).Entity;
+                var revision = seed.ServiceAgreementDrafts.Add(ApprovalTestSupport.BuildRevision(tenantId, p.Id, 1, new[] { ApprovalTestSupport.WeekdayBlock() })).Entity;
+                foreach (var day in RosterStartWeekTests.Weekdays.Take(2 + i % 2))
+                {
+                    patterns++;
+                    seed.ShiftPatterns.Add(new ShiftPattern
+                    {
+                        Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, DayOfWeek = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+                        Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true,
+                        SourceDraftId = revision.Id, SourceBlockKey = "weekdays", WorkerSlot = 1,
+                    });
+                }
+            }
+            await seed.SaveChangesAsync();
+        }
+
+        await using var starter = Open(tenantId);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var result = await StartController(starter, tenantId).StartWeek(Monday, default);
+        clock.Stop();
+        _out.WriteLine($"MEASURE participants={participants} patterns={patterns} elapsedMs={clock.ElapsedMilliseconds}");
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(1, (await CountsAsync(tenantId)).Rows);
     }
 
     /// <summary>Before the first save that adds a RosterWeek, saves that same week from another context: the Start that wins the race (S3).</summary>
