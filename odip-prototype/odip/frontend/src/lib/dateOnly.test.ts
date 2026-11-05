@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { calendarDaysUntil, dayNumberOf, isDateOnly, parseDateOnly } from './dateOnly'
+import { calendarDaysUntil, dayNumberOf, isDateOnly, parseDateOnly, todayInZone } from './dateOnly'
 import { restoreZone, setZone } from '@/test/timeZone'
 
 // The gate runs in UTC and a developer machine in Sydney, so every zone-sensitive case sets the zone itself (src/test/timeZone.ts) and the
@@ -160,5 +160,30 @@ describe('across daylight-saving changes and zones', () => {
       answers.add(calendarDaysUntil('2026-10-11', new Date(2026, 9, 1, 3, 40)))
     }
     expect([...answers]).toEqual([10])
+  })
+})
+
+describe('todayInZone', () => {
+  // 14:30 UTC on 5 Nov is already 01:30 on 6 Nov in Sydney (daylight time, UTC+11), whatever zone the browser is in.
+  const instant = new Date('2026-11-05T14:30:00Z')
+  afterEach(() => restoreZone())
+
+  it("names the zone's own calendar day, not the browser's", () => {
+    if (!setZone('UTC')) return
+    expect(todayInZone('Australia/Sydney', instant)).toBe('2026-11-06')
+    expect(todayInZone('Australia/Perth', instant)).toBe('2026-11-05')
+  })
+
+  it('gives the new day on a daylight-saving change day', () => {
+    if (!setZone('UTC')) return
+    // Sydney moves to daylight time at 02:00 on 4 Oct 2026; 16:00 UTC on 3 Oct is 03:00 there.
+    expect(todayInZone('Australia/Sydney', new Date('2026-10-03T16:00:00Z'))).toBe('2026-10-04')
+  })
+
+  it("falls back to the browser's day when the zone is unknown or not a zone", () => {
+    if (!setZone('UTC')) return
+    expect(todayInZone(undefined, instant)).toBe('2026-11-05')
+    expect(todayInZone(null, instant)).toBe('2026-11-05')
+    expect(todayInZone('Not/AZone', instant)).toBe('2026-11-05')
   })
 })

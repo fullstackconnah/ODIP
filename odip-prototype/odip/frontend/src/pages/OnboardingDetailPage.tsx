@@ -14,9 +14,9 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { localIsoDate } from '@/lib/dateOnly'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { useIntakeCompleteNotice } from './intake/intakeComplete'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 import { fieldErrors } from '@/lib/fieldErrors'
@@ -217,8 +217,8 @@ function ExplainedRecordDialog({ participantId, detail, focus, onClose }: { part
   const record = useRecordOnboardingExplained(participantId)
   const [complaints, setComplaints] = useState(detail.complaintsExplainedOn ?? '')
   const [rights, setRights] = useState(detail.rightsExplainedOn ?? '')
-  const today = localIsoDate()
-  // shortcut: the browser's today stands in for the provider's; the server re-checks with the provider's own zone.
+  // The provider's day, as the server checks it (this dialog opens only for the roles that read provider settings).
+  const today = useProviderToday()
   const dateError = (v: string) => v > today ? 'The date cannot be in the future.' : v && v < EXPLAINED_MIN ? 'Check the date: it is before 1990.' : undefined
   const errors = fieldErrors(record.error)
   const complaintsError = dateError(complaints) ?? errors.complaintsExplainedOn
