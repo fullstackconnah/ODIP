@@ -47,8 +47,9 @@ async function open(browser, { width, height, touch, dark, staff }) {
       body.data.weekStarted = true; body.data.exceptions = []; body.data.pendingAgreements = []
       const bars = barsFor(body.data.days)
       body.data.participantRows = [participantRow('p-9001', 'Mia Chen', [bars[0]]), participantRow('p-9002', 'Noah Blake', [bars[1]]), participantRow('p-9003', 'Zara Covered', [bars[2]]), participantRow('p-9004', 'Zed Driver', [bars[3]])]
-    } else if (body?.data?.staffRows) {
-      body.data.staffRows = [staffRow('s-9001', 'Alex Rivera', [barsFor(body.data.days)[0]])]
+    }
+    if (body?.data?.staffRows) {
+      const sb = barsFor(body.data.days); body.data.staffRows = sb.map((b, i) => staffRow(`s-900${i}`, ['Alex Rivera', 'Bo Tran', 'Cy Okoro', 'Di Walsh'][i], [b]))
     }
     await r.fulfill({ response, json: body })
   })
@@ -106,7 +107,7 @@ async function boardRun(browser, tag, vp, shots) {
 async function scheduleRun(browser, tag, vp, shots) {
   const { context, page } = await open(browser, vp)
   const touch = !!vp.touch
-  const overview = page.waitForResponse((r) => r.url().includes('/schedule/overview'), { timeout: 60_000 })
+  const overview = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith('/api/v1/schedule'), { timeout: 60_000 })
   await page.goto(`${BASE_URL}/schedule`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   const trips = (await (await overview).json()).data.trips
   await page.locator('th:has-text("staff")').first().waitFor({ state: 'visible', timeout: 60_000 })
