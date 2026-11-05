@@ -155,6 +155,12 @@ for (const vp of VPS) {
       }
       if (vp.touch) await tapTargets(main, t(state))
       await crop(page, main, `${state}-${tag}.png`, vp)
+      if (!dark && !vp.touch) {
+        await page.setViewportSize({ width: 1280, height: 1051 }); await page.waitForTimeout(400)
+        const d = await page.evaluate(() => { let low = null; for (const e of document.querySelectorAll('body *')) { const b = e.getBoundingClientRect().bottom + scrollY; if (!low || b > low.b) low = { b: Math.round(b), tag: e.tagName, cls: String(e.className).slice(0, 80) } } const w = document.querySelector('table')?.parentElement; return { sh: document.scrollingElement.scrollHeight, low, wrapScroll: w ? w.scrollWidth - w.clientWidth : null, trs: [...document.querySelectorAll('tbody tr')].map((r) => Math.round(r.getBoundingClientRect().height)) } })
+        check(t('diag list-admin at 1051'), true, d)
+        await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(200)
+      }
       if (!dark) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${state}-${tag}.png`), { touch: vp.touch })).checks)
       await context.close()
     } catch (e) { check(t(`${state} ran`), false, String(e.message).split('\n')[0]) }
