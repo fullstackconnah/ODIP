@@ -106,4 +106,43 @@ public class BusinessDaysTests
         // 02:30 on Sun 4 Oct 2026 does not exist in Sydney (clocks go 02:00 to 03:00): it is read as 03:30 AEDT = 16:30Z the day before.
         Assert.Equal(Utc(2026, 10, 3, 16, 30), ProviderLocalTime.LocalToUtc(new DateTime(2026, 10, 4, 2, 30, 0), Sydney));
     }
+
+    private static DateOnly D(int y, int m, int d) => new(y, m, d);
+
+    [Fact]
+    public void NthAfter_OctoberMonthEnd_IsFriday6Nov()
+    {
+        var due = BusinessDays.NthAfter(D(2026, 10, 31), 5, null, Cal(), Covered);
+        Assert.Equal((D(2026, 11, 6), false), (due.Day, due.WeekendsOnly));
+    }
+
+    [Fact]
+    public void NthAfter_NullState_IgnoresStateHoliday()
+    {
+        var cal = Cal(Hol(2026, 11, 3, "VIC"));
+        Assert.Equal(D(2026, 11, 6), BusinessDays.NthAfter(D(2026, 10, 31), 5, null, cal, Covered).Day);
+        Assert.Equal(D(2026, 11, 9), BusinessDays.NthAfter(D(2026, 10, 31), 5, "VIC", cal, Covered).Day);
+    }
+
+    [Fact]
+    public void NthAfter_NationalHoliday_AcrossYearEnd()
+    {
+        var due = BusinessDays.NthAfter(D(2026, 12, 31), 5, null, Cal(Hol(2027, 1, 1, null)), Covered);
+        Assert.Equal(D(2027, 1, 8), due.Day);
+    }
+
+    [Fact]
+    public void NthAfter_UncoveredYear_WeekendsOnly()
+    {
+        Assert.True(BusinessDays.NthAfter(D(2026, 12, 31), 5, null, Cal(), new HashSet<int> { 2026 }).WeekendsOnly);
+    }
+
+    [Fact]
+    public void EndOfNthAfter_StillMatchesNthAfter()
+    {
+        var from = Utc(2026, 10, 29, 23);
+        var viaUtc = BusinessDays.EndOfNthAfter(from, 5, "NSW", Sydney, Cal(), Covered);
+        var day = BusinessDays.NthAfter(DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(from, Sydney)), 5, "NSW", Cal(), Covered).Day;
+        Assert.Equal(day, DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(viaUtc.DueUtc, Sydney)));
+    }
 }
