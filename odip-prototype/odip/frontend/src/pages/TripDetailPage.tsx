@@ -121,7 +121,7 @@ export default function TripDetailPage() {
 
   // Each tile is have / need of ONE noun (formatRatio), its chip AND its attention tint come from one tone (`glanceState`) so the
   // strip can never tint a tile its own chip calls fine, and each tile opens the tab that fixes the gap it states. A Cancelled or
-  // Archived trip is past fixing, so its tiles keep the figures and drop the chips and tints. Waitlist is warning; a shortfall is negative.
+  // Archived trip is past fixing, so its tiles keep the figures and drop the chips and tints. Waitlist and a staff shortfall are warning; the other gaps are negative.
   const insuranceConfirmed = trip.insuranceConfirmedCount ?? 0
   const insuranceOutstanding = trip.insuranceOutstandingCount ?? 0
   const staffShort = Math.max(0, (trip.staffRequired ?? 0) - trip.staffAssignedCount)
@@ -138,7 +138,7 @@ export default function TripDetailPage() {
       label: 'Staff assigned',
       icon: factIcon('badge'),
       value: trip.staffRequired != null ? formatRatio(trip.staffAssignedCount, trip.staffRequired) : trip.staffAssignedCount,
-      ...gap(staffShort, 'negative', `${staffShort} short`),
+      ...gap(staffShort, 'warning', `${staffShort} short`),
       onSelect: () => setActiveTab('staff'),
     },
     {

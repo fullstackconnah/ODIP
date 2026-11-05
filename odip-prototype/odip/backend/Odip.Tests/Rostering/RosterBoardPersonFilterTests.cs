@@ -114,6 +114,30 @@ public class RosterBoardPersonFilterTests
     }
 
     [Fact]
+    public async Task Staff_filter_keeps_trip_bar_staff_short()
+    {
+        using var db = TestDb.Create();
+        var a = SeedStaff(db, "Alex", "Rivera");
+        var b = SeedStaff(db, "Bea", "Stone");
+        var trip = SeedTrip(db);
+        trip.CalculatedStaffRequired = 3m;
+        foreach (var user in new[] { a, b })
+            db.StaffAssignments.Add(new StaffAssignment
+            {
+                Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = user.Id, Status = AssignmentStatus.Confirmed,
+                AssignmentStart = trip.StartDate, AssignmentEnd = trip.EndDate
+            });
+        db.SaveChangesAsync().GetAwaiter().GetResult();
+
+        var all = await Board(db, "staff");
+        var filtered = await Board(db, "staff", staffId: a.Id);
+
+        // The count comes from every assignment on the trip, not just the board's staff filter.
+        Assert.Equal(1, Assert.Single(Assert.Single(all.StaffRows!, r => r.StaffId == a.Id).TripBars).StaffShort);
+        Assert.Equal(1, Assert.Single(Assert.Single(filtered.StaffRows!).TripBars).StaffShort);
+    }
+
+    [Fact]
     public async Task StaffFilter_KeepsLeaveTripBarsAndHours()
     {
         using var db = TestDb.Create();

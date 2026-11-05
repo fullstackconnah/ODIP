@@ -635,6 +635,42 @@ public class RosteringControllerTests
     }
 
     [Fact]
+    public async Task Board_trip_bars_carry_staff_short_on_participant_and_staff_rows()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Amy", "Ng");
+        var crew = SeedStaff(db, firstName: "Ben", lastName: "Turner");
+        var gone = SeedStaff(db, firstName: "Cat", lastName: "Lee");
+
+        // Calculated 2.5 rounds up to a need of 3; one confirmed and one cancelled assignment leave it 2 short.
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Beach Trip", StartDate = ServiceDate.AddDays(2), DurationDays = 3,
+            Status = TripStatus.Confirmed, CalculatedStaffRequired = 2.5m
+        };
+        db.TripInstances.Add(trip);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = ServiceDate
+        });
+        foreach (var (user, status) in new[] { (crew, AssignmentStatus.Confirmed), (gone, AssignmentStatus.Cancelled) })
+            db.StaffAssignments.Add(new StaffAssignment
+            {
+                Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = user.Id, Status = status,
+                AssignmentStart = trip.StartDate, AssignmentEnd = trip.EndDate
+            });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var byParticipant = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>((await controller.GetBoard(ServiceDate, "participant", CancellationToken.None)).Result).Value).Data!;
+        var byStaff = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>((await controller.GetBoard(ServiceDate, "staff", CancellationToken.None)).Result).Value).Data!;
+
+        Assert.Equal(2, Assert.Single(Assert.Single(byParticipant.ParticipantRows!, r => r.ParticipantId == participant.Id).TripBars).StaffShort);
+        Assert.Equal(2, Assert.Single(Assert.Single(byStaff.StaffRows!, r => r.StaffId == crew.Id).TripBars).StaffShort);
+    }
+
+    [Fact]
     public async Task GetBoard_UnrecognisedGroupBy_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

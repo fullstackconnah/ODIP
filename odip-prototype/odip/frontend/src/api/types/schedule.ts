@@ -43,6 +43,7 @@ export interface ScheduleTripDto {
   minStaffRequired: number | null
   staffRequired: number | null
   staffAssignedCount: number
+  staffShort: number
   vehicleAssignedCount: number
   leadCoordinatorName: string | null
   preferenceMatchCount: number

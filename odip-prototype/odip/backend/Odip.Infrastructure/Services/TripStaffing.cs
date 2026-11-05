@@ -36,6 +36,13 @@ public static class TripStaffing
         trip.UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>How many staff the trip still needs: its <see cref="TripInstance.StaffRequired"/> less the staff assigned. 0 with no target, and for trips past fixing.</summary>
+    // shortcut: counts non-cancelled assignment rows for the whole trip, not distinct staff per day; upgrade when trips get per-day staffing
+    public static int StaffShort(TripInstance trip, int assigned) =>
+        trip.StaffRequired is { } required && trip.Status is not (TripStatus.Cancelled or TripStatus.Archived or TripStatus.Completed)
+            ? Math.Max(0, required - assigned)
+            : 0;
+
     /// <summary>After a participant's ratio changes: recalculates the trips they are actively booked on. Completed, cancelled and archived trips are history.</summary>
     public static async Task RecalculateForParticipantAsync(OdipDbContext db, Guid participantId, CancellationToken ct)
     {
