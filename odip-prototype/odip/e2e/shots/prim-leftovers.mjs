@@ -3,7 +3,7 @@
 // Sign-in is stubbed with page.route; data is the mock API's (shift sh-next, participant p-0001). Computed boxes only. Exit 1 on any failure.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, overlapCheck, fullPage, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -21,9 +21,10 @@ const devUsers = (role, username) => envelope([{ username, role, tenantName: 'Sa
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
 
-async function openPage(browser, { width, height, touch, scheme, role, username }) {
+async function openPage(browser, { width, height, touch, scheme, role, username, setup }) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width, height }, hasTouch: touch, isMobile: touch, colorScheme: scheme, reducedMotion: 'reduce' })
   const page = await context.newPage()
+  await setup?.(page)
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers(role, username) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role, username) }))
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -42,24 +43,61 @@ const crop = async (page, locator, name, touch, pad = 12) => {
   checks.push(checkCropHolds({ ...r, touch }))
 }
 
+// Text vs background contrast for a ghost action, in the page. Colours go through a canvas so oklch and color-mix come back as sRGB; translucent backgrounds are composited down the ancestor chain.
+function measureGhost(el) {
+  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+  const rgba = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255] }
+  const over = (top, under) => { const a = top[3]; return [0, 1, 2].map((i) => top[i] * a + under[i] * (1 - a)).concat(1) }
+  const layers = []
+  for (let n = el; n; n = n.parentElement) layers.push(rgba(getComputedStyle(n).backgroundColor))
+  let bg = [255, 255, 255, 1]
+  for (const l of layers.reverse()) bg = over(l, bg)
+  const fg = over(rgba(getComputedStyle(el).color), bg)
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]) }
+  const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a)
+  const r = el.getBoundingClientRect()
+  return { ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100, fg: fg.slice(0, 3).map(Math.round), bg: bg.slice(0, 3).map(Math.round), h: Math.round(r.height), pad: parseFloat(getComputedStyle(el, '::before').height) || 0 }
+}
+
+const NOTE = { id: 'note-ghost', shiftId: 'sh-next', authorUserId: '00000000-0000-0000-0000-0000000000a1', authorName: 'Dev User', body: 'Settled well after lunch.', createdAt: '2026-09-08T09:30:00Z', updatedAt: '2026-09-08T09:30:00Z', flaggedCategories: [], flagsAcknowledgedAt: null, incidentId: null }
+
+// A portal shift page for sh-next at 390 touch. Published by default; inProgress adds a completion, draft a saved finish draft on the report step; notes adds one note by this worker.
+async function openShift(browser, scheme, { inProgress = false, draft = false, notes = false } = {}) {
+  const setup = async (page) => {
+    if (draft) await page.addInitScript(() => sessionStorage.setItem('odip-shift-end-draft:sh-next', JSON.stringify({ step: 'report', reached: 'report', timesSig: null })))
+    await page.route('**/api/v1/portal/shifts/sh-next', async (r) => {
+      const response = await r.fetch()
+      const body = await response.json()
+      if (body?.data) {
+        body.data.status = inProgress ? 'InProgress' : 'Published'
+        if (inProgress) {
+          const start = new Date(Date.now() - 2 * 3600_000).toISOString()
+          body.data.completion = { id: 'sc-ghost', shiftId: 'sh-next', actualStart: start, actualEnd: null, timeZoneId: body.data.timeZoneId, geolocationDeclined: false, startWasManual: false, submittedByUserId: '00000000-0000-0000-0000-0000000000a1', submittedByName: 'Dev User', startedAt: start, submittedAt: null, reviewedByUserId: null, reviewedByName: null, reviewedAt: null, breaks: [], ...body.data.completion }
+          body.data.breaks ??= []
+        }
+      }
+      await r.fulfill({ response, json: body })
+    })
+    if (notes) await page.route(/\/api\/v1\/portal\/shifts\/[^/]+\/notes/, (r) => r.request().method() === 'GET' ? r.fulfill({ json: envelope([NOTE]) }) : r.continue())
+  }
+  const { context, page } = await openPage(browser, { width: 390, height: 844, touch: true, scheme, role: 'SupportWorker', username: 'dev.worker', setup })
+  await page.goto(`${BASE_URL}/portal/shifts/sh-next`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  return { context, page }
+}
+
 const browser = await chromium.launch({ headless: true })
 try {
-  // 1. Portal shift: the emergency contact call links are <a href="tel:"> of 44px or more at 390 touch.
+  // 1. Portal shift: the emergency contact call links are <a href="tel:"> of 44px or more at 390 touch, cropped with the card expanded.
   for (const scheme of ['light', 'dark']) {
     const tag = scheme === 'light' ? 'portal-call-390' : 'portal-call-dark-390'
     const t = (n) => `${tag}: ${n}`
     try {
-      const { context, page } = await openPage(browser, { width: 390, height: 844, touch: true, scheme, role: 'SupportWorker', username: 'dev.worker' })
-      await page.route('**/api/v1/portal/shifts/sh-next', async (r) => {
-        const response = await r.fetch()
-        const body = await response.json()
-        if (body?.data) body.data.status = 'Published'
-        await r.fulfill({ response, json: body })
-      })
-      await page.goto(`${BASE_URL}/portal/shifts/sh-next`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+      const { context, page } = await openShift(browser, scheme)
       const region = page.locator('#before-contacts')
       await region.waitFor({ state: 'attached', timeout: 60_000 })
       await region.scrollIntoViewIfNeeded()
+      await region.locator('summary').click()
+      check(t('card is expanded'), await region.evaluate((el) => el.open === true))
       await page.waitForTimeout(500)
       const links = await region.evaluate((el) => [...el.querySelectorAll('a')].map((a) => ({
         tag: a.tagName, href: a.getAttribute('href') ?? '', name: (a.textContent ?? '').trim(),
@@ -71,9 +109,49 @@ try {
         check(t(`"${l.name}" is at least 44px tall to tap`), Math.max(l.h, l.pad) >= 43.5, l)
       }
       await noHScroll(page, t('page'))
-      await crop(page, region, `${tag}.png`, true)
+      // Each call link lies inside the clip and is not covered by the bottom nav or any fixed chrome.
+      const r = await cropElement(page, region, path.join(OUT_DIR, `${tag}.png`), {
+        touch: true, natural: true, pad: 12,
+        during: async (clip) => { for (const [i, a] of (await region.locator('a').all()).entries()) checks.push(await overlapCheck(a, clip, `${tag} link ${i + 1}`)) },
+      })
+      checks.push(checkCropHolds({ ...r, touch: true }))
+      if (scheme === 'light') {
+        const full = await fullPage(page, path.join(OUT_DIR, 'full', 'portal-390.png'), { touch: true })
+        checks.push(...full.checks)
+      }
       await context.close()
     } catch (e) { check(t('ran'), false, String(e.message).split('\n')[0]) }
+  }
+
+  // 1b. The three ghost actions at 390 touch, light and dark: text contrast against the real background, and a 44px hit box.
+  const ghosts = [
+    { key: 'before', label: 'BeforeSection "Everything about"', find: async (page) => page.getByRole('button', { name: /^Everything about/ }) },
+    { key: 'finish', label: 'FinishFlow "Back to shift"', inProgress: true, draft: true, find: async (page) => page.getByRole('button', { name: 'Back to shift' }).first() },
+    { key: 'notes', label: 'ShiftNotesSection "Edit"', inProgress: true, notes: true, find: async (page) => { await page.getByRole('tab', { name: /^Notes/ }).click(); return page.getByRole('button', { name: 'Edit', exact: true }).first() } },
+  ]
+  for (const g of ghosts) for (const scheme of ['light', 'dark']) {
+    const tag = `portal-ghost-${g.key}${scheme === 'dark' ? '-dark' : ''}-390`
+    const t = (n) => `${tag}: ${n}`
+    let page
+    try {
+      const opened = await openShift(browser, scheme, g)
+      const { context } = opened
+      page = opened.page
+      const btn = await g.find(page)
+      await btn.waitFor({ state: 'visible', timeout: 60_000 })
+      await btn.scrollIntoViewIfNeeded()
+      await page.waitForTimeout(500)
+      const m = await btn.evaluate(measureGhost)
+      check(t(`${g.label} text contrast is at least 4.5:1`), m.ratio >= 4.5, m)
+      check(t(`${g.label} hit box is at least 44px tall`), Math.max(m.h, m.pad) >= 43.5, m)
+      await noHScroll(page, t('page'))
+      const r = await cropElement(page, btn, path.join(OUT_DIR, `${tag}.png`), { touch: true, natural: true, pad: 24 })
+      checks.push(checkCropHolds({ ...r, touch: true }))
+      await context.close()
+    } catch (e) {
+      const panel = await page?.locator('#shift-panel-notes').innerText({ timeout: 3000 }).catch(() => 'no notes panel')
+      check(t('ran'), false, `${String(e.message).split('\n')[0]} | ${String(panel).replace(/\s+/g, ' ').slice(0, 300)}`)
+    }
   }
 
   // 2. Tenant form: the Provider Settings DisclosureToggle, closed then open, at 1280.
@@ -99,6 +177,7 @@ try {
     await page.waitForTimeout(300)
     await crop(page, section('Provider Settings'), 'disclosure-open-1280.png', false)
     await noHScroll(page, 'disclosure 1280')
+    checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'tenant-form-1280.png'), { touch: false })).checks)
     await context.close()
   } catch (e) { check('disclosure ran', false, String(e.message).split('\n')[0]) }
 
