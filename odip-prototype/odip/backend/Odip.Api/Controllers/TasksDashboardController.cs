@@ -627,6 +627,10 @@ public class DashboardController : ControllerBase
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
         var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(_clock.GetUtcNow().UtcDateTime), ct);
+        // Overdue monthly restrictive practice reports: only the roles that can lodge them see the count (it also costs a few queries).
+        var rpMonthlyReportsOverdueCount = User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true
+            ? (await RestrictivePracticeReportWorklist.LinesAsync(_db, _clock.GetUtcNow().UtcDateTime, null, null, withDetails: false, ct)).Count(l => l.State == MonthlyReportState.Overdue)
+            : 0;
 
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {
@@ -641,6 +645,7 @@ public class DashboardController : ControllerBase
             TripsMissingStaff = upcomingTripIds.Count - tripsWithStaff.Count,
             OpenIncidentCount = openIncidentCount,
             QscOverdueCount = qscOverdueCount,
+            RpMonthlyReportsOverdueCount = rpMonthlyReportsOverdueCount,
             UpcomingTrips = upcomingTrips
         }));
     }

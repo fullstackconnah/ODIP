@@ -18,7 +18,15 @@ public static class BusinessDays
     public static BusinessDayDue EndOfNthAfter(DateTime fromUtc, int n, string? state, TimeZoneInfo zone,
         HolidayCalendar holidays, IReadOnlySet<int> yearsWithHolidayRows)
     {
-        var day = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(fromUtc, zone));
+        var (day, weekendsOnly) = NthAfter(DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(fromUtc, zone)), n, state, holidays, yearsWithHolidayRows);
+        return new BusinessDayDue(ProviderLocalTime.LocalToUtc(day.ToDateTime(new TimeOnly(23, 59, 59)), zone), weekendsOnly);
+    }
+
+    /// <summary>The same count from a plain date: the <paramref name="n"/>th business day after <paramref name="from"/>, as a date. A null <paramref name="state"/> skips national rows only.</summary>
+    public static (DateOnly Day, bool WeekendsOnly) NthAfter(DateOnly from, int n, string? state,
+        HolidayCalendar holidays, IReadOnlySet<int> yearsWithHolidayRows)
+    {
+        var day = from;
         var weekendsOnly = false;
         for (var counted = 0; counted < n;)
         {
@@ -29,6 +37,6 @@ public static class BusinessDays
             if (covered && holidays.On(day, state ?? "").Any(h => h.IsWholeDay)) continue;
             counted++;
         }
-        return new BusinessDayDue(ProviderLocalTime.LocalToUtc(day.ToDateTime(new TimeOnly(23, 59, 59)), zone), weekendsOnly);
+        return (day, weekendsOnly);
     }
 }

@@ -1899,6 +1899,8 @@ public record DashboardSummaryDto
     public int TripsMissingStaff { get; init; }
     public int OpenIncidentCount { get; init; }
     public int QscOverdueCount { get; init; }
+    /// <summary>Monthly restrictive practice reports past their due date; Admin, Coordinator and SuperAdmin only, 0 for other roles.</summary>
+    public int RpMonthlyReportsOverdueCount { get; init; }
     public List<TripListDto> UpcomingTrips { get; init; } = new();
 }
 
@@ -2734,3 +2736,6 @@ public record IncidentTrendMonthDto
     public int RpUses { get; init; }
     public int OtherIncidents { get; init; }
 }
+
+/// <summary>The provider's calendar date now, "yyyy-MM-dd" (GET provider-today, open to every signed-in role).</summary>
+public record ProviderTodayDto(string Date);

@@ -21,6 +21,8 @@ namespace Odip.Infrastructure.Services;
 ///    row whose <see cref="RestrictivePractice.ReviewDate"/> is in the past.
 ///    Plus three behaviour support plan rules on active entries with a first use date: <b>rp-interim-bsp-due</b> (Warning, within
 ///    <see cref="BspTimeline.DueSoonDays"/> days), <b>rp-interim-bsp-overdue</b> and <b>rp-comprehensive-bsp-overdue</b> (Critical).
+///    Plus two monthly report rules, one alert per practice: <b>rp-monthly-report-overdue</b> (Critical, any owed month past its due date) and
+///    <b>rp-monthly-report-due</b> (Warning, an owed month not yet past it); see <see cref="RestrictivePracticeReportWorklist"/>.
 /// 2. <b>high-risk-medication-witness-gap</b> (Critical) — an active, <see cref="ParticipantMedication.IsHighRisk"/>
 ///    medication with an Administered dose in the last 7 days whose <see cref="MedicationAdministration.WitnessStatus"/>
 ///    is Pending or Declined (i.e. never reached Approved).
@@ -179,6 +181,21 @@ public class ParticipantAlertsService
             if (BspTimeline.State(comprehensiveDue, null, today) == BspPlanState.Overdue)
                 Add(rp.ParticipantId, "rp-comprehensive-bsp-overdue", AlertSeverity.Critical,
                     $"Comprehensive behaviour support plan for {phrase} was due {comprehensiveDue.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)} and is overdue", "restrictive-practices");
+        }
+
+        // ── Monthly restrictive practice reports: one alert per practice, Critical when any month is overdue, else Warning for the due one ──
+        var reportLines = await RestrictivePracticeReportWorklist.LinesAsync(_db, nowUtc, null, participantIds, withDetails: false, ct);
+        foreach (var practice in reportLines.Where(l => l.State != MonthlyReportState.Lodged).GroupBy(l => l.RestrictivePracticeId))
+        {
+            var overdue = practice.Where(l => l.State == MonthlyReportState.Overdue).OrderBy(l => l.Month).ToList();
+            var first = practice.First();
+            var phrase = RestrictivePracticeAuthorisation.TypePhrase(first.PracticeType);
+            if (overdue.Count > 0)
+                Add(first.ParticipantId, "rp-monthly-report-overdue", AlertSeverity.Critical,
+                    $"Monthly report for {phrase}: {(overdue.Count == 1 ? "1 month is" : $"{overdue.Count} months are")} overdue, the oldest was due {overdue[0].DueOn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices");
+            else
+                Add(first.ParticipantId, "rp-monthly-report-due", AlertSeverity.Warning,
+                    $"Monthly report for {phrase} is due {first.DueOn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices");
         }
 
         // ── Rules 2 & 5 share the active-medications + recent-administrations data ──

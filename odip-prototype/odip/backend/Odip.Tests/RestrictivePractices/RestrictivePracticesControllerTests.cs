@@ -506,6 +506,31 @@ public class RestrictivePracticesControllerTests
         Assert.False(await db.RestrictivePractices.AnyAsync(r => r.Id == practice.Id));
     }
 
+    private static RestrictivePracticeMonthlyReport LodgedReport(Domain.Entities.RestrictivePractice practice) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = practice.TenantId, RestrictivePracticeId = practice.Id, Month = new DateOnly(2026, 10, 1), ReportType = RestrictivePracticeReportType.NotUsed,
+        LodgedOn = new DateOnly(2026, 11, 2), LodgedByName = "Sam Hill", PracticeType = practice.Type, PracticeDescription = practice.Description,
+    };
+
+    [Theory]
+    [InlineData(true, "This entry has lodged monthly reports. Deactivate it instead.")]
+    [InlineData(false, "This entry has lodged monthly reports, so it's kept as their record.")]
+    public async Task Delete_WithLodgedReports_RefusedAndRowKept(bool active, string copy)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var practice = new Domain.Entities.RestrictivePractice { Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "Kept", IsActive = active };
+        db.RestrictivePractices.Add(practice);
+        db.RestrictivePracticeMonthlyReports.Add(LodgedReport(practice));
+        db.SaveChanges();
+
+        var result = await new RestrictivePracticesController(db, new SafetyNoteSyncService(db)).Delete(practice.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<bool>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal(copy, body.Errors![0]);
+        Assert.True(await db.RestrictivePractices.AnyAsync(r => r.Id == practice.Id));
+    }
+
     // ── Derived Participant.HasRestrictivePracticeFlag sync-write ──────────
     // Fix round 1: RosteringController/PortalController read the raw column directly (not the
     // derived-on-read computation ParticipantsController uses), so every register mutation here
