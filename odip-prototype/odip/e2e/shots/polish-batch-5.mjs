@@ -123,6 +123,47 @@ async function retryCallout(page, vp, scheme) {
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `incidents-full-${vp.name}.png`), { touch: vp.touch })).checks)
 }
 
+// F1 (R7 follow-up): RetryCallout in the roster side panel, a callout under 35rem on a wide viewport. The actions wrap under the text, so the button must start
+// at the text edge in idle, pending and failed alike (the order swap keys off the callout's width, not the viewport's).
+async function rosterFillPanel(page, vp) {
+  const tag = 'F1 roster panel 1280'
+  let mode = 'fail'
+  let release
+  const held = new Promise((res) => { release = res })
+  await page.route('**/api/v1/rostering/fill*', async (r) => {
+    if (mode === 'hold') await held
+    await r.fulfill({ status: 500, json: failEnvelope('The fill chart could not be worked out.') })
+  })
+  await gotoReady(page, '/rostering', false)
+  await page.getByRole('button', { name: 'Next 8 weeks' }).first().click()
+  const panel = page.getByRole('dialog').first()
+  const button = panel.getByRole('button', { name: 'Try again' })
+  await button.waitFor({ state: 'visible', timeout: 90_000 })
+  const callout = button.locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  const measure = () => callout.evaluate((el) => {
+    const b = el.querySelector('button')
+    const text = [...el.children].find((c) => c.tagName === 'DIV' && !c.contains(b) && c.textContent.trim())
+    const cr = el.getBoundingClientRect()
+    return { btnLeft: b.getBoundingClientRect().left, textLeft: text.getBoundingClientRect().left, width: cr.width }
+  })
+  const idle = await measure()
+  check(`${tag}: the callout is under 35rem (560px), so the actions wrap`, idle.width < 560, idle)
+  check(`${tag} idle: button left edge equals the text left edge (2px)`, within(idle.btnLeft, idle.textLeft, 2), idle)
+  await crop(page, vp, 'roster-fill-panel-error-1280', callout)
+  mode = 'hold'
+  await button.click()
+  await page.getByText('Trying again…').first().waitFor({ state: 'visible', timeout: 10_000 })
+  const pending = await measure()
+  check(`${tag} pending: button left edge equals the text left edge (2px)`, within(pending.btnLeft, pending.textLeft, 2), pending)
+  mode = 'fail'
+  release()
+  await page.getByText("Couldn't load it again.").first().waitFor({ state: 'visible', timeout: 90_000 })
+  const failed = await measure()
+  check(`${tag} failed: button left edge equals the text left edge (2px)`, within(failed.btnLeft, failed.textLeft, 2), failed)
+  check(`${tag}: button x identical across idle, pending, failed (1px)`, within(idle.btnLeft, pending.btnLeft, 1) && within(idle.btnLeft, failed.btnLeft, 1), { idle: idle.btnLeft, pending: pending.btnLeft, failed: failed.btnLeft })
+  await noOverflow(page, tag)
+}
+
 // AR1: the auto-roster panel after an apply the app could not confirm (the request is dropped), then after a 500.
 async function autoRoster(page, vp) {
   const tag = `AR1 ${vp.name}`
@@ -222,23 +263,7 @@ async function claimsReady(page, vp) {
       return { thWidth: el.getBoundingClientRect().width, cellWidths: cells.map((c) => +c.getBoundingClientRect().width.toFixed(1)), cellHeights: cells.map((c) => +c.getBoundingClientRect().height.toFixed(1)) }
     })
     check(`${tag}: Checks cell width >= 256px`, m.thWidth >= 255.5 && m.cellWidths.every((w) => w >= 255.5), m)
-    // Does the class do anything? Squeeze the table to 640px with and without it (the fixture's natural width is already past 16rem).
-    const squeeze = (drop) => th.evaluate((el, dropClass) => {
-      const table = el.closest('table')
-      const idx = [...el.parentElement.children].indexOf(el)
-      const marked = [...table.querySelectorAll('.md\\:min-w-\\[16rem\\]')]
-      if (dropClass) marked.forEach((n) => n.classList.remove('md:min-w-[16rem]'))
-      const before = table.style.width
-      table.style.width = '640px'
-      const w = el.getBoundingClientRect().width
-      const cells = [...table.querySelectorAll('tbody tr')].map((tr) => +tr.children[idx].getBoundingClientRect().width.toFixed(1))
-      table.style.width = before
-      if (dropClass) marked.forEach((n) => n.classList.add('md:min-w-[16rem]'))
-      return { marked: marked.length, th: +w.toFixed(1), cells }
-    }, drop)
-    const withClass = await squeeze(false)
-    const withoutClass = await squeeze(true)
-    check(`${tag}: squeezed to 640px, the Checks column still holds >= 256px with the class`, withClass.marked > 0 && withClass.th >= 255.5, { withClass, withoutClass })
+    // CK1 was dropped (the min width gained 6-8px only); the squeeze-with-and-without-the-class check went with it.
     await noOverflow(page, tag)
     if (vp.name === '1280') await crop(page, vp, 'claims-ready-checks-1280', page.locator('main table').filter({ has: page.locator('th', { hasText: /^Checks$/ }) }).first(), 8)
   } else {
@@ -268,6 +293,9 @@ try {
       await s.context.close()
       s = await open()
       await safe('AR1', () => autoRoster(s.page, vp))
+      await s.context.close()
+      s = await open()
+      await safe('F1 roster panel', () => rosterFillPanel(s.page, vp))
       await s.context.close()
     }
     if (vp.name !== '1536') {
