@@ -179,6 +179,26 @@ public class ObligationTaskServiceTests
     }
 
     [Fact]
+    public async Task CompleteAsync_UnfilteredContext_StampsEachTaskWithItsOwnTenantsProviderDate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());   // no tenant: a hosted job or SuperAdmin sees every organisation's rows
+        var wa = Guid.NewGuid();
+        var nsw = Guid.NewGuid();
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = wa, State = "WA" });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = nsw, State = "NSW" });
+        db.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), TenantId = wa, TaskType = TaskType.IncidentQscReport, Title = "wa", SourceKey = "k", Status = TaskItemStatus.NotStarted });
+        db.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), TenantId = nsw, TaskType = TaskType.IncidentQscReport, Title = "nsw", SourceKey = "k", Status = TaskItemStatus.NotStarted });
+        await db.SaveChangesAsync();
+
+        // 15:00Z on 3 Oct 2026 is 23:00 on 3 Oct in Perth (AWST) and 01:00 on 4 Oct in Sydney (AEST, before daylight saving starts).
+        await new ObligationTaskService(db, FakeClock.AtUtc(2026, 10, 3, 15, 0)).CompleteAsync("k", CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(new DateOnly(2026, 10, 3), (await db.BookingTasks.SingleAsync(t => t.TenantId == wa)).CompletedDate);
+        Assert.Equal(new DateOnly(2026, 10, 4), (await db.BookingTasks.SingleAsync(t => t.TenantId == nsw)).CompletedDate);
+    }
+
+    [Fact]
     public async Task CompleteAsync_ExistingNotStartedTask_MarksCompletedWithAutoCompletedAt()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
