@@ -5,13 +5,13 @@ import { MemoryRouter } from 'react-router-dom'
 import type { RpReportLine } from '@/api/types/restrictive-practices'
 import { MonthlyReportModal } from './MonthlyReportModal'
 
-const { mockLodge, mockUndo } = vi.hoisted(() => ({ mockLodge: vi.fn(), mockUndo: vi.fn() }))
+const { mockLodge, mockUndo, mockToday } = vi.hoisted(() => ({ mockLodge: vi.fn(), mockUndo: vi.fn(), mockToday: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
   useLodgeRpReport: () => ({ mutateAsync: mockLodge, isPending: false }),
   useUndoRpReport: () => ({ mutateAsync: mockUndo, isPending: false }),
 }))
-vi.mock('@/hooks/useProviderToday', () => ({ useProviderToday: () => '2026-11-04' }))
+vi.mock('@/hooks/useProviderToday', () => ({ useProviderToday: () => mockToday() }))
 
 function makeLine(overrides: Partial<RpReportLine> = {}): RpReportLine {
   return {
@@ -33,7 +33,7 @@ function renderModal(line: RpReportLine | null, extra: { presetType?: 'Eliminate
   return { onClose, onReload }
 }
 
-beforeEach(() => { mockLodge.mockReset(); mockUndo.mockReset() })
+beforeEach(() => { mockLodge.mockReset(); mockUndo.mockReset(); mockToday.mockReturnValue('2026-11-04') })
 
 describe('MonthlyReportModal: lodging', () => {
   it('is closed with no line', () => {
@@ -138,6 +138,31 @@ describe('MonthlyReportModal: lodging', () => {
     await user.click(screen.getByRole('button', { name: 'Reload' }))
     expect(onReload).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('MonthlyReportModal: the lodged date default', () => {
+  const modal = (line: RpReportLine) => <MemoryRouter><MonthlyReportModal line={line} onClose={vi.fn()} onReload={vi.fn()} /></MemoryRouter>
+
+  it('follows the provider day once it loads', () => {
+    mockToday.mockReturnValue('2026-11-03') // the browser's day while the read is in flight
+    const { rerender } = render(modal(makeLine()))
+    expect(screen.getByLabelText(/Lodged in the portal on/)).toHaveValue('2026-11-03')
+    mockToday.mockReturnValue('2026-11-04')
+    rerender(modal(makeLine()))
+    expect(screen.getByLabelText(/Lodged in the portal on/)).toHaveValue('2026-11-04')
+  })
+
+  it('never overwrites a date the user typed', async () => {
+    const user = userEvent.setup()
+    mockToday.mockReturnValue('2026-11-03')
+    const { rerender } = render(modal(makeLine()))
+    const date = screen.getByLabelText(/Lodged in the portal on/)
+    await user.clear(date)
+    await user.type(date, '2026-11-02')
+    mockToday.mockReturnValue('2026-11-04')
+    rerender(modal(makeLine()))
+    expect(screen.getByLabelText(/Lodged in the portal on/)).toHaveValue('2026-11-02')
   })
 })
 
