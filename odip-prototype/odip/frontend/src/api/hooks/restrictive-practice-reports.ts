@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiDeleteRaw } from '../client'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import type { RpReportLine, LodgeRpReportDto } from '../types'
 
 /** `participantId` narrows to one participant (the register's chips); without it, every month the organisation owes. */
@@ -35,5 +36,7 @@ export function useUndoRpReport() {
   return useMutation({
     mutationFn: (reportId: string) => apiDeleteRaw<boolean>(`/restrictive-practice-reports/${reportId}`),
     onSuccess: invalidate,
+    // 404: someone else already undid it, so the worklist still showing Lodged is stale.
+    onError: err => { if (apiErrorStatus(err) === 404) invalidate() },
   })
 }
