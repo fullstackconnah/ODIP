@@ -20,7 +20,7 @@ public class ProviderTodayControllerTests
     private sealed class FixedClock(DateTime utc) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(utc); }
 
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-0000-0000-0000-00000000000a");
-    private static readonly DateTime LateUtc = new(2026, 11, 5, 23, 30, 0, DateTimeKind.Utc); // Nov 6 07:30 in Perth, Nov 6 10:30 in Sydney
+    private static readonly DateTime LateUtc = new(2026, 11, 5, 14, 0, 0, DateTimeKind.Utc); // Nov 6 01:00 in Sydney, Nov 5 23:30 in Darwin, Nov 5 22:00 in Perth
 
     private static async Task<string?> TodayAsync(string? zone, bool withRow = true)
     {
@@ -34,8 +34,8 @@ public class ProviderTodayControllerTests
     }
 
     [Fact]
-    public async Task A_Perth_organisation_late_in_the_UTC_day_gets_the_next_calendar_date() =>
-        Assert.Equal("2026-11-06", await TodayAsync("Australia/Perth"));
+    public async Task A_Perth_organisation_keeps_the_earlier_date_than_Sydney() =>
+        Assert.Equal("2026-11-05", await TodayAsync("Australia/Perth"));
 
     [Fact]
     public async Task An_organisation_with_no_settings_row_gets_the_Sydney_date() =>
@@ -43,7 +43,7 @@ public class ProviderTodayControllerTests
 
     [Fact]
     public async Task A_Darwin_organisation_keeps_the_earlier_date_than_Sydney() =>
-        Assert.Equal("2026-11-06", await TodayAsync("Australia/Darwin")); // 09:00 on Nov 6 in Darwin
+        Assert.Equal("2026-11-05", await TodayAsync("Australia/Darwin"));
 
     private static bool Allows(string role)
     {
