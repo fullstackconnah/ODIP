@@ -59,18 +59,19 @@ export function RetryCallout({ tone = 'danger', onRetry, children }: { tone?: 'd
 
   // The visible line sits beside the button, inside the actions row, so the banner never changes height; the polite status node is what assistive tech hears.
   const status = state === 'pending' ? 'Trying again…' : state === 'failed' ? "Couldn't load it again." : ''
+  // @container: the actions wrap under the text by the callout's own width (about 35rem), not the viewport's, so the order swap keys off the same box.
   return (
-    <div>
+    <div className="@container">
       <Callout
         tone={tone}
         actions={onRetry ? (
-          <>
+          <div className="flex items-center gap-2 @max-[35rem]:ml-7">
             <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="min-h-[var(--tap-min)] aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
               Try again
             </Button>
-            {/* A fixed width, so the right-aligned button holds one x position in idle, pending and failed (the failed copy measures about 136px). */}
-            <span aria-hidden="true" className="min-w-[8.75rem] text-[var(--color-muted-foreground)]">{status}</span>
-          </>
+            {/* A fixed width, so the right-aligned button (the status sits left of it once the callout is 35rem wide, after it below) holds one x position in idle, pending and failed (the failed copy measures about 136px). */}
+            <span aria-hidden="true" className="order-last @[35rem]:order-first min-w-[8.75rem] text-[var(--color-muted-foreground)]">{status}</span>
+          </div>
         ) : undefined}
       >
         {children}
