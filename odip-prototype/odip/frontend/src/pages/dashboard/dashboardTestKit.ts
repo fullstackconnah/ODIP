@@ -114,7 +114,7 @@ export const clearRow = () => screen.queryByText('All clear', { selector: 'span.
 
 // Danger tiles first (the band deals them first, keeping the given order within a tone), then the warnings.
 export const FULL_ORDER = [
-  'Qualification issues', 'Critical participant alerts', 'Budgets at risk', 'Overdue', 'NDIS Commission overdue',
+  'Qualification issues', 'Critical participant alerts', 'Budgets at risk', 'Overdue', 'NDIS Commission overdue', 'RP monthly reports overdue',
   'Missing accommodation', 'Missing vehicles', 'Missing staff', 'Open incidents', 'Pending leave', 'Shift completions',
 ]
 
@@ -139,6 +139,6 @@ export function showAll() {
   mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
   mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(3))
   mockUseDashboard.mockReturnValue(summaryData({
-    overdueTaskCount: 3, tripsMissingAccommodation: 3, tripsMissingVehicles: 3, tripsMissingStaff: 3, openIncidentCount: 3, qscOverdueCount: 3,
+    overdueTaskCount: 3, tripsMissingAccommodation: 3, tripsMissingVehicles: 3, tripsMissingStaff: 3, openIncidentCount: 3, qscOverdueCount: 3, rpMonthlyReportsOverdueCount: 3,
   }))
 }

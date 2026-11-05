@@ -62,6 +62,9 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public class ParticipantAlertsService
 {
+    /// <summary>Where the monthly restrictive practice report alerts lead: the Incidents page's RP reports tab.</summary>
+    private const string RpReportsLink = "/incidents?view=rp-reports";
+
     /// <summary>Lookback window for the medication-administration-based signals (rules 2 and 5).</summary>
     private const int AdministrationWindowDays = 7;
 
@@ -192,10 +195,10 @@ public class ParticipantAlertsService
             var phrase = RestrictivePracticeAuthorisation.TypePhrase(first.PracticeType);
             if (overdue.Count > 0)
                 Add(first.ParticipantId, "rp-monthly-report-overdue", AlertSeverity.Critical,
-                    $"Monthly report for {phrase}: {(overdue.Count == 1 ? "1 month is" : $"{overdue.Count} months are")} overdue, the oldest was due {overdue[0].DueOn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices");
+                    $"Monthly report for {phrase}: {(overdue.Count == 1 ? "1 month is" : $"{overdue.Count} months are")} overdue, the oldest was due {overdue[0].DueOn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices", RpReportsLink);
             else
                 Add(first.ParticipantId, "rp-monthly-report-due", AlertSeverity.Warning,
-                    $"Monthly report for {phrase} is due {first.DueOn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices");
+                    $"Monthly report for {phrase} is due {first.DueOn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices", RpReportsLink);
         }
 
         // ── Rules 2 & 5 share the active-medications + recent-administrations data ──

@@ -34,12 +34,12 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
     expect(mockUseDecisionGroups).toHaveBeenLastCalledWith(ALL_GATES, expect.objectContaining({ mayCloseBudgetReview: false }))
   })
 
-  it('gives a Coordinator at most the five alert tiles: no moved item is a tile for a viewer who has its group', () => {
+  it('gives a Coordinator at most the six alert tiles: no moved item is a tile for a viewer who has its group', () => {
     showAll()
     asRole('Coordinator')
     renderPage()
 
-    expect(tileLabels()).toEqual(['Budgets at risk', 'Missing accommodation', 'Missing vehicles', 'Missing staff'])
+    expect(tileLabels()).toEqual(['Budgets at risk', 'RP monthly reports overdue', 'Missing accommodation', 'Missing vehicles', 'Missing staff'])
   })
 
   it('shows ReadOnly no decisions at all: no heading, no line', () => {
@@ -58,7 +58,7 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: 'Needs your decision' })).toBeInTheDocument()
     expect(screen.getByText('Choose an organisation to see its approvals.')).toBeInTheDocument()
-    expect(tileLabels()).toHaveLength(10)
+    expect(tileLabels()).toHaveLength(11)
   })
 
   it('decides as an Admin does for a SuperAdmin viewing an organisation', () => {
@@ -171,7 +171,7 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
     renderPage()
 
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
-    expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, staff credentials to update, tasks due, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff and unclaimed shifts.')).toBeInTheDocument()
+    expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, staff credentials to update, tasks due, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff, overdue restrictive practice monthly reports and unclaimed shifts.')).toBeInTheDocument()
     expect(h2s()).toEqual(['Upcoming trips'])
   })
 
