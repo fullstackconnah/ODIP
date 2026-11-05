@@ -46,7 +46,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.ci != 'false' }}
     # the job name is pinned by the merge tooling (merge-chain.sh); keep it
-    name: Backend (.NET 8, EF, PostgreSQL)
+    name: Backend (.NET 10, EF, PostgreSQL)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
