@@ -174,6 +174,12 @@ describe('todayInZone', () => {
     expect(todayInZone('Australia/Perth', instant)).toBe('2026-11-05')
   })
 
+  it('gives the new day on a daylight-saving change day', () => {
+    if (!setZone('UTC')) return
+    // Sydney moves to daylight time at 02:00 on 4 Oct 2026; 16:00 UTC on 3 Oct is 03:00 there.
+    expect(todayInZone('Australia/Sydney', new Date('2026-10-03T16:00:00Z'))).toBe('2026-10-04')
+  })
+
   it("falls back to the browser's day when the zone is unknown or not a zone", () => {
     if (!setZone('UTC')) return
     expect(todayInZone(undefined, instant)).toBe('2026-11-05')

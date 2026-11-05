@@ -28,6 +28,18 @@ describe('useProviderToday', () => {
     expect(renderHook(() => useProviderToday()).result.current).toBe('2026-11-05')
   })
 
+  it('matches the State case-insensitively', () => {
+    mockSettings.mockReturnValue({ data: { timeZoneId: null, state: 'nsw' } })
+    expect(renderHook(() => useProviderToday()).result.current).toBe('2026-11-06')
+  })
+
+  it('uses Sydney when the organisation has no settings row or a blank or unknown State, as the server does', () => {
+    for (const data of [null, { timeZoneId: null, state: null }, { timeZoneId: null, state: '' }, { timeZoneId: null, state: 'XX' }]) {
+      mockSettings.mockReturnValue({ data })
+      expect(renderHook(() => useProviderToday()).result.current).toBe('2026-11-06')
+    }
+  })
+
   it("falls back to the browser's day while the settings are missing, and passes `enabled` on", () => {
     mockSettings.mockReturnValue({ data: undefined })
     expect(renderHook(() => useProviderToday(false)).result.current).toBe('2026-11-05')
