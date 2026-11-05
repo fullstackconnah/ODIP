@@ -2135,6 +2135,24 @@ function claimDetail(c) {
   }
 }
 
+/** ClaimPreviewResponseDto for POST trips/:id/claims/preview. The trip picks the state so the shots reach each without a second fixture: t-0002 has the unpriced-days note only, t-0003 the note plus left-out participants, any other trip neither. */
+function tripClaimPreview(tripId) {
+  const lineItems = [
+    { participantName: 'Sam Lee', ndisNumber: '430000001', supportItemCode: '01_011_0107_1_1', dayTypeLabel: 'Saturday', dayType: 'Saturday', supportsDeliveredFrom: '2026-07-04', supportsDeliveredTo: '2026-07-04', hours: 10, unitPrice: 68.4, totalAmount: 684 },
+    { participantName: 'Jo Park', ndisNumber: '430000002', supportItemCode: '01_011_0107_1_1', dayTypeLabel: 'Sunday', dayType: 'Sunday', supportsDeliveredFrom: '2026-07-05', supportsDeliveredTo: '2026-07-05', hours: 10, unitPrice: 82.1, totalAmount: 821 },
+  ]
+  const leftOut = tripId === 't-0003' ? [
+    { participantId: 'p-sam', description: 'Sam Lee', reason: 'Has no NDIS number on file.' },
+    { participantId: 'p-long', description: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', reason: 'Has no NDIS number on file.' },
+  ] : []
+  return {
+    departureTime: '08:00', returnTime: '18:00', activeHoursPerDay: 10, staffCount: 2, state: 'QLD', confirmedParticipantCount: 2 + leftOut.length,
+    lineItems, totalAmount: 1505, leftOut,
+    unpricedDaysNote: tripId === 't-0002' || tripId === 't-0003'
+      ? "Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days." : null,
+  }
+}
+
 /** ShiftClaimRunDto for POST claims/from-shifts[/preview]. See the route comment for the fixture. */
 function shiftClaimRun(body, make) {
   const from = body?.from ?? '2026-10-19', to = body?.to ?? '2026-11-01'
@@ -3351,6 +3369,7 @@ const postRoutes = [
   // doesn't add the new claim to the `claims` fixture, so a follow-up GET
   // /participants/:id/claims still returns the same fixed list.
   ['participants/:id/claims/from-shifts/preview', () => shiftClaimPreview()],
+  ['trips/:id/claims/preview', (id) => tripClaimPreview(id)],
   ['participants/:id/claims/from-shifts', (id, body) => ({
     id: 'claim-mock-0001', kind: 'Shift', participantId: id,
     periodFrom: body?.from ?? '2026-08-01', periodTo: body?.to ?? '2026-08-14',
