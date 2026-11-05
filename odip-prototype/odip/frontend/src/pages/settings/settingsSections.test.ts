@@ -27,7 +27,7 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'retention', 'integrations', 'failed-sends'])
     expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'templates', 'activities', 'referral-sources', 'holidays', 'export'])
     expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
@@ -61,7 +61,7 @@ describe('who sees which section', () => {
 
 // Old ?tab= key → where each role lands at md and up. 'profile' is the fallback for a key the role can't see (below md it is the list).
 // Columns: Admin, Coordinator, SuperAdmin viewing an organisation, SuperAdmin with none. 14 keys from main plus export, integrations and
-// retention (retention has no section yet; ?tab=integrations is baked into sent emails).
+// retention (an Admin only: the Tasks row links to ?tab=retention; ?tab=integrations is baked into sent emails).
 const LEGACY: [string, SectionKey, SectionKey, SectionKey, SectionKey][] = [
   ['templates', 'templates', 'templates', 'templates', 'profile'],
   ['activities', 'activities', 'activities', 'activities', 'profile'],
@@ -79,7 +79,7 @@ const LEGACY: [string, SectionKey, SectionKey, SectionKey, SectionKey][] = [
   ['notifications-admin', 'failed-sends', 'profile', 'failed-sends', 'failed-sends'],
   ['export', 'export', 'export', 'export', 'profile'],
   ['integrations', 'integrations', 'profile', 'integrations', 'profile'],
-  ['retention', 'profile', 'profile', 'profile', 'profile'],
+  ['retention', 'retention', 'profile', 'profile', 'profile'],
 ]
 
 describe('every legacy ?tab= key, for every role that opens Settings (the plan builder and sent emails rely on them)', () => {
@@ -158,5 +158,18 @@ describe('Rostering rules and Alert windows entries', () => {
   })
   it('words Alert windows as the two expiry warnings only', () => {
     expect(entry('alerts')?.description).toBe("How early we warn before a staff qualification or a participant's plan expires.")
+  })
+})
+
+describe('Data retention section', () => {
+  const keys = (role: RoleCase, viewingAs = false) => visibleSections({ ...ROLES[role](), viewingAs }).map(s => s.key)
+
+  it('is the Admin\'s, right after Data export', () => {
+    expect(keys('Admin').indexOf('retention')).toBe(keys('Admin').indexOf('export') + 1)
+  })
+
+  it('is hidden from a Coordinator, a SuperAdmin and an Admin viewing as someone', () => {
+    for (const role of ['Coordinator', 'SuperAdmin', 'SuperAdminNoOrg'] as const) expect(keys(role), role).not.toContain('retention')
+    expect(keys('Admin', true)).not.toContain('retention')
   })
 })
