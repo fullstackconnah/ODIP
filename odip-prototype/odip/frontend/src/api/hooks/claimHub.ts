@@ -1,15 +1,25 @@
 import { isAxiosError } from 'axios'
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { readText, serverSentence } from './data-export'
+import { fetchPagedList } from './pagedList'
 import { awaitsData } from '@/lib/queryPhase'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
-import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, ManualClaimPreviewDto, ManualClaimRequestDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
+import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, ManualClaimPreviewDto, ManualClaimRequestDto, ManagedClaimDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
 export function useHubLines() {
   return useQuery({ queryKey: ['claim-hub', 'lines'], queryFn: () => apiGet<HubLinesDto>('/claim-hub/lines') })
+}
+
+/** GET /claim-hub/managed: one server-paged slice of the plan- and self-managed claims, newest first. The previous page stays on screen while the next one loads. Under the claim-hub key, so every hub write refreshes it. */
+export function useManagedClaims(params: Record<string, string>) {
+  return useQuery({
+    queryKey: ['claim-hub', 'managed', params],
+    queryFn: () => fetchPagedList<ManagedClaimDto>('/claim-hub/managed', params),
+    placeholderData: keepPreviousData,
+  })
 }
 
 export const CLAIM_PIPELINE_KEY = ['claim-hub', 'pipeline'] as const

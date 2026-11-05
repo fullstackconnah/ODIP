@@ -41,7 +41,7 @@ try {
     await signIn.click()
     await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 60_000 })
     // An empty hub behind the modal: the mock's long Ready list would make the 390 full page taller than the capture helper can hold, and the hub is not what is under test.
-    await page.route('**/api/v1/claim-hub/lines', r => r.fulfill({ json: envelope({ ready: [], rejected: [], managed: [] }) }))
+    await page.route('**/api/v1/claim-hub/lines', r => r.fulfill({ json: envelope({ ready: [], rejected: [] }) }))
     await page.goto(`${BASE_URL}/claims`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await page.getByRole('button', { name: 'Claim shifts' }).waitFor({ timeout: 60_000 })
     await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})

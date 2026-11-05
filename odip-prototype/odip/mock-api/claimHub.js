@@ -170,8 +170,16 @@ function create({ respond, failEnvelope, FILE }) {
   return {
     get: [
       ['claim-hub/lines', () => (registrationMissing
-        ? { ready, rejected, managed, registrationProblem: 'Add your NDIS registration number in Settings first.' }
-        : { ready, rejected, managed })],
+        ? { ready, rejected, registrationProblem: 'Add your NDIS registration number in Settings first.' }
+        : { ready, rejected })],
+      // Server-paged like GET /claim-hub/managed: ?funding=plan|self (empty = both), newest first, ?page=&pageSize=.
+      ['claim-hub/managed', (searchParams) => {
+        const funding = searchParams?.get('funding')
+        const page = Math.max(1, Number(searchParams?.get('page')) || 1)
+        const pageSize = Math.max(1, Number(searchParams?.get('pageSize')) || 50)
+        const rows = managed.filter((m) => !funding || m.fundingType === funding).sort((a, b) => a.ageDays - b.ageDays)
+        return { items: rows.slice((page - 1) * pageSize, page * pageSize), totalCount: rows.length, page, pageSize }
+      }],
       ['claim-batches', () => batches],
       ['claim-batches/:id', (id) => (findBatch(id) ? { ...findBatch(id), lines: lines[id] } : fail(404, 'File not found.'))],
       ['claim-batches/:id/file', (id) => {

@@ -153,7 +153,7 @@ const cardGap = (root) => root.evaluate((el) => {
 })
 async function runModal(page, vp, scheme) {
   const tag = `${vp.name} ${scheme}`
-  await page.route('**/api/v1/claim-hub/lines', (r) => r.fulfill({ json: envelope({ ready: [], rejected: [], managed: [] }) }))
+  await page.route('**/api/v1/claim-hub/lines', (r) => r.fulfill({ json: envelope({ ready: [], rejected: [] }) }))
   await gotoReady(page, '/claims', scheme === 'dark')
   await page.getByRole('button', { name: 'Claim shifts' }).click()
   const dialog = page.getByRole('dialog')

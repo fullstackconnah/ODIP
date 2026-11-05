@@ -73,4 +73,4 @@ public sealed record ManagedClaimDto(
     Guid ClaimId, string ClaimReference, Guid? ParticipantId, string? ParticipantName, string FundingType, TripClaimStatus ClaimStatus, decimal TotalAmount,
     int AgeDays, string AgeBand, List<ManagedInvoiceDto> Invoices);
 
-public sealed record HubLinesDto(List<HubLineDto> Ready, List<RejectedLineDto> Rejected, List<ManagedClaimDto> Managed, string? RegistrationProblem);
+public sealed record HubLinesDto(List<HubLineDto> Ready, List<RejectedLineDto> Rejected, string? RegistrationProblem);

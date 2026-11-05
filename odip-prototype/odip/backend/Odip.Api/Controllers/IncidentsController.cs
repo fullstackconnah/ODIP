@@ -367,7 +367,7 @@ public class IncidentsController : ControllerBase
         [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId,
         [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default,
         // Last, so every existing caller keeps compiling; bound by name like the others.
-        [FromQuery] bool? needsAttention = null)
+        [FromQuery] bool? needsAttention = null, [FromQuery] Guid? involvedParticipantId = null)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
@@ -394,6 +394,7 @@ public class IncidentsController : ControllerBase
         if (qscStatus.HasValue) query = query.Where(i => i.QscReportingStatus == qscStatus.Value);
         if (shiftId.HasValue) query = query.Where(i => i.ShiftId == shiftId.Value);
         if (involvedUserId.HasValue) query = query.Where(i => i.InvolvedUserId == involvedUserId.Value);
+        if (involvedParticipantId.HasValue) query = query.Where(i => i.InvolvedParticipantId == involvedParticipantId.Value);
 
         // Moved server-side from IncidentsPage.tsx's client-side `.filter(i => i.isOverdue24h)`,
         // which used to run over the full (unpaged) result set. Once GetAll only sends one page,

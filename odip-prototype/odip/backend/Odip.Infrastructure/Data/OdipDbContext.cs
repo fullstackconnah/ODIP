@@ -166,6 +166,7 @@ public class OdipDbContext : DbContext
 
     /// <summary>Onboarding import batches (Settings → Import data) and the records each created: see <see cref="Entities.ImportBatch"/>.</summary>
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+    public DbSet<PurgeRecord> PurgeRecords => Set<PurgeRecord>();
     public DbSet<ImportBatchItem> ImportBatchItems => Set<ImportBatchItem>();
 
     /// <summary>Employment Hero Payroll (Settings → Integrations): the connection, the Needs-attention items and the sync log. See Domain/Integrations.</summary>
@@ -2075,6 +2076,17 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.EarlyAccessRequestId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── Purge tombstones (7-year retention) ──────────────────────
+        modelBuilder.Entity<PurgeRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EntityType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ConfirmedByName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(PurgeRecord.ReasonMaxLength).IsRequired();
+            // Backs idempotency: a repeated or racing confirm finds the first record instead of purging twice.
+            entity.HasIndex(e => new { e.TenantId, e.EntityType, e.EntityId }).IsUnique();
+        });
+
         // ── Onboarding import batches ──────────────────────────────
         modelBuilder.Entity<ImportBatch>(entity =>
         {
@@ -2498,6 +2510,8 @@ public class OdipDbContext : DbContext
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ImportBatch>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<PurgeRecord>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<IncidentReport>()

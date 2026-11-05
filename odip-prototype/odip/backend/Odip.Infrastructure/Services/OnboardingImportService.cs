@@ -11,6 +11,7 @@ using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Retention;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
 
@@ -468,11 +469,13 @@ public sealed partial class OnboardingImportService
         {
             // Archived, not deleted: the audit log keeps the import and the undo. A draft stays on the Onboarding tab whatever IsActive says
             // (ParticipantStages), so an onboarding import's drafts are finalised as archived too: they leave that tab for the Archived view.
+            var retentionToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             foreach (var participant in await _db.Participants.Where(p => ids.Contains(p.Id)).ToListAsync(ct))
             {
                 participant.IsActive = false;
                 participant.IsDraft = false;
                 participant.UpdatedAt = now;
+                RetentionClock.OnActiveChanged(participant, false, retentionToday);
             }
             // The People the import made for its contacts go too, with their roles, while nothing else uses them: no role on another
             // participant or added since, and neither the person nor the role edited since. Any other stays, linked to the archived participant.

@@ -28,12 +28,13 @@ public class ClaimBatchWireContractTests
 
         var hub = JsonDocument.Parse(JsonSerializer.Serialize(await f.Service.HubAsync(f.TenantId, default), Json)).RootElement;
         var ready = hub.GetProperty("ready").EnumerateArray().ToDictionary(r => r.GetProperty("lineId").GetGuid());
-        var managed = hub.GetProperty("managed").EnumerateArray().Select(m => m.GetProperty("fundingType").GetString()).Order().ToList();
+        var managed = JsonDocument.Parse(JsonSerializer.Serialize(await f.Service.ManagedAsync(f.TenantId, [PlanType.PlanManaged, PlanType.SelfManaged], 1, 50, default), Json)).RootElement.GetProperty("items").EnumerateArray().Select(m => m.GetProperty("fundingType").GetString()).Order().ToList();
 
         Assert.Equal("trip", ready[trip[0].Id].GetProperty("claimKind").GetString());
         Assert.Equal("shift", ready[shift[0].Id].GetProperty("claimKind").GetString());
         Assert.All(ready.Values, r => Assert.Equal("agency", r.GetProperty("fundingType").GetString()));
         Assert.Equal(["plan", "self"], managed);
+        Assert.False(hub.TryGetProperty("managed", out _));
 
         var built = await f.BuildAsync(trip[0].Id);
         Assert.True(built.Ok, string.Join("; ", built.Errors ?? []));
