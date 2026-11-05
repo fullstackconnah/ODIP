@@ -59,7 +59,7 @@ public class ClientErrorsControllerTests
         Assert.IsType<NoContentResult>(result);
         var entry = Assert.Single(log.Entries);
         Assert.Equal(LogLevel.Warning, entry.Level);
-        Assert.Equal("Client error boundary at /schedule: Cannot read x", entry.Message);
+        Assert.Equal($"Client error boundary at /schedule: Cannot read x (user {UserId}, org {TenantId}) stack at a (b.js:1) component in Foo", entry.Message);
         Assert.Equal(UserId, entry.Props["UserId"]);
         Assert.Equal(TenantId, entry.Props["TenantId"]);
         Assert.Equal("at a (b.js:1)", entry.Props["Stack"]);
@@ -109,7 +109,35 @@ public class ClientErrorsControllerTests
         var entry = Assert.Single(log.Entries);
         Assert.DoesNotContain('\r', entry.Message);
         Assert.DoesNotContain('\n', entry.Message);
-        Assert.Equal("Client error error at /ab: badFake line", entry.Message);
+        Assert.StartsWith("Client error error at /ab: badFake line", entry.Message);
+    }
+
+    [Fact]
+    public void AStackWithLineBreaks_StaysOnOneLine_AndTheIdsAndAFrameReachTheFormattedMessage()
+    {
+        var (controller, log) = Make();
+
+        controller.Report(new ClientErrorRequest("boom", "Error: boom\r\n    at render (App.tsx:9)\n\nFAKE log line\u0007", "in A\nin B", "/x", "error"));
+
+        var message = Assert.Single(log.Entries).Message;
+        Assert.DoesNotContain('\n', message);
+        Assert.DoesNotContain('\r', message);
+        Assert.Contains(UserId.ToString(), message);
+        Assert.Contains(TenantId.ToString(), message);
+        Assert.Contains("at render (App.tsx:9)", message);
+        Assert.Contains("in A | in B", message);
+    }
+
+    [Fact]
+    public async Task AReadOnlyDelete_OnTheClientErrorsRoute_IsRefused()
+    {
+        var middleware = new ReadOnlyMiddleware(_ => Task.CompletedTask);
+        var context = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "ReadOnly")], "test")) };
+        context.Request.Method = "DELETE";
+        context.Request.Path = "/api/v1/client-errors";
+        context.Response.Body = new MemoryStream();
+        await middleware.InvokeAsync(context);
+        Assert.Equal(403, context.Response.StatusCode);
     }
 
     [Theory]

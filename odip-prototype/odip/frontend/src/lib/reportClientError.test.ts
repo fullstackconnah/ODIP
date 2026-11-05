@@ -23,6 +23,16 @@ describe('reportClientError', () => {
     expect(JSON.stringify(body)).not.toContain('participant=abc')
   })
 
+  it('cuts a deep component stack, a long stack and a long message before sending', () => {
+    const err = new Error('m'.repeat(900))
+    err.stack = 's'.repeat(9000)
+    reportClientError('boundary', err, 'c'.repeat(20000))
+    const body = post.mock.calls[0][1]
+    expect(body.componentStack).toHaveLength(4000)
+    expect(body.stack).toHaveLength(4000)
+    expect(body.message).toHaveLength(500)
+  })
+
   it('sends the same message once', () => {
     reportClientError('error', new Error('same'))
     reportClientError('rejection', new Error('same'))

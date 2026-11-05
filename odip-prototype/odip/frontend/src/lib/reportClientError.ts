@@ -23,7 +23,7 @@ export function reportClientError(kind: ClientErrorKind, error: unknown, compone
     if (!message || sent.has(message)) return
     sent.add(message)
     void apiClient
-      .post('/client-errors', { message, stack: err?.stack, componentStack: componentStack ?? undefined, path: window.location.pathname, kind })
+      .post('/client-errors', { message: message.slice(0, 500), stack: err?.stack?.slice(0, 4000), componentStack: componentStack?.slice(0, 4000), path: window.location.pathname, kind })
       .catch(() => {})
   } catch { /* reporting must never cause a second crash */ }
 }

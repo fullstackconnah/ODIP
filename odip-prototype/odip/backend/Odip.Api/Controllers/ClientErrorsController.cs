@@ -40,13 +40,17 @@ public class ClientErrorsController : ControllerBase
         if (!Kinds.Contains(kind)) return BadRequest(ApiResponse<object>.Fail("Unknown kind."));
 
         var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : (Guid?)null;
-        // The stacks and ids ride in a scope, not the message template, so a stack with line breaks cannot forge a log line.
-        using (_logger.BeginScope(new Dictionary<string, object?> { ["UserId"] = userId, ["TenantId"] = _tenant.TenantId, ["Stack"] = Cut(request.Stack, 4000), ["ComponentStack"] = Cut(request.ComponentStack, 4000) }))
-            _logger.LogWarning("Client error {Kind} at {Path}: {Message}", kind, Line(request.Path, 200), message);
+        // Values sit in the template (the default console formatter prints no scopes); Flat keeps a stack on one line so it cannot forge a log line.
+        _logger.LogWarning("Client error {Kind} at {Path}: {Message} (user {UserId}, org {TenantId}) stack {Stack} component {ComponentStack}",
+            kind, Line(request.Path, 200), message, userId, _tenant.TenantId, Flat(request.Stack, 4000), Flat(request.ComponentStack, 4000));
         return NoContent();
     }
 
     private static string Cut(string? value, int max) => value is { Length: > 0 } v && v.Length > max ? v[..max] : value ?? string.Empty;
+
+    // Line breaks become " | " so a stack stays on one log line; other control characters are dropped, as in Line.
+    private static string Flat(string? value, int max) =>
+        new string(string.Join(" | ", Cut(value, max).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Where(c => !char.IsControl(c)).ToArray());
 
     private static string Line(string? value, int max) => Cut(new string((value ?? string.Empty).Where(c => !char.IsControl(c)).ToArray()).Trim(), max);
 }
