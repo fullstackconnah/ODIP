@@ -1,10 +1,11 @@
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { AlertTriangle } from 'lucide-react'
 import { useParticipantRoutines } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { SeeSectionLink } from './SeeSectionLink'
 import { formatRoutineTime, routinesOn } from './routineFormat'
 
@@ -16,10 +17,11 @@ const muted = 'text-sm text-[var(--color-muted-foreground)]'
  * descriptions and editing stay on the Routines card under Daily support. Same query as the tab count, so no extra request.
  */
 export function TodayRoutinesCard({ participantId }: { participantId: string }) {
-  const { canWriteRoutines } = usePermissions()
+  const { canWriteRoutines, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const query = useParticipantRoutines(participantId, true)
-  // shortcut: the browser's day stands in for the provider's; upgrade when Overview reads the provider zone
-  const today = routinesOn(query.data ?? [], format(new Date(), 'EEEE'))
+  // The provider's weekday for the roles that read provider settings; a Support Worker or Read only user (403 there) gets the browser's day.
+  const providerDay = useProviderToday(isSuperAdmin || isAdmin || isCoordinator)
+  const today = routinesOn(query.data ?? [], format(parseISO(providerDay), 'EEEE'))
   const active = (query.data ?? []).filter(r => r.isActive).length
 
   let body
