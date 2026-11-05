@@ -30,16 +30,16 @@ export function TripBar({ tripBar, days }: TripBarProps) {
       title={`${tripBar.tripName} (${tripBar.tripCode})${short ? ` · ${short} staff short` : ''}`}
     >
       <Map className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate font-medium">{tripBar.tripName}</span>
+      <span className="min-w-0 flex-1 truncate font-medium">
+        {tripBar.tripName}
+        {short > 0 && <span className="sr-only">, {plural(short, 'staff member')} short</span>}
+      </span>
       {tripBar.isDriver && <span className="shrink-0 text-xs opacity-80">Driver</span>}
       {short > 0 && (
-        <>
-          <span className="sr-only">, {plural(short, 'staff member')} short</span>
-          <span data-staff-short aria-hidden="true" className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-semibold leading-[18px] ${ON_TINT.warning}`}>
-            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-            {short} short
-          </span>
-        </>
+        <span data-staff-short aria-hidden="true" className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-semibold leading-[18px] ${ON_TINT.warning}`}>
+          <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+          {short} short
+        </span>
       )}
     </Link>
   )

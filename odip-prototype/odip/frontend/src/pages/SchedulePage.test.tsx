@@ -106,7 +106,7 @@ describe('SchedulePage — staffing shortfall', () => {
     const note = screen.getByText('1 short')
     expect(note.className).toContain('--color-on-warning-container')
     expect(note.className).toContain('font-semibold')
-    expect(screen.getByText(/3 / 4 staff/)).toBeInTheDocument()
+    expect(screen.getByText(/3 \/ 4 staff/)).toBeInTheDocument()
   })
 
   it('says nothing when the trip has enough staff', () => {

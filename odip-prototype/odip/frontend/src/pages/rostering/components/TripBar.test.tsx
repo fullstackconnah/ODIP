@@ -15,7 +15,7 @@ describe('TripBar staffing shortfall', () => {
   it('shows how many staff the trip is short, and says it in the link name', () => {
     show(2)
     expect(document.querySelector('[data-staff-short]')).toHaveTextContent('2 short')
-    expect(screen.getByRole('link', { name: /Gold Coast Beach Break, 2 staff members short/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Gold Coast Beach Break\s*, 2 staff members short/ })).toBeInTheDocument()
   })
 
   it('uses the singular for one', () => {
