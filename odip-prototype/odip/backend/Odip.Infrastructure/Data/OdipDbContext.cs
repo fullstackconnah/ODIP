@@ -77,6 +77,7 @@ public class OdipDbContext : DbContext
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<ReferralSource> ReferralSources => Set<ReferralSource>();
     public DbSet<ServiceLocation> ServiceLocations => Set<ServiceLocation>();
+    public DbSet<ComplianceItem> ComplianceItems => Set<ComplianceItem>();
     public DbSet<BookingTask> BookingTasks => Set<BookingTask>();
     public DbSet<TripDocument> TripDocuments => Set<TripDocument>();
     public DbSet<User> Users => Set<User>();
@@ -591,6 +592,17 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
             // One active place per name per organisation. The controller also compares case-insensitively; this is the backstop for a race.
             entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique().HasFilter("\"IsActive\"");
+        });
+
+        // ── ComplianceItem ───────────────────────────────────────
+        modelBuilder.Entity<ComplianceItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Label).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.Reference).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ExpiresOn });
         });
 
         // ── Activity ─────────────────────────────────────────────
@@ -2308,6 +2320,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ServiceLocation>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceLocation>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ComplianceItem>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ComplianceItem>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<TripInstance>()

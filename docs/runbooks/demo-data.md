@@ -47,6 +47,7 @@ what `DEMO_DATA_PACKS` takes.
 | Name | Writes |
 |---|---|
 | `provider-settings` | the provider settings row (state and time zone), when the tenant has none |
+| `compliance-dates` | three sample compliance dates (registration, insurance, mid-term audit), when the tenant has none |
 | `staff-credentials` | moves the expiry dates on existing staff (columns only, never identity or role) |
 | `compatibility` | staff and participant compatibility cells |
 | `emergency-contacts` | people and the contact roles that link them to participants |
@@ -225,6 +226,8 @@ DELETE FROM "ParticipantContactRoles"
     AND (substr("Id"::text, 15, 1) = '8' OR "PersonId" IN (SELECT "Id" FROM demo_person));
 DELETE FROM "People"
   WHERE "Id" IN (SELECT "Id" FROM demo_person);
+DELETE FROM "ComplianceItems"
+  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
 DELETE FROM "ProviderSettings"
   WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
 

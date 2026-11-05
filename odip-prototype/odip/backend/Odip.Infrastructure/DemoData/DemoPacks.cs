@@ -15,6 +15,7 @@ public static class DemoPacks
     public static IReadOnlyList<IDemoPack> Default() => new IDemoPack[]
     {
         new ProviderSettingsPack(),
+        new ComplianceDatesPack(),
         new StaffCredentialsPack(),
         new CompatibilityPack(),
         new EmergencyContactsPack(),
