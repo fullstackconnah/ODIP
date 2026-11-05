@@ -9,6 +9,10 @@ export type ButtonProps = {
   size?: ButtonSize
   /** When set, renders as a React Router Link instead of a <button>. */
   to?: string
+  /** When set (and `to` is not), renders a plain <a> for an external or tel:/mailto: link. `target` and `rel` pass through only if given. */
+  href?: string
+  target?: string
+  rel?: string
   /**
    * Renders an icon-style square button (for table-row actions). Always a `--control-h-sm`
    * square (24px on fine pointers, 36px on coarse) regardless of `size`, so a row of them lines
@@ -27,6 +31,9 @@ export function Button({
   variant = 'primary',
   size = 'md',
   to,
+  href,
+  target,
+  rel,
   iconOnly = false,
   type = 'button',
   className,
@@ -34,7 +41,7 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const cls = buttonClasses(variant, size, iconOnly, className)
-  if (to) {
+  if (to || href) {
     // React Router's <Link> only forwards `to`/`ref`/children. Anything else (aria-label, title,
     // tabIndex) has to be passed explicitly so the link keeps the same semantics as a <button>.
     const { 'aria-label': ariaLabel, title, tabIndex, onClick: linkOnClick } = rest as {
@@ -45,10 +52,15 @@ export function Button({
     }
     // `data-*` (a test id) passes through too, so a Button that became a link keeps the hooks tests and tooling find it by.
     const dataAttributes = Object.fromEntries(Object.entries(rest).filter(([name]) => name.startsWith('data-')))
-    return (
-      <Link to={to} className={cls} aria-label={ariaLabel} title={title} tabIndex={tabIndex} onClick={linkOnClick} {...dataAttributes}>
+    const linkProps = { className: cls, 'aria-label': ariaLabel, title, tabIndex, onClick: linkOnClick, ...dataAttributes }
+    return to ? (
+      <Link to={to} {...linkProps}>
         {children}
       </Link>
+    ) : (
+      <a href={href} target={target} rel={rel} {...linkProps}>
+        {children}
+      </a>
     )
   }
   return (
