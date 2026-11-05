@@ -48,6 +48,16 @@ describe('IncidentReviewCard', () => {
     expect(screen.queryByRole('button', { name: /review/i })).toBeNull()
   })
 
+  it('Cancel is disabled while the review saves', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<IncidentReviewCard incident={incident()} canEdit />)
+    await user.click(screen.getByRole('button', { name: 'Record review' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+    saveState.isPending = true
+    rerender(<IncidentReviewCard incident={incident()} canEdit />)
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  })
+
   it('Admin save sends trimmed notes and the chosen status, with no reviewer or date', async () => {
     const user = userEvent.setup()
     render(<IncidentReviewCard incident={incident()} canEdit />)
