@@ -76,6 +76,12 @@ describe('DataRetentionTab list', () => {
     expect(screen.getByRole('button', { name: "Purge Zoe Campbell's record" })).toHaveTextContent('Purge')
   })
 
+  it("keeps the Due cell level with the first line of Starts on the phone card, where the Estimated badge wraps", async () => {
+    renderTab()
+    await screen.findByText("Margaret Doyle")
+    expect(screen.getAllByRole("cell", { name: /Due/ })[0]).toHaveClass("max-md:self-start")
+  })
+
   it('marks an estimated start with a badge and the footnote, and only then', async () => {
     renderTab()
     await screen.findByText('Margaret Doyle')
