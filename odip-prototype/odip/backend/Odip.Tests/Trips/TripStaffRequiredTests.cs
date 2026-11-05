@@ -92,6 +92,22 @@ public class TripStaffRequiredTests
     }
 
     [Fact]
+    public async Task Schedule_trip_carries_staff_short()
+    {
+        using var db = CreateDb();
+        var trip = SeedTrip(db, calculated: 4.5m);
+        for (var i = 0; i < 3; i++)
+            db.StaffAssignments.Add(new StaffAssignment
+            {
+                Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = Guid.NewGuid(), Status = AssignmentStatus.Confirmed,
+                AssignmentStart = trip.StartDate, AssignmentEnd = trip.EndDate
+            });
+        db.SaveChanges();
+
+        Assert.Equal(2, (await OnTheSchedule(db, trip.Id)).StaffShort);
+    }
+
+    [Fact]
     public async Task WhileNoBookingHasSetTheFigure_TheTripsOwnMinimumStands_OnTheDetailAndTheSchedule()
     {
         using var db = CreateDb();
