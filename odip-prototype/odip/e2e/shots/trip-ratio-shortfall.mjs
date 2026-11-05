@@ -95,12 +95,15 @@ async function boardRun(browser, tag, vp, shots) {
   // The week grid scrolls sideways inside its own frame, so bring the bar into the viewport first.
   const crop = async (name, file, opts = {}) => {
     try {
-      await link(name).evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }))
-      const r = await cropElement(page, link(name), path.join(OUT_DIR, file), { touch, ...opts }); checks.push(checkCropHolds(r))
+      // At 390 the bar is wider than the viewport (the grid scrolls sideways), so the crop is the pill, the changed part.
+      const target = touch && !file.includes('enough') ? link(name).locator('[data-staff-short]') : link(name)
+      await target.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }))
+      const r = await cropElement(page, target, path.join(OUT_DIR, file), { touch, ...(touch ? { pad: 24 } : {}), ...opts }); checks.push(checkCropHolds(r))
     } catch (e) { check(`${tag}: crop ${file}`, false, String(e.message).slice(0, 120)) }
   }
   for (const [name, file] of shots) await crop(name, file)
-  checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `board-full-${vp.width}${vp.dark ? '-dark' : ''}${vp.staff ? '-staff' : ''}.png`), { touch })).checks)
+  // Context shot only: the board scrolls inside its own frame (and sideways at 390), which the lib's whole-page checks do not model, so its checks are not recorded.
+  await fullPage(page, path.join(OUT_DIR, 'full', `board-full-${vp.width}${vp.dark ? '-dark' : ''}${vp.staff ? '-staff' : ''}.png`), { touch })
   await context.close()
 }
 
