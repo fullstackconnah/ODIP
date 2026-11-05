@@ -3,7 +3,7 @@
 // The mock API serves the fixture (mock-api/mock-rp-reports.js). The clock is pinned to 2026-11-04 10:00 Sydney, light theme.
 // Prints "CHECK ok|FAIL name = value", writes checks.json, and exits non-zero when a check fails.
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, settle, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, settle, cropElement, overlapCheck, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -58,6 +58,7 @@ const noOverflow = async (page, name, ctx, width) => {
 const crop = async (page, locator, file, vp, opts = {}) => {
   const r = await cropElement(page, locator, path.join(OUT_DIR, file), { touch: !!vp.touch, ...opts })
   checks.push(checkCropHolds(r))
+  if (r.measured) checks.push(r.measured)
 }
 const goTab = async (page) => {
   await page.goto(`${BASE_URL}/incidents?view=rp-reports`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -90,6 +91,15 @@ try {
     const csv = page.getByRole('button', { name: /CSV for/ })
     const csvBox = await csv.boundingBox()
     check('CSV button is one line', ctx, csvBox?.height, !!csvBox && csvBox.height <= 44)
+    if (!vp.touch) {
+      const fit = await page.locator('table').first().evaluate((t) => {
+        const box = t.parentElement
+        const lodged = [...t.querySelectorAll('tbody td[data-label="Lodged"]')].map((td) => td.scrollWidth <= td.clientWidth)
+        return { sw: box.scrollWidth, cw: box.clientWidth, lodged }
+      })
+      check('due table fits its container (no sideways scroll)', ctx, fit, fit.sw <= fit.cw)
+      check('every Lodged cell holds its date', ctx, fit.lodged, fit.lodged.length >= 4 && fit.lodged.every(Boolean))
+    }
     checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `tab-${vp.name}.png`), { touch: !!vp.touch })).checks)
 
     // 2. The routine lodge modal with Varied use picked.
@@ -114,7 +124,14 @@ try {
     await dialog(page).getByRole('radio', { name: 'No' }).click().catch(() => dialog(page).getByRole('button', { name: 'No', exact: true }).click())
     await dialog(page).getByRole('button', { name: 'Lodge report' }).click()
     await dialog(page).getByText(/already been lodged/).waitFor({ timeout: 20_000 })
-    await crop(page, dialog(page), `conflict-${vp.name}.png`, vp)
+    // Reload sits in the Callout at the foot of the scrolled body; the check runs in the crop viewport, with the body scrolled to it.
+    const reload = dialog(page).getByRole('button', { name: 'Reload' })
+    await crop(page, dialog(page), `conflict-${vp.name}.png`, vp, {
+      during: async (clip) => {
+        await reload.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        return overlapCheck(reload, clip, `conflict-${vp.name}.png (Reload)`)
+      },
+    })
     await page.unroute('**/api/v1/restrictive-practice-reports')
     await dialog(page).getByRole('button', { name: 'Cancel' }).click()
 
@@ -166,7 +183,8 @@ try {
       if (vp.touch) check('chip hit box is 44x44+ (coarse)', ctx, cb, !!cb && cb.width >= 44 && cb.height >= 44)
       await noOverflow(h.page, 'Health tab: no horizontal scroll', ctx, vp.width)
       const card = chip.locator('xpath=ancestor::*[self::article or self::li or self::div][.//button[contains(., "Edit")]][1]')
-      await crop(h.page, card, `health-chips-${vp.name}.png`, vp)
+      // natural: the viewport grows to the page height, so the fixed bottom nav sits at the page foot, not over the card.
+      await crop(h.page, card, `health-chips-${vp.name}.png`, vp, { natural: true, during: (clip) => overlapCheck(chip, clip, `health-chips-${vp.name}.png (chip)`) })
 
       await card.getByRole('button', { name: 'Edit', exact: true }).click()
       await h.page.getByLabel('Active').click()

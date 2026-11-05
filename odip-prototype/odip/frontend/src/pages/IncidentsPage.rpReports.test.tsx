@@ -87,6 +87,9 @@ describe('IncidentsPage: RP monthly reports tab', () => {
     expect(screen.getByText('Choose an organisation to view as first.')).toBeInTheDocument()
     expect(screen.getByText('Monthly reports belong to one organisation.')).toBeInTheDocument()
     expect(mockUseRpLines).toHaveBeenCalledWith(undefined, { enabled: false })
+    // A disabled query is not 'loaded and empty': no count, no All lodged.
+    expect(screen.getByRole('tab', { name: 'RP monthly reports' })).toBeInTheDocument()
+    expect(screen.queryByText('All lodged')).not.toBeInTheDocument()
   })
 
   it('downloads the newest month as CSV when All months is picked', async () => {

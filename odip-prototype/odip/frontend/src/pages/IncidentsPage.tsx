@@ -343,7 +343,7 @@ export default function IncidentsPage() {
       <div>
         <PageHeader
           title="Incidents"
-          count={showFlaggedNotes ? undefined : showRp ? (rpLoading || rpError ? undefined : rpToLodgeCount === 0 ? 'All lodged' : `${rpToLodgeCount} to lodge`) : plural(totalCount, 'incident')}
+          count={showFlaggedNotes ? undefined : showRp ? (!rpEnabled || rpLoading || rpError ? undefined : rpToLodgeCount === 0 ? 'All lodged' : `${rpToLodgeCount} to lodge`) : plural(totalCount, 'incident')}
           action={showRp ? (csvMonth ? (
             <Button variant="secondary" size="md" onClick={downloadRpCsv}>
               <Download className="w-4 h-4" /> CSV for {monthLabel(csvMonth)}
@@ -355,7 +355,7 @@ export default function IncidentsPage() {
                 { id: 'incidents', label: 'Reports' },
                 // A failed load is not a count of 0: the label drops the count until there is one.
                 ...(canViewFlaggedNotes ? [{ id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` }] : []),
-                ...(canWriteRestrictivePractices ? [{ id: 'rp-reports', label: rpError || rpLoading ? 'RP monthly reports' : `RP monthly reports (${rpToLodgeCount})` }] : []),
+                ...(canWriteRestrictivePractices ? [{ id: 'rp-reports', label: !rpEnabled || rpError || rpLoading ? 'RP monthly reports' : `RP monthly reports (${rpToLodgeCount})` }] : []),
               ]}
               active={tab}
               onChange={key => setTab(key as IncidentsTab)}
