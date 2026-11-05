@@ -28,7 +28,7 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
     expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
-    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'templates', 'activities', 'referral-sources', 'holidays'])
+    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'templates', 'activities', 'referral-sources', 'holidays', 'export'])
     expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
@@ -42,7 +42,7 @@ describe('who sees which section', () => {
 
   it('groups them, with My account first for everyone and only My account and Platform for a SuperAdmin with no organisation', () => {
     expect(groupsOf('Admin')).toEqual(['My account', 'Organisation', 'Pricing and budgets', 'Content', 'Data'])
-    expect(groupsOf('Coordinator')).toEqual(['My account', 'Organisation', 'Content'])
+    expect(groupsOf('Coordinator')).toEqual(['My account', 'Organisation', 'Content', 'Data'])
     expect(groupsOf('SuperAdmin')).toEqual(['My account', 'Organisation', 'Pricing and budgets', 'Content', 'Data', 'Platform'])
     expect(groupsOf('SuperAdminNoOrg')).toEqual(['My account', 'Platform'])
   })
@@ -77,7 +77,7 @@ const LEGACY: [string, SectionKey, SectionKey, SectionKey, SectionKey][] = [
   ['users', 'profile', 'profile', 'users', 'users'],
   ['notifications', 'notifications', 'notifications', 'notifications', 'notifications'],
   ['notifications-admin', 'failed-sends', 'profile', 'failed-sends', 'failed-sends'],
-  ['export', 'export', 'profile', 'export', 'profile'],
+  ['export', 'export', 'export', 'export', 'profile'],
   ['integrations', 'integrations', 'profile', 'integrations', 'profile'],
   ['retention', 'profile', 'profile', 'profile', 'profile'],
 ]
