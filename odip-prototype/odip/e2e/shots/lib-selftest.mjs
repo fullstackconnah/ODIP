@@ -2,7 +2,7 @@
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/lib-selftest.mjs <outdir> (an absolute script path)
 // Crops one element taller than the 390 viewport at 1280 fine and 390 touch; asserts the crop holds it and the pointer stays coarse.
 import path from 'node:path'
-import { cropElement, fullPage, checkCropHolds, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
+import { cropElement, fullPage, checkCropHolds, overlapCheck, waitForSidebar, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -56,5 +56,35 @@ try {
     }
     await context.close()
   }
+  // overlapCheck and hideChrome on set-content pages (no app needed): the target sits at y 100-160, 1280 wide.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+  const page = await context.newPage()
+  const target = page.locator('#t')
+  const probe = async (name, opts) => {
+    const r = await cropElement(page, target, path.join(OUT_DIR, `${name}.png`), { ...opts, during: (clip) => overlapCheck(target, clip, `${name}.png`) })
+    return r.measured
+  }
+  const shell = (extra) => `<main><div id="t" style="margin:100px 300px;height:60px;background:#cde">target</div></main>${extra}`
+  await page.setContent(shell('<div style="position:fixed;left:0;right:0;top:90px;height:80px;background:#333"></div>'))
+  const over = await probe('overlap-fixed-chrome', {})
+  checks.push({ name: 'overlapCheck fails when fixed chrome covers the crop', pass: !over.pass && over.detail.covered, detail: over.detail })
+  const hidden = await probe('overlap-hidden-chrome', { hideChrome: true })
+  checks.push({ name: 'overlapCheck passes with hideChrome', pass: hidden.pass, detail: hidden.detail })
+  const restored = await page.evaluate(() => [...document.querySelectorAll('div')].every((d) => d.style.visibility !== 'hidden'))
+  checks.push({ name: 'hideChrome restores the chrome after the shot', pass: restored, detail: { restored } })
+  await page.setContent(`<main></main><div role="dialog" style="position:fixed;inset:0;background:#fff"><div id="t" style="margin:100px 300px;height:60px;background:#cde">target</div><div style="position:absolute;left:0;right:0;top:90px;height:80px;background:#333"></div></div>`)
+  const dlg = await probe('overlap-in-dialog', {})
+  checks.push({ name: 'overlapCheck ignores a cover inside the dialog the target lives in', pass: dlg.pass, detail: dlg.detail })
+  await page.setContent(shell('<aside style="position:fixed;left:0;top:0;bottom:0;width:700px;background:#333"><nav aria-label="Main">menu</nav></aside>'))
+  const t0 = Date.now()
+  await waitForSidebar(page)
+  const sidebarMs = Date.now() - t0
+  const side = await probe('overlap-sidebar', {})
+  checks.push({ name: 'overlapCheck does not fail on the sidebar; waitForSidebar returns at once when it is there', pass: side.pass && sidebarMs < 1500, detail: { ...side.detail, sidebarMs } })
+  await page.setContent(shell(''))
+  const t1 = Date.now()
+  await waitForSidebar(page, 300)
+  checks.push({ name: 'waitForSidebar gives up quietly when the page has none', pass: Date.now() - t1 >= 250, detail: {} })
+  await context.close()
 } finally { await browser.close() }
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1
