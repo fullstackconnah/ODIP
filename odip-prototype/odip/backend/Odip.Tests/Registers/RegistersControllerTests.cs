@@ -32,9 +32,10 @@ public class RegistersControllerTests
 
     private sealed record Host(OdipDbContext Db, RegistersController Controller);
 
-    private static Host Make(Guid? tenant, bool superAdmin = false, string role = "Admin", string? name = null)
+    private static Host Make(Guid? tenant, bool superAdmin = false, string role = "Admin", string? name = null, bool unfilteredDb = false)
     {
-        var db = DataExportTestKit.InMemory(Guid.NewGuid().ToString(), DataExportTestKit.Tenant(tenant, superAdmin));
+        // unfilteredDb: the DB has no global tenant filter, so only the controller's explicit tenant guards can hide the other organisation.
+        var db = DataExportTestKit.InMemory(Guid.NewGuid().ToString(), unfilteredDb ? DataExportTestKit.Tenant(null, superAdmin: true) : DataExportTestKit.Tenant(tenant, superAdmin));
         db.Tenants.AddRange(new Tenant { Id = A, Name = "Alpha Care", EmailDomain = "a.example.com" }, new Tenant { Id = B, Name = "Bravo Care", EmailDomain = "b.example.com" });
         db.SaveChanges();
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()), new Claim(ClaimTypes.Role, role), new Claim("fullName", name ?? "Jordan Lee") };
@@ -103,7 +104,7 @@ public class RegistersControllerTests
     [Theory, MemberData(nameof(AllRegisters))]
     public async Task TenantA_SeesNothingOfTenantB(string register)
     {
-        var h = Make(A);
+        var h = Make(A, unfilteredDb: true);
         foreach (var (tenant, mark) in new[] { (A, "ALPHA"), (B, "BRAVO") })
         {
             var user = AddUser(h.Db, tenant, mark + "-First", "Staff", u => { u.WorkerScreeningNumber = mark + "-WSN"; });
@@ -124,7 +125,7 @@ public class RegistersControllerTests
     [Fact]
     public async Task Incidents_ARowNeedsAReporterOfTheOrganisation_AndATenantColumnThatIsNullOrTheOrganisation()
     {
-        var h = Make(A);
+        var h = Make(A, unfilteredDb: true);
         var reporterA = AddUser(h.Db, A);
         var reporterB = AddUser(h.Db, B);
         var when = new DateTime(2026, 6, 1, 10, 0, 0);
@@ -137,8 +138,8 @@ public class RegistersControllerTests
         h.Db.SaveChanges();
 
         var titles = Rows(await Dated(h.Controller, "incidents")).Skip(1).Select(r => r[1]).Order().ToArray();
-        // A null tenant column is hidden by the global filter for a tenant user as well, as in the raw export; the explicit predicate covers a context without it.
-        Assert.Equal(new[] { "own" }, titles);
+        // The DB has no tenant filter here, so the explicit predicate decides: a null tenant column passes when the reporter is the organisation's.
+        Assert.Equal(new[] { "no-tenant-column", "own" }, titles);
     }
 
     [Fact]
