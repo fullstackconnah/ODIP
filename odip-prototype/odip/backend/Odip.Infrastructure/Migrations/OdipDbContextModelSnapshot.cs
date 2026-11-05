@@ -4505,6 +4505,69 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("RestrictivePractices");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.RestrictivePracticeMonthlyReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("LodgedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("LodgedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("LodgedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("Month")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("PracticeDescription")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("PracticeType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReportType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RestrictivePracticeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("UseCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("VariedAlsoUnauthorised")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("VariedKind")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("RestrictivePracticeId", "Month")
+                        .IsUnique();
+
+                    b.ToTable("RestrictivePracticeMonthlyReports");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ScheduledActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8178,6 +8241,25 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Participant");
 
                     b.Navigation("RelatedMedication");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.RestrictivePracticeMonthlyReport", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.RestrictivePractice", "RestrictivePractice")
+                        .WithMany()
+                        .HasForeignKey("RestrictivePracticeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RestrictivePractice");
 
                     b.Navigation("Tenant");
                 });

@@ -62,6 +62,7 @@ public class OdipDbContext : DbContext
     /// <summary>PF-10.2. See <see cref="Entities.ParticipantCommunityAccessRiskItem"/>'s type doc.</summary>
     public DbSet<ParticipantCommunityAccessRiskItem> ParticipantCommunityAccessRiskItems => Set<ParticipantCommunityAccessRiskItem>();
     public DbSet<RestrictivePractice> RestrictivePractices => Set<RestrictivePractice>();
+    public DbSet<RestrictivePracticeMonthlyReport> RestrictivePracticeMonthlyReports => Set<RestrictivePracticeMonthlyReport>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<TripInstance> TripInstances => Set<TripInstance>();
     public DbSet<ParticipantBooking> ParticipantBookings => Set<ParticipantBooking>();
@@ -1946,6 +1947,24 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.ParticipantId, e.ItemType }).IsUnique();
         });
 
+        // ── RestrictivePracticeMonthlyReport ──────────────────────
+        modelBuilder.Entity<RestrictivePracticeMonthlyReport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Note).HasMaxLength(2000);
+            entity.Property(e => e.LodgedByName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.PracticeDescription).HasMaxLength(2000).IsRequired();
+
+            // Restrict: a practice with lodged reports is kept as their record (the controller refuses the delete first).
+            entity.HasOne(e => e.RestrictivePractice)
+                .WithMany()
+                .HasForeignKey(e => e.RestrictivePracticeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // One report per practice and month; the lodge race lands here.
+            entity.HasIndex(e => new { e.RestrictivePracticeId, e.Month }).IsUnique();
+        });
+
         // ── RestrictivePractice ───────────────────────────────────
         modelBuilder.Entity<RestrictivePractice>(entity =>
         {
@@ -2467,6 +2486,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<RestrictivePractice>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<RestrictivePractice>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<RestrictivePracticeMonthlyReport>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<RestrictivePracticeMonthlyReport>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<Complaint>()

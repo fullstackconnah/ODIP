@@ -172,6 +172,7 @@ public static class ExportTables
         Own<ParticipantChecklistItem>("participant-checklist-items.csv", "Participant checklist answers."),
         Own<ParticipantCommunityAccessRiskItem>("participant-community-access-risks.csv", "Community access risk ratings."),
         Own<RestrictivePractice>("restrictive-practices.csv", "Restrictive practices and their authorisations."),
+        Own<RestrictivePracticeMonthlyReport>("restrictive-practice-monthly-reports.csv", "Monthly restrictive practice reports recorded as lodged in the NDIS Commission portal, and who recorded them."),
         Own<Complaint>("complaints.csv", "Complaints received, how they were handled and their outcome."),
         Own<CaregiverProfileSubmission>("caregiver-submissions.csv", "Profile changes sent in by families and carers, and their review.") with
         {

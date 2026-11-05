@@ -3,9 +3,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Integrations;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Infrastructure.Integrations;
 
@@ -14,7 +16,8 @@ public static class EmploymentHeroLeave
 {
     public const string FromEhMessage = "This leave was entered in Employment Hero. Change or cancel it there.";
     public const string CancelFinalisedMessage = "Cancelled in Bunya Support after the pay run was finalised: fix it in Employment Hero";
-    public const string WeekendMessage = "This leave falls only on a weekend, so Bunya Support has no standard hours to send. Enter it in Employment Hero if it is paid.";
+    public const string NoWorkdaysMessage = "This leave falls only on weekends or public holidays, so Bunya Support has no hours to send. Enter it in Employment Hero if it is paid.";
+    public const string EditedToNoWorkdaysMessage = "This leave now falls only on weekends or public holidays. Employment Hero still has the earlier request with its old hours: change or delete it there.";
     public const string GaveUpMessage = "We stopped trying after six tries.";
     public const string CreateFinalisedMessage = "Sent after the pay run was finalised: enter it in Employment Hero";
     public const string LinkClashMessage = "We couldn't link this leave to Employment Hero's copy.";
@@ -43,11 +46,19 @@ public static class EmploymentHeroLeave
             && MarkerPattern.Match(notes) is { Success: true } m && Guid.TryParse(m.Groups[1].Value, out leaveId);
     }
 
-    // shortcut: counts Mon-Fri and ignores public holidays; move to EH's leaverequest/estimate if payroll asks (Open gap 1).
-    public static (decimal Hours, bool Defaulted) Hours(DateOnly from, DateOnly to, decimal? perDay)
+    /// <summary>The whole-day public holidays of the provider's state in the range, read the way the roster and claims read them. No state set: VIC, as they do.</summary>
+    public static async Task<IReadOnlySet<DateOnly>> HolidaysAsync(OdipDbContext db, Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var providerState = await db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
+        var state = ShiftPriceEstimator.StateFor(null, providerState);
+        return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(db, from, to, includePartDay: false, ct)).For(state).ToHashSet();
+    }
+
+    // shortcut: Mon-Fri minus the state's whole-day public holidays (a part-day holiday still counts as a full day); EH's leaverequest/estimate is not used, move to it if payroll asks (Open gap 1); holidays follow the provider's state, not each employee's work location.
+    public static (decimal Hours, bool Defaulted) Hours(DateOnly from, DateOnly to, decimal? perDay, IReadOnlySet<DateOnly>? holidays = null)
     {
         var days = 0;
-        for (var d = from; d <= to; d = d.AddDays(1)) if (d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) days++;
+        for (var d = from; d <= to; d = d.AddDays(1)) if (d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && holidays?.Contains(d) != true) days++;
         var defaulted = perDay is not > 0;
         return (Math.Round(days * (defaulted ? DefaultDailyHours : perDay!.Value), 2), defaulted);
     }

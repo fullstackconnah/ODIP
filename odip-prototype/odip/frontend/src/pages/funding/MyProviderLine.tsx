@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TextField } from '@/components/TextField'
 import { TAP_AREA } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { localIsoDate } from '@/lib/dateOnly'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { writtenDay } from '@/lib/fundingPlan'
 import type { Tone } from '@/lib/tone'
 import { extractErrorMessage } from '@/lib/utils'
@@ -51,14 +51,13 @@ function MyProviderDialog({ participantId, plan, onClose }: { participantId: str
   const [choice, setChoice] = useState<MyProviderRecord>(plan.myProvider ?? 'Unknown')
   const [date, setDate] = useState(plan.myProviderOn ?? '')
   const [dateError, setDateError] = useState<string>()
-  const today = localIsoDate()
+  const today = useProviderToday() // the provider's day; this line sits on the Funding tab, which only the roles that read provider settings open
   const dateLabel = SHOWN[choice].dateLabel
   const unchanged = choice === (plan.myProvider ?? 'Unknown') && (choice === 'Unknown' || date === (plan.myProviderOn ?? ''))
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (unchanged || save.isPending) return
-    // shortcut: the browser's today stands in for the provider's; the server re-checks with the provider's own zone.
     const problem = choice === 'Unknown' ? undefined
       : !date ? 'Enter the date.'
       : date < MIN_DATE ? 'Enter a date after 1990.'

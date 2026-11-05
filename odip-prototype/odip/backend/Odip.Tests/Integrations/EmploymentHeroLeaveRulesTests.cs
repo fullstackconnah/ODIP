@@ -22,6 +22,9 @@ public class EmploymentHeroLeaveRulesTests
         Assert.Equal((15.2m, true), EmploymentHeroLeave.Hours(new DateOnly(2026, 11, 6), new DateOnly(2026, 11, 9), null));
         Assert.Equal((15.2m, true), EmploymentHeroLeave.Hours(new DateOnly(2026, 11, 6), new DateOnly(2026, 11, 9), 0m));
         Assert.Equal(0m, EmploymentHeroLeave.Hours(new DateOnly(2026, 11, 7), new DateOnly(2026, 11, 8), 7.2m).Hours);
+        var holidays = new HashSet<DateOnly> { new(2026, 11, 4), new(2026, 11, 7) };   // a Wednesday and a Saturday
+        Assert.Equal((28.8m, false), EmploymentHeroLeave.Hours(new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 6), 7.2m, holidays));
+        Assert.Equal(0m, EmploymentHeroLeave.Hours(new DateOnly(2026, 11, 4), new DateOnly(2026, 11, 4), 7.2m, holidays).Hours);
     }
 
     [Fact]
@@ -92,7 +95,7 @@ public class EmploymentHeroLeaveRulesTests
     {
         Assert.True(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.Build(ALeave(LeaveType.Sick), "42", new("5", null, null, null)).WaitReason));
         Assert.True(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.Build(ALeave(), "abc", Mapped).WaitReason));
-        Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.WeekendMessage));
+        Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroLeave.NoWorkdaysMessage));
         Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroTimesheets.BusyMessage));
         Assert.False(EmploymentHeroLeave.IsWaiting(EmploymentHeroTimesheets.NotLinkedReason));
         Assert.False(EmploymentHeroLeave.IsWaiting(null));

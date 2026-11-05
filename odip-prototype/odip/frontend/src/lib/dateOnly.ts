@@ -77,3 +77,16 @@ export function calendarDaysUntil(target: string | null | undefined, today: Date
   const from = typeof today === 'string' ? parseDateOnly(today) : dayNumberOf(today)
   return to === null || from === null ? null : to - from
 }
+
+/**
+ * The calendar date as "YYYY-MM-DD" in an IANA zone (the provider's), at `now`. The browser's own day when `zone` is empty or not a zone this
+ * runtime knows: a bad value must never blank a date check.
+ */
+export function todayInZone(zone: string | null | undefined, now: Date = new Date()): string {
+  if (!zone) return localIsoDate(now)
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+  } catch {
+    return localIsoDate(now)
+  }
+}

@@ -57,6 +57,7 @@ const {
 // composition/the Community Access card, not those sections' own hooks (same "mirror
 // PortalShiftDetailPage.test.tsx's ShiftNotesSection stub" approach used there).
 vi.mock('@/api/hooks', () => ({
+  useProviderSettings: () => ({ data: undefined }),
   useParticipant: mockUseParticipant,
   useServiceAgreementDrafts: mockDrafts,
   useDeleteServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),

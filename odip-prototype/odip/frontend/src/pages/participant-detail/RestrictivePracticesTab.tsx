@@ -21,6 +21,7 @@ import {
 } from '@/api/types/restrictive-practices'
 import type { BspPlanState, RestrictivePracticeDto, RestrictivePracticeType, RestrictivePracticeUseKind } from '@/api/types/restrictive-practices'
 import { calendarDaysUntil } from '@/lib/dateOnly'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { AddRestrictivePracticeDialog } from './AddRestrictivePracticeDialog'
 import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
@@ -220,6 +221,7 @@ function FirstUsedField({ value, suggestion, error, onChange }: { value: string;
 
 export default function RestrictivePracticesTab({ participantId }: { participantId: string | undefined }) {
   const { canWriteRestrictivePractices } = usePermissions()
+  const providerToday = useProviderToday(canWriteRestrictivePractices)
   const practicesQuery = useRestrictivePractices(participantId, true)
   const practices = useMemo(() => practicesQuery.data ?? [], [practicesQuery.data])
   // A failed or paused request is not an empty register: "No restrictive practices recorded" is only for one that succeeded and came back empty.
@@ -290,8 +292,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     if (form.authorised && form.authorisationEndDate && form.authorisationDate && form.authorisationEndDate < form.authorisationDate) {
       next.authorisationEndDate = "The end date can't be before the authorisation date"
     }
-    // shortcut: the browser's calendar day, not the organisation's; the server repeats the check on the organisation's day.
-    if (form.firstUsedOn && (calendarDaysUntil(form.firstUsedOn) ?? 0) > 0) next.firstUsedOn = "The first use date can't be in the future"
+    // The organisation's day, as the server checks it; the browser's day until the settings arrive.
+    if (form.firstUsedOn && (calendarDaysUntil(form.firstUsedOn, providerToday) ?? 0) > 0) next.firstUsedOn = "The first use date can't be in the future"
     setErrors(next)
     return Object.keys(next).length === 0
   }

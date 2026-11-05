@@ -784,6 +784,15 @@ public enum RestrictivePracticeUseKind
     Prn = 1
 }
 
+/// <summary>What was reported to the NDIS Commission for one practice and month. Routine practices use UsedAsPerPlan or VariedUse; as-needed practices use UsesReported; the rest suit either. Eliminated and ServiceCeased stop later months.</summary>
+public enum RestrictivePracticeReportType { UsedAsPerPlan = 0, VariedUse = 1, NotUsed = 2, Eliminated = 3, NoServiceProvided = 4, ServiceCeased = 5, UsesReported = 6 }
+
+/// <summary>How a varied use differed from the plan.</summary>
+public enum RestrictivePracticeVariedKind { Increased = 0, Decreased = 1, Other = 2 }
+
+/// <summary>Where a practice's month stands; not *Status, so no pill-tone coverage until the screen shows it.</summary>
+public enum MonthlyReportState { Due = 0, Overdue = 1, Lodged = 2 }
+
 /// <summary>Where a behaviour support plan stands against its due date (see <c>BspTimeline</c>).</summary>
 public enum BspPlanState
 {

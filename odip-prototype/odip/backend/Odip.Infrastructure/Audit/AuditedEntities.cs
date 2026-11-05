@@ -93,6 +93,7 @@ public static class AuditedEntities
         // flags), and booking tasks all carry the same "who changed this, and when" requirement
         // as the entities already listed above.
         typeof(RestrictivePractice),
+        typeof(RestrictivePracticeMonthlyReport),
         typeof(TripClaim),
         typeof(ClaimLineItem),
         typeof(ParticipantConsent),

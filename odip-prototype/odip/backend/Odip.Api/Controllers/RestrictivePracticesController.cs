@@ -356,6 +356,12 @@ public class RestrictivePracticesController : ControllerBase
                     : $"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}, so it's kept as the record of that restraint."));
         }
 
+        // A lodged monthly report is the record sent to the Commission, so its practice stays (the report FK is Restrict as the backstop).
+        if (await _db.RestrictivePracticeMonthlyReports.AnyAsync(r => r.RestrictivePracticeId == id, ct))
+            return BadRequest(ApiResponse<bool>.Fail(practice.IsActive
+                ? "This entry has lodged monthly reports. Deactivate it instead."
+                : "This entry has lodged monthly reports, so it's kept as their record."));
+
         _db.RestrictivePractices.Remove(practice);
 
         // Sync-write (see CreateBulk): the deleted row can no longer contribute regardless of its own

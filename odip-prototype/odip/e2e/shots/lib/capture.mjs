@@ -45,6 +45,25 @@ export async function settle(page, locator) {
   throw new Error(`settle: layout still moving after ${SETTLE_MS}ms`)
 }
 
+// Hide fixed and sticky elements that are not the target(s), their ancestors or descendants; returns the restore function.
+async function hideChrome(page, locators) {
+  const keep = await Promise.all(locators.map((l) => l.elementHandle()))
+  await page.evaluate((keepEls) => {
+    const hidden = []
+    for (const e of document.body.querySelectorAll('*')) {
+      const p = getComputedStyle(e).position
+      if ((p === 'fixed' || p === 'sticky') && !keepEls.some((k) => e.contains(k) || k.contains(e))) { hidden.push([e, e.style.visibility]); e.style.visibility = 'hidden' }
+    }
+    window.__restoreChrome = () => hidden.forEach(([e, v]) => { e.style.visibility = v })
+  }, keep)
+  return () => page.evaluate(() => window.__restoreChrome?.())
+}
+
+// Wait for the app sidebar (<nav aria-label="Main">) to be visible; a page without one (390 with the drawer closed) just waits out a short timeout. Call before settle.
+export async function waitForSidebar(page, timeout = 2000) {
+  await page.locator('nav[aria-label="Main"]').first().waitFor({ state: 'visible', timeout }).catch(() => {})
+}
+
 // Run fn with the viewport grown to `width` x `height`, then restore it (and the touch emulation).
 async function withViewport(page, width, height, touch, fn) {
   const vp = page.viewportSize()
@@ -68,7 +87,7 @@ const isCoarse = (page) => page.evaluate(() => matchMedia('(pointer: coarse)').m
 // Shoot the whole element plus `pad` (a pad shrinks only at the page edge, or the right edge for a fluid-width element).
 // The viewport grows in height only, never in width: an element wider than the viewport fails checkCropHolds (overflowX).
 // Returns { file, clip, box, viewport, pad, coarse, touch, elementHeight }: clip is the real post-settle clip, box the element box.
-export async function cropElement(page, locator, file, { pad = 16, touch, also, natural, during } = {}) {
+export async function cropElement(page, locator, file, { pad = 16, touch, also, natural, during, hideChrome: hide } = {}) {
   touch ??= await isCoarse(page)
   await settle(page, locator)
   await page.evaluate(() => scrollTo(0, 0))
@@ -92,10 +111,28 @@ export async function cropElement(page, locator, file, { pad = 16, touch, also, 
     const clip = { x, y, width: Math.min(box.x + box.width + pad, page.viewportSize().width) - x, height: box.y + box.height + pad - y }
     const coarse = await isCoarse(page)
     const viewport = page.viewportSize()
-    const measured = during ? await during(clip) : undefined
-    await page.screenshot({ path: file, clip })
+    const restore = hide ? await hideChrome(page, also ? [locator, also] : [locator]) : null
+    let measured
+    try {
+      measured = during ? await during(clip) : undefined
+      await page.screenshot({ path: file, clip })
+    } finally { await restore?.() }
     return { file, clip, box, viewport, pad, coarse, touch, elementHeight: box.height, measured }
   })
+}
+
+// Pass = the element lies inside the clip and the topmost element at its centre is the element or inside it. Run it from `during`.
+// Ignored: the app sidebar, and the dialog, popover or drawer the element lives in and its unpositioned content (a positioned cover inside it still fails). Returns { name, pass, detail }.
+export async function overlapCheck(locator, clip, file) {
+  const detail = await locator.evaluate((el, c) => {
+    const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    // a positioned element between hit and the dialog (not an ancestor of the target) is a real cover
+    const onPath = (n, h) => { for (; n && n !== h; n = n.parentElement) if (getComputedStyle(n).position !== 'static') return true; return false }
+    const host = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true],[popover]')
+    const ignored = !!hit && (!!hit.closest('aside:has(nav[aria-label="Main"]),nav[aria-label="Main"]') || (!!host && host.contains(hit) && (hit === host || hit.contains(el) || !onPath(hit, host))))
+    return { inClip: r.left >= c.x - 1 && r.top >= c.y - 1 && r.right <= c.x + c.width + 1 && r.bottom <= c.y + c.height + 1, covered: !hit || (!el.contains(hit) && !ignored), hit: hit ? hit.tagName + '.' + String(hit.className).split(' ')[0] : null }
+  }, clip)
+  return { name: `crop is clear of fixed or sticky chrome: ${file}`, pass: detail.inClip && !detail.covered, detail }
 }
 
 // Whole page: the viewport is grown to the page height (a fullPage clip drops touch emulation and resizes without settling),
