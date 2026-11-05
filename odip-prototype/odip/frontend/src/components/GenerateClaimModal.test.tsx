@@ -80,7 +80,7 @@ describe('GenerateClaimModal — who the claim leaves out', () => {
 
 // A trip that starts before the catalogue is claimed for the days it can price; the preview says which days it could not.
 describe('GenerateClaimModal — days with no catalogue rate', () => {
-  const note = "Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days."
+  const note = "Not claimed: this trip's weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days."
 
   async function openPreview() {
     const user = userEvent.setup()

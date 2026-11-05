@@ -2149,7 +2149,7 @@ function tripClaimPreview(tripId) {
     departureTime: '08:00', returnTime: '18:00', activeHoursPerDay: 10, staffCount: 2, state: 'QLD', confirmedParticipantCount: 2 + leftOut.length,
     lineItems, totalAmount: 1505, leftOut,
     unpricedDaysNote: tripId === 't-0002' || tripId === 't-0003'
-      ? "Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days." : null,
+      ? "Not claimed: this trip's weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days." : null,
   }
 }
 

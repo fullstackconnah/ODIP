@@ -167,7 +167,7 @@ describe('TasksPage — column budget', () => {
     }
   })
 
-  it('clamps the Task to three lines, caps Owner and Type, and truncates the trip link on the link itself, with the full text in a tooltip', () => {
+  it('clamps the Task to three lines, caps Owner, wraps Type, and truncates the trip link on the link itself, with the full text in a tooltip', () => {
     renderPage()
     const row = screen.getByRole('link', { name: 'Beach Trip' }).closest('tr')!
     const task = within(row).getByText('Confirm accommodation')
@@ -176,7 +176,10 @@ describe('TasksPage — column budget', () => {
     expect(task).toHaveAttribute('title', 'Confirm accommodation')
     expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 7rem')
     // Platform review V2-B (Tasks 1): at 1440 Status was clipped under the pinned actions by ~90px; Task, Trip and Type give ~112px back.
-    expect(within(row).getByText('Accommodation request')).toHaveStyle('--cell-max: 7rem')
+    // Type wraps instead of truncating (a long one such as "NDIS Commission 5-day report" used to read "NDIS Commission…").
+    const typeCell = within(row).getByText('Accommodation request').closest('td')!
+    expect(typeCell).not.toHaveClass('md:whitespace-nowrap')
+    expect(within(typeCell).queryByTitle('Accommodation request')).toBeNull()
     // The link is a custom cell, so it limits itself: truncation on the link (not a wrapper, which would clip its focus ring).
     const link = screen.getByRole('link', { name: 'Beach Trip' })
     expect(link).toHaveClass('block', 'truncate', 'md:max-w-[9rem]')
