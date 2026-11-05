@@ -111,6 +111,9 @@ const scrollerMid = (page) => page.evaluate((sel) => { const b = document.queryS
 {
   const { context, page } = await open(1280, 800, { reduced: 'no-preference' })
   await crop(page, 'drafts-1280-top-light')
+  const status = page.getByRole('button', { name: /agreements? waiting/ }).first(); await status.waitFor({ state: 'visible', timeout: 10000 })
+  const sb = await status.evaluate((el) => { const r = (el.closest('[class*="rounded"]') || el).getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })
+  await page.screenshot({ path: path.join(OUT_DIR, 'agreements-1280.png'), clip: { x: Math.max(0, sb.x - 16), y: Math.max(0, sb.y - 16), width: Math.min(1280, sb.width + 32), height: sb.height + 32 } })
   const top = await probe(page)
   check('N15 motion: installIn', top.anim === 'installIn', top.anim)
   check('N8 no h-scroll 1280', !top.hScroll)
@@ -212,8 +215,11 @@ const scrollerMid = (page) => page.evaluate((sel) => { const b = document.queryS
 }
 // ---- 1280 states: blocked, all blocked, reader, short week, no drafts ------------------------------------------------------
 for (const [mode, name, cap, role] of [['blocked', 'blocked-1280', 60], ['allblocked', 'all-blocked-1280', 60], ['drafts', 'reader-1280', 52, 'ReadOnly'], ['short', 'short-week-1280', 52], ['published', 'nodrafts-1280']]) {
-  const { context, page } = await open(1280, 800, { mode })
-  if (role) { await page.evaluate((r) => { const u = JSON.parse(localStorage.getItem('odip_user') || '{}'); localStorage.setItem('odip_user', JSON.stringify({ ...u, role: r })) }, role); await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}); await page.waitForTimeout(1200) }
+  const { context, page } = await open(1280, 800, { mode, role })
+  if (role) { // READ_ONLY_REFUSED_PAGES lists 'rostering': a real reader is sent to the dashboard, so the pill's reader variant has no screen to capture
+    check('reader: ReadOnly is redirected off /rostering, no bar', (await page.evaluate(() => location.pathname)) === '/' && (await page.locator('[data-publish-bar]').count()) === 0)
+    await context.close(); continue
+  }
   await crop(page, name)
   const p = await probe(page)
   if (mode === 'published') {
@@ -221,7 +227,7 @@ for (const [mode, name, cap, role] of [['blocked', 'blocked-1280', 60], ['allblo
     const c6 = await page.evaluate((sel) => ({ boxBottom: document.querySelector(sel).getBoundingClientRect().bottom, innerHeight }), SCROLLER)
     check('N16 board fills to the viewport bottom', c6.innerHeight - c6.boxBottom <= 2, c6)
   } else {
-    if (!p.hasBar) { check(`${name}: the bar shows`, false, 'no bar'); await context.close(); continue }
+    if (!p.hasBar) { check(`${name}: the bar shows`, false, await page.evaluate(() => ({ url: location.pathname + location.search, role: (JSON.parse(localStorage.getItem('odip_user') || '{}')).role, bars: document.querySelectorAll('[data-publish-bar]').length, text: document.body.innerText.slice(0, 200) }))); await context.close(); continue }
     check(`N6 ${name} <= ${cap}`, p.pillH <= cap, rnd(p.pillH))
     check(`N9 ${name} no truncation`, p.trunc === 0 && p.titleH <= 20.5, { trunc: p.trunc, titleH: p.titleH })
     if (mode === 'allblocked' || role) check(`${name}: no Publish/Select buttons`, !p.buttons.some((b) => /Publish week|Select shifts/.test(b.t)), p.buttons.map((b) => b.t))

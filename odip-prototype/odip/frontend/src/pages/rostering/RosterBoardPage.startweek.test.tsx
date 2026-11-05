@@ -153,6 +153,7 @@ describe('the Publish banner', () => {
     expect(document.querySelector('[data-publish-bar]')).not.toBeNull()
     expect(screen.getByText('3 shifts not visible to staff yet')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+    expect(document.querySelector('[data-publish-bar] .ml-auto')).toBeNull()
   })
 
   it('all published: no banner, and the toolbar says "All published"', () => {

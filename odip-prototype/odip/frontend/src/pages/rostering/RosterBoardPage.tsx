@@ -756,9 +756,11 @@ export default function RosterBoardPage() {
           </p>
           {blocked.length > 0 && <p className="text-sm leading-5 text-[var(--color-muted-foreground)]">{bannerBlockedLine(blocked.length)}</p>}
         </div>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          {selecting ? selectActions : <>{selectButton}{publishButton}</>}
-        </div>
+        {(selecting || selectButton || publishButton) && (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {selecting ? selectActions : <>{selectButton}{publishButton}</>}
+          </div>
+        )}
       </div>
     </div>
   ) : null
