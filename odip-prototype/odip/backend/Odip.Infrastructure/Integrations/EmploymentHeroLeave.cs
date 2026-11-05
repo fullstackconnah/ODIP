@@ -49,7 +49,7 @@ public static class EmploymentHeroLeave
     public static async Task<IReadOnlySet<DateOnly>> HolidaysAsync(OdipDbContext db, Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
     {
         var providerState = await db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
-        var state = ClaimPricing.StateFor(null, providerState);
+        var state = ShiftPriceEstimator.StateFor(null, providerState);
         return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(db, from, to, includePartDay: false, ct)).For(state).ToHashSet();
     }
 
