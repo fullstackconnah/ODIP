@@ -15,6 +15,7 @@ const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
 const invoicesModule = require('./invoices')
 const reportsModule = require('./reports')
+const rpReportsModule = require('./mock-rp-reports.js')
 const claimHubModule = require('./claimHub')
 const importsModule = require('./imports')
 
@@ -1786,6 +1787,7 @@ const dashboardSummary = {
   tripsMissingStaff: 2,
   openIncidentCount: 2,
   qscOverdueCount: 1,
+  rpMonthlyReportsOverdueCount: 1,
   upcomingTrips: trips.filter((t) => t.status !== 'Completed'),
 }
 
@@ -2108,6 +2110,7 @@ const claimLineItemsByClaimId = {
 // Xero PR1: the invoice fixtures (claim-inv-f1 ... f10) join the claims above; invoices.js holds their invoices and routes.
 const invoiceMock = invoicesModule.create({ respond, failEnvelope, claims, lineItemsByClaimId: claimLineItemsByClaimId })
 const reportsMock = reportsModule.create({ respond, failEnvelope })
+const rpReportsMock = rpReportsModule.create({ respond, failEnvelope })
 const claimHub = claimHubModule.create({ respond, failEnvelope, FILE: invoicesModule.FILE })
 
 /** GET/PUT provider-settings: the organisation's billing details, with the invoice numbering invoices.js keeps. */
@@ -2729,6 +2732,7 @@ const routes = [
   ...intake.get,
   ...invoiceMock.get,
   ...reportsMock.get,
+  ...rpReportsMock.get,
   ...claimHub.get,
   ['provider-settings', () => invoiceMock.settingsDto(providerSettingsRow)],
   ['provider-today', () => ({ date: planApproval.providerToday() })],
@@ -3081,6 +3085,7 @@ const postRoutes = [
   ...intake.post,
   ...invoiceMock.post,
   ...reportsMock.post,
+  ...rpReportsMock.post,
   ...claimHub.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
@@ -3849,7 +3854,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...invoiceMock.delete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...invoiceMock.delete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete, ...rpReportsMock.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).

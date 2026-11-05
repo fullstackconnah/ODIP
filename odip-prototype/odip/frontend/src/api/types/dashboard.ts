@@ -11,7 +11,7 @@ export interface DashboardSummaryDto {
   tripsMissingStaff: number
   openIncidentCount: number
   qscOverdueCount: number
-  /** Overdue monthly restrictive practice reports; 0 for roles that cannot lodge them. Optional until the dashboard tile reads it. */
+  /** Overdue monthly restrictive practice reports; 0 for roles that cannot lodge them. Optional so older fixtures and servers still type-check; the tile reads it as 0 when absent. */
   rpMonthlyReportsOverdueCount?: number
   upcomingTrips: TripListDto[]
 }

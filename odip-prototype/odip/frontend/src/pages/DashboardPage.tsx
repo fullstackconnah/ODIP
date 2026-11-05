@@ -248,6 +248,12 @@ export default function DashboardPage() {
         action: { label: 'Review NDIS Commission reports', to: '/incidents?qsc=overdue' },
       },
     )
+    // Only the roles that can lodge them: the tab behind the link is hidden from the rest.
+    if (permissions.canWriteRestrictivePractices) attentionItems.push({
+      label: 'RP monthly reports overdue', noun: 'overdue restrictive practice monthly reports', count: d.rpMonthlyReportsOverdueCount ?? 0, tone: 'danger',
+      detail: 'Monthly reports not recorded as lodged by their due date.',
+      action: { label: 'Open monthly reports', to: '/incidents?view=rp-reports' },
+    })
   }
   if (canApproveLeave && !gates.leave) {
     attentionItems.push({
