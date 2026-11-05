@@ -677,24 +677,6 @@ export default function RosterBoardPage() {
   )
 
   const startCardShown = !isLoading && !loadFailed && !!filteredBoard && unstarted
-  const grid = filteredBoard && (
-    <RosterGrid
-      board={filteredBoard}
-      strip={dragOn ? <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} /> : undefined}
-      canWrite={canWrite}
-      draggable={dragOn}
-      unfilledOnly={unfilledOnly}
-      weekHasNoShifts={weekHasNoShifts}
-      onOpenShift={shift => setSlideOverTarget({ mode: 'edit', shift })}
-      onAssignTo={shift => setSlideOverTarget({ mode: 'edit', shift })}
-      onUnassign={shift => performAssign(shift, null)}
-      onDeleteShift={shift => setConfirmDeleteTarget(shift)}
-      onSetRegular={canWrite ? setRegularTarget : undefined}
-      onAddParticipantShift={handleAddParticipantShift}
-      onAddStaffShift={handleAddStaffShift}
-    />
-  )
-
   // The title row's actions (roster declutter, 2026-11-03), right-aligned in this order. The R7 slot (Auto-roster) goes before New: nothing is built for it. Below md only New stays beside the title; the rest ride the toolbar's last row.
   const secondaryActions = (
     <>
@@ -763,27 +745,49 @@ export default function RosterBoardPage() {
       <Button key="publish-chosen" size="md" disabled={chosen.length === 0} onClick={() => setPublishOpen(true)}>{chosen.length === 0 ? 'Publish' : `Publish ${plural(chosen.length, 'shift')}`}</Button>
     </>
   )
-  // The drafts banner is the Publish bar (owner, 2026-11-04): the foot of the page, pinned, so Publish week stays in reach while the board scrolls. A reader sees it without the button. It sits in the page flow after the board, so it never covers the last row; bg-background because rows scroll under it.
+  // The Publish bar (owner, 2026-11-05): an action bar, not an alert. A floating pill at the foot of the board's own scroller (RosterGrid's foot), so rows scroll under it and it never covers the footer. A reader sees it without the buttons. The wrapper paints nothing and takes no clicks; hidden while a person is carried, as rosterCollision hit-tests what is on top.
   const publishBar = showBanner ? (
-    <div data-publish-bar className="sticky bottom-[var(--mobile-nav-h)] z-20 bg-background pb-[var(--section-gap)] lg:bottom-0">
-      <Callout
-        tone="warning"
-        // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
-        announce={false}
-        title={selecting ? <span ref={focusCount} tabIndex={-1} aria-live="polite" className="outline-none">{selectionTitle(chosen.length)}</span> : bannerTitle(drafts.length)}
-        // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2). py-2.5 keeps that line at 54px, under the 56px check 10 (p-3 made it 58).
-        className={blocked.length === 0 ? 'items-center! py-2.5!' : 'py-2.5!'}
-        actions={selecting ? selectActions : agreementsButton || publishButton ? <>{agreementsButton}{selectButton}{publishButton}</> : undefined}
-      >
-        {bannerBlockedLine(blocked.length)}
-      </Callout>
+    <div data-publish-bar className="pointer-events-none sticky bottom-[var(--mobile-nav-h)] z-20 py-[var(--section-gap)] lg:bottom-0">
+      {/* Not role="alert": a standing state would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence. */}
+      <div className={`publish-float mx-auto flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-popover)] p-3 text-[var(--color-popover-foreground)] shadow-[var(--shadow-float)] transition-opacity duration-150 motion-reduce:transition-none md:max-w-[720px] md:py-2 md:pl-4 md:pr-2 ${carry ? 'pointer-events-none opacity-0' : 'pointer-events-auto'}`}>
+        <div className="min-w-0 max-md:basis-full">
+          <p className="text-sm font-semibold leading-5 tabular-nums">
+            {selecting ? <span ref={focusCount} tabIndex={-1} aria-live="polite" className="outline-none">{selectionTitle(chosen.length)}</span> : bannerTitle(drafts.length)}
+          </p>
+          {blocked.length > 0 && <p className="text-sm leading-5 text-[var(--color-muted-foreground)]">{bannerBlockedLine(blocked.length)}</p>}
+        </div>
+        {(selecting || selectButton || publishButton) && (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {selecting ? selectActions : <>{selectButton}{publishButton}</>}
+          </div>
+        )}
+      </div>
     </div>
   ) : null
-  const statusLine = !showBanner && hasNotice ? (
+  const statusLine = hasNotice ? (
     <Callout tone="info" icon={Hourglass} announce={false} title={`${plural(waiting.length, 'agreement')} waiting for approval`} className="items-center!" actions={agreementsButton}>
       {null}
     </Callout>
   ) : null
+  const grid = filteredBoard && (
+    <RosterGrid
+      board={filteredBoard}
+      strip={dragOn ? <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} /> : undefined}
+      canWrite={canWrite}
+      draggable={dragOn}
+      unfilledOnly={unfilledOnly}
+      weekHasNoShifts={weekHasNoShifts}
+      onOpenShift={shift => setSlideOverTarget({ mode: 'edit', shift })}
+      onAssignTo={shift => setSlideOverTarget({ mode: 'edit', shift })}
+      onUnassign={shift => performAssign(shift, null)}
+      onDeleteShift={shift => setConfirmDeleteTarget(shift)}
+      onSetRegular={canWrite ? setRegularTarget : undefined}
+      onAddParticipantShift={handleAddParticipantShift}
+      onAddStaffShift={handleAddStaffShift}
+      foot={publishBar}
+    />
+  )
+
   const transientShown = !!assignError || !!startNotice || !!regularNotice || !!skippedNotice
 
   return (
@@ -985,8 +989,6 @@ export default function RosterBoardPage() {
           ) : grid}
         </DropStateContext.Provider>
       )}
-
-      {publishBar}
 
       <ShiftSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
