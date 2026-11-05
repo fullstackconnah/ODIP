@@ -95,6 +95,20 @@ describe('StaffAssignModal — live conflict check (trip-side parity)', () => {
   })
 })
 
+describe('StaffAssignModal — duplicate on the same trip', () => {
+  it('shows the server sentence from a 409 in the error callout', async () => {
+    const user = userEvent.setup()
+    mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
+    const sentence = 'Alex Rivera is already on this trip for these dates.'
+    const onAssign = vi.fn().mockRejectedValue({ response: { status: 409, data: { success: false, errors: [sentence] } } })
+    render(<StaffAssignModal staff={staff} trip={trip} onClose={vi.fn()} onAssign={onAssign} isLoading={false} />)
+
+    await user.click(screen.getByRole('button', { name: /assign staff/i }))
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+  })
+})
+
 describe('RosterGateFields — trip-side call sites', () => {
   it('renders no reason field for a soft-Warning-only finding set, as the roster board no longer does either', () => {
     render(
