@@ -462,4 +462,99 @@ public class StaffAssignmentGateTests
         var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(ok.Value);
         Assert.DoesNotContain(body.Data!, f => f.Code == RosterConflictService.PublicHoliday);
     }
+
+    // ── Same person, same trip, overlapping dates: rejected (409), never an override ──
+
+    private static async Task<StaffAssignmentDto> CreatedAsync(StaffAssignmentsController c, Guid tripId, Guid staffId, DateOnly start, DateOnly end)
+    {
+        var r = await c.Create(CreateDto(tripId, staffId, start, end), CancellationToken.None);
+        return ((ApiResponse<StaffAssignmentDto>)((OkObjectResult)r.Result!).Value!).Data!;
+    }
+
+    private static UpdateStaffAssignmentDto UpdateDto(Guid tripId, Guid staffId, DateOnly start, DateOnly end, AssignmentStatus status = AssignmentStatus.Confirmed) => new()
+    {
+        TripInstanceId = tripId, StaffId = staffId, AssignmentStart = start, AssignmentEnd = end,
+        IsDriver = false, SleepoverType = SleepoverType.None, Status = status,
+    };
+
+    [Fact]
+    public async Task Create_SamePersonSameTripOverlappingDates_Returns409_AndDoesNotSave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10), days: 5);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12));
+
+        var result = await controller.Create(CreateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 12), new DateOnly(2026, 9, 14), overrideReason: "needed"), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffAssignmentDto>>(conflict.Value);
+        Assert.Equal("Ben Turner is already on this trip for these dates.", Assert.Single(body.Errors!));
+        Assert.Single(await db.StaffAssignments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_SamePersonSameTripSeparatePeriod_Succeeds()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10), days: 5);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 11));
+
+        var result = await controller.Create(CreateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 13), new DateOnly(2026, 9, 14)), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(2, await db.StaffAssignments.CountAsync());
+    }
+
+    [Fact]
+    public async Task Create_ExistingCancelledRowOnSameTrip_DoesNotBlock()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10), days: 3);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        var first = await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12));
+        (await db.StaffAssignments.SingleAsync(a => a.Id == first.Id)).Status = AssignmentStatus.Cancelled;
+        await db.SaveChangesAsync();
+
+        var result = await controller.Create(CreateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12)), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Update_MovingOntoSamePersonsOtherAssignmentOnTrip_Returns409_ButOwnDatesUnchangedIsAllowed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10), days: 5);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 11));
+        var second = await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 13), new DateOnly(2026, 9, 14));
+
+        var same = await controller.Update(second.Id, UpdateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 13), new DateOnly(2026, 9, 14)), CancellationToken.None);
+        Assert.IsType<OkObjectResult>(same.Result);
+
+        var moved = await controller.Update(second.Id, UpdateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 11), new DateOnly(2026, 9, 13)), CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(moved.Result);
+        Assert.Equal(new DateOnly(2026, 9, 13), (await db.StaffAssignments.SingleAsync(a => a.Id == second.Id)).AssignmentStart);
+    }
+
+    [Fact]
+    public async Task Update_Cancelling_IsNeverBlockedByTheDuplicateCheck()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10), days: 5);
+        var controller = new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db));
+        await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 11));
+        var second = await CreatedAsync(controller, trip.Id, staff.Id, new DateOnly(2026, 9, 13), new DateOnly(2026, 9, 14));
+
+        var result = await controller.Update(second.Id, UpdateDto(trip.Id, staff.Id, new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 11), AssignmentStatus.Cancelled), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
 }

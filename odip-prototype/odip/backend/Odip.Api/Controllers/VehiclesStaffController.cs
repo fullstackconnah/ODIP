@@ -1037,6 +1037,24 @@ public class StaffAssignmentsController : ControllerBase
         return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(RosterGate.ToFindingDto).ToList()));
     }
 
+    /// <summary>
+    /// 409 when the same person already holds a non-cancelled assignment on this trip whose period overlaps
+    /// [start, end] (same inclusive overlap test as CheckAsync). excludeAssignmentId is the row's own Id on update.
+    /// Not an override-able finding: a second row for the same person and dates only inflates the trip's staffing count.
+    /// shortcut: no DB constraint (separate date ranges for one person are legal), so two truly simultaneous requests can still both pass; add a serializable check if this is seen on live.
+    /// </summary>
+    private async Task<ConflictObjectResult?> DuplicateOnTripAsync(
+        Guid tripId, Guid staffId, DateOnly start, DateOnly end, Guid excludeAssignmentId, CancellationToken ct)
+    {
+        var duplicate = await _db.StaffAssignments
+            .AnyAsync(a => a.TripInstanceId == tripId && a.UserId == staffId && a.Id != excludeAssignmentId
+                           && a.Status != AssignmentStatus.Cancelled && a.AssignmentStart <= end && a.AssignmentEnd >= start, ct);
+        if (!duplicate) return null;
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == staffId, ct);
+        var name = user != null ? (user.FirstName + " " + user.LastName).Trim() : "";
+        return Conflict(ApiResponse<StaffAssignmentDto>.Fail($"{(name.Length > 0 ? name : "This staff member")} is already on this trip for these dates."));
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Create([FromBody] CreateStaffAssignmentDto dto, CancellationToken ct)
@@ -1045,6 +1063,9 @@ public class StaffAssignmentsController : ControllerBase
             return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Trip not found"));
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
             return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
+
+        var duplicate = await DuplicateOnTripAsync(dto.TripInstanceId, dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, Guid.Empty, ct);
+        if (duplicate != null) return duplicate;
 
         var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, Guid.Empty, ct);
         var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "trip assignment");
@@ -1097,6 +1118,9 @@ public class StaffAssignmentsController : ControllerBase
 
         if (!isCancelling)
         {
+            var duplicate = await DuplicateOnTripAsync(a.TripInstanceId, dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, a.Id, ct);
+            if (duplicate != null) return duplicate;
+
             var findings = await CheckAsync(dto.StaffId, dto.AssignmentStart, dto.AssignmentEnd, a.Id, ct);
             var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "trip assignment");
             if (rejection != null) return UnprocessableEntity(rejection);

@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
 import { useCheckStaffAssignment, getRosterFindings } from '@/api/hooks'
+import { apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { ScheduleStaffDto, ScheduleTripDto, CreateStaffAssignmentDto, RosterFindingDto, SleepoverType } from '@/api/types'
@@ -72,6 +73,8 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
       if (serverFindings) {
         setFindings(serverFindings)
         if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
+      } else if (apiErrorStatus(err) === 409 && apiErrorMessages(err)[0]) {
+        setError(apiErrorMessages(err)[0])
       } else {
         setError('Something went wrong assigning this staff member. Please try again.')
       }
