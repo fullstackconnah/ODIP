@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Odip.Application.Common;
 using Odip.Domain.Billing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -131,23 +132,42 @@ public sealed partial class ClaimBatchService
             return new RejectedLineDto(HubLine(byId[r.LineId], ctx, NextAttempt(r.LineId)), r.Id, r.BatchId, r.FileName, r.RejectCode ?? "", r.RejectMessage, info.NeedsDecision, info.Hint, r.RejectedAt);
         }).ToList();
 
-        // shortcut: the newest 200 claims only, then the plan- and self-managed ones among them; page it if an organisation outgrows that.
-        var recent = await scoped.Where(c => c.Status != TripClaimStatus.Cancelled).OrderByDescending(c => c.CreatedAt).Take(ListCap).Select(c => c.Id).ToListAsync(ct);
-        var recentRows = await bpr.LoadRowsAsync(t, await db.ClaimLineItems.AsNoTracking().Where(l => recent.Contains(l.TripClaimId)).Select(l => l.Id).ToListAsync(ct), ct);
-        var invoiceLookup = (await db.Invoices.AsNoTracking().Where(i => i.TripClaimId != null && recent.Contains(i.TripClaimId.Value) && i.Kind == InvoiceKind.Invoice)
+        var settings = rows.Select(r => r.Settings).FirstOrDefault(s => s != null) ?? await db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == t, ct);
+        return new HubLinesDto(ready, rejected, ClaimBatchChecks.RegistrationProblem(settings));
+    }
+
+    /// <summary>
+    /// One page of the claims that follow a plan- or self-managed participant, newest claim first (the id breaks a tie, so a page holds the same rows on every load).
+    /// A line's participant and plan type are BprCsvService.LoadRowsAsync's: booking, else shift, else claim for the participant; the booking's override, else the participant's plan type.
+    /// </summary>
+    public async Task<PagedResult<ManagedClaimDto>> ManagedAsync(Guid t, PlanType[] plans, int page, int pageSize, CancellationToken ct)
+    {
+        var lines = db.ClaimLineItems.AsNoTracking().Where(l => l.TenantId == t).Select(l => new
+        {
+            l.TripClaimId,
+            Pid = (Guid?)l.ParticipantBooking!.ParticipantId ?? (Guid?)l.Shift!.ParticipantId ?? l.TripClaim.ParticipantId,
+            Override = l.ParticipantBooking!.PlanTypeOverride,
+        });
+        var matching = lines.Where(x => db.Participants.Any(p => p.TenantId == t && p.Id == x.Pid && plans.Contains(x.Override ?? p.PlanType))).Select(x => x.TripClaimId);
+        var claims = db.TripClaims.AsNoTracking().Where(c => c.TenantId == t && c.Status != TripClaimStatus.Cancelled && matching.Contains(c.Id));
+
+        var total = await claims.CountAsync(ct);
+        var ids = await claims.OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize).Select(c => c.Id).ToListAsync(ct);
+
+        var rows = await bpr.LoadRowsAsync(t, await db.ClaimLineItems.AsNoTracking().Where(l => ids.Contains(l.TripClaimId)).Select(l => l.Id).ToListAsync(ct), ct);
+        var invoiceLookup = (await db.Invoices.AsNoTracking().Where(i => i.TripClaimId != null && ids.Contains(i.TripClaimId.Value) && i.Kind == InvoiceKind.Invoice)
                 .Select(i => new { ClaimId = i.TripClaimId!.Value, Dto = new ManagedInvoiceDto(i.Id, i.DisplayNumber, i.Status, i.Total, i.IssueDate) }).ToListAsync(ct))
             .ToLookup(i => i.ClaimId, i => i.Dto);
-        var today = ctx.Today;
-        var managed = recentRows.Where(r => r.PlanType is PlanType.PlanManaged or PlanType.SelfManaged).GroupBy(r => r.Claim.Id).Select(g =>
+        var today = await ProviderTimeZoneResolver.TodayAsync(db, t, clock, ct);
+        var byClaim = rows.Where(r => r.PlanType is { } p && plans.Contains(p)).GroupBy(r => r.Claim.Id).ToDictionary(g => g.Key);
+        var items = ids.Where(byClaim.ContainsKey).Select(id =>
         {
+            var g = byClaim[id];
             var first = g.First();
-            var oldest = g.Min(r => r.Line.SupportsDeliveredFrom);
-            var age = ClaimBatchChecks.AgeDays(today, oldest);
+            var age = ClaimBatchChecks.AgeDays(today, g.Min(r => r.Line.SupportsDeliveredFrom));
             return new ManagedClaimDto(first.Claim.Id, first.Claim.ClaimReference, first.Participant?.Id, first.Participant?.FullName, Wire(first.PlanType!.Value), first.Claim.Status,
-                first.Claim.TotalAmount, age, ClaimBatchChecks.AgeBand(age), invoiceLookup[first.Claim.Id].ToList());
-        }).OrderByDescending(c => c.AgeDays).ToList();
-
-        var settings = rows.Concat(recentRows).Select(r => r.Settings).FirstOrDefault(s => s != null) ?? await db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == t, ct);
-        return new HubLinesDto(ready, rejected, managed, ClaimBatchChecks.RegistrationProblem(settings));
+                first.Claim.TotalAmount, age, ClaimBatchChecks.AgeBand(age), invoiceLookup[id].ToList());
+        }).ToList();
+        return new PagedResult<ManagedClaimDto> { Items = items, TotalCount = total, Page = page, PageSize = pageSize };
     }
 }

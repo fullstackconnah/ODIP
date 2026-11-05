@@ -22,7 +22,8 @@ const trip = (over: Partial<TripListDto> = {}): TripListDto => ({
   id: 't-1', tripName: 'Byron Bay Weekend', tripCode: null, destination: null, region: null, startDate: '2026-10-09', endDate: '2026-10-11',
   durationDays: 3, status: 'Completed', maxParticipants: null, currentParticipantCount: 4, waitlistCount: 0, leadCoordinatorName: null, ...over,
 })
-const list = (data: TripListDto[] | undefined, over: object = {}) => ({ data, isLoading: false, isError: false, refetch: vi.fn(), ...over })
+// useTrips hands back a TruncatableList: the rows carrying the server's total.
+const list = (data: TripListDto[] | undefined, over: object = {}) => ({ data: data && Object.assign(data, { totalCount: (data as { totalCount?: number }).totalCount ?? data.length, isTruncated: (data as { isTruncated?: boolean }).isTruncated ?? false }), isLoading: false, isError: false, refetch: vi.fn(), ...over })
 const one = (data?: object, over: object = {}) => ({ data, isLoading: false, isError: false, refetch: vi.fn(), ...over })
 
 const cancelled = (n: number) => ({
@@ -147,6 +148,24 @@ describe('NewClaimModal: the chooser', () => {
     expect(row).toHaveFocus()
     await userEvent.click(row)
     expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
+  })
+})
+
+describe('NewClaimModal: a truncated trip list', () => {
+  const truncated = () => list(Object.assign([trip(), trip({ id: 't-2', tripName: 'Gold Coast Day' })], { totalCount: 5, isTruncated: true }))
+
+  it('counts every waiting trip, not the rows loaded, and says the list is cut', async () => {
+    m.trips.mockReturnValue(truncated())
+    setup()
+    expect(screen.getByRole('button', { name: 'A trip A completed trip with no claim 5 waiting' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^A trip/ }))
+    expect(screen.getByText("Showing the 2 most recent of 5 completed trips. Claim an older one from its trip's Claims tab.")).toBeInTheDocument()
+  })
+
+  it('has no hint when the list is whole', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /^A trip/ }))
+    expect(screen.queryByText(/most recent of/)).toBeNull()
   })
 })
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Odip.Application.Common;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Services;
 
@@ -91,6 +92,22 @@ public class ClaimBatchesController(ClaimBatchService batches, ICurrentTenant te
     [HttpGet("claim-hub/lines")]
     public async Task<IActionResult> Hub(CancellationToken ct) =>
         NoTenant() ?? Ok(ApiResponse<HubLinesDto>.Ok(await batches.HubAsync(tenant.TenantId!.Value, ct)));
+
+    // GET /api/v1/claim-hub/managed?funding=plan|self&page=&pageSize=
+    [HttpGet("claim-hub/managed")]
+    public async Task<IActionResult> Managed([FromQuery] string? funding, [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
+    {
+        PlanType[]? plans = funding switch
+        {
+            null or "" => [PlanType.PlanManaged, PlanType.SelfManaged],
+            "plan" => [PlanType.PlanManaged],
+            "self" => [PlanType.SelfManaged],
+            _ => null,
+        };
+        if (plans is null) return BadRequest(ApiResponse<bool>.Fail("Funding must be plan or self."));
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
+        return NoTenant() ?? Ok(ApiResponse<PagedResult<ManagedClaimDto>>.Ok(await batches.ManagedAsync(tenant.TenantId!.Value, plans, page, pageSize, ct)));
+    }
 
     // GET /api/v1/claim-hub/pipeline
     [HttpGet("claim-hub/pipeline")]

@@ -10,6 +10,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Retention;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
@@ -698,6 +699,7 @@ public class ParticipantsController : ControllerBase
 
         p.IsActive = activate;
         p.UpdatedAt = DateTime.UtcNow;
+        RetentionClock.OnActiveChanged(p, activate, activate ? null : await RetentionClock.TodayAsync(_db, p.TenantId, _clock, ct));
         // The audit interceptor writes the one row for this change; the reason rides on it instead of making a second one.
         if (!string.IsNullOrWhiteSpace(reason) && HttpContext != null)
             HttpContext.Items[AuditInterceptor.ReasonItemKey(p.Id)] = reason.Trim();
@@ -992,8 +994,13 @@ public class ParticipantsController : ControllerBase
     {
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
-        p.IsActive = false; p.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        // Archiving again must not restart the 7-year clock.
+        if (p.IsActive)
+        {
+            p.IsActive = false; p.UpdatedAt = DateTime.UtcNow;
+            RetentionClock.OnActiveChanged(p, false, await RetentionClock.TodayAsync(_db, p.TenantId, _clock, ct));
+            await _db.SaveChangesAsync(ct);
+        }
         return Ok(ApiResponse<bool>.Ok(true, "Participant archived"));
     }
 }

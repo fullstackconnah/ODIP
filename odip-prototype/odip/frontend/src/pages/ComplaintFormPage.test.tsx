@@ -234,25 +234,31 @@ describe('ComplaintFormPage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
-  it('M2: choosing a participant narrows the incident options to theirs', async () => {
+  it('M2: choosing a participant asks the server for their incidents', async () => {
     const user = userEvent.setup()
-    mockUseIncidents.mockReturnValue({
-      isLoading: false,
-      data: [
-        { id: 'i-1', title: 'Fall at home', incidentDateTime: '2026-10-02T09:00:00', involvedParticipantId: 'p-1' },
-        { id: 'i-2', title: 'Missing medication', incidentDateTime: '2026-10-03T09:00:00', involvedParticipantId: 'p-2' },
-      ],
-    })
     renderAt('/complaints/new')
-    const picker = screen.getByLabelText('Search incidents…')
-    expect(Array.from(picker.querySelectorAll('option')).map(o => o.textContent)).toEqual([
-      'No linked incident', expect.stringContaining('Fall at home'), expect.stringContaining('Missing medication'),
-    ])
+    expect(mockUseIncidents).toHaveBeenLastCalledWith({ pageSize: '200' })
     await user.selectOptions(screen.getByLabelText(/Who made the complaint/), 'Participant')
     await user.selectOptions(screen.getByLabelText('Participant picker'), 'p-2')
-    expect(Array.from(screen.getByLabelText('Search incidents…').querySelectorAll('option')).map(o => o.textContent)).toEqual([
-      'No linked incident', expect.stringContaining('Missing medication'),
-    ])
+    expect(mockUseIncidents).toHaveBeenLastCalledWith({ pageSize: '200', involvedParticipantId: 'p-2' })
+  })
+
+  it('says the incident list is cut, with the counts, only when it is', () => {
+    const rows = [{ id: 'i-1', title: 'Fall at home', incidentDateTime: '2026-10-02T09:00:00' }, { id: 'i-2', title: 'Missing medication', incidentDateTime: '2026-10-03T09:00:00' }]
+    mockUseIncidents.mockReturnValue({ isLoading: false, data: Object.assign([...rows], { totalCount: 5, isTruncated: true }) })
+    const first = renderAt('/complaints/new')
+    expect(screen.getByText(/Showing the latest 2 of 5 incidents not yet closed. Search looks through these only./)).toBeInTheDocument()
+    first.unmount()
+    mockUseIncidents.mockReturnValue({ isLoading: false, data: Object.assign([...rows], { totalCount: 2, isTruncated: false }) })
+    renderAt('/complaints/new')
+    expect(screen.queryByText(/Showing the latest/)).toBeNull()
+  })
+
+  it('keeps a saved incident link on screen even when it is outside the loaded rows', () => {
+    mockUseComplaint.mockReturnValue(loaded(complaint({ incidentReportId: 'i-old', incidentReportTitle: 'Old fall' })))
+    mockUseIncidents.mockReturnValue({ isLoading: false, data: [{ id: 'i-1', title: 'Fall at home', incidentDateTime: '2026-10-02T09:00:00' }] })
+    renderAt('/complaints/c-1')
+    expect(Array.from(screen.getByLabelText('Search incidents…').querySelectorAll('option')).map(o => o.textContent)).toContain('Old fall')
   })
 
   // A path change re-renders the page, which re-reads the mocked hooks.

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, PipelineDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
+import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, ManagedClaimDto, PipelineDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
 import { ClaimFileError } from '@/api/hooks/claimHub'
 import ClaimsHubPage from './ClaimsHubPage'
 
@@ -12,14 +12,14 @@ import ClaimsHubPage from './ClaimsHubPage'
 const m = vi.hoisted(() => ({
   lines: vi.fn(), batches: vi.fn(), batch: vi.fn(), fetchClaimFile: vi.fn(), preview: vi.fn(),
   uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(), pipeline: vi.fn(),
-  unclaimed: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn(),
+  unclaimed: vi.fn(), managed: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn(),
 }))
 vi.mock('@/api/hooks/claimHub', async () => {
   const actual = await vi.importActual<typeof import('@/api/hooks/claimHub')>('@/api/hooks/claimHub')
   const mutation = (fn: ReturnType<typeof vi.fn>) => () => ({ mutate: fn, isPending: false, isError: false, error: null, reset: vi.fn() })
   return {
     ClaimFileError: actual.ClaimFileError,
-    useHubLines: m.lines, useClaimBatches: m.batches, useClaimPipeline: m.pipeline, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
+    useHubLines: m.lines, useManagedClaims: m.managed, useClaimBatches: m.batches, useClaimPipeline: m.pipeline, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
     useMarkBatchUploaded: mutation(m.uploaded), useDiscardBatch: mutation(m.discard), useImportResults: mutation(m.importResults),
     useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss), useUnclaimedShifts: m.unclaimed,
     useCancellationCandidates: m.cancellations, usePreviewCancellationClaim: m.previewCancellation, useMakeCancellationClaim: m.makeCancellation,
@@ -42,7 +42,7 @@ vi.mock('./ShiftClaimRunModal', async () => {
   return { ShiftClaimRunModal: ({ onClose, from }: { onClose: () => void; from?: string }) => <Modal open onClose={onClose} title="Claim run"><p data-testid="run-from">{from ?? 'default'}</p><button onClick={onClose}>Close run</button></Modal> }
 })
 
-const query = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn() })
+const query = <T,>(data: T, over: object = {}) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn(), ...over })
 
 function line(over: Partial<HubLineDto> = {}): HubLineDto {
   return {
@@ -66,7 +66,13 @@ const detail = (over: Partial<BatchDetailDto> = {}): BatchDetailDto => ({
   ], ...over,
 })
 const pipeline = (): PipelineDto => ({ today: '2026-10-30', weeks: Array.from({ length: 12 }, (_, i) => ({ weekStart: new Date(Date.UTC(2026, 7, 10 + 7 * i)).toISOString().slice(0, 10), sent: i === 11 ? 350 : 0, paid: 0, rejected: 0, rejectedLines: 0 })), withNdia: 350, acceptedUnpaid: 0, undatedPaid: 0 })
-const hub = (over: Partial<HubLinesDto> = {}): HubLinesDto => ({ ready: [], rejected: [], managed: [], ...over })
+const hub = (over: Partial<HubLinesDto> = {}): HubLinesDto => ({ ready: [], rejected: [], ...over })
+
+const managedClaim = (n: number): ManagedClaimDto => ({
+  claimId: `m-${n}`, claimReference: `TC-${n}`, participantId: 'p-1', participantName: 'Alex Park', fundingType: 'plan', claimStatus: 'Draft', totalAmount: 100, ageDays: 3, ageBand: 'none', invoices: [],
+})
+/** What useManagedClaims hands back: the page's rows with the server's total on them (a TruncatableList). */
+const managedPage = (rows: ManagedClaimDto[], totalCount: number, over: object = {}) => query(Object.assign([...rows], { totalCount, isTruncated: rows.length < totalCount }), over)
 
 function Where() {
   return <output data-testid="where">{useLocation().search}</output>
@@ -87,6 +93,7 @@ beforeEach(() => {
   m.lines.mockReturnValue(query(hub()))
   m.batches.mockReturnValue(query([]))
   m.pipeline.mockReturnValue(query(pipeline()))
+  m.managed.mockReturnValue(managedPage([], 0))
   m.batch.mockReturnValue({ ...query(undefined), isLoading: false })
   m.unclaimed.mockReturnValue({ count: 12, participants: 3, loading: false, error: false })
   m.cancellations.mockReturnValue({
@@ -687,5 +694,59 @@ describe('ClaimsHubPage: New claim', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     renderPage('/claims?run=shifts')
     expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+  })
+})
+
+describe('ClaimsHubPage: the Plan- and self-managed tab pages on the server', () => {
+  it('asks for page 1, then page 2, and shows the server total', async () => {
+    m.managed.mockReturnValue(managedPage(Array.from({ length: 50 }, (_, i) => managedClaim(i)), 120))
+    renderPage('/claims?tab=other')
+    expect(m.managed).toHaveBeenLastCalledWith({ page: '1', pageSize: '50' })
+    expect(screen.getByText('Showing 1-50 of 120')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(m.managed).toHaveBeenLastCalledWith({ page: '2', pageSize: '50' })
+  })
+
+  it('sends the funding type to the server and goes back to page 1', async () => {
+    m.managed.mockReturnValue(managedPage(Array.from({ length: 50 }, (_, i) => managedClaim(i)), 120))
+    renderPage('/claims?tab=other')
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await userEvent.click(screen.getByRole('button', { name: /Both/ }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Plan-managed' }))
+    expect(m.managed).toHaveBeenLastCalledWith({ page: '1', pageSize: '50', funding: 'plan' })
+  })
+
+  it('shows the empty state when nothing is managed, and the filter message when a funding type matches none', async () => {
+    renderPage('/claims?tab=other')
+    expect(screen.getByText('No plan- or self-managed claims')).toBeInTheDocument()
+    cleanup()
+    m.managed.mockImplementation((p: Record<string, string>) => p.funding ? managedPage([], 0) : managedPage([managedClaim(1)], 1))
+    renderPage('/claims?tab=other')
+    await userEvent.click(screen.getByRole('button', { name: /Both/ }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Self-managed' }))
+    expect(await screen.findByText('No claims match. Show both funding types.')).toBeInTheDocument()
+  })
+
+  it('steps back to the last page when its page comes back empty', async () => {
+    let shrunk = false
+    m.managed.mockImplementation((p: Record<string, string>) => {
+      if (p.page === '3') { shrunk = true; return managedPage([], 60) }
+      if (shrunk) return managedPage(Array.from({ length: 10 }, (_, i) => managedClaim(50 + i)), 60)
+      return managedPage(Array.from({ length: 50 }, (_, i) => managedClaim(i)), 120)
+    })
+    renderPage('/claims?tab=other')
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByText('Showing 51-60 of 60')).toBeInTheDocument()
+    expect(m.managed).toHaveBeenLastCalledWith({ page: '2', pageSize: '50' })
+    expect(screen.queryByText(/No claims match/)).not.toBeInTheDocument()
+  })
+
+  it('shows the error state, and Try again refetches this query', async () => {
+    const refetch = vi.fn()
+    m.managed.mockReturnValue({ ...managedPage([], 0), data: undefined, isError: true, refetch })
+    renderPage('/claims?tab=other')
+    await userEvent.click(screen.getByRole('button', { name: /Try again/ }))
+    expect(refetch).toHaveBeenCalled()
   })
 })
