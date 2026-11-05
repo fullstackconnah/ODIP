@@ -90,6 +90,7 @@ public class ParticipantIdMaskEndpointScanTests
         ["AuthController.Logout"] = "no participant ID fields in this controller (grep-checked 2026-10-25)",
         ["CaregiverController.SaveDraft"] = "no participant ID fields in this controller (grep-checked 2026-10-25)",
         ["CaregiverController.Submit"] = "no participant ID fields in this controller (grep-checked 2026-10-25)",
+        ["ClientErrorsController.Report"] = "takes a crash message and stacks and returns 204; no participant ID fields (2026-11-06)",
         ["EarlyAccessController.Submit"] = "no participant ID fields in this controller (grep-checked 2026-10-25)",
         ["MicrosoftAuthController.Callback"] = "Microsoft sign-in: redirects, session and account state; no participant ID fields in this controller (grep-checked 2026-10-26)",
         ["MicrosoftAuthController.Config"] = "Microsoft sign-in: redirects, session and account state; no participant ID fields in this controller (grep-checked 2026-10-26)",
