@@ -240,13 +240,9 @@ export function ShiftNotesSection({
                       <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">Editing a sent note needs a connection.</span>
                     )}
                     {note.authorUserId === currentUserId && (online || (note as QueuedNote).waiting) && (
-                      <button
-                        type="button"
-                        onClick={() => startEdit(note)}
-                        className="shrink-0 min-h-[44px] px-2 -my-2 text-xs font-medium text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-                      >
+                      <Button variant="ghost" size="sm" className="shrink-0" onClick={() => startEdit(note)}>
                         Edit
-                      </button>
+                      </Button>
                     )}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap">{note.body}</p>

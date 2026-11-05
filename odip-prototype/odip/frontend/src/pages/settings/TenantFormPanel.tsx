@@ -1,6 +1,6 @@
 import { inputClass, labelClass, textareaClass } from '@/components/FormField'
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -440,21 +440,10 @@ export default function TenantFormPanel({
       {/* ── Section 2: Provider Settings (create only) ────────────── */}
       {!isEdit && (
         <div>
-          <button
-            type="button"
-            onClick={() => setProviderExpanded(p => !p)}
-            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-foreground)] hover:text-[var(--color-primary)] transition-colors"
-          >
-            {providerExpanded ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-            Provider Settings
-          </button>
+          <DisclosureToggle label="Provider Settings" open={providerExpanded} onToggle={() => setProviderExpanded(p => !p)} controls="tf-provider-panel" />
 
           {providerExpanded && (
-            <div className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
+            <div id="tf-provider-panel" className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="tf-registration-number" className={labelClass}>Registration Number</label>
@@ -559,21 +548,10 @@ export default function TenantFormPanel({
       {/* ── Section 3: Initial Admin User (create only) ───────────── */}
       {!isEdit && (
         <div>
-          <button
-            type="button"
-            onClick={() => setUserExpanded(p => !p)}
-            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-foreground)] hover:text-[var(--color-primary)] transition-colors"
-          >
-            {userExpanded ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-            Initial Admin User
-          </button>
+          <DisclosureToggle label="Initial Admin User" open={userExpanded} onToggle={() => setUserExpanded(p => !p)} controls="tf-admin-user-panel" />
 
           {userExpanded && (
-            <div className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
+            <div id="tf-admin-user-panel" className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
               {/* Info banner */}
               <div className="bg-[var(--color-secondary-container)] border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-3 text-xs text-[var(--color-foreground)]">
                 Optionally create an admin user for this tenant. All four

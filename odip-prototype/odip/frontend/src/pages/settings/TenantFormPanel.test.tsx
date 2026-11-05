@@ -118,3 +118,15 @@ describe('TenantFormPanel — every field is named by its label', () => {
     expect(screen.getByLabelText('Role')).toBeInTheDocument()
   })
 })
+
+describe('TenantFormPanel disclosure sections', () => {
+  it.each(['Provider Settings', 'Initial Admin User'])('%s toggle reports aria-expanded and flips on click', async name => {
+    const user = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    const toggle = screen.getByRole('button', { name })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).toBeInTheDocument()
+  })
+})

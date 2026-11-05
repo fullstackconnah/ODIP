@@ -8,6 +8,23 @@ import { Button } from './Button'
 import { TAP_AREA } from './tapArea'
 
 describe('Button', () => {
+  it('renders a plain <a href> with the button classes when href is set', () => {
+    render(<Button href="tel:0412345678" variant="secondary" aria-label="Call Sam">Call</Button>)
+    const link = screen.getByRole('link', { name: 'Call Sam' })
+    expect(link).toHaveAttribute('href', 'tel:0412345678')
+    expect(link).toHaveClass('bg-[var(--color-card)]')
+    expect(link).not.toHaveAttribute('type')
+    expect(link).not.toHaveAttribute('target')
+    expect(link).not.toHaveAttribute('rel')
+  })
+
+  it('passes target and rel to the <a> only when given', () => {
+    render(<Button href="https://example.com" target="_blank" rel="noopener noreferrer">Out</Button>)
+    const link = screen.getByRole('link', { name: 'Out' })
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
   it('renders the supplied text in a primary variant by default', () => {
     render(<Button>Save enquiry</Button>)
     const btn = screen.getByRole('button', { name: 'Save enquiry' })

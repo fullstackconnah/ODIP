@@ -7,7 +7,6 @@ import { isStillTrying } from '@/lib/offline/queue'
 import { waitingKind } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { buttonClasses } from '@/components/buttonClasses'
 import { TAP_AREA } from '@/components/tapArea'
 import { formatWithTimeZone } from '@/lib/utils'
 import { formatServiceDate } from '@/lib/format'
@@ -145,8 +144,8 @@ function rankContacts(list: PortalEmergencyContactDto[]): PortalEmergencyContact
     || (x.priorityOrder ?? Number.MAX_SAFE_INTEGER) - (y.priorityOrder ?? Number.MAX_SAFE_INTEGER))
 }
 
-// A tel: link is an anchor, not a Button, but it takes Button's secondary look. h-auto! lets a long number wrap instead of spilling out of a fixed-height box.
-const CALL_LINK = buttonClasses('secondary', 'md', false, `${TAP_AREA} h-auto! min-h-[44px] py-2`)
+// h-auto! lets a long number wrap instead of spilling out of a fixed-height box.
+const CALL_CLASS = `${TAP_AREA} h-auto! min-h-[44px] py-2`
 
 function telHref(number: string): string {
   return `tel:${number.replace(/[^\d+]/g, '')}`
@@ -165,14 +164,14 @@ function Contacts({ contacts }: { contacts: PortalEmergencyContactDto[] }) {
           <p className="text-xs text-[var(--color-muted-foreground)]">{[c.roleLabel, c.relationship].filter(Boolean).join(', ')}</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {c.mobile && (
-              <a href={telHref(c.mobile)} className={CALL_LINK}>
+              <Button href={telHref(c.mobile)} variant="secondary" className={CALL_CLASS}>
                 <Phone className="w-4 h-4" aria-hidden="true" /> Call mobile {c.mobile}
-              </a>
+              </Button>
             )}
             {c.phone && (
-              <a href={telHref(c.phone)} className={CALL_LINK}>
+              <Button href={telHref(c.phone)} variant="secondary" className={CALL_CLASS}>
                 <Phone className="w-4 h-4" aria-hidden="true" /> Call phone {c.phone}
-              </a>
+              </Button>
             )}
             {!c.mobile && !c.phone && <span className="text-[var(--color-muted-foreground)] italic">No number recorded</span>}
           </div>
@@ -233,8 +232,7 @@ export function MustKnowLine({ shift, onAbout }: { shift: PortalShiftDetailDto; 
       {p.isHighSupport && <Chip>High support</Chip>}
       {p.isIntensiveSupport && <Chip>Intensive support</Chip>}
       {p.hasRestrictivePracticeFlag && <Chip>Restrictive practice</Chip>}
-      {/* The house link look (BackButton 'link'): a ghost button reads as body text on touch, where nothing hovers. */}
-      <button type="button" className="inline-flex items-center min-h-[var(--tap-min)] rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]" onClick={onAbout}>Everything about {p.fullName.split(' ')[0]}</button>
+      <Button variant="ghost" size="sm" onClick={onAbout}>Everything about {p.fullName.split(' ')[0]}</Button>
     </div>
   )
 }
