@@ -11,16 +11,16 @@ const preview: ClaimPreviewResponseDto = {
 } as unknown as ClaimPreviewResponseDto
 
 // The participants the preview leaves out; a test sets it before it opens the preview.
-const shown = vi.hoisted(() => ({ leftOut: [] as unknown[] }))
+const shown = vi.hoisted(() => ({ leftOut: [] as unknown[], unpricedDaysNote: undefined as string | undefined }))
 
 vi.mock('@/api/hooks', () => ({
-  usePreviewClaim: () => ({ mutate: (_: unknown, o: { onSuccess: (d: ClaimPreviewResponseDto) => void }) => o.onSuccess({ ...preview, leftOut: shown.leftOut } as ClaimPreviewResponseDto), isPending: false }),
+  usePreviewClaim: () => ({ mutate: (_: unknown, o: { onSuccess: (d: ClaimPreviewResponseDto) => void }) => o.onSuccess({ ...preview, leftOut: shown.leftOut, unpricedDaysNote: shown.unpricedDaysNote } as ClaimPreviewResponseDto), isPending: false }),
   useGenerateClaim: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 const trip = { id: 't1', tripName: 'Byron Bay', startDate: '2026-08-14', endDate: '2026-08-17' } as TripDetailDto
 
-afterEach(() => { restoreZone(); shown.leftOut = [] })
+afterEach(() => { restoreZone(); shown.leftOut = []; shown.unpricedDaysNote = undefined })
 
 // Standard 8. The trip and line-item dates are DateOnly; `new Date("2026-08-14")` is UTC midnight, the evening before west of UTC.
 describe('GenerateClaimModal — dates and money', () => {
@@ -75,6 +75,39 @@ describe('GenerateClaimModal — who the claim leaves out', () => {
     await openPreview()
 
     expect(screen.queryByText(/left out of this claim/)).not.toBeInTheDocument()
+  })
+})
+
+// A trip that starts before the catalogue is claimed for the days it can price; the preview says which days it could not.
+describe('GenerateClaimModal — days with no catalogue rate', () => {
+  const note = "Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days."
+
+  async function openPreview() {
+    const user = userEvent.setup()
+    render(<GenerateClaimModal tripId="t1" trip={trip} onClose={() => {}} onSuccess={() => {}} />)
+    await user.click(screen.getByRole('button', { name: /Preview Claim/ }))
+  }
+
+  it('shows the note as a warning beside the lines it did price', async () => {
+    shown.unpricedDaysNote = note
+    await openPreview()
+
+    expect(screen.getByText(note)).toBeInTheDocument()
+    expect(screen.getByText('Priya Nair')).toBeInTheDocument()
+  })
+
+  it('shows the note beside a left-out list, not instead of it', async () => {
+    shown.unpricedDaysNote = note
+    shown.leftOut = [{ participantId: 'p-2', description: 'Lee Left', reason: 'NDIS number missing.' }]
+    await openPreview()
+
+    expect(screen.getByText(note)).toBeInTheDocument()
+    expect(screen.getByText('1 participant will be left out of this claim')).toBeInTheDocument()
+  })
+
+  it('says nothing when every day was priced', async () => {
+    await openPreview()
+    expect(screen.queryByText(/have no catalogue rate/)).not.toBeInTheDocument()
   })
 })
 

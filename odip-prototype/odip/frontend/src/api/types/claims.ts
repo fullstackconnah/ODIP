@@ -115,6 +115,8 @@ export interface ClaimPreviewResponseDto {
   budget?: ClaimBudgetDto
   /** The confirmed participants this claim leaves out and why: never dropped silently. The server always sends it (empty when nobody is left out). */
   leftOut?: TripClaimLeftOutDto[]
+  /** Set when some of the trip's days had no catalogue rate and are not claimed; absent when every day was priced. A warning, never a block. */
+  unpricedDaysNote?: string | null
 }
 
 /** A confirmed participant a trip claim leaves out. `description` is their name; `reason` is a sentence that does not repeat it. */
