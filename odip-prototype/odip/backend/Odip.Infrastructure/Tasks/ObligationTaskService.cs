@@ -73,12 +73,15 @@ public sealed class ObligationTaskService : IObligationTaskService
 
         // CompletedDate is a calendar date people read ("completed on Sat 3 Oct"): the provider's date, not the UTC date, which is still
         // yesterday until 10:00 or 11:00 in Sydney. AutoCompletedAt / UpdatedAt are instants.
-        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        // Resolved per task's own tenant: the matches can span organisations when the context is unfiltered (a hosted scan, a SuperAdmin).
+        var todayByTenant = new Dictionary<Guid, DateOnly>();
+        foreach (var tenantId in matches.Select(t => t.TenantId).Distinct())
+            todayByTenant[tenantId] = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         var now = _clock.GetUtcNow().UtcDateTime;
         foreach (var task in matches)
         {
             task.Status = TaskItemStatus.Completed;
-            task.CompletedDate = today;
+            task.CompletedDate = todayByTenant[task.TenantId];
             task.AutoCompletedAt = now;
             task.UpdatedAt = now;
         }

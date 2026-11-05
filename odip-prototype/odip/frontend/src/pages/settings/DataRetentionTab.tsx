@@ -64,7 +64,8 @@ export default function DataRetentionTab() {
         </span>
       ),
     },
-    { key: 'dueOn', header: 'Due for purge', mobile: 'meta', render: (r) => <span><span className="md:hidden">Due </span>{formatDateAu(r.dueOn)}</span> },
+    // self-start: when Starts wraps (date, then the Estimated badge) Due stays level with its first line instead of centring beside it.
+    { key: 'dueOn', header: 'Due for purge', mobile: 'meta', className: 'max-md:self-start', render: (r) => <span><span className="md:hidden">Due </span>{formatDateAu(r.dueOn)}</span> },
     {
       key: 'rowCounts', header: 'Records', mobile: 'meta', wrap: true,
       // The card's meta cap and ellipsis would cut the kinds line; this cell takes the card's width and wraps.
