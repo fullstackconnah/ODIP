@@ -155,19 +155,6 @@ for (const vp of VPS) {
       }
       if (vp.touch) await tapTargets(main, t(state))
       await crop(page, main, `${state}-${tag}.png`, vp)
-      if (!dark && !vp.touch) {
-        const cells = async () => page.locator('tbody tr').nth(2).evaluate((r) => [...r.querySelectorAll('td')].map((c) => c.textContent.trim().slice(0, 12) + ':' + Math.round(c.getBoundingClientRect().width) + 'x' + Math.round(c.getBoundingClientRect().height)))
-        check(t('diag row 3 cells at 900'), true, await cells())
-        await page.setViewportSize({ width: 1280, height: 1051 }); await page.waitForTimeout(300)
-        check(t('diag row 3 cells at 1051'), true, await cells())
-        const heights = {}
-        for (const h of [900, 1000, 1051, 1200]) { await page.setViewportSize({ width: 1280, height: h }); await page.waitForTimeout(300); heights[h] = await page.evaluate(() => document.scrollingElement.scrollHeight) }
-        check(t('diag heights by viewport'), true, heights)
-        await page.setViewportSize({ width: 1280, height: 1051 }); await page.waitForTimeout(400)
-        const d = await page.evaluate(() => { let low = null; for (const e of document.querySelectorAll('body *')) { const b = e.getBoundingClientRect().bottom + scrollY; if (!low || b > low.b) low = { b: Math.round(b), tag: e.tagName, h: Math.round(e.getBoundingClientRect().height), up: (() => { const o = []; for (let n = e; n && o.length < 4; n = n.parentElement) o.push(n.tagName + '.' + String(n.className).slice(0, 60)); return o })() } } const w = document.querySelector('table')?.parentElement; return { sh: document.scrollingElement.scrollHeight, low, wrapScroll: w ? w.scrollWidth - w.clientWidth : null, trs: [...document.querySelectorAll('tbody tr')].map((r) => Math.round(r.getBoundingClientRect().height)) } })
-        check(t('diag list-admin at 1051'), true, d)
-        await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(200)
-      }
       if (!dark) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${state}-${tag}.png`), { touch: vp.touch })).checks)
       await context.close()
     } catch (e) { check(t(`${state} ran`), false, String(e.message).split('\n')[0]) }
