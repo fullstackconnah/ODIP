@@ -361,6 +361,36 @@ public class CatalogueServiceDateTests
         Assert.Equal((new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 2), WeekdayJuly, 16m), (line.SupportsDeliveredFrom, line.SupportsDeliveredTo, line.UnitPrice, line.Hours));
     }
 
+    [Fact]
+    public async Task A_trip_that_runs_into_the_catalogue_says_which_days_it_could_not_price()
+    {
+        await using var db = await WithDecemberPriceSetAsync();
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 6, 29), 4);   // Mon 29 and Tue 30 June (no row), Wed 1 and Thu 2 July (the July rows)
+        await db.SaveChangesAsync();
+
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        Assert.Single(preview.LineItems);
+        Assert.Equal("Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days.", preview.UnpricedDaysNote);
+    }
+
+    [Fact]
+    public async Task A_trip_priced_on_every_day_has_no_unpriced_days_note()
+    {
+        await using var db = await WithDecemberPriceSetAsync();
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 7, 1), 2);
+        await db.SaveChangesAsync();
+
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        Assert.NotEmpty(preview.LineItems);
+        Assert.Null(preview.UnpricedDaysNote);
+    }
+
     // ── Agreement drafts ──────────────────────────────────────────────────────────
 
     [Theory]

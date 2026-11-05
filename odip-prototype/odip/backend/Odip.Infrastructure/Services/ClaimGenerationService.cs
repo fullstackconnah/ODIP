@@ -63,6 +63,7 @@ public class ClaimGenerationService
             ConfirmedParticipantCount = context.ConfirmedParticipantCount,
             TotalAmount = lineItems.Sum(l => l.TotalAmount),
             LeftOut = context.LeftOut,
+            UnpricedDaysNote = lineItems.Count > 0 ? UnpricedDaysNote(context) : null,
             LineItems = lineItems.Select(l => new ClaimPreviewLineItemDto
             {
                 ParticipantName = l.Booking.Participant?.FullName ?? string.Empty,
@@ -247,6 +248,8 @@ public class ClaimGenerationService
         var context = new ClaimCalcContext
         {
             TenantId = trip.TenantId,
+            TripStart = trip.StartDate,
+            TripEnd = tripEnd,
             DepartureTime = departureTime,
             ReturnTime = returnTime,
             ActiveHoursPerDay = activeHoursPerDay,
@@ -350,13 +353,19 @@ public class ClaimGenerationService
         if (context.ConfirmedWithNdisNumberCount == 0)
             return "None of the trip's confirmed participants has an NDIS number, so no claim lines could be built. Add the NDIS number to each participant, then generate the claim again.";
         if (context.UnpricedDayTypes.Count > 0)
-        {
-            var tripEnd = trip.StartDate.AddDays(trip.DurationDays - 1);
             return FormattableString.Invariant(
-                $"No catalogue item prices this trip's {string.Join(", ", context.UnpricedDayTypes)} days ({trip.StartDate:dd/MM/yyyy} to {tripEnd:dd/MM/yyyy}), so no claim lines could be built. Import the catalogue for that period first.");
-        }
+                $"No catalogue item prices this trip's {UnpricedDaysLabel(context)}, so no claim lines could be built. Import the catalogue for that period first.");
         return "No claim lines could be built for this trip. Check its active hours per day and its departure and return times, then generate the claim again.";
     }
+
+    /// <summary>The part of a trip that has lines but not every day priced: said in the preview so the Draft claim is not quietly worth less than the trip. Null when every day was priced.</summary>
+    private static string? UnpricedDaysNote(ClaimCalcContext context) =>
+        context.UnpricedDayTypes.Count == 0
+            ? null
+            : $"Not claimed: this trip's {UnpricedDaysLabel(context)} have no catalogue rate. Import the catalogue for that period, then claim those days.";
+
+    private static string UnpricedDaysLabel(ClaimCalcContext context) =>
+        FormattableString.Invariant($"{string.Join(", ", context.UnpricedDayTypes)} days ({context.TripStart:dd/MM/yyyy} to {context.TripEnd:dd/MM/yyyy})");
 
     // ─── Internal types ────────────────────────────────────────────────
 
@@ -380,6 +389,9 @@ public class ClaimGenerationService
         public List<TripClaimLeftOutDto> LeftOut { get; } = new();
         /// <summary>Day types a line was wanted for but no catalogue item was valid on its dates (what stops the claim when it ends up with no lines).</summary>
         public SortedSet<ClaimDayType> UnpricedDayTypes { get; } = new();
+        /// <summary>The trip's first and last day, for the sentences that name the days left unpriced.</summary>
+        public DateOnly TripStart { get; set; }
+        public DateOnly TripEnd { get; set; }
     }
 
     private class LineItemCalc
