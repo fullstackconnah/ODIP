@@ -51,7 +51,7 @@ function MyProviderDialog({ participantId, plan, onClose }: { participantId: str
   const [choice, setChoice] = useState<MyProviderRecord>(plan.myProvider ?? 'Unknown')
   const [date, setDate] = useState(plan.myProviderOn ?? '')
   const [dateError, setDateError] = useState<string>()
-  const today = useProviderToday() // the provider's day; this line sits on the Funding tab, which only the roles that read provider settings open
+  const today = useProviderToday()
   const dateLabel = SHOWN[choice].dateLabel
   const unchanged = choice === (plan.myProvider ?? 'Unknown') && (choice === 'Unknown' || date === (plan.myProviderOn ?? ''))
 
