@@ -6,13 +6,14 @@ import { plan } from '@/test/fixtures/funding'
 
 // The "my provider" line on the Funding tab's current plan: whether we are recorded as the participant's my provider for this plan, and the modal that changes it.
 
-const { mutate, state } = vi.hoisted(() => ({ mutate: vi.fn(), state: { isPending: false, error: null as unknown } }))
-vi.mock('@/api/hooks', () => ({ useSetMyProvider: () => ({ mutate, isPending: state.isPending, error: state.error }) }))
+const { mutate, providerSettings, state } = vi.hoisted(() => ({ mutate: vi.fn(), providerSettings: { data: undefined as unknown }, state: { isPending: false, error: null as unknown } }))
+vi.mock('@/api/hooks', () => ({ useProviderSettings: () => providerSettings, useSetMyProvider: () => ({ mutate, isPending: state.isPending, error: state.error }) }))
 
 beforeEach(() => {
   vi.clearAllMocks()
   state.isPending = false
   state.error = null
+  providerSettings.data = undefined
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-03T03:00:00Z'))
 })
@@ -100,6 +101,21 @@ describe('My provider line', () => {
     expect(screen.getByText('Enter the date.')).toBeInTheDocument()
     expect(screen.getByLabelText('Requested on')).toHaveFocus()
     expect(mutate).not.toHaveBeenCalled()
+  })
+
+  // 14:30 UTC on 5 Nov is already 6 Nov in Sydney: a Requested date of 6 Nov is today for the organisation, not the future.
+  it("accepts today on the organisation's calendar, which the browser's clock still calls tomorrow", async () => {
+    vi.setSystemTime(new Date('2026-11-05T14:30:00Z'))
+    providerSettings.data = { timeZoneId: 'Australia/Sydney', state: 'NSW' }
+    show({ myProvider: 'Requested', myProviderOn: '2026-11-01' })
+    await user().click(screen.getByRole('button', { name: 'Update' }))
+    const field = screen.getByLabelText('Requested on')
+    await user().clear(field)
+    await user().type(field, '2026-11-06')
+    await user().click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.queryByText('The date cannot be in the future.')).not.toBeInTheDocument()
+    expect(mutate).toHaveBeenCalledWith({ planId: expect.anything(), body: { myProvider: 'Requested', myProviderOn: '2026-11-06' } }, expect.anything())
   })
 
   it('shows what the server refused with, in the dialog', async () => {
