@@ -2709,7 +2709,24 @@ const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope,
 // Onboarding phase 3: the upcoming-shifts import (preview, commit with a started week of drafts, partial undo). See imports.js.
 const importMock = importsModule.create({ respond, failEnvelope, rosterShifts, startedWeeks, today: planApproval.providerToday, addDays: planApproval.addDays, weekday: planApproval.weekday })
 
+// Registers for auditors (B9): a small CSV per register, with the real file's headers. A backwards range is the server's 400.
+const REGISTER_FILES = {
+  incidents: 'Incident reference,Incident date and time,Participant,Category,Severity,Status',
+  complaints: 'Complaint reference,Received on,Complainant,Category,Status',
+  'restrictive-practices': 'Participant,Practice,Type,Start date,End date,Authorisation status',
+  risks: 'Kind,Participant,Risk,Rating,Review date',
+  'staff-credentials': 'Staff member,Credential,Expiry date,Status',
+}
+const registerFile = (register, params) => {
+  const header = REGISTER_FILES[register]
+  if (!header) return respond(404, failEnvelope(null, ['Register not found.']))
+  const from = params.get('from'), to = params.get('to')
+  if (from && to && from > to) return respond(400, failEnvelope(null, ['The start date must be on or before the end date.']))
+  return { [invoicesModule.FILE]: '\uFEFF' + header + '\r\n', contentType: 'text/csv', headers: { 'Cache-Control': 'no-store' } }
+}
+
 const routes = [
+  ['registers/:id', (register, params) => registerFile(register, params)],
   ...importMock.get,
   ...funding.get,
   ...intake.get,
