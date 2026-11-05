@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ErrorBoundary from './ErrorBoundary'
+import { reportClientError } from '@/lib/reportClientError'
+
+vi.mock('@/lib/reportClientError', () => ({ reportClientError: vi.fn() }))
 
 // A page that throws while `broken.on` is set, standing in for one whose data arrived in a shape it cannot render.
 const broken = { on: true }
@@ -12,6 +15,7 @@ function Page({ name = 'The page' }: { name?: string }) {
 describe('ErrorBoundary', () => {
   beforeEach(() => {
     broken.on = true
+    vi.mocked(reportClientError).mockClear()
     // React logs every caught render error, and the boundary logs it again: keep the test output readable.
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
@@ -78,5 +82,11 @@ describe('ErrorBoundary', () => {
       rerender(<ErrorBoundary resetKey="/trips/2"><input aria-label="draft" /></ErrorBoundary>)
       expect(screen.getByLabelText('draft')).toBe(input)
     })
+  })
+
+  it('reports the caught error once, as a boundary crash with its component stack', () => {
+    render(<ErrorBoundary><Page /></ErrorBoundary>)
+    expect(reportClientError).toHaveBeenCalledTimes(1)
+    expect(reportClientError).toHaveBeenCalledWith('boundary', expect.objectContaining({ message: 'alertsAggregate.filter is not a function' }), expect.stringContaining('Page'))
   })
 })

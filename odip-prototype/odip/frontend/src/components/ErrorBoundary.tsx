@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
+import { reportClientError } from '@/lib/reportClientError'
 
 interface Props {
   children: ReactNode
@@ -27,6 +28,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info.componentStack)
+    reportClientError('boundary', error, info.componentStack)
 
     // After a new deployment, cached JS may reference old chunk filenames that
     // no longer exist. Detect this and force a full page reload (once) so the
