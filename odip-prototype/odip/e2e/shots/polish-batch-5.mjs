@@ -222,8 +222,25 @@ async function claimsReady(page, vp) {
       return { thWidth: el.getBoundingClientRect().width, cellWidths: cells.map((c) => +c.getBoundingClientRect().width.toFixed(1)), cellHeights: cells.map((c) => +c.getBoundingClientRect().height.toFixed(1)) }
     })
     check(`${tag}: Checks cell width >= 256px`, m.thWidth >= 255.5 && m.cellWidths.every((w) => w >= 255.5), m)
+    // Does the class do anything? Squeeze the table to 640px with and without it (the fixture's natural width is already past 16rem).
+    const squeeze = (drop) => th.evaluate((el, dropClass) => {
+      const table = el.closest('table')
+      const idx = [...el.parentElement.children].indexOf(el)
+      const marked = [...table.querySelectorAll('.md\\:min-w-\\[16rem\\]')]
+      if (dropClass) marked.forEach((n) => n.classList.remove('md:min-w-[16rem]'))
+      const before = table.style.width
+      table.style.width = '640px'
+      const w = el.getBoundingClientRect().width
+      const cells = [...table.querySelectorAll('tbody tr')].map((tr) => +tr.children[idx].getBoundingClientRect().width.toFixed(1))
+      table.style.width = before
+      if (dropClass) marked.forEach((n) => n.classList.add('md:min-w-[16rem]'))
+      return { marked: marked.length, th: +w.toFixed(1), cells }
+    }, drop)
+    const withClass = await squeeze(false)
+    const withoutClass = await squeeze(true)
+    check(`${tag}: squeezed to 640px, the Checks column still holds >= 256px with the class`, withClass.marked > 0 && withClass.th >= 255.5, { withClass, withoutClass })
     await noOverflow(page, tag)
-    if (vp.name === '1280') await crop(page, vp, 'claims-ready-checks-1280', panel.locator('table'), 8)
+    if (vp.name === '1280') await crop(page, vp, 'claims-ready-checks-1280', page.locator('main table').filter({ has: page.locator('th', { hasText: /^Checks$/ }) }).first(), 8)
   } else {
     await noOverflow(page, tag)
     await crop(page, vp, 'claims-ready-card-390', panel.getByText("can't be claimed as a short-notice").first().locator('xpath=ancestor::*[self::li or self::article or (self::div and contains(@class,"rounded"))][1]'), 8)
