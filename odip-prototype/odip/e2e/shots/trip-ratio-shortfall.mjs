@@ -145,19 +145,20 @@ async function tripRun(browser, tag, vp) {
     return { attention: el.dataset.attention, cls: el.className.includes('--color-warning-container'), chipText: chip?.textContent } })
   check(`${tag}: Staff assigned tile is warning`, g.attention === 'warning' && g.cls, g)
   const chip = cell.locator('span', { hasText: /short/ }).last()
-  const cr = await chip.evaluate(`(el) => { ${contrastFns} return contrast(el) }`.replace('(el) =>', '(el) =>')).catch(() => null)
+  const cr = await chip.evaluate(new Function('el', `${contrastFns} return contrast(el)`))
   check(`${tag}: chip text contrast >= 4.5`, cr === null || cr >= 4.5, cr)
   const r1 = await cropElement(page, cell, path.join(OUT_DIR, `trip-glance-short-${vp.width}${vp.dark ? '-dark' : ''}.png`), { touch: !!vp.touch }); checks.push(checkCropHolds(r1))
   await page.getByRole('tab', { name: /^Staff/ }).first().click().catch(async () => { await page.getByText('Staff', { exact: true }).first().click() })
   const pill = page.getByText(/\/ \d+ staff$/).first()
   await pill.waitFor({ state: 'visible', timeout: 30_000 })
-  const p = await pill.evaluate(`(el) => { ${contrastFns} const box = el.parentElement; return { cls: box.className.includes('--color-warning-container'), contrast: contrast(box) } }`)
+  const p = await pill.evaluate(new Function('el', `${contrastFns} const box = el.parentElement; return { cls: box.className.includes('--color-warning-container'), contrast: contrast(box) }`))
   check(`${tag}: Staff-tab pill carries the warning classes`, p.cls, p)
   check(`${tag}: Staff-tab pill text contrast >= 4.5`, p.contrast >= 4.5, p.contrast)
   const r2 = await cropElement(page, pill.locator('xpath=..'), path.join(OUT_DIR, `stafftab-short-${vp.width}${vp.dark ? '-dark' : ''}.png`), { touch: !!vp.touch }); checks.push(checkCropHolds(r2))
   await context.close()
 }
 
+const attempt = async (tag, fn) => { try { await fn() } catch (e) { check(`${tag}: ran`, false, String(e.message).slice(0, 160)) } }
 const browser = await chromium.launch({ headless: true })
 try {
   const D = { width: 1280, height: 800 }; const M = { width: 390, height: 844, touch: true }
@@ -169,8 +170,8 @@ try {
   await scheduleRun(browser, 'schedule 1280', D, [[true, 'schedule-short-1280.png'], [false, 'schedule-enough-1280.png']])
   await scheduleRun(browser, 'schedule 1280 dark', { ...D, dark: true }, [[true, 'schedule-dark-short-1280.png']])
   await scheduleRun(browser, 'schedule 390', M, [[true, 'schedule-390-short.png']])
-  await tripRun(browser, 'trip page 1280', D)
-  await tripRun(browser, 'trip page 1280 dark', { ...D, dark: true })
+  await attempt('trip page 1280', () => tripRun(browser, 'trip page 1280', D))
+  await attempt('trip page 1280 dark', () => tripRun(browser, 'trip page 1280 dark', { ...D, dark: true }))
 } finally {
   await browser.close()
 }
