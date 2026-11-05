@@ -144,7 +144,7 @@ export default function ClaimsHubPage() {
           onOpenFile={setFile} onBuilt={onBuilt} announce={setMessage} />
       )}
       {tab === 'paid' && <PaidPanel {...filesProps} />}
-      {tab === 'other' && <OtherPanel claims={data?.managed ?? []} {...linesProps} />}
+      {tab === 'other' && <OtherPanel />}
       <FilePanel
         batchId={openFile}
         onClose={() => setFile(null)}

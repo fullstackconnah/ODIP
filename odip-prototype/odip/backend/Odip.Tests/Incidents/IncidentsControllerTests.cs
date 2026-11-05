@@ -1627,6 +1627,28 @@ public class IncidentsControllerTests
         Assert.Contains(closedItems.Data!.Items, i => i.Id == incident.Id);
     }
 
+    [Fact]
+    public async Task GetAll_filters_by_involved_participant_within_the_tenant()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateTenantScopedDb(Guid.NewGuid().ToString(), tenantId);
+        var reporter = SeedUser(db, tenantId);
+        var controller = new IncidentsController(db);
+        var p = SeedParticipant(db, tenantId).Id;
+        var q = SeedParticipant(db, tenantId, "Quinn").Id;
+        foreach (var participant in new[] { p, q, p })
+            await controller.Create(CreateDto(reporter.Id, incidentType: IncidentType.PropertyDamage, rpType: null) with { InvolvedParticipantId = participant }, CancellationToken.None);
+        db.IncidentReports.Add(new IncidentReport { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), InvolvedParticipantId = p, IsActive = true, IncidentDateTime = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, involvedParticipantId: p, ct: CancellationToken.None);
+
+        var items = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;
+        Assert.Equal(2, items.Count);
+    }
+
     // ── Ordering: IncidentDateTime tiebreaker ────────────────────────────────
 
     /// <summary>
