@@ -386,7 +386,7 @@ public sealed class EmploymentHeroLeaveSync
                     await EmploymentHeroLeave.HolidaysAsync(db, tenantId, leave.StartDate, leave.EndDate, ct));
                 if (hours == 0)
                 {
-                    Flag(row, EmploymentHeroLeave.WeekendMessage);
+                    Flag(row, row.ExternalId is null ? EmploymentHeroLeave.NoWorkdaysMessage : EmploymentHeroLeave.EditedToNoWorkdaysMessage);
                     await EmploymentHeroTimesheetSender.SaveOrSkipAsync(db, row, now, ct);
                     continue;
                 }
