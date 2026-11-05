@@ -429,7 +429,8 @@ public partial class ShiftClaimGenerationService
             var zone = ProviderTimeZoneResolver.ZoneOf(s, placeZones, orgZone);
             var worked = priceOn(s, windows[s.Id].Priced, zone);
             var held = priceOn(s, windows[s.Id].WithoutExtra!, zone);
-            if (!worked.IsPriced || !held.IsPriced) continue;   // the main loop leaves it out with the pricing reason
+            if (!worked.IsPriced) continue;   // the main loop leaves it out with the pricing reason
+            if (!held.IsPriced) { refusals[s.Id] = $"{participant.FullName}: the budget could not be checked, so the extra time was left out. {Manual}"; continue; }
             var increment = ShiftPriceEstimator.PartsOf(worked)
                 .Concat(ShiftPriceEstimator.PartsOf(held).Select(p => p with { Amount = -p.Amount, Hours = -p.Hours }))
                 .GroupBy(p => (p.Date, p.PaceCategory)).Select(g => new ShiftCostPart(g.Key.Date, g.Key.PaceCategory, g.Sum(p => p.Amount), g.Sum(p => p.Hours)))

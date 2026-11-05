@@ -113,7 +113,7 @@ describe('ShiftClaimRunModal', () => {
 
     expect(screen.getByText('Extra time left out')).toBeInTheDocument()
     expect(screen.queryByText(/shift will be left out/)).not.toBeInTheDocument()
-    expect(screen.getByText(/The shifts are claimed at their held hours/)).toBeInTheDocument()
+    expect(screen.getByText('The shift is claimed at its held hours.')).toBeInTheDocument()
   })
 
   it('counts only whole shifts in the heading when extra time is left out beside them', () => {

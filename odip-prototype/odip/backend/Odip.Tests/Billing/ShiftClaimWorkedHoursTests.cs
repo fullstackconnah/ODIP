@@ -127,8 +127,11 @@ public class ShiftClaimWorkedHoursTests
     [Fact]
     public void ApprovedExtraTime_IsConvertedInTheEstimatorsZone_NotTheCompletions()
     {
-        var shift = new Shift { ServiceDate = Day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), NightType = SleepoverType.None };
-        var completion = new ShiftCompletion { ActualStart = Utc(8, 40), ActualEnd = Utc(17, 20), VarianceMinutesStart = -20, VarianceMinutesEnd = 20, ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney" };
+        // Mon 9 Nov 2026 is daylight saving in Sydney (UTC+11) but not in Brisbane (UTC+10), so the two zones read one instant an hour apart.
+        var summer = new DateOnly(2026, 11, 9);
+        var shift = new Shift { ServiceDate = summer, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), NightType = SleepoverType.None };
+        DateTime At(int h, int m) => TimeZoneInfo.ConvertTimeToUtc(summer.ToDateTime(new TimeOnly(h, m)), Sydney);
+        var completion = new ShiftCompletion { ActualStart = At(8, 40), ActualEnd = At(17, 20), VarianceMinutesStart = -20, VarianceMinutesEnd = 20, ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney" };
 
         var inSydney = ShiftClaimWindow.For(shift, completion, Sydney);
         var inBrisbane = ShiftClaimWindow.For(shift, completion, TimeZoneInfo.FindSystemTimeZoneById("Australia/Brisbane"));
@@ -136,7 +139,7 @@ public class ShiftClaimWorkedHoursTests
         Assert.Equal(new TimeOnly(8, 40), inSydney.Priced.Start);
         Assert.Equal(new TimeOnly(9, 0), inSydney.WithoutExtra!.Start);
         Assert.Equal("Extra time 08:40–09:00, 17:00–17:20 · 40 min", inSydney.ExtraText);
-        Assert.Equal(new TimeOnly(8, 40), inBrisbane.Priced.Start);   // no clock change in September: the same wall time
+        Assert.Equal(new TimeOnly(7, 40), inBrisbane.Priced.Start);   // the same instant, an hour earlier on a Brisbane clock
     }
 
     [Fact]
@@ -231,11 +234,42 @@ public class ShiftClaimWorkedHoursTests
         Worked(kit, person, Day, (8, 40), (17, 20), ExtraTimeDecision.Pending, -20, 20);
         await engine.GenerateAsync(person.Id, Day, Day, Ct);
 
+        kit.Db.TripClaims.Single().Status = TripClaimStatus.Submitted;
         kit.Db.ShiftCompletions.Single().ExtraTime = ExtraTimeDecision.Approved;
         kit.Db.SaveChanges();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => engine.GenerateAsync(person.Id, Day, Day, Ct));
         Assert.Equal(1, kit.Db.ClaimLineItems.Count());
+    }
+
+    [Fact]
+    public async Task ShortNoticeCancellation_StaysRostered_EvenWithAnApprovedCompletion()
+    {
+        var (kit, engine, person) = NewKit();
+        using var _ = kit;
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        var shift = Worked(kit, person, Day, (8, 40), (17, 20), ExtraTimeDecision.Approved, -20, 20);
+        shift.Status = ShiftStatus.Cancelled;
+        shift.CancelledAt = Day.AddDays(-3).ToDateTime(new TimeOnly(1, 0), DateTimeKind.Utc);
+        kit.Db.SaveChanges();
+
+        var made = await engine.GenerateCancellationAsync(shift.Id, "NSDH", Day.AddDays(2), Ct);
+
+        Assert.Equal(8m, Assert.Single(kit.Db.ClaimLineItems.Where(l => l.TripClaimId == made.Claim.Id)).Hours);
+    }
+
+    [Fact]
+    public async Task AnotherTenantsCompletion_IsNotLoaded_SoTheShiftPricesRostered()
+    {
+        var (kit, engine, person) = NewKit();
+        using var _ = kit;
+        var shift = Worked(kit, person, Day, (8, 40), (17, 20), ExtraTimeDecision.Approved, -20, 20);
+        kit.Db.ShiftCompletions.Single().TenantId = Guid.NewGuid();
+        kit.Db.SaveChanges();
+
+        Assert.Empty(await ShiftClaimWindow.LoadAsync(kit.Db, new[] { shift.Id }, Ct));
+        var claim = (await engine.GenerateAsync(person.Id, Day, Day, Ct)).Claim;
+        Assert.Equal(8m, Assert.Single(kit.Db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id)).Hours);
     }
 
     [Fact]

@@ -18,7 +18,7 @@ export interface LeftOutItem {
 export const SHIFT_LEFT_OUT_FOOTER = 'They stay completed and unclaimed. Nothing here is billed for them.'
 
 export const EXTRA_TIME_LEFT_OUT_HEADING = 'Extra time left out'
-export const EXTRA_TIME_LEFT_OUT_FOOTER = 'The shifts are claimed at their held hours. Add the extra time as a manual claim if the budget allows.'
+export const EXTRA_TIME_LEFT_OUT_FOOTER = (count: number) => (count === 1 ? 'The shift is claimed at its held hours.' : 'The shifts are claimed at their held hours.')
 
 /** What a claim leaves out and why: the same warning in the shift claim and the trip claim, so nothing is dropped silently. Callers count whole shifts only in `heading`; extra-time entries change the wording when they are all there is. */
 export function LeftOutCallout({ items, heading, footer }: { items: LeftOutItem[]; heading: string; footer: string }) {
@@ -34,7 +34,7 @@ export function LeftOutCallout({ items, heading, footer }: { items: LeftOutItem[
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[13px]">{extraOnly ? EXTRA_TIME_LEFT_OUT_FOOTER : someExtra ? `${footer} A shift whose extra time is left out is claimed at its held hours.` : footer}</p>
+      <p className="mt-2 text-[13px]">{extraOnly ? EXTRA_TIME_LEFT_OUT_FOOTER(items.length) : someExtra ? `${footer} A shift whose extra time is left out is claimed at its held hours.` : footer}</p>
     </Callout>
   )
 }

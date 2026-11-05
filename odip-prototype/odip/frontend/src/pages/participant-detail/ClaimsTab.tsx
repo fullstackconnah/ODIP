@@ -331,7 +331,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
             {generated.claimReference ? `Claim ${generated.claimReference} was made` : 'The claim was made'}
             {generated.totalAmount != null ? ` for ${formatCurrency(generated.totalAmount)}` : ''}
             {/* "From the shifts that could be priced" is only true when some could not: a claim whose only note is a caveat has every shift of the range in it. */}
-            {(generated.leftOut?.length ?? 0) > 0 ? ', from the shifts that could be priced' : ''}.
+            {wholeShifts(generated.leftOut ?? []) > 0 ? ', from the shifts that could be priced' : ''}.
           </p>
           {generated.leftOut && generated.leftOut.length > 0 && (
             <LeftOutCallout items={shiftItems(generated.leftOut)} heading={`${plural(wholeShifts(generated.leftOut), 'shift')} ${wholeShifts(generated.leftOut) === 1 ? 'was' : 'were'} left out of the claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
