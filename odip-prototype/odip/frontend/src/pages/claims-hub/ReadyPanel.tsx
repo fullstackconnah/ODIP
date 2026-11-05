@@ -153,7 +153,7 @@ export function ReadyPanel({ lines, loading, failed, onRetry, registrationProble
     { key: 'amount', header: 'Amount', align: 'right', mobile: 'meta', sortable: true, render: l => formatCurrency(l.totalAmount) },
     { key: 'age', header: 'Age', mobile: 'status', sortable: true, render: l => <AgeCell days={l.ageDays} band={l.ageBand} /> },
     // A passing line says nothing on a phone card (PassMark carries data-pass); a blocked one gets its reason on a full-width line, no caps label.
-    { key: 'checks', header: 'Checks', className: 'max-md:basis-full max-md:before:hidden! max-md:has-[[data-pass]]:hidden', render: l => <Checks line={l} heldBack={!tickable(l)} /> },
+    { key: 'checks', header: 'Checks', className: 'max-md:basis-full max-md:before:hidden! max-md:has-[[data-pass]]:hidden md:min-w-[16rem]', render: l => <Checks line={l} heldBack={!tickable(l)} /> },
   ]
   const columns = allColumns.filter(c => wide || c.key !== 'hours')
 
