@@ -2162,7 +2162,7 @@ const cancelledShiftFixtures = [
 ]
 const cancelledShiftsNotOffered = [
   { shiftId: 'sh-cancel-3', participantName: 'Sophie Brown', serviceDate: '2026-10-19', description: 'Shift 09:00–17:00 · 8 h', reason: 'Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.' },
-  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide. Check the short-notice setting for this item in the price guide." },
+  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation. Check the short-notice setting for this item in the price guide." },
 ]
 function cancellationCandidates() {
   return { shifts: cancelledShiftFixtures, leftOut: cancelledShiftsNotOffered }

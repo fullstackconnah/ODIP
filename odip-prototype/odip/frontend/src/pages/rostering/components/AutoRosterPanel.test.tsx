@@ -199,6 +199,7 @@ describe('the draft roster panel', () => {
     expect(await screen.findByText('We couldn’t confirm the apply')).toBeInTheDocument()
     expect(screen.getByText('Check the board before you apply again.')).toBeInTheDocument()
     expect(screen.queryByText(/Nothing was saved/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
   it('loading and a failed run each have one home, and the run error offers Try again', async () => {

@@ -100,7 +100,7 @@ public class ClaimBatchChecksTests
         var problems = ClaimBatchChecks.For(row, new BatchContext { Today = Today, Plans = Covered });
 
         Assert.Equal(blocked, problems.Any(p => p.Rule == "CancellationNotAllowed" && p.Severity == ClaimBatchChecks.Block));
-        if (blocked) Assert.Contains("04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide.", problems.Single(p => p.Rule == "CancellationNotAllowed").Message);
+        if (blocked) Assert.Contains("04_104_0125_6_1 can't be claimed as a short-notice cancellation.", problems.Single(p => p.Rule == "CancellationNotAllowed").Message);
     }
 
     [Fact]
