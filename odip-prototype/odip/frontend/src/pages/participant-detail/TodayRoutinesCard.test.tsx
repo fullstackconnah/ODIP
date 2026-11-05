@@ -8,8 +8,8 @@ import type { ParticipantRoutineDto } from '@/api/types/routines'
 // Overview's "Today's routines": the active routines that run on today's weekday, critical first, then by time. It reuses the tab-count query,
 // so it asks the server for nothing new.
 
-const { useParticipantRoutines, providerSettings } = vi.hoisted(() => ({ useParticipantRoutines: vi.fn(), providerSettings: { data: undefined as unknown } }))
-vi.mock('@/api/hooks', () => ({ useParticipantRoutines, useProviderSettings: () => providerSettings }))
+const { useParticipantRoutines, providerToday } = vi.hoisted(() => ({ useParticipantRoutines: vi.fn(), providerToday: { data: undefined as unknown } }))
+vi.mock('@/api/hooks', () => ({ useParticipantRoutines, useProviderTodayQuery: () => providerToday }))
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -27,7 +27,7 @@ const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringif
 beforeEach(() => {
   vi.clearAllMocks()
   asRole('Coordinator')
-  providerSettings.data = undefined
+  providerToday.data = undefined
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date(2026, 10, 4, 10, 0)) // a Wednesday
   useParticipantRoutines.mockReturnValue(reply([]))
@@ -36,9 +36,10 @@ afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
 describe('Today’s routines card', () => {
   // 14:30 UTC on Wed 4 Nov is already Thursday 5 Nov in Sydney: the organisation's weekday, not the browser's (UTC).
-  it("lists the routines for the organisation's weekday, not the browser's", () => {
+  it("lists the routines for the organisation's weekday, not the browser's, for a Support Worker too", () => {
+    asRole('SupportWorker')
     vi.setSystemTime(new Date('2026-11-04T14:30:00Z'))
-    providerSettings.data = { timeZoneId: 'Australia/Sydney', state: 'NSW' }
+    providerToday.data = { date: '2026-11-05' }
     useParticipantRoutines.mockReturnValue(reply([
       routine({ id: 'w', title: 'Wednesday only', days: ['Wednesday'] }),
       routine({ id: 't', title: 'Thursday only', days: ['Thursday'] }),

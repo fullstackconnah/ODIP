@@ -7,7 +7,7 @@ import { restoreZone, setZone } from '@/test/timeZone'
 const { mockUseRestrictivePractices } = vi.hoisted(() => ({ mockUseRestrictivePractices: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
-  useProviderSettings: () => ({ data: undefined }),
+  useProviderTodayQuery: () => ({ data: undefined }),
   useRestrictivePractices: mockUseRestrictivePractices,
   useParticipantMedications: () => ({ data: [], isLoading: false }),
   useRpMonthlyReportLines: () => ({ data: [], isLoading: false }),

@@ -247,7 +247,7 @@ function FirstUsedField({ value, suggestion, error, onChange }: { value: string;
 
 export default function RestrictivePracticesTab({ participantId }: { participantId: string | undefined }) {
   const { canWriteRestrictivePractices } = usePermissions()
-  const providerToday = useProviderToday(canWriteRestrictivePractices)
+  const providerToday = useProviderToday()
   const practicesQuery = useRestrictivePractices(participantId, true)
   const practices = useMemo(() => practicesQuery.data ?? [], [practicesQuery.data])
   // A failed or paused request is not an empty register: "No restrictive practices recorded" is only for one that succeeded and came back empty.

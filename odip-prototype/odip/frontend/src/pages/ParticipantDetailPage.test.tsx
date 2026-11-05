@@ -58,6 +58,7 @@ const {
 // PortalShiftDetailPage.test.tsx's ShiftNotesSection stub" approach used there).
 vi.mock('@/api/hooks', () => ({
   useProviderSettings: () => ({ data: undefined }),
+  useProviderTodayQuery: () => ({ data: undefined }),
   useParticipant: mockUseParticipant,
   useServiceAgreementDrafts: mockDrafts,
   useDeleteServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),

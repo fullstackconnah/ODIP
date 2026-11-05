@@ -7,6 +7,11 @@ import type { MedicationCompetencyMode } from './enums'
  */
 export type ParticipantReadinessMode = 'Warn' | 'Enforce'
 
+/** The provider's calendar date now, "YYYY-MM-DD" (GET provider-today, open to every signed-in role). */
+export interface ProviderTodayDto {
+  date: string
+}
+
 export interface ProviderSettingsDto {
   id: string
   registrationNumber: string

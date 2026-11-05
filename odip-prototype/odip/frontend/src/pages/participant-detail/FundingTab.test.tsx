@@ -18,7 +18,7 @@ const { useFundingPlans, useFundingLedger, apply, editor } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useProviderSettings: () => ({ data: undefined }),
+  useProviderTodayQuery: () => ({ data: undefined }),
   useFundingPlans,
   // The tab renders the budget ledger (phase 2a) below the plan record. Every test here is about the
   // record, so the ledger is stubbed as a single marker: what the ledger itself does has its own tests.
