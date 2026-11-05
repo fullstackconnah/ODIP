@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './fonts.css'
 import { captureInstallEvents } from './lib/installPrompt'
+import { reportClientError } from './lib/reportClientError'
 import { offlineQueue } from './lib/offline/queue'
 import { sweepExpired } from './lib/offline/store'
 
@@ -27,6 +28,10 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Crashes outside React's render (event handlers, timers, promises) reach the API log too; the boundary reports the render ones.
+window.addEventListener('error', (e) => reportClientError('error', e.error ?? e.message))
+window.addEventListener('unhandledrejection', (e) => reportClientError('rejection', e.reason))
 
 // Unsent changes go out when the app opens, the signal returns, or the app comes back to the front.
 sweepExpired()

@@ -122,3 +122,78 @@ export interface BulkCreateRestrictivePracticeRowDto {
 export interface BulkCreateRestrictivePracticeDto {
   items: BulkCreateRestrictivePracticeRowDto[]
 }
+
+// ── Monthly reports to the NDIS Commission (GET /restrictive-practice-reports) ──
+
+export const RP_REPORT_TYPES = ['UsedAsPerPlan', 'VariedUse', 'NotUsed', 'Eliminated', 'NoServiceProvided', 'ServiceCeased', 'UsesReported'] as const
+export type RpReportType = typeof RP_REPORT_TYPES[number]
+
+export const RP_REPORT_TYPE_LABELS: Record<RpReportType, string> = {
+  UsedAsPerPlan: 'Used as per plan',
+  VariedUse: 'Varied use',
+  NotUsed: 'Not used',
+  Eliminated: 'Eliminated',
+  NoServiceProvided: 'No service provided',
+  ServiceCeased: 'Service provision has ceased',
+  UsesReported: 'Uses reported',
+}
+
+/** The types the server accepts for a practice: routine ones report "as per plan" or "varied", as-needed ones report their uses. */
+export const rpReportTypesFor = (useKind: RestrictivePracticeUseKind): RpReportType[] =>
+  RP_REPORT_TYPES.filter((t) => (useKind === 'Prn' ? t !== 'UsedAsPerPlan' && t !== 'VariedUse' : t !== 'UsesReported'))
+
+export type RpVariedKind = 'Increased' | 'Decreased' | 'Other'
+export const RP_VARIED_KIND_LABELS: Record<RpVariedKind, string> = { Increased: 'Increased', Decreased: 'Decreased', Other: 'Other' }
+
+/** Not a *Status enum: the pill tone is chosen where it is shown. */
+export type MonthlyReportState = 'Due' | 'Overdue' | 'Lodged'
+
+export interface RpReportUseDto {
+  /** The provider's wall clock, no offset: "2026-10-12T14:30:00". */
+  localDateTime: string
+  incidentReportId: string | null
+  medicationAdministrationId: string | null
+}
+
+export interface RpLodgedReportDto {
+  id: string
+  reportType: RpReportType
+  variedKind: RpVariedKind | null
+  variedAlsoUnauthorised: boolean | null
+  useCount: number | null
+  note: string | null
+  /** "YYYY-MM-DD" */
+  lodgedOn: string
+  lodgedByName: string
+  createdAt: string
+}
+
+/** One practice's month: what is owed, when, the uses behind it, and the report lodged for it once there is one. */
+export interface RpReportLine {
+  restrictivePracticeId: string
+  participantId: string
+  participantName: string
+  practiceType: RestrictivePracticeType
+  practiceDescription: string
+  useKind: RestrictivePracticeUseKind
+  /** "YYYY-MM-01" */
+  month: string
+  dueOn: string
+  /** True when the due date skipped weekends only: the holiday list has no rows for a year it touched. */
+  dueCountedWithoutHolidays: boolean
+  state: MonthlyReportState
+  /** As-needed lines only. */
+  suggestedType: RpReportType | null
+  uses: RpReportUseDto[]
+  report: RpLodgedReportDto | null
+}
+
+export interface LodgeRpReportDto {
+  restrictivePracticeId: string
+  month: string
+  reportType: RpReportType
+  variedKind: RpVariedKind | null
+  variedAlsoUnauthorised: boolean | null
+  note: string | null
+  lodgedOn: string
+}

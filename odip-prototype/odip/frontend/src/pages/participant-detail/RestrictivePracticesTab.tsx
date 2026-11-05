@@ -3,7 +3,7 @@ import { useShowAll } from '@/components/ShowAllButton'
 import { ShieldAlert, AlertTriangle, Plus, Pill } from 'lucide-react'
 import {
   useRestrictivePractices, useUpdateRestrictivePractice, useDeleteRestrictivePractice,
-  useParticipantMedications,
+  useParticipantMedications, useRpMonthlyReportLines,
 } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -19,7 +19,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import {
   RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS, RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS, USE_KIND_LABELS,
 } from '@/api/types/restrictive-practices'
-import type { BspPlanState, RestrictivePracticeDto, RestrictivePracticeType, RestrictivePracticeUseKind } from '@/api/types/restrictive-practices'
+import type { BspPlanState, RpReportLine, RpReportType, RestrictivePracticeDto, RestrictivePracticeType, RestrictivePracticeUseKind } from '@/api/types/restrictive-practices'
 import { calendarDaysUntil } from '@/lib/dateOnly'
 import { useProviderToday } from '@/hooks/useProviderToday'
 import { AddRestrictivePracticeDialog } from './AddRestrictivePracticeDialog'
@@ -27,6 +27,10 @@ import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
 import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Callout } from '@/components/Callout'
+import { StatusBadge } from '@/components/StatusBadge'
+import { TAP_FLOOR } from '@/components/tapArea'
+import { MonthlyReportModal } from '@/pages/incidents/MonthlyReportModal'
+import { monthLabel } from '@/pages/incidents/rpReportFormat'
 import { RpAuthorisationBadge } from '@/pages/incidents/RpAuthorisationBadge'
 import { isRpAuthorised } from '@/lib/incidentPrefill'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -92,9 +96,15 @@ const EMPTY_FORM: PracticeFormState = {
   relatedMedicationId: '', isActive: true, requiresReporting: null, authorised: false,
 }
 
-function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
+/** The month a chip or the deactivate prompt acts on: lines come back Overdue, Due, Lodged, then by month, so the order is set here. */
+const byMonth = (lines: RpReportLine[]) => [...lines].sort((a, b) => a.month.localeCompare(b.month))
+
+function PracticeCard({ practice, canWrite, reportLines = [], onLodge, onEdit, onDelete }: {
   practice: RestrictivePracticeDto
   canWrite: boolean
+  /** This entry's unlodged monthly report lines; the chip shows only when there are some. */
+  reportLines?: RpReportLine[]
+  onLodge?: (line: RpReportLine) => void
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -148,6 +158,22 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
               Review {overdue ? 'overdue' : 'due'} {formatDateAu(practice.reviewDate)}
             </span>
           )}
+          {onLodge && reportLines.length > 0 && (() => {
+            const oldest = byMonth(reportLines)[0]
+            const overdueReports = reportLines.filter(l => l.state === 'Overdue').length
+            return (
+              <button
+                type="button"
+                className={`${TAP_FLOOR} rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
+                aria-label={`Lodge the ${monthLabel(oldest.month)} monthly report`}
+                onClick={() => onLodge(oldest)}
+              >
+                {overdueReports > 0
+                  ? <StatusBadge tone="danger" className="whitespace-nowrap" icon={<AlertTriangle className="w-3 h-3" />} label={overdueReports === 1 ? 'Monthly report overdue' : `${overdueReports} monthly reports overdue`} />
+                  : <StatusBadge tone="warning" className="whitespace-nowrap" label={`Monthly report due ${formatDateAu(oldest.dueOn)}`} />}
+              </button>
+            )
+          })()}
         </div>
         {canWrite && (
           <div className="flex items-center gap-1 pointer-coarse:gap-2 shrink-0">
@@ -229,6 +255,15 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const { data: medications = [] } = useParticipantMedications(participantId, false)
   const updatePractice = useUpdateRestrictivePractice()
   const deletePractice = useDeleteRestrictivePractice()
+  // One request for the participant's lines; each card takes its own entry's unlodged months.
+  const reportsQuery = useRpMonthlyReportLines(participantId, { enabled: canWriteRestrictivePractices && !!participantId })
+  const unlodgedByPractice = useMemo(() => {
+    const map = new Map<string, RpReportLine[]>()
+    for (const l of reportsQuery.data ?? []) if (!l.report) map.set(l.restrictivePracticeId, [...(map.get(l.restrictivePracticeId) ?? []), l])
+    return map
+  }, [reportsQuery.data])
+  const [lodging, setLodging] = useState<{ line: RpReportLine; presetType?: RpReportType } | null>(null)
+  const [askEliminated, setAskEliminated] = useState(false)
 
   // PD-2: creation now only happens through the "Add entries" bulk modal below. This modal is
   // edit-only — `null` means closed, otherwise the entry currently being edited.
@@ -301,6 +336,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   async function handleSave() {
     if (!validate()) return
     if (!editingPractice) return
+    // Switching a practice off may mean it was eliminated: ask before the save, so the Eliminated report can end the months owed.
+    if (editingPractice.isActive && !form.isActive && !askEliminated && (unlodgedByPractice.get(editingPractice.id)?.length ?? 0) > 0) {
+      setAskEliminated(true)
+      return
+    }
+    setAskEliminated(false)
     setModalError(null)
     const payload = {
       type: form.type,
@@ -414,7 +455,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         <div ref={activeRef} className="space-y-3">
           {activePractices.slice(0, showAll.limit).map(p => (
             <div key={p.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
-            <PracticeCard practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => requestDelete(p)} />
+            <PracticeCard practice={p} canWrite={canWriteRestrictivePractices} reportLines={unlodgedByPractice.get(p.id)} onLodge={line => setLodging({ line })} onEdit={() => openEdit(p)} onDelete={() => requestDelete(p)} />
             </div>
           ))}
         </div>
@@ -428,7 +469,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           {showInactive && (
             <div id="practices-inactive-list" className="space-y-3 mt-3">
               {inactivePractices.map(p => (
-                <PracticeCard key={p.id} practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => requestDelete(p)} />
+                <PracticeCard key={p.id} practice={p} canWrite={canWriteRestrictivePractices} reportLines={unlodgedByPractice.get(p.id)} onLodge={line => setLodging({ line })} onEdit={() => openEdit(p)} onDelete={() => requestDelete(p)} />
               ))}
             </div>
           )}
@@ -626,6 +667,28 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         // An inactive entry has nothing to open: it only needs the Close button.
         footer={deleteBlocked?.isActive === false ? <Button variant="secondary" onClick={() => setDeleteBlocked(null)}>Close</Button> : undefined}
       />
+
+      {(() => {
+        const owed = editingPractice ? byMonth(unlodgedByPractice.get(editingPractice.id) ?? []) : []
+        const newest = owed[owed.length - 1]
+        return (
+          <ConfirmDialog
+            open={askEliminated && !!newest}
+            onCancel={() => setAskEliminated(false)}
+            title="Was this practice eliminated?"
+            message={`If it was, lodge an Eliminated report for ${newest ? monthLabel(newest.month) : ''} in the NDIS Commission portal and record it here, so no later months are owed.${owed.length >= 2 ? ` ${owed.length} months are still to lodge for this entry.` : ''}`}
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setAskEliminated(false)}>Back</Button>
+                <Button variant="secondary" onClick={handleSave}>Deactivate only</Button>
+                <Button onClick={() => { setAskEliminated(false); closeModal(); setLodging({ line: newest, presetType: 'Eliminated' }) }}>Lodge a report</Button>
+              </>
+            }
+          />
+        )
+      })()}
+
+      <MonthlyReportModal line={lodging?.line ?? null} presetType={lodging?.presetType} onClose={() => setLodging(null)} onReload={() => void reportsQuery.refetch()} />
 
       <AddRestrictivePracticeDialog
         open={adding && !!participantId}
