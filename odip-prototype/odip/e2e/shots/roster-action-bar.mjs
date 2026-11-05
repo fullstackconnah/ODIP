@@ -105,7 +105,7 @@ const tokenAndContrast = (page) => page.evaluate(() => {
   function rnd(n) { return Math.round(n * 10) / 10 }
   return out
 })
-const scrollerMid = (page) => page.evaluate((sel) => { const b = document.querySelector(sel); b.scrollTop = Math.min(400, b.scrollHeight - b.clientHeight); scrollTo(0, 0) }, SCROLLER).then(() => page.waitForTimeout(250))
+const scrollerMid = (page) => page.evaluate((sel) => { const b = document.querySelector(sel); b.scrollTop = Math.min(1100, b.scrollHeight - b.clientHeight); scrollTo(0, 0) }, SCROLLER).then(() => page.waitForTimeout(250))
 
 // ---- 1280, light: placement, widths, tokens, motion, keyboard, menus, drag --------------------------------------------------
 {
@@ -163,18 +163,27 @@ const scrollerMid = (page) => page.evaluate((sel) => { const b = document.queryS
   await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab')
   await crop(page, 'focus-publish-1280')
   // N13 drag
-  const grip = page.getByRole('button', { name: /drag to move/i }).first()
-  if (await grip.count()) {
-    const b = await grip.boundingBox()
-    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down()
-    for (let i = 1; i <= 12; i++) await page.mouse.move(b.x + b.width / 2 + i * 8, b.y + b.height / 2 + i * 8)
-    await page.waitForTimeout(400)
+  await page.evaluate((sel) => { document.querySelector(sel).scrollTop = 0; scrollTo(0, 0) }, SCROLLER)
+  await page.waitForTimeout(300)
+  const gripBox = await page.evaluate((sel) => {
+    const box = document.querySelector(sel).getBoundingClientRect(), pill = document.querySelector('[data-publish-bar]').firstElementChild.getBoundingClientRect()
+    for (const e of document.querySelectorAll('[aria-label^="Drag to move"]')) {
+      const r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2
+      if (y > box.top + 120 && y < pill.top - 20 && x > box.left && x < box.right && document.elementFromPoint(x, y) === e) return { x, y }
+    }
+    return null
+  }, SCROLLER)
+  if (gripBox) {
+    // Keyboard lift (dnd-kit's KeyboardSensor): Space picks the person up, Escape puts them back. The same carry state as a mouse drag.
+    await page.mouse.move(gripBox.x, gripBox.y)
+    await page.evaluate(({ x, y }) => document.elementFromPoint(x, y).focus(), gripBox)
+    await page.keyboard.press('Space'); await page.waitForTimeout(500)
     const during = await probe(page)
     await crop(page, 'drag-carry-1280')
-    await page.mouse.up(); await page.waitForTimeout(400)
+    await page.keyboard.press('Escape'); await page.waitForTimeout(500)
     const after = await probe(page)
     check('N13 drag: pill opacity 0 and no pointer events, then back to 1', during.opacity === '0' && during.pe === 'none' && after.opacity === '1', { during: [during.opacity, during.pe], after: after.opacity })
-  } else { check('N13 drag: a grip exists', false, 'no [drag to move] button (strip may need staff)'); await crop(page, 'drag-carry-1280') }
+  } else { check('N13 drag: a clear grip exists', false, 'no grip found'); await crop(page, 'drag-carry-1280') }
   // select mode 0 and 3
   await page.evaluate((sel) => { document.querySelector(sel).scrollTop = 0; scrollTo(0, 0) }, SCROLLER)
   await page.getByRole('button', { name: 'Select shifts' }).click(); await page.waitForTimeout(300)
@@ -203,7 +212,8 @@ const scrollerMid = (page) => page.evaluate((sel) => { const b = document.queryS
 }
 // ---- 1280 states: blocked, all blocked, reader, short week, no drafts ------------------------------------------------------
 for (const [mode, name, cap, role] of [['blocked', 'blocked-1280', 60], ['allblocked', 'all-blocked-1280', 60], ['drafts', 'reader-1280', 52, 'ReadOnly'], ['short', 'short-week-1280', 52], ['published', 'nodrafts-1280']]) {
-  const { context, page } = await open(1280, 800, { mode, role })
+  const { context, page } = await open(1280, 800, { mode })
+  if (role) { await page.evaluate((r) => { const u = JSON.parse(localStorage.getItem('odip_user') || '{}'); localStorage.setItem('odip_user', JSON.stringify({ ...u, role: r })) }, role); await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}); await page.waitForTimeout(1200) }
   await crop(page, name)
   const p = await probe(page)
   if (mode === 'published') {
@@ -211,6 +221,7 @@ for (const [mode, name, cap, role] of [['blocked', 'blocked-1280', 60], ['allblo
     const c6 = await page.evaluate((sel) => ({ boxBottom: document.querySelector(sel).getBoundingClientRect().bottom, innerHeight }), SCROLLER)
     check('N16 board fills to the viewport bottom', c6.innerHeight - c6.boxBottom <= 2, c6)
   } else {
+    if (!p.hasBar) { check(`${name}: the bar shows`, false, 'no bar'); await context.close(); continue }
     check(`N6 ${name} <= ${cap}`, p.pillH <= cap, rnd(p.pillH))
     check(`N9 ${name} no truncation`, p.trunc === 0 && p.titleH <= 20.5, { trunc: p.trunc, titleH: p.titleH })
     if (mode === 'allblocked' || role) check(`${name}: no Publish/Select buttons`, !p.buttons.some((b) => /Publish week|Select shifts/.test(b.t)), p.buttons.map((b) => b.t))
