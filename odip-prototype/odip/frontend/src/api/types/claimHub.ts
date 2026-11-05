@@ -69,7 +69,6 @@ export interface ManagedClaimDto {
 export interface HubLinesDto {
   ready: HubLineDto[]
   rejected: RejectedLineDto[]
-  managed: ManagedClaimDto[]
   registrationProblem?: string
 }
 

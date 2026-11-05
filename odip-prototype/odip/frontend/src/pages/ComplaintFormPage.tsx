@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useComplaint, useCreateComplaint, useUpdateComplaint, useIncidents, useStaff } from '@/api/hooks'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { ComplaintDto, IncidentListDto, SaveComplaintDto } from '@/api/types'
 import {
   COMPLAINANT_KIND_LABELS, COMPLAINANT_KINDS, COMPLAINT_CHANNEL_LABELS, COMPLAINT_CHANNELS, COMPLAINT_STATUS_LABELS, COMPLAINT_STATUSES,
@@ -169,10 +170,11 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
   const update = useUpdateComplaint()
   const mutation = isEdit ? update : create
   const { data: staff = [] } = useStaff({ isActive: 'true' })
-  const { data: incidents = [], isLoading: incidentsLoading } = useIncidents({ pageSize: '200' })
 
   const initial = useMemo(() => (complaint ? valuesFrom(complaint) : blankValues('')), [complaint])
   const [values, setValues] = useState<FormValues>(initial)
+  const { data: incidents = [], isLoading: incidentsLoading } = useIncidents(values.participantId ? { pageSize: '200', involvedParticipantId: values.participantId } : { pageSize: '200' })
+  const truncatedIncidents = incidents as Partial<TruncatableList<IncidentListDto>>
   const [saved, setSaved] = useState<FormValues>(initial)
   // The version this form was loaded or last saved at: a refetch never swaps it, so a real conflict still gets the 409.
   const [version, setVersion] = useState(complaint?.updatedAt)
@@ -254,17 +256,15 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
     }
     return [{ value: '', label: 'Nobody yet' }, ...items]
   }, [staff, values.handledByUserId, complaint])
-  // The incident list is filtered here, not on the server (IncidentsController is not touched): with a participant chosen, only their incidents.
-  // shortcut: the 200 newest incidents only, upgrade to a server-side participant filter when a tenant passes that.
+  // shortcut: the 200 newest incidents not yet closed when no participant is chosen, and the hint says so; with a participant chosen the server filters, so none of theirs is cut.
   const incidentItems = useMemo(() => {
-    const rows = (incidents as IncidentListDto[]).filter(i => !values.participantId || i.involvedParticipantId === values.participantId)
-    const items = rows.map(i => ({ value: i.id, label: `${i.title} · ${formatDateAu(i.incidentDateTime.slice(0, 10))}` }))
+    const items = (incidents as IncidentListDto[]).map(i => ({ value: i.id, label: `${i.title} · ${formatDateAu(i.incidentDateTime.slice(0, 10))}` }))
     // A link already saved stays visible even if it is outside the loaded rows or the participant filter.
     if (values.incidentReportId && !items.some(i => i.value === values.incidentReportId)) {
       items.unshift({ value: values.incidentReportId, label: complaint?.incidentReportId === values.incidentReportId && complaint.incidentReportTitle ? complaint.incidentReportTitle : 'Linked incident' })
     }
     return [{ value: '', label: 'No linked incident' }, ...items]
-  }, [incidents, values.participantId, values.incidentReportId, complaint])
+  }, [incidents, values.incidentReportId, complaint])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -342,7 +342,7 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
                     )}
                   </>
                 )}
-                hint="If this complaint is about something already reported as an incident."
+                hint={`If this complaint is about something already reported as an incident.${truncatedIncidents.isTruncated ? ` Showing the latest ${incidents.length} of ${truncatedIncidents.totalCount} incidents not yet closed. Search looks through these only.` : ''}`}
                 className={span.medium}
               >
                 <SearchableSelect
