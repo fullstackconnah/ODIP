@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Archive, Download, Loader2 } from 'lucide-react'
 import { useParticipantExport, useRetentionDue } from '@/api/hooks'
 import type { DataExportSaved, PurgeRecordDto, RetentionDueDto } from '@/api/types'
@@ -59,12 +59,12 @@ export default function DataRetentionTab() {
       key: 'startsOn', header: 'Retention starts', mobile: 'meta',
       render: (r) => (
         <span className="inline-flex flex-wrap items-center gap-2">
-          {formatDateAu(r.startsOn)}
+          <span><span className="md:hidden">Starts </span>{formatDateAu(r.startsOn)}</span>
           {r.startEstimated && <span title={ESTIMATED_NOTE} aria-describedby="retention-estimated-note"><StatusBadge tone="neutral" label="Estimated" /></span>}
         </span>
       ),
     },
-    { key: 'dueOn', header: 'Due for purge', mobile: 'meta', render: (r) => formatDateAu(r.dueOn) },
+    { key: 'dueOn', header: 'Due for purge', mobile: 'meta', render: (r) => <span><span className="md:hidden">Due </span>{formatDateAu(r.dueOn)}</span> },
     {
       key: 'rowCounts', header: 'Records', mobile: 'meta', wrap: true,
       // The card's meta cap and ellipsis would cut the kinds line; this cell takes the card's width and wraps.
@@ -74,7 +74,7 @@ export default function DataRetentionTab() {
         return (
           <span className="flex flex-col">
             <span>{recordsText(retentionTotal(kinds))}</span>
-            <span className={`text-xs ${muted}`}>{kinds.slice(0, 3).map((k) => `${k.label} ${k.count.toLocaleString('en-AU')}`).join(' · ')}</span>
+            <span className={`text-xs ${muted}`}>{kinds.slice(0, 3).map((k, i) => <Fragment key={k.table}>{i > 0 && ' · '}<span className="whitespace-nowrap">{`${k.label} ${k.count.toLocaleString('en-AU')}`}</span></Fragment>)}</span>
           </span>
         )
       },
