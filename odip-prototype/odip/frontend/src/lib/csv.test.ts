@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { csvCell, csvFileName, downloadCsv, toCsv } from './csv'
 
 describe('csvCell', () => {
-  it.each(['=SUM(A1)', '+1', '-x', '@x', '\t=1', '\r=1'])('prefixes the formula-looking text %j with an apostrophe', (text) => {
+  it.each(['=SUM(A1)', '+1', '-x', '@x', '\t=1', '\r=1', ' =1+1'])('prefixes the formula-looking text %j with an apostrophe', (text) => {
     expect(csvCell(text).replace(/^"/, '')).toMatch(/^'/)
   })
 
   it('leaves numbers alone, including negatives, and never prefixes them', () => {
     expect(csvCell(-5)).toBe('-5')
     expect(csvCell(12)).toBe('12')
+  })
+
+  it('does not prefix a plain number', () => {
+    expect(csvCell(7)).toBe('7')
   })
 
   it('writes a fractional number to two decimals', () => {
