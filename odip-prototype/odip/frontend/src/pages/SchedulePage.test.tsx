@@ -103,7 +103,7 @@ describe('SchedulePage — staffing shortfall', () => {
   it('marks a short trip in the warning ink beside its staff count', () => {
     currentOverview = { ...overview, trips: [makeTrip('trip-1', 'Gold Coast Beach Break', { staffRequired: 4, staffAssignedCount: 3, staffShort: 1 })] }
     renderPage()
-    const note = screen.getByText('1 short')
+    const note = screen.getByText(/1 short/)
     expect(note.className).toContain('--color-on-warning-container')
     expect(note.className).toContain('font-semibold')
     expect(screen.getByText(/3 \/ 4 staff/)).toBeInTheDocument()
@@ -113,6 +113,12 @@ describe('SchedulePage — staffing shortfall', () => {
     currentOverview = { ...overview, trips: [makeTrip('trip-1', 'Gold Coast Beach Break', { staffRequired: 1, staffAssignedCount: 1, staffShort: 0 })] }
     renderPage()
     expect(screen.queryByText(/short/)).toBeNull()
+  })
+
+  it('keeps the dot between the staff and pax counts, ending the staff piece', () => {
+    currentOverview = { ...overview, trips: [makeTrip('trip-1', 'Gold Coast Beach Break', { staffRequired: 3, staffAssignedCount: 3, staffShort: 0, currentParticipantCount: 2, maxParticipants: 6 })] }
+    renderPage()
+    expect(screen.getByText(/3 \/ 3 staff/).parentElement).toHaveTextContent(/staff · 2 \/ 6 pax/)
   })
 })
 

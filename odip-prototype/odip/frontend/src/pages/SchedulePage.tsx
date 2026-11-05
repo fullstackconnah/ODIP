@@ -220,12 +220,12 @@ export default function SchedulePage() {
                           </span>
                           <TripStatusBadge status={trip.status} />
                           <span className="whitespace-nowrap">
-                            {formatRatio(trip.staffAssignedCount, trip.staffRequired ?? '?')} staff
+                            {formatRatio(trip.staffAssignedCount, trip.staffRequired ?? '?')} staff ·{' '}
                           </span>
                           {trip.staffShort > 0 && (
                             <span className={`whitespace-nowrap font-semibold ${TONE.warning.ink}`}>
                               <AlertTriangle className="-mt-0.5 mr-0.5 inline h-3 w-3" aria-hidden="true" />
-                              {trip.staffShort} short
+                              {trip.staffShort} short ·{' '}
                             </span>
                           )}
                           <span className="whitespace-nowrap">{formatRatio(trip.currentParticipantCount, trip.maxParticipants ?? '?')} pax</span>

@@ -95,14 +95,15 @@ async function boardRun(browser, tag, vp, shots) {
   // The week grid scrolls sideways inside its own frame, so bring the bar into the viewport first.
   const crop = async (name, file, opts = {}) => {
     try {
-      // At 390 the bar is wider than the viewport (the grid scrolls sideways), so the crop is the pill, the changed part.
-      const target = touch && !file.includes('enough') ? link(name).locator('[data-staff-short]') : link(name)
+      // The crop is the whole bar (left edge to right edge, pad 24), also at 390.
+      const target = link(name)
       await target.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }))
       const r = await cropElement(page, target, path.join(OUT_DIR, file), { touch, ...(touch ? { pad: 24 } : {}), ...opts }); checks.push(checkCropHolds(r))
     } catch (e) { check(`${tag}: crop ${file}`, false, String(e.message).slice(0, 120)) }
   }
   for (const [name, file] of shots) await crop(name, file)
   // Context shot only: the board scrolls inside its own frame (and sideways at 390), which the lib's whole-page checks do not model, so its checks are not recorded.
+  await page.evaluate(() => window.scrollTo(0, window.scrollY))
   await fullPage(page, path.join(OUT_DIR, 'full', `board-full-${vp.width}${vp.dark ? '-dark' : ''}${vp.staff ? '-staff' : ''}.png`), { touch })
   await context.close()
 }
@@ -120,7 +121,7 @@ async function scheduleRun(browser, tag, vp, shots) {
     return { scrollW: document.documentElement.scrollWidth, innerW: innerWidth, heads: heads.map((t) => {
       const line = t.querySelector('div.flex-wrap'); const pieces = line ? [...line.children] : []
       const note = pieces.find((p) => /\\bshort\\b/.test(p.textContent))
-      return { name: t.querySelector('div[title]')?.title ?? '', h: t.getBoundingClientRect().height, hasShort: !!note, text: t.textContent.slice(-60), noteContrast: note ? contrast(note) : null,
+      return { name: t.querySelector('div[title]')?.title ?? '', h: t.getBoundingClientRect().height, hasShort: !!note, text: t.textContent.slice(-60), full: t.textContent, noteContrast: note ? contrast(note) : null,
         pieceFits: pieces.every((p) => p.scrollWidth <= p.clientWidth + 1) } }) } })()`)
   const byName = new Map(trips.map((t) => [t.tripName, t.staffShort]))
   const expectShort = m.heads.filter((h) => byName.get(h.name) > 0).length
@@ -129,10 +130,15 @@ async function scheduleRun(browser, tag, vp, shots) {
   check(`${tag}: "short" only in the short trips' headers`, m.heads.every((h) => h.hasShort === (byName.get(h.name) > 0)), m.heads.map((h) => [h.name, h.hasShort, h.text]))
   check(`${tag}: header pieces do not wrap inside`, m.heads.every((h) => h.pieceFits))
   check(`${tag}: "N short" contrast >= 4.5`, m.heads.filter((h) => h.hasShort).every((h) => h.noteContrast >= 4.5), m.heads.map((h) => h.noteContrast))
+  check(`${tag}: enough-staff header text keeps 'staff · '`, m.heads.filter((h) => !h.hasShort).every((h) => /staff · /.test(h.full)), m.heads.map((h) => h.full))
   const hs = m.heads.filter((h) => h.hasShort).map((h) => h.h); const hc = m.heads.filter((h) => !h.hasShort).map((h) => h.h)
   check(`${tag}: a short header grows at most one line (<= 22px) over a covered one`, !hs.length || !hc.length || Math.max(...hs) - Math.min(...hc) <= 22, [hs, hc])
   const th = (short) => page.locator('thead th').filter({ hasText: 'staff' }).filter(short ? { hasText: 'short' } : { hasNotText: 'short' }).first()
-  for (const [short, file] of shots) { await th(short).evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' })); const r = await cropElement(page, th(short), path.join(OUT_DIR, file), { touch }); checks.push(checkCropHolds(r)) }
+  for (const [short, file] of shots) { await th(short).evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'center' }))
+    const gap = await th(short).evaluate((el) => { const nav = [...document.querySelectorAll('nav')].map((n) => n.getBoundingClientRect()).filter((r) => r.top > innerHeight / 2 && r.width >= innerWidth - 1).sort((a, b) => a.top - b.top)[0]; return nav ? nav.top - el.getBoundingClientRect().bottom : null })
+    check(`${tag}: ${file} header sits above the bottom nav`, gap === null || gap >= 0, gap)
+    const r = await cropElement(page, th(short), path.join(OUT_DIR, file), { touch }); checks.push(checkCropHolds(r)) }
+  await page.evaluate(() => window.scrollTo(0, window.scrollY))
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `schedule-full-${vp.width}${vp.dark ? '-dark' : ''}.png`), { touch })).checks)
   await context.close()
 }
