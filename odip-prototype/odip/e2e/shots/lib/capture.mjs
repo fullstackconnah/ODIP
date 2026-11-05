@@ -45,7 +45,6 @@ export async function settle(page, locator) {
   throw new Error(`settle: layout still moving after ${SETTLE_MS}ms`)
 }
 
-// Run fn with the viewport grown to `width` x `height`, then restore it (and the touch emulation).
 // Hide fixed and sticky elements that are not the target(s), their ancestors or descendants; returns the restore function.
 async function hideChrome(page, locators) {
   const keep = await Promise.all(locators.map((l) => l.elementHandle()))
@@ -65,6 +64,7 @@ export async function waitForSidebar(page, timeout = 2000) {
   await page.locator('nav[aria-label="Main"]').first().waitFor({ state: 'visible', timeout }).catch(() => {})
 }
 
+// Run fn with the viewport grown to `width` x `height`, then restore it (and the touch emulation).
 async function withViewport(page, width, height, touch, fn) {
   const vp = page.viewportSize()
   const grow = width > vp.width || height > vp.height
@@ -122,12 +122,14 @@ export async function cropElement(page, locator, file, { pad = 16, touch, also, 
 }
 
 // Pass = the element lies inside the clip and the topmost element at its centre is the element or inside it. Run it from `during`.
-// Ignored: the app sidebar, and anything inside the open dialog, popover or drawer the element lives in. Returns { name, pass, detail }.
+// Ignored: the app sidebar, and the dialog, popover or drawer the element lives in and its unpositioned content (a positioned cover inside it still fails). Returns { name, pass, detail }.
 export async function overlapCheck(locator, clip, file) {
   const detail = await locator.evaluate((el, c) => {
     const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-    const host = el.closest('[role=dialog],[popover]')
-    const ignored = !!hit && (!!hit.closest('aside:has(nav[aria-label="Main"]),nav[aria-label="Main"]') || (!!host && host.contains(hit)))
+    // a positioned element between hit and the dialog (not an ancestor of the target) is a real cover
+    const onPath = (n, h) => { for (; n && n !== h; n = n.parentElement) if (getComputedStyle(n).position !== 'static') return true; return false }
+    const host = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true],[popover]')
+    const ignored = !!hit && (!!hit.closest('aside:has(nav[aria-label="Main"]),nav[aria-label="Main"]') || (!!host && host.contains(hit) && (hit === host || hit.contains(el) || !onPath(hit, host))))
     return { inClip: r.left >= c.x - 1 && r.top >= c.y - 1 && r.right <= c.x + c.width + 1 && r.bottom <= c.y + c.height + 1, covered: !hit || (!el.contains(hit) && !ignored), hit: hit ? hit.tagName + '.' + String(hit.className).split(' ')[0] : null }
   }, clip)
   return { name: `crop is clear of fixed or sticky chrome: ${file}`, pass: detail.inClip && !detail.covered, detail }
