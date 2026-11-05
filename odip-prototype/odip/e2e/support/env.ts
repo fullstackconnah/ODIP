@@ -17,6 +17,7 @@ export const SEEDED = {
   supportWorker: 'james.obrien',
   readOnly: 'coordinator.read',
   superAdmin: 'admin',
+  admin: 'demo.admin',
 } as const;
 
 export const EXPECTED_ROLE: Record<string, string> = {
@@ -24,4 +25,5 @@ export const EXPECTED_ROLE: Record<string, string> = {
   [SEEDED.supportWorker]: 'SupportWorker',
   [SEEDED.readOnly]: 'ReadOnly',
   [SEEDED.superAdmin]: 'SuperAdmin',
+  [SEEDED.admin]: 'Admin',
 };
