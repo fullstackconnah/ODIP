@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import IncidentsPage from './IncidentsPage'
 
-const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate, mockRestoreMutate, mockDeleteMutate } = vi.hoisted(() => ({
+const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate, mockRestoreMutate, mockDeleteMutate, mockUseRpLines } = vi.hoisted(() => ({
+  mockUseRpLines: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockRestoreMutate: vi.fn(),
   mockUseIncidents: vi.fn(),
@@ -22,6 +23,9 @@ vi.mock('@/api/hooks', () => ({
   useRestoreIncident: () => ({ mutate: mockRestoreMutate, isPending: false }),
   useDeleteIncident: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useFlaggedShiftNotes: mockUseFlaggedShiftNotes,
+  useRpMonthlyReportLines: mockUseRpLines,
+  useLodgeRpReport: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUndoRpReport: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useIncidentTrend: () => ({ data: undefined, isLoading: true, isError: false }),
 }))
 
@@ -87,6 +91,7 @@ beforeEach(() => {
   mockUseIncidents.mockReturnValue({ data: [], isLoading: false })
   mockUseOverdueQscIncidents.mockReturnValue({ data: [] })
   mockUseFlaggedShiftNotes.mockReturnValue({ data: [], isLoading: false })
+  mockUseRpLines.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockNavigate.mockReset()
 })
 

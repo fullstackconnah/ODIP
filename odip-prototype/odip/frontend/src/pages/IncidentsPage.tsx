@@ -1,4 +1,4 @@
-import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
+import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes, useRpMonthlyReportLines } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
 import { INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS, type IncidentSeverity, type IncidentStatus, type IncidentType } from '@/api/types/enums'
@@ -15,16 +15,19 @@ import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Archive, ArchiveRestore, ChevronRight } from 'lucide-react'
+import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Archive, ArchiveRestore, ChevronRight, Download, CalendarCheck } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
+import { downloadFile } from '@/lib/downloadFile'
 import { formatAge, plural } from '@/lib/format'
 import { SHIFT_NOTE_FLAG_LABELS } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { IncidentTrendCard } from './incidents/IncidentTrendCard'
+import { RpMonthlyReportsTab, rpMonths, rpToLodge } from './incidents/RpMonthlyReportsTab'
+import { monthLabel } from './incidents/rpReportFormat'
 
-type IncidentsTab = 'incidents' | 'flagged-notes'
+type IncidentsTab = 'incidents' | 'flagged-notes' | 'rp-reports'
 
 /** Connection map item 4: mirrors ShiftNotesSection.goToIncident's field mapping so
  * IncidentCreatePage treats a queue-filed incident identically to a portal-filed one. Uses the
@@ -167,7 +170,7 @@ function formatQscLabel(status: string): string {
 }
 
 export default function IncidentsPage() {
-  const { canWrite, canCreateIncidents, canAccessPage, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
+  const { canWrite, canCreateIncidents, canAccessPage, isSuperAdmin, isAdmin, isCoordinator, canWriteRestrictivePractices, hasOrganisation } = usePermissions()
   // Same gate as /rostering (coordinators, admins, super admins) — a support worker's own
   // notes are already visible to them on the portal shift page; this queue spans every
   // participant's notes, which a support worker should not see.
@@ -177,7 +180,14 @@ export default function IncidentsPage() {
   // queue) — read once on mount, same as qscOverdueOnly below. Default (no param) is unchanged:
   // the Incidents tab. Only sets the initial tab — switching tabs afterwards via Tabs doesn't
   // write the param back, matching how qscOverdueOnly is a one-way filter, not a synced tab state.
-  const [tab, setTab] = useState<IncidentsTab>(searchParams.get('view') === 'flagged-notes' ? 'flagged-notes' : 'incidents')
+  const initialView = searchParams.get('view')
+  const [tab, setTab] = useState<IncidentsTab>(initialView === 'flagged-notes' ? 'flagged-notes' : initialView === 'rp-reports' ? 'rp-reports' : 'incidents')
+  // The monthly restrictive practice reports (?view=rp-reports): one organisation's worklist, so no request without a role that lodges them or an organisation chosen.
+  const rpEnabled = canWriteRestrictivePractices && hasOrganisation
+  const rpQuery = useRpMonthlyReportLines(undefined, { enabled: rpEnabled })
+  const { data: rpLines = [], isLoading: rpLoading, isError: rpError } = rpQuery
+  const [rpMonth, setRpMonth] = useState('')
+  const [rpCsvError, setRpCsvError] = useState<string | null>(null)
   const flaggedQuery = useFlaggedShiftNotes(
     { withoutIncident: true },
     { enabled: canViewFlaggedNotes },
@@ -303,11 +313,24 @@ export default function IncidentsPage() {
   // Same condition the body uses to swap in the queue: a ?view=flagged-notes link from someone who
   // can't see the tab still lands on the incidents list.
   const showFlaggedNotes = tab === 'flagged-notes' && canViewFlaggedNotes
+  const showRp = tab === 'rp-reports' && canWriteRestrictivePractices
+  const rpMonthItems = [{ value: '', label: 'All months' }, ...rpMonths(rpLines).map(m => ({ value: m, label: monthLabel(m) }))]
+  // The CSV is one month at a time: the one picked, or the newest when it is All months.
+  const csvMonth = rpMonth || rpMonths(rpLines)[0]
+  async function downloadRpCsv() {
+    setRpCsvError(null)
+    try {
+      await downloadFile(`/restrictive-practice-reports/csv?month=${csvMonth}`, `rp-monthly-reports-${csvMonth.slice(0, 7)}.csv`)
+    } catch (err) {
+      setRpCsvError((err as Error).message)
+    }
+  }
+  const rpToLodgeCount = rpToLodge(rpLines)
   // "1 incident requires", "2 incidents require": the verb agrees with the count.
   const qscHeadline = overdueQsc.length === 1
     ? '1 incident is past its NDIS Commission deadline'
     : `${overdueQsc.length} incidents are past their NDIS Commission deadline`
-  const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
+  const reportIncidentAction = !showFlaggedNotes && !showRp && !showArchived && canCreateIncidents && (
     <Button to="/incidents/new" size="md">
       <Plus className="w-4 h-4" /> Report incident
     </Button>
@@ -320,14 +343,19 @@ export default function IncidentsPage() {
       <div>
         <PageHeader
           title="Incidents"
-          count={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
-          action={reportIncidentAction || undefined}
-          tabs={canViewFlaggedNotes && (
+          count={showFlaggedNotes ? undefined : showRp ? (rpLoading || rpError ? undefined : rpToLodgeCount === 0 ? 'All lodged' : `${rpToLodgeCount} to lodge`) : plural(totalCount, 'incident')}
+          action={showRp ? (csvMonth ? (
+            <Button variant="secondary" size="md" onClick={downloadRpCsv}>
+              <Download className="w-4 h-4" /> CSV for {monthLabel(csvMonth)}
+            </Button>
+          ) : undefined) : reportIncidentAction || undefined}
+          tabs={(canViewFlaggedNotes || canWriteRestrictivePractices) && (
             <Tabs
               tabs={[
                 { id: 'incidents', label: 'Reports' },
                 // A failed load is not a count of 0: the label drops the count until there is one.
-                { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
+                ...(canViewFlaggedNotes ? [{ id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` }] : []),
+                ...(canWriteRestrictivePractices ? [{ id: 'rp-reports', label: rpError || rpLoading ? 'RP monthly reports' : `RP monthly reports (${rpToLodgeCount})` }] : []),
               ]}
               active={tab}
               onChange={key => setTab(key as IncidentsTab)}
@@ -335,7 +363,17 @@ export default function IncidentsPage() {
             />
           )}
         >
-          {!showFlaggedNotes && (
+          {showRp && rpLines.length > 0 && (
+            <Dropdown
+              variant="pill"
+              value={rpMonth}
+              onChange={setRpMonth}
+              label="All months"
+              items={rpMonthItems}
+              colorClass="bg-[var(--color-input)] border border-[var(--color-border)]"
+            />
+          )}
+          {!showFlaggedNotes && !showRp && (
             <>
               {toggleButtons}
               {!showArchived && (
@@ -368,7 +406,16 @@ export default function IncidentsPage() {
         </PageHeader>
       </div>
 
-      {showFlaggedNotes ? (
+      {showRp ? (
+        !hasOrganisation ? (
+          <EmptyState icon={CalendarCheck} title="Choose an organisation to view as first." description="Monthly reports belong to one organisation." />
+        ) : (
+          <>
+            {rpCsvError && <Callout tone="danger">{rpCsvError}</Callout>}
+            <RpMonthlyReportsTab lines={rpLines} month={rpMonth} isLoading={rpLoading} isError={rpError || retryingAfterError(rpQuery)} onRetry={() => rpQuery.refetch()} />
+          </>
+        )
+      ) : showFlaggedNotes ? (
         <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError || retryingAfterError(flaggedQuery)} onRetry={() => refetchFlaggedNotes()} />
       ) : (
       <>

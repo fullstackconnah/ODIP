@@ -38,7 +38,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical participant alerts', 'Missing vehicles', 'Budgets at risk'].includes(label)))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical participant alerts', 'Missing vehicles', 'Budgets at risk', 'RP monthly reports overdue'].includes(label)))
     expect(screen.queryByRole('group', { name: /Missing vehicles/ })).not.toBeInTheDocument()
     // No budget is in force for anybody here, so the band does not name Budgets at risk at all: it cannot say it checked what nobody recorded. The other zero is a name in the row.
     expect(clearRow()).toHaveTextContent('All clear on trips missing vehicles')
@@ -56,7 +56,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical participant alerts', 'Budgets at risk', 'Pending leave', 'Shift completions', 'Qualification issues'].includes(label)))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical participant alerts', 'Budgets at risk', 'Pending leave', 'Shift completions', 'Qualification issues', 'RP monthly reports overdue'].includes(label)))
     expect(screen.queryByText(/Budgets at risk/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Critical participant alerts/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Pending leave/)).not.toBeInTheDocument()
@@ -153,6 +153,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
     ['NDIS Commission overdue', 'Reportable incidents not reported to the NDIS Commission by their deadline.', 'Review NDIS Commission reports', '/incidents?qsc=overdue'],
+    ['RP monthly reports overdue', 'Monthly reports not recorded as lodged by their due date.', 'Open monthly reports', '/incidents?view=rp-reports'],
     ['Missing accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
     ['Missing vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
     ['Missing staff', 'Trips start within 60 days with no staff assigned.', 'Assign staff', '/schedule'],
@@ -283,7 +284,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(tileLabels()).toEqual(['Overdue'])
     const row = clearRow()!
     expect(row).toHaveTextContent(
-      'All clear on qualification issues, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue NDIS Commission reports, pending leave and shift completions',
+      'All clear on qualification issues, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue NDIS Commission reports, overdue restrictive practice monthly reports, pending leave and shift completions',
     )
     expect(row).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
     expect(screen.getAllByText('All clear')).toHaveLength(1)
@@ -315,7 +316,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(clearRow()).toBeNull()
     // It names everything it checked, so the claim can be audited.
     expect(screen.getByText(
-      'Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue NDIS Commission reports, pending leave and shift completions.',
+      'Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue NDIS Commission reports, overdue restrictive practice monthly reports, pending leave and shift completions.',
     )).toBeInTheDocument()
   })
 
@@ -420,7 +421,7 @@ describe('DashboardPage — the All clear row and field name the items by nouns'
     renderPage()
 
     expect(screen.getByText(/^Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation/)).toBeInTheDocument()
-    expect(screen.getByText(/overdue NDIS Commission reports, pending leave and shift completions\.$/)).toBeInTheDocument()
+    expect(screen.getByText(/overdue NDIS Commission reports, overdue restrictive practice monthly reports, pending leave and shift completions\.$/)).toBeInTheDocument()
   })
 
   it('leaves the tile labels exactly as they are', () => {
@@ -460,7 +461,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
     renderPage()
 
     expect(band().innerHTML).not.toMatch(/text-(?:xl|2xl|3xl|4xl|5xl|6xl|\[(?:1[0-2]|1[5-9]|[2-9]\d)px\]|\[0?\.\d+rem\])/)
-    expect(band().querySelectorAll('.text-display')).toHaveLength(10)
+    expect(band().querySelectorAll('.text-display')).toHaveLength(11)
   })
 
   it('still has exactly one h1 whatever the band shows', () => {
