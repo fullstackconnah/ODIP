@@ -127,6 +127,8 @@ async function retryCallout(page, vp, scheme) {
 async function autoRoster(page, vp) {
   const tag = `AR1 ${vp.name}`
   await gotoReady(page, '/rostering', false)
+  const start = page.getByRole('button', { name: 'Start rostering' })
+  if (await start.count()) await start.first().click()
   await page.getByRole('button', { name: 'Auto-roster' }).first().click({ timeout: 90_000 })
   const apply = page.getByRole('button', { name: /^Apply/ })
   await apply.waitFor({ state: 'visible', timeout: 90_000 })
@@ -146,41 +148,59 @@ async function autoRoster(page, vp) {
   await crop(page, vp, 'autoroster-failed-1280', failed, 24)
 }
 
-// INC1: Cancel while the review save is held.
+// INC1: Cancel while the review save is held. The incident is a full fixture (the mock's inc-0002 lacks fields the detail page reads).
+const incidentFixture = {
+  id: 'inc-1', serviceType: 'None', tripInstanceId: null, tripName: null, incidentType: 'Injury', otherTypeSpecify: null,
+  severity: 'Medium', status: 'UnderReview', title: 'Fall in the garden', incidentDateTime: '2026-10-03T08:00:00', location: 'Home',
+  reportedByName: 'Mei Zhang', involvedParticipantId: 'participant-4', involvedParticipantName: 'Grace Palmer-Hughes', qscReportingStatus: 'NotRequired', isOverdue24h: false,
+  createdAt: '2026-10-03T09:00:00Z', medicationAdministrationId: null, shiftId: null, shiftNoteId: null, participantBookingId: null, involvedStaffId: null, involvedStaffName: null, reportedByStaffId: 'staff-4',
+  restrictivePracticeType: null, restrictivePracticeId: null, restrictivePracticeDescription: null, restrictivePracticeReviewDate: null, unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: null,
+  description: 'Grace slipped on the wet path.', immediateActionsTaken: 'Checked for injury and sat her down.', wereEmergencyServicesCalled: false, emergencyServicesDetails: null, emergencyServices: 'None',
+  policeOfficerName: null, policeReference: null, ambulanceOfficerName: null, ambulanceReference: null, fireOfficerName: null, fireReference: null, witnessNames: null, witnessStatements: null,
+  injuries: [], witnesses: [], qscReportedAt: null, qscReferenceNumber: null, awareAt: '2026-10-03T09:05:00Z', reportableClass: 'None', reportableClassReason: null,
+  notifyDueAt: null, detailedReportDueAt: null, dueCountedWithoutHolidays: false, commissionDetailedReportedAt: null, commissionFinalReportRequested: false, commissionFinalReportedAt: null, timeZoneId: 'Australia/Sydney',
+  reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null, resolvedAt: null,
+  familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
+  updatedAt: '2026-10-05T01:02:03.4567890Z', medicationContext: null, shiftContext: null, shiftNoteContext: null,
+}
 async function incidentReview(page, vp) {
   const tag = `INC1 ${vp.name}`
-  await gotoReady(page, `/incidents/${vp.touch ? 'inc-0003' : 'inc-0002'}`, false)
+  await page.route('**/api/v1/incidents/inc-1', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: envelope(incidentFixture) }) : r.fallback()))
+  await page.route('**/api/v1/incidents/inc-1/status-history', (r) => r.fulfill({ json: envelope([]) }))
+  await gotoReady(page, '/incidents/inc-1', false)
   const review = page.locator('[data-testid="incident-review"]')
   await review.waitFor({ timeout: 90_000 })
-  await page.getByText(/Loading status history|No status changes yet|Reported as/).first().waitFor({ timeout: 60_000 })
   await review.getByRole('button', { name: 'Record review' }).click({ timeout: 60_000 })
   await review.getByLabel(/Review notes/).fill('Spoke with the team. Footwear check added.')
   let release
   const held = new Promise((res) => { release = res })
-  await page.route('**/api/v1/incidents/**', async (r) => { if (r.request().method() === 'PUT' && /review/i.test(r.request().url())) { await held; await r.continue() } else await r.fallback() })
+  await page.route('**/api/v1/incidents/inc-1/review', async (r) => { if (r.request().method() === 'PUT') { await held; await r.fulfill({ json: envelope(incidentFixture) }) } else await r.fallback() })
   await review.getByRole('button', { name: 'Save review' }).click()
   await review.getByRole('button', { name: 'Saving...' }).waitFor({ timeout: 10_000 })
   const cancel = review.getByRole('button', { name: 'Cancel' })
-  const save = review.getByRole('button', { name: 'Saving...' })
   check(`${tag}: Cancel is disabled while saving`, await cancel.isDisabled())
-  const m = await review.evaluate((el) => {
-    const bs = [...el.querySelectorAll('form button')]
-    return bs.map((b) => ({ t: b.textContent.trim(), w: b.getBoundingClientRect().width, top: b.getBoundingClientRect().top }))
-  })
+  const m = await review.evaluate((el) => [...el.querySelectorAll('form button')].map((b) => ({ t: b.textContent.trim(), w: b.getBoundingClientRect().width, top: b.getBoundingClientRect().top })))
   if (vp.touch) {
     const c = m.find((b) => b.t === 'Cancel'), s = m.find((b) => b.t.startsWith('Saving'))
     check(`${tag}: buttons full width and Cancel below Save (reversed column)`, c.w > 300 && within(c.w, s.w, 1) && c.top > s.top, m)
   }
   await noOverflow(page, `${tag} saving`)
   await crop(page, vp, `incident-review-saving-${vp.name}`, review, 16)
-  void save
   release()
 }
 
-// CK1: the Checks column on the Ready tab, and the phone card.
+// CK1: the Checks column on the Ready tab, and the phone card. The Ready list is a fixture with one blocked claim.
+const hubLine = (i, over = {}) => ({
+  lineId: `l${i}`, claimId: `c${i}`, claimReference: `CLM-000${i}`, claimKind: 'shift', participantId: `p${i}`, participantName: ['Jo Park', 'Sam Lee', 'Alex Rivera', 'Mina Okafor'][i % 4],
+  supportNumber: '04_104_0125_6_1', supportName: 'Short-notice cancellation', from: '2026-10-18', to: '2026-10-18', hours: 3, quantity: 3, unitPrice: 67.56, totalAmount: 202.68,
+  gstCode: 'P2', claimType: 'Standard', fundingType: 'agency', ageDays: 5, ageBand: 'none', nextAttempt: 1, problems: [], ...over,
+})
+const blockMsg = "04_104_0125_6_1 can't be claimed as a short-notice cancellation. Check the short-notice setting for this item in the price guide."
+const hubLines = { ready: [hubLine(0, { problems: [{ rule: 'CancellationNotAllowed', severity: 'block', message: blockMsg }] }), hubLine(1), hubLine(2), hubLine(3)], rejected: [], managed: [] }
 async function claimsReady(page, vp) {
   const tag = `CK1 ${vp.name}`
-  await gotoReady(page, '/claims', false)
+  await page.route('**/api/v1/claim-hub/lines', (r) => r.fulfill({ json: envelope(hubLines) }))
+  await gotoReady(page, '/claims?tab=ready', false)
   const panel = page.getByRole('tabpanel').first()
   await panel.waitFor({ state: 'visible', timeout: 90_000 })
   if (vp.width >= 768) {
@@ -189,14 +209,14 @@ async function claimsReady(page, vp) {
     const m = await th.evaluate((el) => {
       const idx = [...el.parentElement.children].indexOf(el)
       const cells = [...el.closest('table').querySelectorAll('tbody tr')].map((tr) => tr.children[idx]).filter(Boolean)
-      return { thWidth: el.getBoundingClientRect().width, cellWidths: cells.slice(0, 8).map((c) => +c.getBoundingClientRect().width.toFixed(1)), cellHeights: cells.slice(0, 8).map((c) => +c.getBoundingClientRect().height.toFixed(1)) }
+      return { thWidth: el.getBoundingClientRect().width, cellWidths: cells.map((c) => +c.getBoundingClientRect().width.toFixed(1)), cellHeights: cells.map((c) => +c.getBoundingClientRect().height.toFixed(1)) }
     })
     check(`${tag}: Checks cell width >= 256px`, m.thWidth >= 255.5 && m.cellWidths.every((w) => w >= 255.5), m)
     await noOverflow(page, tag)
-    if (vp.name === '1280') await crop(page, vp, 'claims-ready-checks-1280', panel, 8)
+    if (vp.name === '1280') await crop(page, vp, 'claims-ready-checks-1280', panel.locator('table'), 8)
   } else {
     await noOverflow(page, tag)
-    await crop(page, vp, 'claims-ready-card-390', panel, 8)
+    await crop(page, vp, 'claims-ready-card-390', panel.getByText("can't be claimed as a short-notice").first().locator('xpath=ancestor::*[self::li or self::article or (self::div and contains(@class,"rounded"))][1]'), 8)
   }
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `claims-full-${vp.name}.png`), { touch: vp.touch })).checks)
 }
