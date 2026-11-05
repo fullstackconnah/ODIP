@@ -418,6 +418,12 @@ describe('StaffTab — the staffing summary shows what the server says the trip 
     expect(screen.getByText(/2\.50 required from ratios/)).toBeInTheDocument()
   })
 
+  it('paints the not-staffed pill amber, not red: a shortfall warns, it never blocks', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(3, 3)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0 / 3 staff').parentElement).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+  })
+
   it('shows the figure the server sends while no booking has set one (the trip\'s own minimum)', () => {
     render(<StaffTab tripId="trip-1" trip={tripNeeding(0, 2)} staff={[]} canWrite />)
 

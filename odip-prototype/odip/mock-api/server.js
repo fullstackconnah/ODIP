@@ -1727,6 +1727,7 @@ const scheduleOverview = {
     minStaffRequired: (tripDetailExtras[t.id] || {}).minStaffRequired ?? null,
     staffRequired: staffRequiredOf(tripDetailExtras[t.id]),
     staffAssignedCount: (tripDetailExtras[t.id] || {}).staffAssignedCount ?? 0,
+    staffShort: ['Cancelled', 'Archived', 'Completed'].includes(t.status) ? 0 : Math.max(0, (staffRequiredOf(tripDetailExtras[t.id]) ?? 0) - ((tripDetailExtras[t.id] || {}).staffAssignedCount ?? 0)),
     vehicleAssignedCount: t.id === 't-0001' || t.id === 't-0004' ? 1 : 0,
     leadCoordinatorName: t.leadCoordinatorName,
     preferenceMatchCount: t.id === 't-0001' ? 2 : 0,

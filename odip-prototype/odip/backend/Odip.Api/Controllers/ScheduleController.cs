@@ -106,6 +106,7 @@ public class ScheduleController : ControllerBase
             MinStaffRequired = t.MinStaffRequired,
             StaffRequired = t.StaffRequired,
             StaffAssignedCount = t.StaffAssignments.Count(a => a.Status != AssignmentStatus.Cancelled),
+            StaffShort = TripStaffing.StaffShort(t, t.StaffAssignments.Count(a => a.Status != AssignmentStatus.Cancelled)),
             VehicleAssignedCount = t.VehicleAssignments.Count(a =>
                 a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable),
             LeadCoordinatorName = t.LeadCoordinator != null

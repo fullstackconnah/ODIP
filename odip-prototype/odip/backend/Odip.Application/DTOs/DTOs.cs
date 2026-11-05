@@ -2074,6 +2074,7 @@ public record ScheduleTripDto
     public int? MinStaffRequired { get; init; }
     public int? StaffRequired { get; init; }
     public int StaffAssignedCount { get; init; }
+    public int StaffShort { get; init; }
     public int VehicleAssignedCount { get; init; }
     public string? LeadCoordinatorName { get; init; }
     public int PreferenceMatchCount { get; init; }
