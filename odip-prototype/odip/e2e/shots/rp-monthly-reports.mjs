@@ -18,7 +18,7 @@ const NOW = '2026-11-04T10:00:00+11:00'
 const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const who = (role) => ({
   users: envelope([{ username: `dev.${role.toLowerCase()}`, role, tenantName: 'Sample Support Co' }]),
-  login: envelope({ id: '00000000-0000-0000-0000-0000000000a2', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: `dev.${role.toLowerCase()}`, fullName: `Dev ${role}`, role, tenantName: 'Sample Support Co', tenantId: '00000000-0000-0000-0000-0000000000b1' }),
+  login: envelope({ id: '00000000-0000-0000-0000-0000000000a2', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: `dev.${role.toLowerCase()}`, fullName: `Dev ${role}`, role, tenantName: 'Sample Support Co', ...(role === 'SuperAdmin' ? {} : { tenantId: '00000000-0000-0000-0000-0000000000b1' }) }),
 })
 
 const checks = []
@@ -168,7 +168,7 @@ try {
       const card = chip.locator('xpath=ancestor::*[self::article or self::li or self::div][.//button[contains(., "Edit")]][1]')
       await crop(h.page, card, `health-chips-${vp.name}.png`, vp)
 
-      await h.page.getByRole('button', { name: 'Edit' }).first().click()
+      await card.getByRole('button', { name: 'Edit', exact: true }).click()
       await h.page.getByLabel('Active').click()
       await h.page.getByRole('button', { name: /save entry/i }).click()
       await h.page.getByText('Was this practice eliminated?').waitFor({ timeout: 20_000 })

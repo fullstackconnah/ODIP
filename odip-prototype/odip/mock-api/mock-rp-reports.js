@@ -9,7 +9,7 @@ const JORDAN = { participantId: 'p-0002', participantName: 'Jordan Demo' }
 
 const PRACTICES = [
   { id: 'rp-alex', ...ALEX, type: 'PhysicalRestraint', description: 'Hands-on guiding during transitions', useKind: 'Routine', medicine: null },
-  { id: 'rp-jordan', ...JORDAN, type: 'ChemicalRestraint', description: 'As-needed sedation', useKind: 'AsNeeded', medicine: 'Midazolam 5 mg' },
+  { id: 'rp-jordan', ...JORDAN, type: 'ChemicalRestraint', description: 'As-needed sedation', useKind: 'Prn', medicine: 'Midazolam 5 mg' },
 ]
 
 const lodged = { id: 'rep-aug', reportType: 'NotUsed', variedKind: null, variedAlsoUnauthorised: null, useCount: null, note: null, lodgedOn: '2026-09-03', lodgedByName: 'Sam Coordinator' }
@@ -19,7 +19,7 @@ const fixtureLines = () => [
   { restrictivePracticeId: 'rp-alex', ...ALEX, practiceType: 'PhysicalRestraint', practiceDescription: PRACTICES[0].description, useKind: 'Routine', month: '2026-09-01', dueOn: '2026-10-07', dueCountedWithoutHolidays: false, state: 'Overdue', suggestedType: null, uses: [], report: null },
   { restrictivePracticeId: 'rp-alex', ...ALEX, practiceType: 'PhysicalRestraint', practiceDescription: PRACTICES[0].description, useKind: 'Routine', month: '2026-08-01', dueOn: '2026-09-04', dueCountedWithoutHolidays: false, state: 'Lodged', suggestedType: null, uses: [], report: lodged },
   {
-    restrictivePracticeId: 'rp-jordan', ...JORDAN, practiceType: 'ChemicalRestraint', practiceDescription: PRACTICES[1].description, useKind: 'AsNeeded', month: '2026-10-01', dueOn: '2026-11-06', dueCountedWithoutHolidays: false,
+    restrictivePracticeId: 'rp-jordan', ...JORDAN, practiceType: 'ChemicalRestraint', practiceDescription: PRACTICES[1].description, useKind: 'Prn', month: '2026-10-01', dueOn: '2026-11-06', dueCountedWithoutHolidays: false,
     state: 'Due', suggestedType: 'UsesReported',
     uses: [
       { localDateTime: '2026-10-12T14:30:00', incidentReportId: null, medicationAdministrationId: 'adm-1' },
