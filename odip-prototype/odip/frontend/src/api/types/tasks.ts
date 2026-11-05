@@ -24,6 +24,7 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   FlaggedNoteFollowUp: 'Flagged note follow-up',
   BudgetEmergencyReview: 'Budget emergency review',
   RestrictivePracticeRegisterAddition: 'Restrictive practice register',
+  ComplianceDue: 'Compliance date',
   Other: 'Other',
 }
 

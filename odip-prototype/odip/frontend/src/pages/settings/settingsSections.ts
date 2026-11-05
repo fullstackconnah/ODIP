@@ -17,7 +17,7 @@ export type SettingsPerms = Pick<
 
 export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
-  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'locations' | 'security'
+  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'compliance' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'locations' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'referral-sources' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
@@ -59,6 +59,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'workspace-visibility', label: 'Workspace visibility', group: 'Organisation', visible: managesOrganisation, description: 'Choose which optional workspaces appear in the usual menu for your organisation.' },
   { key: 'organisation', label: 'Organisation profile', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "Your organisation's legal details, address and contact details, and the time zone that rosters, the portal and reminders follow. Claims, bulk payment files and invoices carry the legal details and address." },
   { key: 'microsoft', label: 'Microsoft sign-in', group: 'Organisation', visible: p => p.isAdmin && !p.viewingAs && p.hasOrganisation && p.microsoftSignIn, description: 'Let your team sign in with their Microsoft work accounts, and choose the role new people get.' },
+  { key: 'compliance', label: 'Compliance dates', group: 'Organisation', visible: p => (p.isAdmin || p.isSuperAdmin || p.isCoordinator) && p.hasOrganisation, readOnly: onlyAdminsChange, description: 'When your registration, audits, insurance and key personnel checks are due. Admins get a task 90 days before each date.' },
   { key: 'billing', label: 'Billing details', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice." },
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What we stop, and what we only warn about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
   { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "How early we warn before a staff qualification or a participant's plan expires." },

@@ -15,6 +15,7 @@ import { PageState } from '@/components/PageState'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import ReferralSourcesSection from '@/pages/settings/ReferralSourcesSection'
 import ServiceLocationsSection from '@/pages/settings/ServiceLocationsSection'
+import ComplianceDatesSection from '@/pages/settings/ComplianceDatesSection'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import WhatsNewSection from '@/pages/settings/WhatsNewSection'
@@ -131,6 +132,7 @@ export default function SettingsPage() {
       case 'workspace-visibility': return <WorkspaceVisibilitySection {...frame} />
       case 'setup': return framed(<OrganisationSetupSection />)
       case 'organisation': return <OrganisationProfileSection {...frame} />
+      case 'compliance': return framed(<ComplianceDatesSection />)
       case 'microsoft': return framed(<MicrosoftSignInSection />)
       case 'billing': return <BillingDetailsSection {...frame} />
       case 'safety': return <SafetyChecksSection {...frame} />
