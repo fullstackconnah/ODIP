@@ -18,12 +18,6 @@ type Row = RpReportLine & { rowKey: string }
 
 const TONE = { Overdue: 'danger', Due: 'warning', Lodged: 'success' } as const
 
-/** Lines still to lodge: the tab's count. */
-export const rpToLodge = (lines: RpReportLine[]) => lines.filter(l => !l.report).length
-
-/** The months that have a line, newest first: the month filter's items. */
-export const rpMonths = (lines: RpReportLine[]) => [...new Set(lines.map(l => l.month))].sort().reverse()
-
 function usageText(l: Row) {
   if (l.useKind === 'Routine') return 'Routine'
   return `As needed · ${l.uses.length === 0 ? 'no uses' : plural(l.uses.length, 'use')}`

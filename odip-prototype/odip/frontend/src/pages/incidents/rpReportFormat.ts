@@ -1,3 +1,5 @@
+import type { RpReportLine } from '@/api/types/restrictive-practices'
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -19,3 +21,8 @@ export function nextMonthStart(month: string) {
   return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
 }
 
+/** Lines still to lodge: the tab's count. */
+export const rpToLodge = (lines: RpReportLine[]) => lines.filter(l => !l.report).length
+
+/** The months that have a line, newest first: the month filter's items. */
+export const rpMonths = (lines: RpReportLine[]) => [...new Set(lines.map(l => l.month))].sort().reverse()

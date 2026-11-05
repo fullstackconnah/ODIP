@@ -3,7 +3,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import type { RpReportLine } from '@/api/types/restrictive-practices'
-import { RpMonthlyReportsTab, rpMonths, rpToLodge } from './RpMonthlyReportsTab'
+import { RpMonthlyReportsTab } from './RpMonthlyReportsTab'
+import { rpMonths, rpToLodge } from './rpReportFormat'
 
 vi.mock('@/api/hooks', () => ({
   useLodgeRpReport: () => ({ mutateAsync: vi.fn(), isPending: false }),

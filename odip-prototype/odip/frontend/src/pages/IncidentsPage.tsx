@@ -24,8 +24,8 @@ import { SHIFT_NOTE_FLAG_LABELS } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { IncidentTrendCard } from './incidents/IncidentTrendCard'
-import { RpMonthlyReportsTab, rpMonths, rpToLodge } from './incidents/RpMonthlyReportsTab'
-import { monthLabel } from './incidents/rpReportFormat'
+import { RpMonthlyReportsTab } from './incidents/RpMonthlyReportsTab'
+import { monthLabel, rpMonths, rpToLodge } from './incidents/rpReportFormat'
 
 type IncidentsTab = 'incidents' | 'flagged-notes' | 'rp-reports'
 
