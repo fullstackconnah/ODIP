@@ -62,6 +62,7 @@ public class RpMonthlyReportAlertsTests
         Assert.Equal("rp-monthly-report-overdue", alert.Type);
         Assert.Equal(AlertSeverity.Critical, alert.Severity);
         Assert.Equal("restrictive-practices", alert.DeepLinkTab);
+        Assert.Equal("/incidents?view=rp-reports", alert.LinkTo);
     }
 
     [Fact]
@@ -88,6 +89,7 @@ public class RpMonthlyReportAlertsTests
 
         Assert.Equal(("rp-monthly-report-due", AlertSeverity.Warning), (alert.Type, alert.Severity));
         Assert.Contains("06/11/2026", alert.Message);
+        Assert.Equal("/incidents?view=rp-reports", alert.LinkTo);
     }
 
     [Fact]

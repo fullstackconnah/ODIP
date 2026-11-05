@@ -16,6 +16,9 @@ vi.mock('@/api/hooks', () => ({
   useRestoreIncident: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteIncident: () => ({ mutate: vi.fn(), isPending: false }),
   useFlaggedShiftNotes: () => ({ data: [], isLoading: false }),
+  useRpMonthlyReportLines: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useLodgeRpReport: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUndoRpReport: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useIncidentTrend: mockUseIncidentTrend,
 }))
 
