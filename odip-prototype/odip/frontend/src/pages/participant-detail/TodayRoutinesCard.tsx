@@ -17,10 +17,9 @@ const muted = 'text-sm text-[var(--color-muted-foreground)]'
  * descriptions and editing stay on the Routines card under Daily support. Same query as the tab count, so no extra request.
  */
 export function TodayRoutinesCard({ participantId }: { participantId: string }) {
-  const { canWriteRoutines, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
+  const { canWriteRoutines } = usePermissions()
   const query = useParticipantRoutines(participantId, true)
-  // The provider's weekday for the roles that read provider settings; a Support Worker or Read only user (403 there) gets the browser's day.
-  const providerDay = useProviderToday(isSuperAdmin || isAdmin || isCoordinator)
+  const providerDay = useProviderToday()
   const today = routinesOn(query.data ?? [], format(parseISO(providerDay), 'EEEE'))
   const active = (query.data ?? []).filter(r => r.isActive).length
 

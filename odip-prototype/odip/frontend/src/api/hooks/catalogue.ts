@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiGetWithDefault, apiPut } from '../client'
 import type {
   ProviderSettingsDto,
+  ProviderTodayDto,
   UpsertProviderSettingsDto,
   SupportActivityGroupDto,
 } from '../types'
@@ -22,6 +23,15 @@ export function useProviderSettings(enabled = true, refetchOnMount: boolean | 'a
     ...providerSettingsQuery,
     refetchOnMount,
     enabled,
+  })
+}
+
+/** The provider's date as the server works it out (its saved zone, else its State's), readable by every role. Not re-read often: a day changes once. */
+export function useProviderTodayQuery() {
+  return useQuery({
+    queryKey: ['provider-today'],
+    queryFn: () => apiGet<ProviderTodayDto>('/provider-today'),
+    staleTime: 5 * 60_000,
   })
 }
 
