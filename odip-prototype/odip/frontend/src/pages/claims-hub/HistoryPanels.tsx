@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Banknote, Receipt } from 'lucide-react'
 import { Callout } from '@/components/Callout'
@@ -57,6 +57,9 @@ export function OtherPanel() {
   const query = useManagedClaims({ page: String(page), pageSize: String(ROWS_PER_PAGE), ...(funding ? { funding } : {}) })
   const { data: rows = [], isLoading, isError, refetch } = query
   const { totalCount = rows.length } = rows as Partial<TruncatableList<ManagedClaimDto>>
+  // A refresh can leave the pager past the last page (rows deleted or filtered away): step back to it.
+  const lastPage = Math.ceil(totalCount / ROWS_PER_PAGE)
+  useEffect(() => { if (page > 1 && !isLoading && rows.length === 0 && lastPage > 0 && page > lastPage) setPage(lastPage) }, [page, isLoading, rows.length, lastPage])
   const columns: Column<ManagedClaimDto>[] = [
     { key: 'claim', header: 'Claim', mobile: 'primary', render: c => <Link to={`/claims/${c.claimId}`} className="font-medium hover:underline" onClick={e => e.stopPropagation()}>{c.claimReference}</Link> },
     { key: 'participant', header: 'Participant', mobile: 'meta', render: c => c.participantName },
@@ -71,7 +74,7 @@ export function OtherPanel() {
       Plan- and self-managed supports aren't claimed from the NDIA. Bunya Support issues an invoice when the claim is submitted: to the plan manager, or to the participant.
     </Callout>
   )
-  if (isError || retryingAfterError(query)) return <div data-testid="claims-panel-other"><PageState kind="error" noun="claims" onRetry={() => refetch()} /></div>
+  if (isError || retryingAfterError(query)) return <div data-testid="claims-panel-other"><PageState kind="error" noun="claim list" onRetry={() => refetch()} /></div>
   if (!isLoading && totalCount === 0 && !funding) {
     return (
       <div data-testid="claims-panel-other">

@@ -727,6 +727,21 @@ describe('ClaimsHubPage: the Plan- and self-managed tab pages on the server', ()
     expect(await screen.findByText('No claims match. Show both funding types.')).toBeInTheDocument()
   })
 
+  it('steps back to the last page when its page comes back empty', async () => {
+    let shrunk = false
+    m.managed.mockImplementation((p: Record<string, string>) => {
+      if (p.page === '3') { shrunk = true; return managedPage([], 60) }
+      if (shrunk) return managedPage(Array.from({ length: 10 }, (_, i) => managedClaim(50 + i)), 60)
+      return managedPage(Array.from({ length: 50 }, (_, i) => managedClaim(i)), 120)
+    })
+    renderPage('/claims?tab=other')
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByText('Showing 51-60 of 60')).toBeInTheDocument()
+    expect(m.managed).toHaveBeenLastCalledWith({ page: '2', pageSize: '50' })
+    expect(screen.queryByText(/No claims match/)).not.toBeInTheDocument()
+  })
+
   it('shows the error state, and Try again refetches this query', async () => {
     const refetch = vi.fn()
     m.managed.mockReturnValue({ ...managedPage([], 0), data: undefined, isError: true, refetch })
