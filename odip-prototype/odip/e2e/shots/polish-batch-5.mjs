@@ -24,7 +24,14 @@ const check = (name, pass, detail = '') => {
   checks.push({ name, pass: !!pass, detail })
   console.log(`CHECK ${pass ? 'ok' : 'FAIL'} ${name} = ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
 }
-const safe = async (name, fn) => { try { await fn() } catch (e) { check(`${name} (script error)`, false, String(e.message).split('\n')[0]) } }
+let lastPage
+const safe = async (name, fn) => {
+  try { await fn() } catch (e) {
+    let seen = ''
+    try { seen = `${lastPage.url()} :: ${(await lastPage.locator('body').innerText({ timeout: 3000 })).replace(/\s+/g, ' ').slice(0, 400)}` } catch {}
+    check(`${name} (script error)`, false, `${String(e.message).split('\n')[0]} | ${seen}`)
+  }
+}
 const within = (a, b, tol) => Math.abs(a - b) <= tol
 
 const browser = await chromium.launch({ headless: true })
@@ -50,7 +57,9 @@ async function openPage(context, touchCdp) {
 }
 const gotoReady = async (page, url, dark) => {
   await page.goto(`${BASE_URL}${url}`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  lastPage = page
   await page.locator('main, form').first().waitFor({ state: 'visible', timeout: 60_000 })
+  await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {})
   if (dark) await page.evaluate(() => { document.documentElement.dataset.theme = 'dark' })
   await page.pinCoarse()
   await page.waitForTimeout(800)
@@ -117,7 +126,7 @@ async function retryCallout(page, vp, scheme) {
 async function autoRoster(page, vp) {
   const tag = `AR1 ${vp.name}`
   await gotoReady(page, '/rostering', false)
-  await page.getByRole('button', { name: 'Auto-roster' }).first().click()
+  await page.getByRole('button', { name: 'Auto-roster' }).first().click({ timeout: 90_000 })
   const apply = page.getByRole('button', { name: /^Apply/ })
   await apply.waitFor({ state: 'visible', timeout: 90_000 })
   await page.route('**/auto-roster/apply', (r) => r.abort('failed'))
@@ -141,7 +150,9 @@ async function incidentReview(page, vp) {
   const tag = `INC1 ${vp.name}`
   await gotoReady(page, `/incidents/${vp.touch ? 'inc-0003' : 'inc-0002'}`, false)
   const review = page.locator('[data-testid="incident-review"]')
-  await review.getByRole('button', { name: 'Record review' }).click()
+  await review.waitFor({ timeout: 90_000 })
+  await page.getByText(/Loading status history|No status changes yet|Reported as/).first().waitFor({ timeout: 60_000 })
+  await review.getByRole('button', { name: 'Record review' }).click({ timeout: 60_000 })
   await review.getByLabel(/Review notes/).fill('Spoke with the team. Footwear check added.')
   let release
   const held = new Promise((res) => { release = res })
@@ -170,10 +181,10 @@ async function claimsReady(page, vp) {
   const tag = `CK1 ${vp.name}`
   await gotoReady(page, '/claims', false)
   const panel = page.getByRole('tabpanel').first()
-  await panel.waitFor({ state: 'visible', timeout: 60_000 })
+  await panel.waitFor({ state: 'visible', timeout: 90_000 })
   if (vp.width >= 768) {
-    const th = page.getByRole('columnheader', { name: 'Checks' }).first()
-    await th.waitFor({ state: 'visible', timeout: 60_000 })
+    const th = page.locator('th').filter({ hasText: /^Checks$/ }).first()
+    await th.waitFor({ state: 'visible', timeout: 90_000 })
     const m = await th.evaluate((el) => {
       const idx = [...el.parentElement.children].indexOf(el)
       const cells = [...el.closest('table').querySelectorAll('tbody tr')].map((tr) => tr.children[idx]).filter(Boolean)

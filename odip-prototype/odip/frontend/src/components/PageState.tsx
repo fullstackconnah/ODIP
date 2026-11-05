@@ -64,13 +64,13 @@ export function RetryCallout({ tone = 'danger', onRetry, children }: { tone?: 'd
       <Callout
         tone={tone}
         actions={onRetry ? (
-          <>
+          <div className="flex items-center gap-2 max-sm:ml-7">
             <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="min-h-[var(--tap-min)] aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
               Try again
             </Button>
             {/* A fixed width, so the right-aligned button (the status sits left of it from sm, after it below) holds one x position in idle, pending and failed (the failed copy measures about 136px). */}
             <span aria-hidden="true" className="order-last sm:order-first min-w-[8.75rem] text-[var(--color-muted-foreground)]">{status}</span>
-          </>
+          </div>
         ) : undefined}
       >
         {children}
