@@ -110,3 +110,62 @@ public record BulkCreateRestrictivePracticeDto
 {
     public List<BulkCreateRestrictivePracticeRowDto> Items { get; init; } = new();
 }
+
+// ══════════════════════════════════════════════════════════════
+// MONTHLY REPORT DTOs (the NDIS Commission's monthly restrictive practice report)
+// ══════════════════════════════════════════════════════════════
+
+/// <summary>One practice's month: what is owed, when it is due, the uses behind it, and the report lodged for it once there is one.</summary>
+public record RestrictivePracticeReportLineDto
+{
+    public Guid RestrictivePracticeId { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public RestrictivePracticeType PracticeType { get; init; }
+    public string PracticeDescription { get; init; } = string.Empty;
+    public RestrictivePracticeUseKind UseKind { get; init; }
+    public DateOnly? AuthorisationDate { get; init; }
+    public DateOnly? AuthorisationEndDate { get; init; }
+    /// <summary>First day of the month.</summary>
+    public DateOnly Month { get; init; }
+    public DateOnly DueOn { get; init; }
+    /// <summary>True when the due date skipped weekends only, because the holiday feed has no rows for a year the count touched.</summary>
+    public bool DueCountedWithoutHolidays { get; init; }
+    public MonthlyReportState State { get; init; }
+    /// <summary>As-needed lines only: NotUsed with no uses, else UsesReported.</summary>
+    public RestrictivePracticeReportType? SuggestedType { get; init; }
+    public List<RestrictivePracticeUseDto> Uses { get; init; } = new();
+    public RestrictivePracticeMonthlyReportDto? Report { get; init; }
+}
+
+/// <summary>One recorded use. <see cref="LocalDateTime"/> is the provider's wall clock (Kind Unspecified), serialised without an offset.</summary>
+public record RestrictivePracticeUseDto
+{
+    public DateTime LocalDateTime { get; init; }
+    public Guid? IncidentReportId { get; init; }
+    public Guid? MedicationAdministrationId { get; init; }
+}
+
+public record RestrictivePracticeMonthlyReportDto
+{
+    public Guid Id { get; init; }
+    public RestrictivePracticeReportType ReportType { get; init; }
+    public RestrictivePracticeVariedKind? VariedKind { get; init; }
+    public bool? VariedAlsoUnauthorised { get; init; }
+    public int? UseCount { get; init; }
+    public string? Note { get; init; }
+    public DateOnly LodgedOn { get; init; }
+    public string LodgedByName { get; init; } = string.Empty;
+    public DateTime CreatedAt { get; init; }
+}
+
+public record LodgeRestrictivePracticeReportDto
+{
+    public Guid RestrictivePracticeId { get; init; }
+    public DateOnly Month { get; init; }
+    public RestrictivePracticeReportType ReportType { get; init; }
+    public RestrictivePracticeVariedKind? VariedKind { get; init; }
+    public bool? VariedAlsoUnauthorised { get; init; }
+    public string? Note { get; init; }
+    public DateOnly LodgedOn { get; init; }
+}
