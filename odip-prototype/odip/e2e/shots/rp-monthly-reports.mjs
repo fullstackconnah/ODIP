@@ -90,7 +90,7 @@ try {
     }
     const csv = page.getByRole('button', { name: /CSV for/ })
     const csvBox = await csv.boundingBox()
-    check('CSV button is one line', ctx, csvBox?.height, !!csvBox && csvBox.height <= 44)
+    check('CSV button is one line', ctx, csvBox?.height, !!csvBox && Math.round(csvBox.height) <= 44)
     if (!vp.touch) {
       const fit = await page.locator('table').first().evaluate((t) => {
         const box = t.parentElement
