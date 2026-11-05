@@ -46,7 +46,7 @@ const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${S
 const shift = (o) => ({ id: 'sh', participantId: 'p-0001', participantName: 'Liam Okafor', staffId: 's-0001', staffName: 'Callum Radford', serviceDate: '', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null, notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false, ...o })
 // A shift by minutes; the id names what it seeds. `from` / `to` are minutes of the day; to <= from means it ends the next day.
 const at = (id, date, from, to, o = {}) => shift({ id, serviceDate: date, startTime: hhmm(from), endTime: hhmm(to), endsNextDay: to <= from, durationHours: ((to - from + 1440) % 1440) / 60, ...o })
-const trip = (start) => ({ tripInstanceId: 't1', tripCode: 'BMT-26', tripName: 'Blue Mountains weekend', startDate: start, endDate: addDays(start, 2), isDriver: true })
+const trip = (start) => ({ tripInstanceId: 't1', tripCode: 'BMT-26', tripName: 'Blue Mountains weekend', startDate: start, endDate: addDays(start, 2), isDriver: true, staffShort: 0 })
 const leave = (o) => ({ availabilityType: 'Annual', notes: null, startTime: null, endTime: null, ...o })
 const staffRow = (staffId, fullName, o = {}) => ({ staffId, fullName, role: 'SupportWorker', compliance: 'Ok', complianceNotes: [], rosteredHours: 0, targetHours: 38, shifts: [], tripBars: [], leave: [], ...o })
 const finding = (severity, code) => ({ code, severity, message: `${code} message`, requiresReason: severity === 'Warning' })

@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
-import { Map } from 'lucide-react'
+import { AlertTriangle, Map } from 'lucide-react'
 import type { TripBarDto } from '@/api/types'
+import { plural } from '@/lib/format'
+import { ON_TINT } from '@/lib/tone'
 import { clampedDayIndex } from '../lib/roster'
 
 export type TripBarProps = {
@@ -12,23 +14,33 @@ export type TripBarProps = {
  * Trip staffing rendered read-only on the roster board — visibly a different material from a
  * shift chip (filled secondary surface, no border, a map glyph) so a coordinator never mistakes
  * it for something editable here. Not draggable, no menu; the only interaction is navigating to
- * the trip itself. Sits in the row's second lane at --control-h-sm (24px) with a mouse; under a coarse
+ * the trip itself. A trip short of staff ends its bar with an amber "n short" pill (a reminder, never a block). Sits in the row's second lane at --control-h-sm (24px) with a mouse; under a coarse
  * pointer it is a link, so it takes --control-h (44px), the touch target.
  */
 export function TripBar({ tripBar, days }: TripBarProps) {
   const startCol = clampedDayIndex(tripBar.startDate, days) + 1
   const endCol = clampedDayIndex(tripBar.endDate, days) + 2
+  const short = tripBar.staffShort
 
   return (
     <Link
       to={`/trips/${tripBar.tripInstanceId}`}
       style={{ gridColumn: `${startCol} / ${endCol}` }}
       className="flex h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] items-center gap-1.5 rounded-sm bg-secondary-container px-2 text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      title={`${tripBar.tripName} (${tripBar.tripCode})`}
+      title={`${tripBar.tripName} (${tripBar.tripCode})${short ? ` · ${short} staff short` : ''}`}
     >
       <Map className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate font-medium">{tripBar.tripName}</span>
       {tripBar.isDriver && <span className="shrink-0 text-xs opacity-80">Driver</span>}
+      {short > 0 && (
+        <>
+          <span className="sr-only">, {plural(short, 'staff member')} short</span>
+          <span data-staff-short aria-hidden="true" className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-semibold leading-[18px] ${ON_TINT.warning}`}>
+            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+            {short} short
+          </span>
+        </>
+      )}
     </Link>
   )
 }

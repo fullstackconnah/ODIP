@@ -231,7 +231,7 @@ describe('PersonWeek: the time grid', () => {
   })
 
   it('bars render in the lane, once per bar', async () => {
-    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-05', isDriver: false }
+    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-05', isDriver: false, staffShort: 0 }
     mockApiGet.mockImplementation(serve({ [NOV[0]]: staffWeek({ shifts: [shiftOn({})], tripBars: [trip] }) }))
     renderWeek('staff')
     const lane = await screen.findByRole('list', { name: 'Leave and trips' })
@@ -239,7 +239,7 @@ describe('PersonWeek: the time grid', () => {
   })
 
   it('a week with only a trip shows the grid, the lane and the empty-week line', async () => {
-    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-03', isDriver: false }
+    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-03', isDriver: false, staffShort: 0 }
     mockApiGet.mockImplementation(serve({ [NOV[0]]: participantWeek({ tripBars: [trip] }) }))
     renderWeek('participant')
     expect(await screen.findByRole('list', { name: 'Leave and trips' })).toBeInTheDocument()
@@ -342,7 +342,7 @@ describe('PersonWeek: the week', () => {
 describe('PersonWeek: extras', () => {
   // Roster week shots (SHAPE §8.5): a trip bar is a control-height link under a coarse pointer (44px), and stays 24px on a mouse.
   it('trip bars grow to the control height under a coarse pointer', async () => {
-    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-05', isDriver: false }
+    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-05', isDriver: false, staffShort: 0 }
     mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], tripBars: [trip] }))
     renderWeek('staff')
     const lane = await screen.findByRole('list', { name: 'Leave and trips' })

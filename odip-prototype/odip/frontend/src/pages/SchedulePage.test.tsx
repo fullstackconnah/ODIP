@@ -9,7 +9,7 @@ const overview: ScheduleOverviewDto = {
     id: 'trip-1', tripName: 'Gold Coast Beach Break', tripCode: null, destination: null, region: null,
     startDate: '2026-09-10', endDate: '2026-09-12', durationDays: 3, status: 'Confirmed',
     maxParticipants: null, currentParticipantCount: 0, minStaffRequired: null, staffRequired: 1,
-    staffAssignedCount: 0, vehicleAssignedCount: 0, leadCoordinatorName: null, preferenceMatchCount: 0,
+    staffAssignedCount: 0, staffShort: 0, vehicleAssignedCount: 0, leadCoordinatorName: null, preferenceMatchCount: 0,
   }],
   staff: [{
     id: 'staff-1', firstName: 'Alex', lastName: 'Rivera', fullName: 'Alex Rivera', role: 'SupportWorker',
@@ -96,6 +96,23 @@ describe('SchedulePage — Tentative badge for pending leave', () => {
   it('renders a Tentative badge for a staff/trip cell with pending leave', () => {
     renderPage()
     expect(screen.getByText('Tentative')).toBeInTheDocument()
+  })
+})
+
+describe('SchedulePage — staffing shortfall', () => {
+  it('marks a short trip in the warning ink beside its staff count', () => {
+    currentOverview = { ...overview, trips: [makeTrip('trip-1', 'Gold Coast Beach Break', { staffRequired: 4, staffAssignedCount: 3, staffShort: 1 })] }
+    renderPage()
+    const note = screen.getByText('1 short')
+    expect(note.className).toContain('--color-on-warning-container')
+    expect(note.className).toContain('font-semibold')
+    expect(screen.getByText(/3 / 4 staff/)).toBeInTheDocument()
+  })
+
+  it('says nothing when the trip has enough staff', () => {
+    currentOverview = { ...overview, trips: [makeTrip('trip-1', 'Gold Coast Beach Break', { staffRequired: 1, staffAssignedCount: 1, staffShort: 0 })] }
+    renderPage()
+    expect(screen.queryByText(/short/)).toBeNull()
   })
 })
 

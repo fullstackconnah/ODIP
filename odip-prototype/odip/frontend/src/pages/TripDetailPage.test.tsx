@@ -413,7 +413,7 @@ describe('TripDetailPage — glance strip', () => {
     expect(screen.queryByText('Places booked')).not.toBeInTheDocument()
   })
 
-  it('tints the tiles whose chip signals a gap: waitlist warning; short, to confirm and to do error', () => {
+  it('tints the tiles whose chip signals a gap: waitlist and short staff warning; to confirm and to do error', () => {
     trip = withTrip(attentionCounts)
     renderPage()
 
@@ -422,7 +422,12 @@ describe('TripDetailPage — glance strip', () => {
     expect(places).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
     expect(within(places).getByText('2 on waitlist')).toBeInTheDocument()
 
-    for (const [label, chip] of [['Staff assigned', '1 short'], ['Insurance confirmed', '1 to confirm'], ['Open tasks', 'To do']]) {
+    const staff = cellOf('Staff assigned')
+    expect(staff).toHaveAttribute('data-attention', 'warning')
+    expect(staff).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+    expect(within(staff).getByText('1 short')).toHaveClass('bg-[var(--color-card)]')
+
+    for (const [label, chip] of [['Insurance confirmed', '1 to confirm'], ['Open tasks', 'To do']]) {
       const cell = cellOf(label)
       expect(cell, label).toHaveAttribute('data-attention', 'error')
       expect(cell, label).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')

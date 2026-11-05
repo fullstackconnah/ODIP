@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  CalendarRange, Users, Truck, ChevronDown, ChevronRight,
+  AlertTriangle, CalendarRange, Users, Truck, ChevronDown, ChevronRight,
   Car, Shield, Pill, HandMetal, Moon,
 } from 'lucide-react'
 import {
@@ -9,6 +9,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
 import { formatRatio, plural } from '@/lib/format'
+import { TONE } from '@/lib/tone'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
@@ -219,8 +220,15 @@ export default function SchedulePage() {
                           </span>
                           <TripStatusBadge status={trip.status} />
                           <span className="whitespace-nowrap">
-                            {formatRatio(trip.staffAssignedCount, trip.staffRequired ?? '?')} staff · {formatRatio(trip.currentParticipantCount, trip.maxParticipants ?? '?')} pax
+                            {formatRatio(trip.staffAssignedCount, trip.staffRequired ?? '?')} staff
                           </span>
+                          {trip.staffShort > 0 && (
+                            <span className={`whitespace-nowrap font-semibold ${TONE.warning.ink}`}>
+                              <AlertTriangle className="-mt-0.5 mr-0.5 inline h-3 w-3" aria-hidden="true" />
+                              {trip.staffShort} short
+                            </span>
+                          )}
+                          <span className="whitespace-nowrap">{formatRatio(trip.currentParticipantCount, trip.maxParticipants ?? '?')} pax</span>
                           {trip.preferenceMatchCount > 0 && (
                             <StatusBadge tone="warning" label={`★ ${trip.preferenceMatchCount} preferred`} className="whitespace-nowrap" />
                           )}
