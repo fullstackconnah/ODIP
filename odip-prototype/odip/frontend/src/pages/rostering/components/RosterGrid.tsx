@@ -8,6 +8,8 @@ import { formatDayHeader, isToday, ROSTER_DAY_COL_MIN, ROSTER_STICKY_COL_WIDTH, 
 
 export type RosterGridProps = {
   board: RosterBoardDto
+  /** Floats over the foot of the board scroller (the Publish pill); the last child of the scroller, so it never leaves it. */
+  foot?: ReactNode
   canWrite: boolean
   unfilledOnly: boolean
   /** True when the whole (unfiltered) week has zero shifts — suppresses the per-row coverage badge, since every row being uncovered on an empty week is tautological noise the hint above the grid already covers. */
@@ -62,6 +64,8 @@ const ROOT = 'min-[1500px]:[--roster-sticky-col:280px] lg:min-h-0 lg:flex-1 lg:o
 // Below lg the window scrolls: 3rem is the app bar (AppLayout), 9rem = that + the band (strip 52 + header 34, rounded up): a keyboard-focused chip never rests under the band. From lg the band pins to the scroller's own top.
 const BAND = 'sticky top-[calc(3rem+var(--safe-top))] z-20 bg-[var(--color-background)] lg:top-0'
 const HEAD_FRAME = 'overflow-x-auto overflow-y-hidden [scrollbar-width:none] rounded-t-[var(--radius-md)] border border-b-0 border-border'
+/** A focused chip scrolls clear of the floating foot (the Publish pill): about 60px plus a gap from lg, up to 120px plus the nav below. */
+const FOOT_CLEARANCE = '[&_:is(button,a,[tabindex])]:scroll-mb-[calc(var(--mobile-nav-h)+9rem)] lg:[&_:is(button,a,[tabindex])]:scroll-mb-24'
 const BODY_FRAME = 'overflow-x-auto overflow-y-hidden rounded-b-[var(--radius-md)] border border-t-0 border-border [&_:is(button,a,[tabindex])]:scroll-mt-36'
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
 const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
@@ -75,7 +79,7 @@ const follow = (from: Scroller, to: Scroller) => {
 }
 
 /** The sticky band (strip + day header) over the uncapped body, shared by the board and its skeleton. */
-function Frames({ strip, header, hidden, children }: { strip?: ReactNode; header: ReactNode; hidden?: boolean; children: ReactNode }) {
+function Frames({ strip, header, hidden, foot, children }: { strip?: ReactNode; header: ReactNode; hidden?: boolean; foot?: ReactNode; children: ReactNode }) {
   const headRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -88,9 +92,10 @@ function Frames({ strip, header, hidden, children }: { strip?: ReactNode; header
           <div className="grid" style={GRID_TEMPLATE}>{header}</div>
         </div>
       </div>
-      <div ref={bodyRef} onScroll={() => follow(bodyRef, headRef)} className={BODY_FRAME} style={BOARD_FRAME_STYLE}>
+      <div ref={bodyRef} onScroll={() => follow(bodyRef, headRef)} className={foot ? `${BODY_FRAME} ${FOOT_CLEARANCE}` : BODY_FRAME} style={BOARD_FRAME_STYLE}>
         <div className="grid" style={GRID_TEMPLATE}>{children}</div>
       </div>
+      {foot}
     </div>
   )
 }
@@ -107,7 +112,7 @@ const HEADER_BG_TODAY = 'bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--col
  * Never swap this out for an empty state; guidance for a first-time/empty week belongs in a
  * dismissible hint the caller renders above this component.
  */
-export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable, strip }: RosterGridProps) {
+export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable, strip, foot }: RosterGridProps) {
   const { days } = board
 
   const header = (
@@ -129,7 +134,7 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
   )
 
   return (
-    <Frames strip={strip} header={header}>
+    <Frames strip={strip} header={header} foot={foot}>
         {board.groupBy === 'Participant' ? (
           board.participantRows.map(row => (
             <ParticipantRow
