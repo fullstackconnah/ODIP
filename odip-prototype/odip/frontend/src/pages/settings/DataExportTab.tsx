@@ -7,17 +7,30 @@ import { Callout } from '@/components/Callout'
 import { DATA_EXPORT_KEY, useDataExport, useDataExportLast } from '@/api/hooks'
 import type { DataExportFailure, DataExportSaved } from '@/api/types'
 import { formatBytes, formatDateTimeAu } from '@/lib/format'
+import { usePermissions } from '@/lib/permissions'
+import { RegistersCard } from './RegistersCard'
 
 const muted = 'text-[var(--color-muted-foreground)]'
 
 /**
  * Settings → Data export (the shape brief of 2026-10-14, section 3). One button downloads everything the organisation holds as a ZIP.
- * - DataExportController admits an Admin, or a SuperAdmin viewing an organisation: SettingsPage gates the tab with canImportData.
+ * - DataExportController admits an Admin, or a SuperAdmin viewing an organisation: the full export shows for canImportData.
+ * - The registers card below it (B9) shows for canDownloadRegisters, so a Coordinator sees only that; Complaints needs canImportData too.
  * - The download is a TanStack mutation keyed DATA_EXPORT_KEY. Leaving the tab and coming back shows it still running, then its outcome, and
  *   only one runs at a time.
  * - The busy button is aria-disabled, not disabled, so focus stays on it instead of falling to the page.
  */
 export default function DataExportTab() {
+  const perms = usePermissions()
+  return (
+    <div className="flex flex-col gap-[var(--section-gap)]">
+      {perms.canImportData && <FullExportSection />}
+      {perms.canDownloadRegisters && <RegistersCard canComplaints={perms.canImportData} />}
+    </div>
+  )
+}
+
+function FullExportSection() {
   const last = useDataExportLast()
   const exportData = useDataExport()
   const running = useIsMutating({ mutationKey: DATA_EXPORT_KEY }) > 0
@@ -53,7 +66,7 @@ export default function DataExportTab() {
     : <>Last exported on {when}</>
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)]">
+    <>
       <AnnouncementRegion message={announcement} />
       <section aria-labelledby="data-export-heading" className="flex max-w-2xl flex-col gap-4">
         <div className="flex flex-col gap-1">
@@ -97,6 +110,6 @@ export default function DataExportTab() {
           )}
         </div>
       </section>
-    </div>
+    </>
   )
 }
