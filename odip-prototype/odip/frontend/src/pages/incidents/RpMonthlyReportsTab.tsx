@@ -59,7 +59,7 @@ export function RpMonthlyReportsTab({ lines, month, isLoading, isError, onRetry 
       header: 'Practice',
       render: l => {
         const text = `${RESTRICTIVE_PRACTICE_TYPE_LABELS[l.practiceType]} · ${l.practiceDescription}`
-        return <CellText title={text} className="md:max-w-[15rem]">{text}</CellText>
+        return <CellText title={text} className="md:max-w-[12rem]">{text}</CellText>
       },
     },
     { key: 'use', header: 'Use', mobile: 'hidden', render: usageText },
