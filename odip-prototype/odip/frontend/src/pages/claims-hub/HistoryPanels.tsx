@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Banknote, Receipt } from 'lucide-react'
 import { Callout } from '@/components/Callout'
@@ -59,7 +59,7 @@ export function OtherPanel() {
   const { totalCount = rows.length } = rows as Partial<TruncatableList<ManagedClaimDto>>
   // A refresh can leave the pager past the last page (rows deleted or filtered away): step back to it.
   const lastPage = Math.ceil(totalCount / ROWS_PER_PAGE)
-  useEffect(() => { if (page > 1 && !isLoading && rows.length === 0 && lastPage > 0 && page > lastPage) setPage(lastPage) }, [page, isLoading, rows.length, lastPage])
+  if (page > 1 && !isLoading && rows.length === 0 && lastPage > 0 && page > lastPage) setPage(lastPage)
   const columns: Column<ManagedClaimDto>[] = [
     { key: 'claim', header: 'Claim', mobile: 'primary', render: c => <Link to={`/claims/${c.claimId}`} className="font-medium hover:underline" onClick={e => e.stopPropagation()}>{c.claimReference}</Link> },
     { key: 'participant', header: 'Participant', mobile: 'meta', render: c => c.participantName },
