@@ -703,7 +703,7 @@ describe('CompletionReviewPage extra time', () => {
     expect(within(dialog).queryByText(/Already claimed/)).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('radio', { name: 'Pay actual time (8 h 40 min)' }))
 
-    expect(await within(dialog).findByText(/Already claimed at rostered hours on TC.12\./)).toHaveTextContent('delete that draft claim and claim again, or add a manual claim')
+    await waitFor(() => expect(dialog).toHaveTextContent(/Already claimed at rostered hours on TC.12\. To claim the extra time, delete that draft claim and claim again, or add a manual claim\./))
   })
 
   it('keeps the old choice and says so when the save fails', async () => {
