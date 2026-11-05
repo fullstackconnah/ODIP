@@ -28,8 +28,8 @@ public sealed class RosterWeekStarter(RosterShiftGenerator generator, RosterAvai
         foreach (var participantId in participantIds)
         {
             if (!(await ParticipantReadiness.CheckAsync(db, participantId, ct)).Allowed) { skipped.Add(participantId); continue; }
-            // shortcut: the board lock is held while each participant's lock is waited for in turn (up to LockWait each), so a slow generation makes drag and drop answer busy; take the participant locks without waiting if that bites.
-            await using var participantLock = await RosterGenerationLock.AcquireAsync(db, participantId, ct, generator.LockWait);
+            // The board lock is held while each participant lock is waited for; only a short pattern update holds one without the board, so a stuck lock is cut at 2 s and frees the board as a retryable busy.
+            await using var participantLock = await RosterGenerationLock.AcquireAsync(db, participantId, ct, TimeSpan.FromMilliseconds(Math.Min(generator.LockWait.TotalMilliseconds, 2000)));
             // Read again under the lock: an approval that ended or replaced a pattern a moment ago is seen.
             var patterns = await AgreementPatternsLiveIn(db, tenantId, monday, end).Where(p => p.ParticipantId == participantId).ToListAsync(ct);
             made.AddRange((await generator.AddAsync(db, patterns, monday, end, ct)).MadeShifts);
