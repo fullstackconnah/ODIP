@@ -270,7 +270,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("login")]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> DevLogin([FromBody] DevLoginDto? dto, CancellationToken ct)
     {
-        if (!IsDevAuthEnabled())
+        if (!DevAuth.IsEnabled())
             return NotFound();
 
         var username = string.IsNullOrEmpty(dto?.Username) ? "admin" : dto.Username;
@@ -341,7 +341,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("login")]
     public async Task<ActionResult<ApiResponse<IEnumerable<object>>>> DevUsers(CancellationToken ct)
     {
-        if (!IsDevAuthEnabled())
+        if (!DevAuth.IsEnabled())
             return NotFound();
 
         var users = await _db.Users
@@ -372,7 +372,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("login")]
     public IActionResult DevWhoAmi()
     {
-        if (!IsDevAuthEnabled())
+        if (!DevAuth.IsEnabled())
             return NotFound();
 
         var connection = HttpContext.Connection;
@@ -398,9 +398,6 @@ public class AuthController : ControllerBase
 
         }));
     }
-
-    private static bool IsDevAuthEnabled()
-        => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// True when the decoded Firebase token's "email_verified" claim is present and true.
