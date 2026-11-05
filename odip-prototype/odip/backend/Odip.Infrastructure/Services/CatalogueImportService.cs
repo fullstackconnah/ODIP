@@ -21,6 +21,14 @@ public class CatalogueImportService
     /// <summary>The real catalogues hold about 1,000 rows; a confirm request far beyond that is not a catalogue.</summary>
     private const int MaxRows = 10_000;
 
+    private static long _generation;
+
+    /// <summary>Counts commits that changed a row. Cached quotes priced from the catalogue carry it, so a correction file (same code and start date, a new price) is never served the old quote.</summary>
+    public static long Generation => Interlocked.Read(ref _generation);
+
+    /// <summary>Marks the catalogue as changed in place; a commit calls it, and so should any other writer that edits a priced row.</summary>
+    public static void NoteChanged() => Interlocked.Increment(ref _generation);
+
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
 
@@ -158,6 +166,7 @@ public class CatalogueImportService
 
         await _db.SaveChangesAsync(ct);
         await gate.CommitAsync(ct);
+        if (plan.Rows.Any(p => p.Action != ImportAction.Unchanged) || plan.EndDates.Count > 0) NoteChanged();
         return new CatalogueImportResultDto(
             plan.Rows.Count(p => p.Action == ImportAction.Add),
             plan.Rows.Count(p => p.Action == ImportAction.Update),

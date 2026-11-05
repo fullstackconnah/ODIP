@@ -4,7 +4,9 @@
 //   { conflict: true | false }     true = the next lodge answers 409 (the month was lodged elsewhere)
 // The fixture is dated for a clock pinned to 2026-11-04: October is due Fri 6 Nov, September was due Wed 7 Oct.
 
-const ALEX = { participantId: 'p-0001', participantName: 'Alex Demo' }
+const { FILE } = require('./invoices')
+
+const ALEX ={ participantId: 'p-0001', participantName: 'Alex Demo' }
 const JORDAN = { participantId: 'p-0002', participantName: 'Jordan Demo' }
 
 const PRACTICES = [
@@ -51,21 +53,23 @@ function create({ respond, failEnvelope }) {
       }],
       ['restrictive-practice-reports/csv', (searchParams) => {
         const month = (searchParams && searchParams.get('month')) || ''
-        return `Participant,Practice,Month\r\n${visible().filter((l) => l.month === month).map((l) => `${l.participantName},${l.practiceType},${l.month}`).join('\r\n')}`
+        const rows = visible().filter((l) => l.month === month).map((l) => `${l.participantName},${l.practiceType},${l.month}`)
+        return { [FILE]: `Participant,Practice,Month\r\n${rows.join('\r\n')}`, contentType: 'text/csv' }
       }],
       ['participants/:id/restrictive-practices', (id) => PRACTICES.filter((p) => p.participantId === id).map(practiceDto)],
     ],
     post: [
       ['restrictive-practice-reports', (body) => {
+        if (!PRACTICES.some((p) => p.id === body.restrictivePracticeId)) return respond(404, failEnvelope(null, ['Restrictive practice entry not found']))
         const line = lines.find((l) => key(l) === `${body.restrictivePracticeId}|${body.month}`)
-        if (!line) return respond(404, failEnvelope(null, ['That monthly report line was not found.']))
-        if (conflict || line.report) return respond(409, failEnvelope(null, ['This month has already been recorded as lodged.']))
+        if (!line) return respond(400, failEnvelope(null, ['This practice has no monthly report for that month.']))
+        if (conflict || line.report) return respond(409, failEnvelope(null, ['This month has already been lodged. Reload to see it.']))
         line.report = {
           id: `rep-${Date.now()}`, reportType: body.reportType, variedKind: body.variedKind ?? null, variedAlsoUnauthorised: body.variedAlsoUnauthorised ?? null,
           useCount: body.reportType === 'UsesReported' ? line.uses.length : null, note: body.note ?? null, lodgedOn: body.lodgedOn, lodgedByName: 'Sam Coordinator',
         }
         line.state = 'Lodged'
-        return line.report
+        return line
       }],
       ['mock/rp-reports/state', (body) => {
         if (body.mode === 'default' || body.mode === 'empty') mode = body.mode
