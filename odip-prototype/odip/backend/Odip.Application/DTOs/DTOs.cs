@@ -2734,3 +2734,6 @@ public record IncidentTrendMonthDto
     public int RpUses { get; init; }
     public int OtherIncidents { get; init; }
 }
+
+/// <summary>The provider's calendar date now, "yyyy-MM-dd" (GET provider-today, open to every signed-in role).</summary>
+public record ProviderTodayDto(string Date);
