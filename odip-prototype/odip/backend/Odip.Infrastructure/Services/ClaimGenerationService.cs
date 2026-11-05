@@ -365,7 +365,13 @@ public class ClaimGenerationService
             : $"Not claimed: this trip's {UnpricedDaysLabel(context)} have no catalogue rate. Import the catalogue for that period, then claim those days.";
 
     private static string UnpricedDaysLabel(ClaimCalcContext context) =>
-        FormattableString.Invariant($"{string.Join(", ", context.UnpricedDayTypes)} days ({context.TripStart:dd/MM/yyyy} to {context.TripEnd:dd/MM/yyyy})");
+        FormattableString.Invariant($"{string.Join(", ", context.UnpricedDayTypes.Select(DayTypeInSentence))} days ({context.TripStart:dd/MM/yyyy} to {context.TripEnd:dd/MM/yyyy})");
+
+    /// <summary>A day type inside a sentence: "weekday", "public holiday"; Saturday and Sunday keep their capital.</summary>
+    private static string DayTypeInSentence(ClaimDayType dayType) =>
+        dayType is ClaimDayType.Saturday or ClaimDayType.Sunday
+            ? dayType.ToString()
+            : System.Text.RegularExpressions.Regex.Replace(dayType.ToString(), "(?<=[a-z])(?=[A-Z])", " ").ToLowerInvariant();
 
     // ─── Internal types ────────────────────────────────────────────────
 
