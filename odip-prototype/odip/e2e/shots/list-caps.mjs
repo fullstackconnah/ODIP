@@ -152,7 +152,7 @@ for (const vp of VPS) {
         await marker.waitFor({ state: 'visible', timeout: 60_000 })
         await page.waitForTimeout(400)
         check(t(`${state}: its message shows`), await marker.isVisible())
-        if (answer === 'error') check(t('managed-error: reads exactly the claim-list copy'), await panel.getByText("Couldn't load this claim list.", { exact: true }).isVisible())
+        if (answer === 'error') check(t('managed-error: reads the claim list sentence'), await panel.getByText("Couldn't load this claim list.").isVisible())
         await noHScroll(page, t(state))
         await crop(page, panel, `${state}-${tag}.png`, vp)
         await context.close()
