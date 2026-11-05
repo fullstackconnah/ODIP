@@ -299,6 +299,7 @@ public static class DbSeeder
         // "genuinely expired plan on an inactive participant" case the alerts aggregate's
         // activeOnly filter correctly excludes (still visible on her own detail page).
         participants[16].IsActive = false;
+        participants[16].RetentionStartsOn = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-8)); // archived 8 years ago, so the demo has one record already due for purge
         participants[16].LivingArrangement = LivingArrangement.Independent;
         participants[16].LivesWithOthers = false;
         SetAddress(participants[16], "5 King Street", "Erskineville", "NSW", "2043");
