@@ -2162,7 +2162,7 @@ const cancelledShiftFixtures = [
 ]
 const cancelledShiftsNotOffered = [
   { shiftId: 'sh-cancel-3', participantName: 'Sophie Brown', serviceDate: '2026-10-19', description: 'Shift 09:00–17:00 · 8 h', reason: 'Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.' },
-  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide. Check the short-notice setting for this item in the price guide." },
+  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation. Check the short-notice setting for this item in the price guide." },
 ]
 function cancellationCandidates() {
   return { shifts: cancelledShiftFixtures, leftOut: cancelledShiftsNotOffered }
@@ -3375,6 +3375,8 @@ const postRoutes = [
   ['problem-reports', (body) => (typeof body.text === 'string' && body.text.trim()
     ? respond(201, ok({ id: 'pr-' + Date.now(), status: 'Sent' }))
     : respond(400, failEnvelope(null, ['Write a few words about what went wrong.'])))],
+  // Front-end crash reports: the real endpoint only writes a log line.
+  ['client-errors', () => respond(204, null)],
   ['admin/whats-new', (body) => {
     const row = whatsNewSave({ id: 'wn-' + String(whatsNewRows.length + 1).padStart(4, '0'), key: 'admin-' + Date.now(), publishedAtUtc: new Date().toISOString() }, body)
     whatsNewRows.unshift(row)

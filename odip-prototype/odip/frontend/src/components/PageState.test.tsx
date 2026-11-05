@@ -149,6 +149,16 @@ describe('PageState: error', () => {
     rerender(<MemoryRouter><PageState kind="error" noun="trip" /></MemoryRouter>)
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
+
+  it("swaps the status and button order by the callout width (container query), not the viewport", () => {
+    const { container } = renderState(<PageState kind="error" noun="trip" onRetry={vi.fn()} />)
+    // jsdom cannot lay out, so pin the classes: the wrapper is the container and every variant is a container variant.
+    expect(container.firstElementChild).toHaveClass('@container')
+    const status = container.querySelector('span[aria-hidden]')!
+    expect(status).toHaveClass('order-last', '@[35rem]:order-first')
+    expect(status.parentElement).toHaveClass('@max-[35rem]:ml-7')
+    expect(container.innerHTML).not.toMatch(/(^|[\s"])(sm:order-first|max-sm:ml-7)/)
+  })
 })
 
 describe('PageState: error detail', () => {
