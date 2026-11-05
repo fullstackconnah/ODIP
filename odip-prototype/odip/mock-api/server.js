@@ -483,6 +483,12 @@ const tasks = [
     vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'InsuranceConfirmation', title: 'Confirm travel insurance – Liam O.', ownerId: 's-0001',
     ownerName: 'Callum Radford', priority: 'High', dueDate: providerToday(), status: 'NotStarted', completedDate: null, notes: 'Policy number to follow.',
   },
+  // Retention 2b: the nightly scan's task for an Admin. No due date and no owner (the Admins own it); the title links to the Data retention list.
+  {
+    id: 'task-0099', participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'RetentionPurgeDue', title: '2 participant records are due for purge', ownerId: null, ownerName: null, priority: 'Medium', dueDate: null,
+    status: 'NotStarted', completedDate: null, notes: null, linkTo: '/settings?tab=retention',
+  },
 ]
 
 // Incidents (IncidentListDto)
@@ -2725,6 +2731,7 @@ planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.provid
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
 // Onboarding phase 3: the upcoming-shifts import (preview, commit with a started week of drafts, partial undo). See imports.js.
+const retentionMock = require('./dataRetention.js').create({ respond, failEnvelope, FILE: invoicesModule.FILE })
 const importMock = importsModule.create({ respond, failEnvelope, rosterShifts, startedWeeks, today: planApproval.providerToday, addDays: planApproval.addDays, weekday: planApproval.weekday })
 
 // Registers for auditors (B9): a small CSV per register, with the real file's headers. A backwards range is the server's 400.
@@ -2746,6 +2753,7 @@ const registerFile = (register, params) => {
 const routes = [
   ['registers/:id', (register, params) => registerFile(register, params)],
   ...importMock.get,
+  ...retentionMock.get,
   ...funding.get,
   ...intake.get,
   ...invoiceMock.get,
@@ -3098,6 +3106,7 @@ const routes = [
 const postRoutes = [
   ...autoRosterMock.post,
   ...importMock.post,
+  ...retentionMock.post,
   ...earlyAccessFollowedUp,
   ...funding.post,
   ...intake.post,

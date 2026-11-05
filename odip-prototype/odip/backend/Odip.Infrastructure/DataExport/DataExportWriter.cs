@@ -24,7 +24,7 @@ public static class DataExportWriter
     private static readonly UTF8Encoding Utf8WithBom = new(encoderShouldEmitUTF8Identifier: true);
 
     public static async Task WriteAsync(Stream output, OdipDbContext db, Guid tenantId, IReadOnlyList<ExportTable> tables,
-        DateTime generatedAtUtc, string build, CancellationToken ct)
+        DateTime generatedAtUtc, string build, CancellationToken ct, Guid? participantId = null)
     {
         // One snapshot for every file, so they agree with each other and with the manifest (a row added mid-export is in all of them or none).
         await using var snapshot = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct) : null;
@@ -38,7 +38,7 @@ public static class DataExportWriter
             counts.Add((table.FileName, await WriteTableAsync(zip, db, tenantId, table, ct)));
             await output.FlushAsync(ct);
         }
-        counts.Add((ExportTables.DocumentsFolder, await WriteDocumentsAsync(zip, db, tenantId, output, ct)));
+        counts.Add((ExportTables.DocumentsFolder, await WriteDocumentsAsync(zip, db, tenantId, participantId, output, ct)));
         await WriteTextAsync(zip, ReadmeName, Readme(db, tables, generatedAtUtc, build), ct);
         await WriteTextAsync(zip, ManifestName, Manifest(counts, generatedAtUtc, build), ct);
         zip.Dispose();
@@ -63,9 +63,9 @@ public static class DataExportWriter
         return rows;
     }
 
-    private static async Task<long> WriteDocumentsAsync(ZipArchive zip, OdipDbContext db, Guid tenantId, Stream output, CancellationToken ct)
+    private static async Task<long> WriteDocumentsAsync(ZipArchive zip, OdipDbContext db, Guid tenantId, Guid? participantId, Stream output, CancellationToken ct)
     {
-        var pdfs = db.ParticipantIntakeSnapshots.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => new { s.ParticipantId, s.Revision, s.PdfContent });
+        var pdfs = db.ParticipantIntakeSnapshots.AsNoTracking().Where(s => s.TenantId == tenantId && (participantId == null || s.ParticipantId == participantId)).Select(s => new { s.ParticipantId, s.Revision, s.PdfContent });
         long files = 0;
         await foreach (var pdf in pdfs.AsAsyncEnumerable().WithCancellation(ct))
         {

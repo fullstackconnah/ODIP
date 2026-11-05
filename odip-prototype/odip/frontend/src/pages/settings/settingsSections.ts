@@ -20,7 +20,7 @@ export type SectionKey =
   | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'locations' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'referral-sources' | 'holidays'
-  | 'import' | 'export' | 'integrations' | 'failed-sends'
+  | 'import' | 'export' | 'retention' | 'integrations' | 'failed-sends'
   | 'tenants' | 'users' | 'catalogue' | 'alpha-signups' | 'whats-new'
 
 export type SectionGroup = 'My account' | 'Organisation' | 'Pricing and budgets' | 'Content' | 'Data' | 'Platform'
@@ -74,6 +74,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'import', label: 'Import data', group: 'Data', wide: true, visible: p => p.canImportData, description: 'Bring participants and staff in from a spreadsheet, and undo an import that went wrong.' },
   // Data export (#243): the full export is gated like Import data; the registers card (B9) also opens it to a Coordinator.
   { key: 'export', label: 'Data export', group: 'Data', visible: p => p.canImportData || p.canDownloadRegisters, description: "Download your organisation's data and registers as CSV files." },
+  // Data retention (retention 2b): DataRetentionController is Admin-only and a SuperAdmin cannot confirm a purge, even viewing as an organisation.
+  { key: 'retention', label: 'Data retention', group: 'Data', wide: true, visible: p => p.isAdmin && !p.viewingAs && p.hasOrganisation, description: "Archived participants' records that have been kept for 7 years. Download their data, then delete each record for good." },
   // Employment Hero (EH PR 1): EmploymentHeroController admits an Admin, or a SuperAdmin viewing an organisation.
   { key: 'integrations', label: 'Integrations', group: 'Data', wide: true, visible: p => p.canManageIntegrations, description: 'Connect Bunya Support to the other systems you use, such as Employment Hero.' },
   { key: 'failed-sends', label: 'Failed sends', group: 'Data', wide: true, visible: p => p.isAdmin, description: "Emails we couldn't deliver for your organisation. Retry one, or send a test email to check sending works." },

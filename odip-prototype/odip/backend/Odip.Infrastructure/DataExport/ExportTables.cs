@@ -100,7 +100,7 @@ public static class ExportTables
     /// The rows with every byte-array column left unread, built from the model so a new column can't be missed. The CSV never writes bytes
     /// (Columns skips them), and the intake PDFs are read once, for documents/.
     /// </summary>
-    private static IQueryable<T> WithoutBytes<T>(OdipDbContext db, IQueryable<T> rows) where T : class
+    internal static IQueryable<T> WithoutBytes<T>(OdipDbContext db, IQueryable<T> rows) where T : class
     {
         var mapped = db.Model.FindEntityType(typeof(T))!.GetProperties().Where(p => p.PropertyInfo is not null).ToList();
         if (mapped.All(p => p.ClrType != typeof(byte[]))) return rows;
@@ -122,6 +122,21 @@ public static class ExportTables
     {
         var staff = Staff(db, t);
         return db.IncidentReports.Where(i => staff.Any(u => u.Id == i.ReportedByUserId));
+    }
+
+    /// <summary>
+    /// One participant's export: the tables of <see cref="All"/> that the purge plan covers, in their order, each reading the purge's own query. A table the purge doesn't touch
+    /// (organisation, staff, settings, the contacts themselves) is left out, so the files hold only what the purge deletes.
+    /// shortcut: ids are read outside the writer's RepeatableRead snapshot, fine for an archived participant; move ScopeAsync inside WriteAsync if exports of active participants are added.
+    /// </summary>
+    public static async Task<IReadOnlyList<ExportTable>> ForParticipantAsync(OdipDbContext db, Guid tenantId, Guid participantId, CancellationToken ct)
+    {
+        var scope = await Retention.PurgePlan.ScopeAsync(db, tenantId, participantId, ct);
+        var tables = new List<ExportTable>();
+        foreach (var table in All)
+            if (Retention.PurgePlan.Steps.FirstOrDefault(s => s.Entity == table.EntityType) is { } step)
+                tables.Add(table with { Rows = (_, _) => step.Query(scope) });
+        return tables;
     }
 
     /// <summary>The exported tables, in the order of the files in the ZIP and the manifest.</summary>
