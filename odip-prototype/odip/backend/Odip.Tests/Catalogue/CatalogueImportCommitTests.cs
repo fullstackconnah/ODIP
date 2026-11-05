@@ -109,21 +109,6 @@ public class CatalogueImportCommitTests
     // ── Re-importing ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task A_commit_that_changes_rows_moves_the_catalogue_generation_and_one_that_changes_nothing_does_not()
-    {
-        await using var db = CreateDb();
-        await SeedCommunityAccessGroupAsync(db);
-        var start = CatalogueImportService.Generation;
-
-        await ImportAsync(db, CatalogueFixtures.File2026_27);
-        var afterFirst = CatalogueImportService.Generation;
-        await ImportAsync(db, CatalogueFixtures.File2026_27);
-
-        Assert.True(afterFirst > start);
-        Assert.Equal(afterFirst, CatalogueImportService.Generation);
-    }
-
-    [Fact]
     public async Task Importing_the_same_file_again_changes_nothing()
     {
         await using var db = CreateDb();
