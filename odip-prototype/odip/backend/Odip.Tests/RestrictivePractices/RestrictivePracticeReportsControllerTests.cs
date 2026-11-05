@@ -277,6 +277,20 @@ public class RestrictivePracticeReportsControllerTests
         Assert.Equal(new HashSet<Guid> { unanswered.Id, yes.Id }, ids);
     }
 
+    [Fact]
+    public async Task ReportingSwitchedOffAfterLodging_KeepsLodgedMonth_OwesNothingMore()
+    {
+        using var rig = Rig.Create(Dec3);
+        var rp = rig.Practice();
+        rig.Report(rp, Oct);
+        rp.RequiresReporting = false;
+        rig.Db.SaveChanges();
+
+        var line = Assert.Single(Data(await Lines(rig)));
+        Assert.Equal((Oct, MonthlyReportState.Lodged), (line.Month, line.State));
+        Assert.Contains("Lodged", Assert.Single((await CsvAsync(rig, Oct)).Rows.Skip(1)));
+    }
+
     // ── Deactivated practices (PLAN-AMEND 1, 9, 10) ───────────
 
     [Fact]
@@ -438,7 +452,7 @@ public class RestrictivePracticeReportsControllerTests
         Assert.Equal((null, null), (rows[1].VariedKind, rows[1].VariedAlsoUnauthorised));
     }
 
-    public static TheoryData<int> ValidationRows => new() { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+    public static TheoryData<int> ValidationRows => new() { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
 
     [Theory, MemberData(nameof(ValidationRows))]
     public async Task Lodge_Validation(int row)
@@ -461,10 +475,13 @@ public class RestrictivePracticeReportsControllerTests
             case 9: dto = dto with { ReportType = RestrictivePracticeReportType.VariedUse, VariedKind = RestrictivePracticeVariedKind.Other }; expected = (400, "Say whether the varied use was also unauthorised."); break;
             case 10: dto = dto with { LodgedOn = new DateOnly(2026, 11, 4) }; expected = (400, "The lodged date can't be in the future."); break;
             case 11: dto = dto with { LodgedOn = new DateOnly(2026, 10, 31) }; expected = (400, "The lodged date must be after the month ends."); break;
+            case 13: dto = dto with { ReportType = (RestrictivePracticeReportType)9 }; expected = (400, "Choose a valid report type."); break;
+            case 14: dto = dto with { ReportType = RestrictivePracticeReportType.VariedUse, VariedKind = (RestrictivePracticeVariedKind)7, VariedAlsoUnauthorised = false }; expected = (400, "Choose a valid report type."); break;
             default: dto = dto with { Note = new string('x', 2001) }; expected = (400, "Keep the note under 2,000 characters."); break;
         }
 
         Assert.Equal(expected, Failure(await rig.C.Lodge(dto, CancellationToken.None)));
+        if (row >= 13) Assert.Empty(rig.Db.RestrictivePracticeMonthlyReports);
     }
 
     [Fact]

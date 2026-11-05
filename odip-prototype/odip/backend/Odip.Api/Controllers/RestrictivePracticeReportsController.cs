@@ -79,6 +79,10 @@ public class RestrictivePracticeReportsController : ControllerBase
         if (line == null) return BadRequest(ApiResponse<RestrictivePracticeReportLineDto>.Fail(NoSuchMonth));
         if (line.Report != null) return Conflict(ApiResponse<RestrictivePracticeReportLineDto>.Fail(AlreadyLodged));
 
+        // JsonStringEnumConverter also accepts a bare integer; an undefined value would otherwise be stored.
+        if (!Enum.IsDefined(dto.ReportType) || (dto.VariedKind is { } kind && !Enum.IsDefined(kind)))
+            return BadRequest(ApiResponse<RestrictivePracticeReportLineDto>.Fail("Choose a valid report type."));
+
         var prn = line.UseKind == RestrictivePracticeUseKind.Prn;
         var today = await TodayAsync(tenantId, ct);
         var error = dto.ReportType switch

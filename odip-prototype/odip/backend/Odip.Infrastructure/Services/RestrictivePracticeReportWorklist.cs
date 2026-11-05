@@ -27,7 +27,7 @@ public static class RestrictivePracticeReportWorklist
         OdipDbContext db, DateTime utcNow, Guid? tenantId, IReadOnlyCollection<Guid>? participantIds, bool withDetails, CancellationToken ct)
     {
         var practiceQuery = db.RestrictivePractices.AsNoTracking().Include(rp => rp.RelatedMedication)
-            .Where(rp => rp.RequiresReporting != false && rp.AuthorisationDate != null);
+            .Where(rp => (rp.RequiresReporting != false && rp.AuthorisationDate != null) || db.RestrictivePracticeMonthlyReports.Any(r => r.RestrictivePracticeId == rp.Id));
         if (tenantId is { } t) practiceQuery = practiceQuery.Where(rp => rp.TenantId == t);
         if (participantIds != null) practiceQuery = practiceQuery.Where(rp => participantIds.Contains(rp.ParticipantId));
         var practices = await practiceQuery.ToListAsync(ct);
@@ -57,7 +57,8 @@ public static class RestrictivePracticeReportWorklist
             var lodged = reportsByPractice[rp.Id].ToList();
             DateOnly? stop = lodged.Where(r => r.ReportType is RestrictivePracticeReportType.Eliminated or RestrictivePracticeReportType.ServiceCeased)
                 .Select(r => (DateOnly?)r.Month).Min();
-            var owed = RestrictivePracticeMonthlyReporting.MonthsOwed(rp, RestrictivePracticeMonthlyReporting.StartMonth(rp.ReportingFromMonth, rp.CreatedAt, zone),
+            // A practice kept only for its lodged reports (reporting since switched off) owes nothing more.
+            var owed = rp.RequiresReporting == false ? [] : RestrictivePracticeMonthlyReporting.MonthsOwed(rp, RestrictivePracticeMonthlyReporting.StartMonth(rp.ReportingFromMonth, rp.CreatedAt, zone),
                 RestrictivePracticeMonthlyReporting.LastEndedMonth(todays[rp.TenantId]), stop);
             foreach (var m in owed.Concat(lodged.Select(r => r.Month)).Distinct()) candidates.Add((rp, m));
         }
