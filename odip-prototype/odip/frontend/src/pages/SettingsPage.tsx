@@ -26,6 +26,7 @@ import AppearanceSection from '@/pages/settings/AppearanceSection'
 import BillingDetailsSection from '@/pages/settings/BillingDetailsSection'
 import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import DataExportTab from '@/pages/settings/DataExportTab'
+import DataRetentionTab from '@/pages/settings/DataRetentionTab'
 import EventTemplatesSection from '@/pages/settings/EventTemplatesSection'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
 import IntegrationsTab from '@/pages/settings/IntegrationsTab'
@@ -148,6 +149,7 @@ export default function SettingsPage() {
       case 'holidays': return framed(<PublicHolidaysSection canEdit={perms.isSuperAdmin} />)
       case 'import': return framed(<ImportDataTab />)
       case 'export': return framed(<DataExportTab />)
+      case 'retention': return framed(<DataRetentionTab />)
       case 'integrations': return framed(<IntegrationsTab />)
       case 'failed-sends': return framed(<AdminNotificationsTab />)
       case 'alpha-signups': return framed(<AlphaSignupsTab />)

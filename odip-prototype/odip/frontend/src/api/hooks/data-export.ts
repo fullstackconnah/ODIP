@@ -42,21 +42,26 @@ export function useDataExport() {
       } catch (err) {
         throw await exportFailure(err)
       }
-      // The server resets the connection on a failure, but a proxy could still end a cut-off body cleanly: never save that as whole.
-      if (!(await isWholeZip(response.data))) throw DIDNT_FINISH
-      const fileName = exportFileName(response.headers['content-disposition'])
-      const url = window.URL.createObjectURL(response.data)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      return { fileName, bytes: response.data.size }
+      return saveZip(response)
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: LAST_KEY }),
   })
+}
+
+/** Saves a finished export response as a download, or throws DIDNT_FINISH when the body is not a whole ZIP. Shared by the full and the per-participant export. */
+export async function saveZip(response: { data: Blob; headers: Record<string, unknown> }): Promise<DataExportSaved> {
+  // The server resets the connection on a failure, but a proxy could still end a cut-off body cleanly: never save that as whole.
+  if (!(await isWholeZip(response.data))) throw DIDNT_FINISH
+  const fileName = exportFileName(response.headers['content-disposition'])
+  const url = window.URL.createObjectURL(response.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+  return { fileName, bytes: response.data.size }
 }
 
 /** The server's name for the file (bunya-support-export-<organisation>-<date>.zip), or one with today's date when the header can't be read. */

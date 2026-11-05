@@ -483,6 +483,12 @@ const tasks = [
     vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'InsuranceConfirmation', title: 'Confirm travel insurance – Liam O.', ownerId: 's-0001',
     ownerName: 'Callum Radford', priority: 'High', dueDate: providerToday(), status: 'NotStarted', completedDate: null, notes: 'Policy number to follow.',
   },
+  // Retention 2b: the nightly scan's task for an Admin. No due date and no owner (the Admins own it); the title links to the Data retention list.
+  {
+    id: 'task-0099', participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'RetentionPurgeDue', title: '2 participant records are due for purge', ownerId: null, ownerName: null, priority: 'Medium', dueDate: null,
+    status: 'NotStarted', completedDate: null, notes: null, linkTo: '/settings?tab=retention',
+  },
 ]
 
 // Incidents (IncidentListDto)
@@ -2129,6 +2135,24 @@ function claimDetail(c) {
   }
 }
 
+/** ClaimPreviewResponseDto for POST trips/:id/claims/preview. The trip picks the state so the shots reach each without a second fixture: t-0002 has the unpriced-days note only, t-0003 the note plus left-out participants, any other trip neither. */
+function tripClaimPreview(tripId) {
+  const lineItems = [
+    { participantName: 'Sam Lee', ndisNumber: '430000001', supportItemCode: '01_011_0107_1_1', dayTypeLabel: 'Saturday', dayType: 'Saturday', supportsDeliveredFrom: '2026-07-04', supportsDeliveredTo: '2026-07-04', hours: 10, unitPrice: 68.4, totalAmount: 684 },
+    { participantName: 'Jo Park', ndisNumber: '430000002', supportItemCode: '01_011_0107_1_1', dayTypeLabel: 'Sunday', dayType: 'Sunday', supportsDeliveredFrom: '2026-07-05', supportsDeliveredTo: '2026-07-05', hours: 10, unitPrice: 82.1, totalAmount: 821 },
+  ]
+  const leftOut = tripId === 't-0003' ? [
+    { participantId: 'p-sam', description: 'Sam Lee', reason: 'Has no NDIS number on file.' },
+    { participantId: 'p-long', description: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', reason: 'Has no NDIS number on file.' },
+  ] : []
+  return {
+    departureTime: '08:00', returnTime: '18:00', activeHoursPerDay: 10, staffCount: 2, state: 'QLD', confirmedParticipantCount: 2 + leftOut.length,
+    lineItems, totalAmount: 1505, leftOut,
+    unpricedDaysNote: tripId === 't-0002' || tripId === 't-0003'
+      ? "Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days." : null,
+  }
+}
+
 /** ShiftClaimRunDto for POST claims/from-shifts[/preview]. See the route comment for the fixture. */
 function shiftClaimRun(body, make) {
   const from = body?.from ?? '2026-10-19', to = body?.to ?? '2026-11-01'
@@ -2707,6 +2731,7 @@ planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.provid
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
 // Onboarding phase 3: the upcoming-shifts import (preview, commit with a started week of drafts, partial undo). See imports.js.
+const retentionMock = require('./dataRetention.js').create({ respond, failEnvelope, FILE: invoicesModule.FILE })
 const importMock = importsModule.create({ respond, failEnvelope, rosterShifts, startedWeeks, today: planApproval.providerToday, addDays: planApproval.addDays, weekday: planApproval.weekday })
 
 // Registers for auditors (B9): a small CSV per register, with the real file's headers. A backwards range is the server's 400.
@@ -2728,6 +2753,7 @@ const registerFile = (register, params) => {
 const routes = [
   ['registers/:id', (register, params) => registerFile(register, params)],
   ...importMock.get,
+  ...retentionMock.get,
   ...funding.get,
   ...intake.get,
   ...invoiceMock.get,
@@ -3080,6 +3106,7 @@ const routes = [
 const postRoutes = [
   ...autoRosterMock.post,
   ...importMock.post,
+  ...retentionMock.post,
   ...earlyAccessFollowedUp,
   ...funding.post,
   ...intake.post,
@@ -3342,6 +3369,7 @@ const postRoutes = [
   // doesn't add the new claim to the `claims` fixture, so a follow-up GET
   // /participants/:id/claims still returns the same fixed list.
   ['participants/:id/claims/from-shifts/preview', () => shiftClaimPreview()],
+  ['trips/:id/claims/preview', (id) => tripClaimPreview(id)],
   ['participants/:id/claims/from-shifts', (id, body) => ({
     id: 'claim-mock-0001', kind: 'Shift', participantId: id,
     periodFrom: body?.from ?? '2026-08-01', periodTo: body?.to ?? '2026-08-14',

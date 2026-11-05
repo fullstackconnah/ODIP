@@ -297,7 +297,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroTimesh
 builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroLeaveSync>();
 // Every minute, each connected organisation: approved hours go to Employment Hero as timesheets. Same EmploymentHero:Enabled switch.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroTimesheetBackgroundService>();
-// Nightly: one task for the Admin when archived records pass their 7 years. Retention:ScanEnabled (default false) keeps it off until the Settings screen ships.
+// Nightly: one task for the Admin when archived records pass their 7 years. Retention:ScanEnabled=false switches it off (default on).
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RetentionScanBackgroundService>();
 // Nightly: one Admin task per compliance date from 90 days out. Compliance:ScanEnabled (default true).
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.ComplianceScanBackgroundService>();

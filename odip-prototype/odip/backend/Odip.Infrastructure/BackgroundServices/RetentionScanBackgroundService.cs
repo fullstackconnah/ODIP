@@ -18,11 +18,12 @@ namespace Odip.Infrastructure.BackgroundServices;
 /// Nightly: for each organisation, counts its archived participants whose 7-year retention has run out (<see cref="RetentionClock"/>) and keeps ONE open "records due for purge" task for the Admin
 /// in step with that count. It deletes nothing: only an Admin's confirmed purge does (DataRetentionController). Same shape as <see cref="EarlyAccessPurgeBackgroundService"/>, and like it
 /// it never throws and logs counts only, never a name.
-/// Switched OFF until the Settings screen ships: <c>Retention:ScanEnabled</c> (default false). <see cref="RunOnceAsync"/> works regardless, so it can be tested and run by hand.
+/// On by default; <c>Retention:ScanEnabled=false</c> switches it off. <see cref="RunOnceAsync"/> works regardless, so it can be tested and run by hand.
 /// </summary>
 public class RetentionScanBackgroundService : BackgroundService
 {
     public const string ScanEnabledKey = "Retention:ScanEnabled";
+    public static bool Enabled(IConfiguration config) => config.GetValue(ScanEnabledKey, true);
     public static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     public static readonly TimeSpan RetryInterval = TimeSpan.FromMinutes(30);
     public static readonly TimeSpan FirstRunDelay = TimeSpan.FromMinutes(10);
@@ -49,7 +50,7 @@ public class RetentionScanBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_config.GetValue(ScanEnabledKey, false))
+        if (!Enabled(_config))
         {
             _logger.LogInformation("The retention scan is off ({Key} is false)", ScanEnabledKey);
             return;

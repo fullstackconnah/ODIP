@@ -392,6 +392,22 @@ public class BudgetSeriesServiceTests
         Assert.Equal((2, 2), (a.Quotes, a.Entries));
     }
 
+    [Fact]
+    public async Task APriceCorrectedInPlace_IsQuotedAgainOnceTheImportSaysTheCatalogueChanged()
+    {
+        using var a = Arrange();
+        YearPlan(a);
+        Revision(a, 1, PlanStart, PlanEnd);
+
+        await a.GetAsync();
+        a.Kit.Item(ClaimDayType.Weekday).PriceLimit_VIC += 5m;   // a correction file: same code and start date, a new price
+        a.Kit.Db.SaveChanges();
+        CatalogueImportService.NoteChanged();                       // what CatalogueImportService.CommitImportAsync does after a commit that changed a row
+        await a.GetAsync();
+
+        Assert.Equal(2, a.Quotes);
+    }
+
     // ── 20 and the unpriced agreement lines ────────────────────────────────────
 
     [Fact]

@@ -54,7 +54,9 @@ function LodgeBody({ line, presetType, onClose, onReload }: { line: RpReportLine
   const [type, setType] = useState<RpReportType | ''>(presetType ?? (prn ? line.suggestedType ?? '' : ''))
   const [variedKind, setVariedKind] = useState<RpVariedKind | ''>('')
   const [alsoUnauthorised, setAlsoUnauthorised] = useState<'true' | 'false' | ''>('')
-  const [lodgedOn, setLodgedOn] = useState(today)
+  // Follows the provider day (the browser's day until it loads) until the user types a date.
+  const [typedOn, setLodgedOn] = useState<string | null>(null)
+  const lodgedOn = typedOn ?? today
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState<Errors>({})
   const [serverError, setServerError] = useState<{ message: string; conflict: boolean } | null>(null)

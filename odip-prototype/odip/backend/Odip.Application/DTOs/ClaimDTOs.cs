@@ -137,6 +137,8 @@ public record ClaimPreviewResponseDto
     public ClaimBudgetDto? Budget { get; init; }
     /// <summary>The confirmed participants this claim leaves out, and why (no NDIS number; funded another way): never dropped silently. Empty when nobody is left out.</summary>
     public List<TripClaimLeftOutDto> LeftOut { get; init; } = new();
+    /// <summary>Set when the claim has lines but some of the trip's days had no catalogue rate and are not claimed (a trip that starts before the catalogue); null when every day was priced. A warning, never a block.</summary>
+    public string? UnpricedDaysNote { get; init; }
 }
 
 /// <summary>A confirmed participant a trip claim leaves out, in the shape of <see cref="ShiftClaimLeftOutDto"/>: who (Description) and why (Reason). Their booking is not claimed.</summary>

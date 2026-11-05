@@ -211,6 +211,13 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
               </div>
             )}
 
+            {/* Days of the trip the catalogue has no rate for: the claim covers the rest, and says so. */}
+            {previewData.unpricedDaysNote && (
+              <div className="mt-[var(--section-gap)]">
+                <Callout tone="warning">{previewData.unpricedDaysNote}</Callout>
+              </div>
+            )}
+
             {/* What this claim would use of each participant's recorded plan: a warning, never a block. Absent when none of them has a plan that has started. */}
             <div className="mt-[var(--section-gap)]">
               <ClaimBudgetBlock budget={previewData.budget} />
