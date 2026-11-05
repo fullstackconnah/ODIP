@@ -49,7 +49,8 @@ describe('ComplianceDatesSection', () => {
     render(<ComplianceDatesSection />)
     expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Kind', 'Name', 'Expires on', 'Status', 'Reference'])
     expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.getByText('Only Admins can change this list.')).toBeInTheDocument()
+    // The settings frame already says it; a second lock callout stacked under it.
+    expect(screen.queryByText('Only Admins can change this list.')).toBeNull()
   })
 
   it('has one sentence for an empty list per role', () => {

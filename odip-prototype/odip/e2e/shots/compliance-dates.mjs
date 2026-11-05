@@ -40,6 +40,8 @@ const TASKS = [
   task('t2', 'Sam Lee, Chief executive expires within 30 days, on 27 Nov 2026', '2026-11-27'),
   task('t3', 'Mid-term audit is due on 20 Jan 2027', '2027-01-20'),
 ]
+// The dashboard Tasks group asks for status=Overdue and dueToday=true: one overdue compliance task, nothing due today.
+const dashboardOnly = (url) => url.includes('status=Overdue') ? [TASKS[0]] : url.includes('dueToday=true') ? [] : null
 const SERVER_ERROR = 'Could not save the date. Try again.'
 const EMPTY_ADMIN = "No compliance dates yet. Start with your registration: add the date it expires, and we'll remind your Admins 90 days before."
 const EMPTY_COORD = 'No compliance dates yet. An Admin can add them here.'
@@ -65,8 +67,9 @@ async function openPage(browser, vp, { role = 'Admin', username = 'dev.admin', i
     sent.push({ method: req.method(), body: JSON.parse(req.postData() ?? '{}') })
     return r.fulfill({ status: 400, json: { success: false, data: null, message: SERVER_ERROR, errors: [SERVER_ERROR] } })
   })
+  await page.route('**/api/v1/dashboard/summary', (r) => r.fulfill({ json: envelope({ upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 3, overdueTaskCount: 1, conflictCount: 0, tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0, upcomingTrips: [] }) }))
   await page.route('**/api/v1/tasks**', (r) => r.request().method() === 'GET'
-    ? r.fulfill({ json: envelope({ items: TASKS, totalCount: TASKS.length, page: 1, pageSize: 50, totalPages: 1, hasNext: false, hasPrevious: false }) })
+    ? r.fulfill({ json: envelope({ items: dashboardOnly(r.request().url()) ?? TASKS, totalCount: TASKS.length, page: 1, pageSize: 50, totalPages: 1, hasNext: false, hasPrevious: false }) })
     : r.fallback())
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   const btn = page.getByRole('button', { name: 'Sign in as selected user' })
@@ -144,6 +147,12 @@ for (const vp of VPS) {
       check(t(`${state}: chip text contrast at least 4.5:1`), chips.length === 5 && chips.every((c) => c.ratio >= 4.5), chips.map((c) => `${c.text} ${c.ratio.toFixed(2)}`))
       check(t(`${state}: rows are soonest first`), (await page.locator('tbody tr').first().innerText()).includes('Public liability'))
       await geometry(page, t(state))
+      if (!vp.touch) {
+        const refs = await page.locator('tbody tr').evaluateAll((rows) => rows.map((r) => { const td = r.querySelectorAll('td')[4]; const g = document.createRange(); g.selectNodeContents(td); return { text: td.textContent.trim(), lines: new Set([...g.getClientRects()].map((q) => Math.round(q.top))).size } }).filter((x) => x.text !== '—'))
+        check(t(state + ': each reference is on one line'), refs.length === 3 && refs.every((x) => x.lines === 1), refs)
+        const gap = await page.locator('tbody tr').first().evaluate((r) => { const [e, d] = r.querySelectorAll('button'); return d.getBoundingClientRect().left - e.getBoundingClientRect().right })
+        check(t(state + ': Edit and Delete are 16px apart or less'), gap <= 16, gap)
+      }
       if (vp.touch) await tapTargets(main, t(state))
       await crop(page, main, `${state}-${tag}.png`, vp)
       if (!dark) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${state}-${tag}.png`), { touch: vp.touch })).checks)
@@ -162,8 +171,8 @@ for (const vp of VPS) {
       check(t('list-coordinator: headers are the first five'), JSON.stringify(headers) === JSON.stringify(['Kind', 'Name', 'Expires on', 'Status', 'Reference']), headers)
     }
     const buttons = await page.locator('section button, [role=tabpanel] button, main button').evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') || e.textContent || '').trim()))
-    const section = await page.evaluate(() => { const h = [...document.querySelectorAll('main *')].find((e) => e.children.length === 0 && /Only Admins can change this list/.test(e.textContent)); return !!h })
-    check(t('list-coordinator: the lock callout shows'), section)
+    const locks = await page.locator('main *').evaluateAll((els) => els.filter((e) => e.children.length === 0 && /Only (an Admin|Admins) can change/.test(e.textContent)).map((e) => e.textContent.trim()))
+    check(t('list-coordinator: exactly one lock callout, the frame own'), locks.length === 1 && locks[0].startsWith('Only an Admin can change these'), locks)
     check(t('list-coordinator: no Add, Edit or Delete button in the section'), !buttons.some((b) => /^(Add a date|Edit|Delete)/.test(b)), buttons)
     await geometry(page, t('list-coordinator'))
     await crop(page, main, `list-coordinator-${tag}.png`, vp)
@@ -283,10 +292,28 @@ for (const vp of VPS) {
     const text = await page.locator('main').first().innerText()
     check(t('tasks-page-compliance: band-1, band-2 and expired titles show'), text.includes('Mid-term audit is due on 20 Jan 2027') && text.includes('Sam Lee, Chief executive expires within 30 days, on 27 Nov 2026') && text.includes('Public liability insurance expired on 3 Nov 2026'))
     if (!vp.touch) check(t('tasks-page-compliance: the Type column reads Compliance date'), text.includes('Compliance date'))
+    if (!vp.touch) {
+      const cell = await page.locator('[title="Sam Lee, Chief executive expires within 30 days, on 27 Nov 2026"]').first().evaluate((e) => ({ cut: e.scrollHeight - e.clientHeight, lines: Math.round(e.clientHeight / parseFloat(getComputedStyle(e).lineHeight)) }))
+      check(t('tasks-page-compliance: the 30-day title is not cut and is at most 3 lines'), cell.cut <= 1 && cell.lines <= 3, cell)
+    }
     await noHScroll(page, t('tasks-page-compliance'))
     await crop(page, page.locator('main').first(), `tasks-page-compliance-${tag}.png`, vp)
     await context.close()
   } catch (e) { check(t('tasks-page-compliance ran'), false, String(e.message).split('\n')[0]) }
+
+  // dashboard-tasks-compliance: the Tasks group row shows the type as a fact
+  try {
+    const { context, page } = await openPage(browser, vp)
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    const subject = page.getByText('Public liability insurance expired on 3 Nov 2026').first()
+    await subject.waitFor({ state: 'visible', timeout: 60_000 })
+    await page.waitForTimeout(400)
+    const row = subject.locator('xpath=ancestor::*[self::li or self::tr or self::article or self::div][contains(., "Compliance date")][1]')
+    check(t('dashboard-tasks-compliance: the row reads Compliance date, with the title'), (await row.count()) > 0 && (await row.first().innerText()).includes('Compliance date'))
+    await noHScroll(page, t('dashboard-tasks-compliance'))
+    await crop(page, row.first(), `dashboard-tasks-compliance-${tag}.png`, vp, 24)
+    await context.close()
+  } catch (e) { check(t('dashboard-tasks-compliance ran'), false, String(e.message).split('\n')[0]) }
 }
 await browser.close()
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1

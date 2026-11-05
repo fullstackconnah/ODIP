@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Lock, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useComplianceItems, useCreateComplianceItem, useDeleteComplianceItem, useUpdateComplianceItem } from '@/api/hooks'
 import { COMPLIANCE_KINDS, COMPLIANCE_KIND_LABELS, type ComplianceItemDto, type ComplianceKind, type SaveComplianceItemDto } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -116,9 +116,9 @@ export default function ComplianceDatesSection() {
     { key: 'label', header: 'Name', className: `font-medium break-words ${CELL} ${FULL}`, wrap: true, width: '34%', render: (i: ComplianceItemDto) => i.label },
     { key: 'expiresOn', header: 'Expires on', className: `${CELL} ${HALF}`, render: (i: ComplianceItemDto) => formatDateAu(i.expiresOn) },
     { key: 'status', header: 'Status', className: `${CELL} ${HALF}`, render: (i: ComplianceItemDto) => <Status daysLeft={i.daysLeft} /> },
-    { key: 'reference', header: 'Reference', className: `${CELL} ${FULL} break-words`, wrap: true, render: (i: ComplianceItemDto) => i.reference || '—' },
+    { key: 'reference', header: 'Reference', className: `${CELL} ${FULL} break-words md:whitespace-nowrap`, wrap: true, render: (i: ComplianceItemDto) => i.reference || '—' },
     ...(canEdit ? [{
-      key: 'actions', header: 'Actions', className: `${CELL} ${FULL}`,
+      key: 'actions', header: 'Actions', className: `${CELL} ${FULL}`, width: '1%',
       render: (i: ComplianceItemDto) => (
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" className={`${TAP_AREA} max-md:flex-1`} onClick={() => open({ id: i.id, initial: formOf(i) })} aria-label={`Edit: ${i.label}`}>Edit</Button>
@@ -130,9 +130,6 @@ export default function ComplianceDatesSection() {
 
   return (
     <div className="space-y-4">
-      {!canEdit && (
-        <Callout tone="info" icon={Lock} announce={false} className="max-w-prose">Only Admins can change this list.</Callout>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[var(--color-muted-foreground)]">Soonest first. The status shows Due soon from {LEAD_DAYS} days before the date.</p>
         {canEdit && <Button ref={addRef} size="md" onClick={() => open({ initial: NEW_DATE })}><Plus className="w-4 h-4" /> Add a date</Button>}

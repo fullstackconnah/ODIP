@@ -167,11 +167,11 @@ describe('TasksPage — column budget', () => {
     }
   })
 
-  it('clamps the Task to two lines, caps Owner and Type, and truncates the trip link on the link itself, with the full text in a tooltip', () => {
+  it('clamps the Task to three lines, caps Owner and Type, and truncates the trip link on the link itself, with the full text in a tooltip', () => {
     renderPage()
     const row = screen.getByRole('link', { name: 'Beach Trip' }).closest('tr')!
     const task = within(row).getByText('Confirm accommodation')
-    expect(task).toHaveClass('md:line-clamp-2', 'md:max-w-[13rem]')
+    expect(task).toHaveClass('md:line-clamp-3', 'md:max-w-[13rem]')
     expect(task.className).not.toMatch(/md:truncate/)
     expect(task).toHaveAttribute('title', 'Confirm accommodation')
     expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 7rem')
@@ -271,17 +271,17 @@ describe('TasksPage — the emergency review task', () => {
     renderPage()
 
     const title = screen.getByRole('link', { name: review.title })
-    expect(title).toHaveClass('line-clamp-2', 'break-words')
+    expect(title).toHaveClass('line-clamp-3', 'break-words')
     expect(title).not.toHaveClass('truncate', 'md:truncate')
     expect(title).toHaveAttribute('title', review.title)
   })
 
-  it('gives the title of any task that has a link the same two lines, on the link itself, with the full text in the tooltip', () => {
+  it('gives the title of any task that has a link the same three lines, on the link itself, with the full text in the tooltip', () => {
     showing(ordinary)
     renderPage()
 
     const title = screen.getByRole('link', { name: 'Find leave cover' })
-    expect(title).toHaveClass('line-clamp-2', 'md:max-w-[13rem]')
+    expect(title).toHaveClass('line-clamp-3', 'md:max-w-[13rem]')
     expect(title).toHaveAttribute('title', 'Find leave cover')
     expect(title).toHaveAttribute('href', '/rostering/leave')
   })

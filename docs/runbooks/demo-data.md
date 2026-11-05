@@ -184,6 +184,9 @@ DELETE FROM "NotificationOutbox"
   WHERE "Id" IN (SELECT "Id" FROM demo_outbox);
 DELETE FROM "BookingTasks"
   WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
+-- The compliance-date tasks the nightly scan made have random ids, so the line above misses them; their source key holds the item id, which is version 8 for a demo item.
+DELETE FROM "BookingTasks"
+  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND "SourceKey" LIKE 'compliance:%' AND substr(split_part("SourceKey", ':', 2), 15, 1) = '8';
 DELETE FROM "IncidentInjuries"
   WHERE "IncidentReportId" IN (SELECT "Id" FROM demo_incident);
 DELETE FROM "IncidentWitnesses"

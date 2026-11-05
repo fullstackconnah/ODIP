@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -72,6 +73,8 @@ public class ComplianceItemsController : ControllerBase
         // The task is keyed by the date: a moved date closes the old task and opens the new one (or none, while it is still past 90 days).
         if (oldOn != row.ExpiresOn) await new ObligationTaskService(_db, _clock).CompleteAsync(ComplianceDueTasks.SourceKey(row.Id, oldOn), ct);
         await EnsureTaskAsync(row, today, tenantId, ct);
+        // Moving a date back onto one the move itself auto-closed reopens that task; a task a person ticked (AutoCompletedAt null) stays closed.
+        if (oldOn != row.ExpiresOn) await ReopenAutoClosedAsync(ComplianceDueTasks.SourceKey(row.Id, row.ExpiresOn), ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ComplianceItemDto>.Ok(ToDto(row, today)));
     }
@@ -87,6 +90,16 @@ public class ComplianceItemsController : ControllerBase
         _db.ComplianceItems.Remove(row);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    private async Task ReopenAutoClosedAsync(string sourceKey, CancellationToken ct)
+    {
+        var task = await _db.BookingTasks.FirstOrDefaultAsync(t => t.SourceKey == sourceKey, ct);
+        if (task is not { Status: TaskItemStatus.Completed, AutoCompletedAt: not null }) return;
+        task.Status = TaskItemStatus.NotStarted;
+        task.CompletedDate = null;
+        task.AutoCompletedAt = null;
+        task.UpdatedAt = DateTime.UtcNow;
     }
 
     private async Task EnsureTaskAsync(ComplianceItem row, DateOnly today, Guid tenantId, CancellationToken ct)

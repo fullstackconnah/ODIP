@@ -179,6 +179,38 @@ public class ComplianceItemsControllerTests
     }
 
     [Fact]
+    public async Task Update_that_moves_the_date_away_and_back_reopens_the_task_the_move_auto_closed()
+    {
+        var created = Data<ComplianceItemDto>((await Controller(_tenantId).Create(Valid(Today.AddDays(40)), CancellationToken.None)).Result);
+        Data<ComplianceItemDto>((await Controller(_tenantId).Update(created.Id, Valid(Today.AddDays(60)), CancellationToken.None)).Result);
+
+        Data<ComplianceItemDto>((await Controller(_tenantId).Update(created.Id, Valid(Today.AddDays(40)), CancellationToken.None)).Result);
+
+        var back = Assert.Single(Tasks(), t => t.DueDate == Today.AddDays(40));
+        Assert.Equal(TaskItemStatus.NotStarted, back.Status);
+        Assert.Null(back.CompletedDate);
+        Assert.Null(back.AutoCompletedAt);
+    }
+
+    [Fact]
+    public async Task Update_that_moves_the_date_back_leaves_a_task_an_admin_ticked_off_completed()
+    {
+        var created = Data<ComplianceItemDto>((await Controller(_tenantId).Create(Valid(Today.AddDays(40)), CancellationToken.None)).Result);
+        await using (var db = Db())
+        {
+            var ticked = await db.BookingTasks.IgnoreQueryFilters().SingleAsync(t => t.TaskType == TaskType.ComplianceDue);
+            ticked.Status = TaskItemStatus.Completed;
+            ticked.CompletedDate = Today;
+            await db.SaveChangesAsync();
+        }
+
+        Data<ComplianceItemDto>((await Controller(_tenantId).Update(created.Id, Valid(Today.AddDays(60)), CancellationToken.None)).Result);
+        Data<ComplianceItemDto>((await Controller(_tenantId).Update(created.Id, Valid(Today.AddDays(40)), CancellationToken.None)).Result);
+
+        Assert.Equal(TaskItemStatus.Completed, Assert.Single(Tasks(), t => t.DueDate == Today.AddDays(40)).Status);
+    }
+
+    [Fact]
     public async Task Update_that_moves_the_date_past_90_days_only_completes_the_old_task()
     {
         var created = Data<ComplianceItemDto>((await Controller(_tenantId).Create(Valid(Today.AddDays(40)), CancellationToken.None)).Result);
