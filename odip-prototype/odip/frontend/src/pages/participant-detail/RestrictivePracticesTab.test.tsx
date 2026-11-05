@@ -6,9 +6,10 @@ import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import type { MedicationListDto } from '@/api/types/medications'
 
 const {
-  mockUseRestrictivePractices, mockUseParticipantMedications,
+  mockProviderSettings, mockUseRestrictivePractices, mockUseParticipantMedications,
   mockUpdateMutateAsync, mockDeleteMutateAsync, mockBulkCreateMutateAsync,
 } = vi.hoisted(() => ({
+  mockProviderSettings: vi.fn(() => ({ data: undefined as unknown })),
   mockUseRestrictivePractices: vi.fn(() => ({ data: [] as RestrictivePracticeDto[], isLoading: false })),
   mockUseParticipantMedications: vi.fn(() => ({ data: [] as MedicationListDto[], isLoading: false })),
   mockUpdateMutateAsync: vi.fn(),
@@ -20,6 +21,7 @@ const {
 // are the real components, so this exercises the actual add/edit/delete/bulk-add wiring (same
 // approach as RoutinesTab.test.tsx).
 vi.mock('@/api/hooks', () => ({
+  useProviderSettings: mockProviderSettings,
   useRestrictivePractices: mockUseRestrictivePractices,
   useParticipantMedications: mockUseParticipantMedications,
   useUpdateRestrictivePractice: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
@@ -1112,6 +1114,20 @@ describe('RestrictivePracticesTab edit modal: use kind, end date and plan dates'
     await user.click(screen.getByRole('button', { name: /save entry/i }))
     expect(await screen.findByText("The first use date can't be in the future")).toBeInTheDocument()
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  // 14:30 UTC on 5 Nov is already 6 Nov in Sydney: a first use on 6 Nov is today for the organisation, not the future.
+  it("accepts a first use date that is today on the organisation's calendar", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-05T14:30:00Z'))
+    try {
+      mockProviderSettings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney', state: 'NSW' } })
+      const user = await openEdit({ ...authorised })
+      await user.type(screen.getByLabelText('First used on'), '2026-11-06')
+      await user.click(screen.getByRole('button', { name: /save entry/i }))
+      await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled())
+      expect(screen.queryByText("The first use date can't be in the future")).not.toBeInTheDocument()
+    } finally { vi.useRealTimers(); mockProviderSettings.mockReturnValue({ data: undefined }) }
   })
 
   it('offers the earliest use on record and fills it on tap', async () => {

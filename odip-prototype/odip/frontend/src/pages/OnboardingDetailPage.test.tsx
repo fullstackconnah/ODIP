@@ -7,7 +7,8 @@ import type { ParticipantOnboardingDto } from '@/api/types/inquiries'
 
 // The checklist page as the owner approved it on 2026-10-13: a header (name, stage badge, View record), one action bar (Begin services, Make
 // active) and one list of the four derived items. Hooks are mocked at the module seam; the payloads are the API's own shapes.
-const { mockUseOnboarding, mockUseParticipant, beginServices, makeActive, recordAgreement, recordExplained } = vi.hoisted(() => ({
+const { mockProviderSettings, mockUseOnboarding, mockUseParticipant, beginServices, makeActive, recordAgreement, recordExplained } = vi.hoisted(() => ({
+  mockProviderSettings: vi.fn(() => ({ data: undefined as unknown })),
   mockUseOnboarding: vi.fn(),
   mockUseParticipant: vi.fn(),
   beginServices: { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown },
@@ -16,6 +17,7 @@ const { mockUseOnboarding, mockUseParticipant, beginServices, makeActive, record
   recordExplained: { mutate: vi.fn(), isPending: false, error: null as unknown, reset: vi.fn() },
 }))
 vi.mock('@/api/hooks', () => ({
+  useProviderSettings: mockProviderSettings,
   useOnboarding: mockUseOnboarding,
   useParticipant: mockUseParticipant,
   useBeginServices: () => beginServices,
@@ -289,6 +291,21 @@ describe('OnboardingDetailPage: the complaints and rights record', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     expect(recordExplained.mutate).toHaveBeenCalledWith({ complaintsExplainedOn: null, rightsExplainedOn: '2026-10-02' }, expect.anything())
+  })
+
+  // 14:30 UTC on 5 Nov is already 6 Nov in Sydney: the organisation's day, not the browser's (UTC), decides what is "in the future".
+  it("checks the date against the organisation's day, not the browser's", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-05T14:30:00Z'))
+    try {
+      mockProviderSettings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney', state: 'NSW' } })
+      const user = userEvent.setup()
+      renderPage()
+      const dialog = await openDialog(user, 1)
+      await user.type(within(dialog).getByLabelText('Told how to make a complaint on'), '2026-11-06')
+      expect(within(dialog).queryByText('The date cannot be in the future.')).not.toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled()
+    } finally { vi.useRealTimers(); mockProviderSettings.mockReturnValue({ data: undefined }) }
   })
 
   it('refuses a future date and a date before 1990 on the field, without sending', async () => {
