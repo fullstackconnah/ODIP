@@ -97,8 +97,10 @@ async function boardRun(browser, tag, vp, shots) {
     try {
       // The crop is the whole bar (left edge to right edge, pad 24), also at 390.
       const target = link(name)
-      await target.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }))
-      const r = await cropElement(page, target, path.join(OUT_DIR, file), { touch, ...(touch ? { pad: 24 } : {}), ...opts }); checks.push(checkCropHolds(r))
+      // A bar wider than the 390 viewport scrolls in its frame and the pill sits at its right end: scroll to the end so the crop shows the pill and the bar's right edge (the left edge cannot fit).
+      const wide = touch
+      await target.evaluate((el, w) => el.scrollIntoView({ inline: w ? 'end' : 'center', block: 'nearest' }), wide)
+      const r = await cropElement(page, target, path.join(OUT_DIR, file), { touch, ...(touch ? { pad: 24 } : {}), ...opts }); if (r.box.width > r.viewport.width) { const pr = await link(name).locator('[data-staff-short]').boundingBox(); check(`${tag}: ${file} crop holds the bar's right edge and its pill`, r.box.x + r.box.width <= r.clip.x + r.clip.width && pr && pr.x >= r.clip.x && pr.x + pr.width <= r.clip.x + r.clip.width, [r.clip, r.box, pr]) } else checks.push(checkCropHolds(r))
     } catch (e) { check(`${tag}: crop ${file}`, false, String(e.message).slice(0, 120)) }
   }
   for (const [name, file] of shots) await crop(name, file)
