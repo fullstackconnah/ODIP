@@ -22,6 +22,11 @@ public static class ShiftErrorCodes
     public const string ShiftNotPendingReview = "SHIFT_NOT_PENDING_REVIEW";
     /// <summary>A clean-only approve (the dashboard's) found a review flag on the shift now: an incident, a dose without outcome, outlier time, manual start or adjusted times.</summary>
     public const string ShiftNeedsReview = "SHIFT_NEEDS_REVIEW";
+    /// <summary>An extra-time decision was sent for a completion that has no extra time (the worker started and finished within 5 minutes of the roster, or started late and finished early).</summary>
+    public const string ShiftNoExtraTime = "SHIFT_NO_EXTRA_TIME";
+    /// <summary>An extra-time decision was sent for a Completed shift older than the Employment Hero change window, so the change would never reach payroll.</summary>
+    public const string ShiftExtraTimeTooOld = "SHIFT_EXTRA_TIME_TOO_OLD";
+    public const string ShiftExtraTimeChoiceInvalid = "SHIFT_EXTRA_TIME_CHOICE_INVALID";
     public const string ShiftReturnReasonRequired = "SHIFT_RETURN_REASON_REQUIRED";
     public const string ShiftReturnReasonTooLong = "SHIFT_RETURN_REASON_TOO_LONG";
     /// <summary>A roster write was refused because the board it was made from is out of date (the 409 whose copy offers "Refresh the board"). The frontend branches on this, with the sentence as a fallback.</summary>

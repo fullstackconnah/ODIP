@@ -24,7 +24,9 @@ public sealed class EmploymentHeroTimesheetSender
 {
     private static readonly TimeSpan[] Delays = [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(240)];
     private static readonly TimeSpan Lease = TimeSpan.FromMinutes(10), WaitingRetry = TimeSpan.FromMinutes(30), DrainBudget = TimeSpan.FromSeconds(20);
-    private const int BatchSize = 25, ScanSize = 500, ChangeWindowDays = 62;
+    /// <summary>How many days back the change check looks at sent timesheets; an older shift is never updated in Employment Hero.</summary>
+    public const int ChangeWindowDays = 62;
+    private const int BatchSize = 25, ScanSize = 500;
 
     private readonly EmploymentHeroClient _client;
     private readonly IntegrationKeyProtector _keys;

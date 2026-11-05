@@ -23,6 +23,7 @@ internal static class OlderSchemaSeeds
         ("ShiftCompletions", "LocationCheckedAt", "timestamp without time zone"),
         ("ShiftCompletions", "StartTimeReason", "character varying(500)"),
         ("ShiftCompletions", "FinishTimeReason", "character varying(500)"),
+        ("ShiftCompletions", "ExtraTime", "integer"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
         ("IncidentReports", "FireOfficerName", "character varying(100)"),

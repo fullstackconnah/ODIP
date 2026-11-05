@@ -24,7 +24,8 @@ const period = (o = {}) => ({ payScheduleId: 1, scheduleName: 'Fortnightly', fro
 const shift = (o: Partial<PayrollShiftDto> = {}): PayrollShiftDto => ({
   shiftId: 's1', serviceDate: '2026-10-14', participantName: 'Alex Example', rosteredStart: '09:00', rosteredEnd: '17:00', endsNextDay: false,
   rosteredMinutes: 480, actualStart: '2026-10-14T09:00:00Z', actualEnd: '2026-10-14T17:00:00Z', timeZoneId: 'Australia/Sydney',
-  breakMinutes: 30, paidMinutes: 450, nightType: 'None', status: 'Sent', reason: '', sentAt: '2026-10-15T01:00:00Z', sendable: false, ...o,
+  breakMinutes: 30, paidMinutes: 450, nightType: 'None', status: 'Sent', reason: '', sentAt: '2026-10-15T01:00:00Z', sendable: false,
+  paidStart: '2026-10-14T09:00:00Z', paidEnd: '2026-10-14T17:00:00Z', extraTimeHeld: false, ...o,
 })
 const worker = (o: Partial<PayrollWorkerDto> = {}): PayrollWorkerDto => ({
   userId: 'u1', name: 'Sam Support', linked: true, rosteredMinutes: 480, paidMinutes: 450, shifts: [shift()], ...o,
@@ -140,6 +141,17 @@ describe('PayrollPage', () => {
     expect(document.body.textContent).toMatch(/Rostered 9:00\u00A0am/)
     expect(document.body.textContent).toMatch(/at 9:15\u00A0am/)
     expect(document.body.textContent).not.toMatch(/\d:\d\d[ \u202F][ap]m/)
+  })
+
+  it('shows the paid window and an "Extra time held" tag on a held row, and neither on a plain one', async () => {
+    // Worked 9:00 am to 5:20 pm Sydney (UTC+11 on 2026-10-14); extra time not yet approved, so Employment Hero gets 9:00 am to 5:00 pm.
+    setup(check({ workers: [worker({ shifts: [
+      shift({ shiftId: 'held', actualStart: '2026-10-13T22:00:00Z', actualEnd: '2026-10-14T06:20:00Z', paidStart: '2026-10-13T22:00:00Z', paidEnd: '2026-10-14T06:00:00Z', extraTimeHeld: true }),
+      shift({ shiftId: 'plain' }),
+    ] })] }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show shifts: Sam Support' }))
+    expect(screen.getAllByText('Extra time held')).toHaveLength(1)
+    expect(document.body.textContent).toMatch(/paid 9:00[^a-z]{1,2}am.{1,5}5:00[^a-z]{1,2}pm/)
   })
 
   it('says the break minutes are unpaid ones (a break with the participant is not deducted)', async () => {

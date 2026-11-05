@@ -164,7 +164,7 @@ public static class ShiftCompletionMapper
                 extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual,
                 completion.OriginalActualStart is not null || completion.OriginalActualEnd is not null,
                 extras[completion.Id].IncidentCount,
-                IsOffRoster(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, completion.ActualEnd)));
+                IsOffRoster(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, completion.ActualEnd), completion.ExtraTime));
         }
         return items;
     }
@@ -224,7 +224,7 @@ public static class ShiftCompletionMapper
             c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres,
             c.PreShiftTravelMinutes, c.PreShiftTravelKilometres, c.PostShiftTravelMinutes, c.PostShiftTravelKilometres, c.AnythingToReport,
             c.SentFromOffline, c.LocationCheck, c.LocationDistanceMetres, c.LocationAccuracyMetres, c.LocationReason,
-            c.StartTimeReason, c.FinishTimeReason, ShiftTimeRules.IsOffRoster(c.VarianceMinutesStart), c.ActualEnd is not null && ShiftTimeRules.IsOffRoster(c.VarianceMinutesEnd));
+            c.StartTimeReason, c.FinishTimeReason, ShiftTimeRules.IsOffRoster(c.VarianceMinutesStart), c.ActualEnd is not null && ShiftTimeRules.IsOffRoster(c.VarianceMinutesEnd), c.ExtraTime);
     }
 
     /// <summary>

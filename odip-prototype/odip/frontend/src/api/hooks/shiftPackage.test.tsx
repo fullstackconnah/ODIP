@@ -29,7 +29,7 @@ import {
   useStartBreak, useEndBreak, useEditBreak, useDeleteBreak, useAcknowledgeHandover, useRecordShiftDose, useFinishShift,
   useCheckRoutine, useUncheckRoutine,
 } from './portal'
-import { useShiftCompletionReview, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch } from './rostering'
+import { useShiftCompletionReview, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useDecideExtraTime } from './rostering'
 
 function wrapper(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
@@ -272,6 +272,26 @@ describe('coordinator completion review', () => {
 
     expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/approve')
     expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review', 'shift-1'] })
+  })
+
+  it('Approve posts the extra-time choice only when one is made', async () => {
+    const { result } = renderHook(() => useApproveCompletion(), { wrapper: wrapper(new QueryClient()) })
+
+    await result.current.mutateAsync({ shiftId: 'shift-1', extraTime: 'decline' })
+
+    expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/approve', { extraTime: 'decline' })
+  })
+
+  it('deciding extra time posts the word and refreshes the queue, the review and the Payroll check', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useDecideExtraTime(), { wrapper: wrapper(qc) })
+
+    await result.current.mutateAsync({ shiftId: 'shift-1', decision: 'approve' })
+
+    expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/extra-time', { decision: 'approve' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completions'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['employment-hero', 'payroll'] })
   })
 
   it('Return posts the reason and refreshes the open review for that shift', async () => {

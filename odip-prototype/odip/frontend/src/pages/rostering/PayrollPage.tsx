@@ -16,7 +16,7 @@ import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
-import type { Tone } from '@/lib/tone'
+import { TONE, type Tone } from '@/lib/tone'
 
 /** The five words pin their own tone, so a word used elsewhere ("Sent", "Failed") keeps its tone there. */
 const WORD_TONE: Record<PayrollShiftStatus, Tone> = { Sent: 'success', Waiting: 'warning', NotLinked: 'warning', Failed: 'danger', Changed: 'danger' }
@@ -63,7 +63,7 @@ function shiftLine(s: PayrollShiftDto) {
   if (s.nightType === 'Sleepover') return `${rostered} · Sleepover: rostered times sent`
   const time = (iso: string | null) => keepAmPm(formatWithTimeZone(iso, s.timeZoneId, { hour: 'numeric', minute: '2-digit' }))
   const actual = s.actualEnd
-    ? `Actual ${time(s.actualStart)}${DASH}${time(s.actualEnd)}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min unpaid break` : ''} (${hours(s.paidMinutes)})`
+    ? `Actual ${time(s.actualStart)}${DASH}${time(s.actualEnd)}${s.extraTimeHeld ? `, paid ${time(s.paidStart)}${DASH}${time(s.paidEnd)}` : ''}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min unpaid break` : ''} (${hours(s.paidMinutes)})`
     : 'Actual hours not recorded'
   const lead = s.nightType === 'ActiveNight' ? 'Active night · ' : s.nightType === 'PassiveNight' ? 'Passive night · ' : ''
   return `${lead}${rostered} · ${actual}`
@@ -81,6 +81,7 @@ function ShiftLines({ id, shifts, canLink }: { id: string; shifts: PayrollShiftD
             <Word status={s.status} />
           </div>
           <span className="text-[13px] text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{shiftLine(s)}</span>
+          {s.extraTimeHeld && <span className={`w-fit text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Extra time held</span>}
           {s.status !== 'Sent' && s.reason && <span className="text-[13px] [overflow-wrap:anywhere]">{keepAmPm(s.reason)}</span>}
           {s.status === 'NotLinked' && canLink && (
             <Link className="flex w-fit items-center text-[13px] underline pointer-coarse:min-h-[var(--tap-min)]" to="/settings?section=integrations">Link in Settings → Integrations</Link>

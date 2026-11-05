@@ -134,6 +134,32 @@ public class EmploymentHeroTimesheetSenderTests
     }
 
     [Fact]
+    public async Task ExtraTimeDecision_AfterSent_ResendsAsEdit()
+    {
+        var (db, tenant, _, clock) = await OrgAsync();
+        await using var _ = db;
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenant);
+        var (_, completion) = await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, worker, Day, Nine, Three);
+        completion.ActualStart = completion.ActualStart.AddMinutes(-20);
+        completion.ActualEnd = completion.ActualEnd!.Value.AddMinutes(20);
+        (completion.VarianceMinutesStart, completion.VarianceMinutesEnd, completion.ExtraTime) = (-20, 20, ExtraTimeDecision.Pending);
+        await db.SaveChangesAsync();
+        var eh = Eh();
+        var sender = Sender(eh, clock);
+        await sender.RunAsync(db, tenant, false, default);
+        Assert.Equal(("2026-10-14T09:00:00", "2026-10-14T15:00:00"), (Body(eh, 0).GetProperty("startTime").GetString(), Body(eh, 0).GetProperty("endTime").GetString()));   // held at rostered hours
+
+        completion.ExtraTime = ExtraTimeDecision.Approved;
+        await db.SaveChangesAsync();
+        clock.Set(clock.GetUtcNow().AddMinutes(1));
+        await sender.RunAsync(db, tenant, true, default);
+
+        Assert.Equal([HttpMethod.Post, HttpMethod.Get, HttpMethod.Put], eh.Requests.Select(r => r.Method));
+        Assert.Equal(("2026-10-14T08:40:00", "2026-10-14T15:20:00"), (Body(eh, 2).GetProperty("startTime").GetString(), Body(eh, 2).GetProperty("endTime").GetString()));
+        Assert.Equal(EmploymentHeroOutboxStatus.Sent, (await RowAsync(db)).Status);
+    }
+
+    [Fact]
     public async Task Changing_a_work_type_mapping_after_sending_neither_resends_nor_flags_the_line()
     {
         var (db, tenant, conn, clock) = await OrgAsync();

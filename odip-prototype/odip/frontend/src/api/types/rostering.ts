@@ -196,6 +196,12 @@ export type ShiftCompletionReviewOutcome = 'Approved' | 'Returned'
 
 export type LocationCheckStatus = 'AtLocation' | 'NotAtLocation' | 'Unavailable' | 'NoLocationSet'
 
+/** Extra time (an early start or a late finish over 5 minutes). Pending is held at rostered hours in Employment Hero until a coordinator decides. */
+export type ExtraTimeDecision = 'Pending' | 'Approved' | 'Declined'
+
+/** What the Approve dialog and the extra-time endpoint send: pay the actual times, or the rostered hours. */
+export type ExtraTimeChoice = 'approve' | 'decline'
+
 export interface ShiftCompletionDto {
   id: string
   shiftId: string
@@ -260,6 +266,8 @@ export interface ShiftCompletionDto {
   /** Why the worker started or finished more than 5 minutes off roster (optional); null when not given. */
   startTimeReason?: string | null
   finishTimeReason?: string | null
+  /** Extra time (a start more than 5 min early or a finish more than 5 min late): null when none. Pending is held at rostered hours in Employment Hero until a coordinator decides. */
+  extraTime?: ExtraTimeDecision | null
   /** Each side is more than 5 minutes off the roster (a finish counts only once it is set). */
   offRosterStart?: boolean
   offRosterFinish?: boolean
@@ -339,6 +347,8 @@ export interface CompletionQueueItemDto {
   timesAdjusted: boolean
   /** True when the start, or a set finish, is more than 5 minutes off the roster: the row needs review whatever the outlier setting says. */
   offRoster: boolean
+  /** See `ShiftCompletionDto.extraTime`. */
+  extraTime?: ExtraTimeDecision | null
   /** Active incidents linked to the shift: the ones the review lists. A row is one-tap only when this is exactly 0 (dashboard). */
   incidentCount: number
 }

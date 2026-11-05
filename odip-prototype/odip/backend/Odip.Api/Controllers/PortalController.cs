@@ -692,6 +692,8 @@ public class PortalController : ControllerBase
         var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
         completion.VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(completion.ActualStart, rosteredStartUtc);
         completion.VarianceMinutesEnd = ShiftVarianceCalculator.VarianceMinutes(completion.ActualEnd.Value, rosteredEndUtc);
+        // Extra time is what the worker added to the paid span; a coordinator decides it. A sleepover has none (its pay ignores the clock times). A re-Finish after a Return starts the decision over.
+        completion.ExtraTime = shift.NightType != SleepoverType.Sleepover && ShiftTimeRules.HasExtraTime(completion.VarianceMinutesStart, completion.VarianceMinutesEnd) ? ExtraTimeDecision.Pending : null;
         completion.UpdatedAt = now;
 
         shift.Status = ShiftStatus.PendingReview;
