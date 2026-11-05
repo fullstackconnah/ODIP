@@ -1899,6 +1899,8 @@ public record DashboardSummaryDto
     public int TripsMissingStaff { get; init; }
     public int OpenIncidentCount { get; init; }
     public int QscOverdueCount { get; init; }
+    /// <summary>Monthly restrictive practice reports past their due date; Admin, Coordinator and SuperAdmin only, 0 for other roles.</summary>
+    public int RpMonthlyReportsOverdueCount { get; init; }
     public List<TripListDto> UpcomingTrips { get; init; } = new();
 }
 
