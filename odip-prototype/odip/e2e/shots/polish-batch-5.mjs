@@ -126,9 +126,19 @@ async function retryCallout(page, vp, scheme) {
 // AR1: the auto-roster panel after an apply the app could not confirm (the request is dropped), then after a 500.
 async function autoRoster(page, vp) {
   const tag = `AR1 ${vp.name}`
+  // The mock's current week has no shifts: start it and add one unfilled draft shift, so the board offers Auto-roster.
+  await page.route('**/api/v1/rostering/board*', async (route) => {
+    const res = await route.fetch()
+    const body = await res.json()
+    if (body?.data?.participantRows) {
+      const d = body.data
+      d.weekStarted = true
+      const open = { id: 'pb5-open', participantId: 'p-pb5', participantName: 'Jo Park', staffId: null, staffName: null, serviceDate: d.days[2], startTime: '09:00:00', endTime: '15:00:00', endsNextDay: false, durationHours: 6, ratio: 'OneToOne', nightType: 'None', status: 'Draft', shiftPatternId: null, notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false }
+      d.participantRows.push({ participantId: 'p-pb5', fullName: 'Jo Park', supportRatio: 'OneToOne', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: false, shifts: [open], tripBars: [], scheduledHours: 6, daysWithoutCover: 6 })
+    }
+    return route.fulfill({ response: res, json: body })
+  })
   await gotoReady(page, '/rostering', false)
-  const start = page.getByRole('button', { name: 'Start rostering' })
-  if (await start.count()) await start.first().click()
   await page.getByRole('button', { name: 'Auto-roster' }).first().click({ timeout: 90_000 })
   const apply = page.getByRole('button', { name: /^Apply/ })
   await apply.waitFor({ state: 'visible', timeout: 90_000 })
@@ -200,8 +210,8 @@ const hubLines = { ready: [hubLine(0, { problems: [{ rule: 'CancellationNotAllow
 async function claimsReady(page, vp) {
   const tag = `CK1 ${vp.name}`
   await page.route('**/api/v1/claim-hub/lines', (r) => r.fulfill({ json: envelope(hubLines) }))
-  await gotoReady(page, '/claims?tab=ready', false)
-  const panel = page.getByRole('tabpanel').first()
+  await gotoReady(page, '/claims', false)
+  const panel = page.locator('[role="tabpanel"]:visible').first()
   await panel.waitFor({ state: 'visible', timeout: 90_000 })
   if (vp.width >= 768) {
     const th = page.locator('th').filter({ hasText: /^Checks$/ }).first()
