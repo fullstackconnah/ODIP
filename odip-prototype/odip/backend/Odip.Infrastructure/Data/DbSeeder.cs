@@ -92,6 +92,14 @@ public static class DbSeeder
         if (usersAdded)
             await context.SaveChangesAsync(ct);
 
+        // E2E needs an organisation Admin that Firebase-less dev login can reach. Seeded only where dev login is on, so live never gains it.
+        var demoAdminId = Guid.Parse("b2000000-0000-0000-0000-000000000005");
+        if (DevAuth.IsEnabled() && !await context.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == demoAdminId, ct))
+        {
+            context.Users.Add(new User { Id = demoAdminId, TenantId = demoTenantId, Username = "demo.admin", Email = "demo.admin@demo.odip.com.au", FirstName = "Demo", LastName = "Admin", Role = UserRole.Admin });
+            await context.SaveChangesAsync(ct);
+        }
+
         // Ensure SuperAdmin user exists for Connah tenant
         var connahTenantId = new Guid("00000000-0000-0000-0000-000000000001");
         var superAdminExists = await context.Users
@@ -183,6 +191,8 @@ public static class DbSeeder
             // method (medications/notes/routines/risk entries all key off specific indices that
             // stop at 19).
             new() { Id = Guid.Parse("d3000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, FirstName = "Priya", IsDraft = true, Notes = "Phone screening only — still need DOB, NDIS number, funding source, and living arrangement." },
+            // Retention demo and E2E: archived 8 years ago with nothing linked to him, so the E2E can purge him for good without touching any other spec's data.
+            new() { Id = Guid.Parse("d2000000-0000-0000-0000-000000000099"), TenantId = demoTenantId, Gender = Gender.Male, FirstName = "Harold", LastName = "Whitby", DateOfBirth = new DateOnly(1950, 3, 2), NdisNumber = "430567999", PlanType = PlanType.SelfManaged, IsActive = false, RetentionStartsOn = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-8)) },
         };
         // FUND-02: derive FundingSource from the pre-existing FundingOrganisation text using the
         // exact same rule the AddParticipantFundingSource migration applies to real rows on

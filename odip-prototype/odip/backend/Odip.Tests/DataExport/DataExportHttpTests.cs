@@ -270,6 +270,65 @@ public class DataExportHttpTests
     }
 
     [Fact]
+    public async Task An_admin_downloads_one_participants_zip_under_their_name_with_an_audit_row_that_is_theirs_not_the_organisations()
+    {
+        await using var host = await Host.StartAsync();
+        var (tenantId, participantId, _) = await host.SeedParticipantsAsync();
+
+        using var response = await host.GetAsync($"/api/v1/data-export/participants/{participantId}", "Admin", tenantClaim: tenantId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Matches("^bunya-support-participant-ben-xavier-[0-9]{4}-[0-9]{2}-[0-9]{2}[.]zip$", response.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
+        using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+        Assert.Single(DataExportTestKit.Csv(zip, "participants.csv").Skip(1));
+        Assert.Empty(await host.ExportRowsAsync(tenantId)); // Data export's "last exported" line doesn't move
+        var audit = Assert.Single(await host.ParticipantExportRowsAsync(participantId));
+        Assert.Equal("Jordan Lee", audit.ChangedByName);
+    }
+
+    [Fact]
+    public async Task A_participant_of_another_organisation_or_an_unknown_id_is_404_and_a_superadmin_with_no_organisation_gets_400()
+    {
+        await using var host = await Host.StartAsync();
+        var (tenantId, participantId, otherTenantsParticipant) = await host.SeedParticipantsAsync();
+
+        foreach (var id in new[] { otherTenantsParticipant, Guid.NewGuid() })
+        {
+            using var response = await host.GetAsync($"/api/v1/data-export/participants/{id}", "Admin", tenantClaim: tenantId);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        using var none = await host.GetAsync($"/api/v1/data-export/participants/{participantId}", "SuperAdmin", tenantClaim: null);
+        Assert.Equal(HttpStatusCode.BadRequest, none.StatusCode);
+        Assert.Empty(await host.ParticipantExportRowsAsync(participantId));
+    }
+
+    [Theory]
+    [InlineData("Admin", HttpStatusCode.OK)]
+    [InlineData("Coordinator", HttpStatusCode.Forbidden)]
+    [InlineData("SupportWorker", HttpStatusCode.Forbidden)]
+    [InlineData("ReadOnly", HttpStatusCode.Forbidden)]
+    public async Task Only_an_admin_may_download_one_participant(string role, HttpStatusCode expected)
+    {
+        await using var host = await Host.StartAsync();
+        var (tenantId, participantId, _) = await host.SeedParticipantsAsync();
+
+        using var response = await host.GetAsync($"/api/v1/data-export/participants/{participantId}", role, tenantClaim: tenantId);
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_superadmin_who_chose_an_organisation_may_download_one_of_its_participants()
+    {
+        await using var host = await Host.StartAsync();
+        var (tenantId, participantId, _) = await host.SeedParticipantsAsync();
+
+        using var response = await host.GetAsync($"/api/v1/data-export/participants/{participantId}", "SuperAdmin", tenantClaim: null, viewAs: tenantId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task A_superadmin_who_chose_an_organisation_gets_only_its_rows_whatever_tenant_their_token_names()
     {
         await using var host = await Host.StartAsync();
@@ -511,6 +570,27 @@ public class DataExportHttpTests
             db.Vehicles.Add(new Vehicle { Id = Guid.NewGuid(), TenantId = tenantId, VehicleName = "Van", TotalSeats = 8 });
             await db.SaveChangesAsync();
             return tenantId;
+        }
+
+        /// <summary>An organisation with the participant Ben Xavier, and a participant of another organisation. Returns the organisation, Ben, and the other one.</summary>
+        public async Task<(Guid TenantId, Guid ParticipantId, Guid OtherTenantsParticipantId)> SeedParticipantsAsync()
+        {
+            var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+            using var scope = _app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OdipDbContext>();
+            db.Tenants.AddRange(new Tenant { Id = a, Name = "Alpha Care", EmailDomain = $"{a:N}.example.com" }, new Tenant { Id = b, Name = "Bravo Care", EmailDomain = $"{b:N}.example.com" });
+            await db.SaveChangesAsync();
+            var ben = ParticipantExportTests.Plant(db, a, "Ben", "Xavier");
+            var other = ParticipantExportTests.Plant(db, b, "Cat", "Quillfeather");
+            return (a, ben.Id, other.Id);
+        }
+
+        public async Task<List<AuditLog>> ParticipantExportRowsAsync(Guid participantId)
+        {
+            using var scope = _app.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<OdipDbContext>().AuditLogs
+                .Where(a => a.EntityType == nameof(Participant) && a.EntityId == participantId && a.Action == AuditAction.Exported)
+                .ToListAsync();
         }
 
         /// <summary>Two organisations side by side, each with a row in every table reached through a parent (DataExportTestKit.Plant).</summary>

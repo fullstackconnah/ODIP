@@ -388,3 +388,22 @@ describe('TasksPage — phone card', () => {
     expect(screen.getByRole('button', { name: 'Mark complete' }).closest('td')).toHaveAttribute('data-card', 'trail')
   })
 })
+
+// Retention 2b: the nightly scan opens and closes this task itself.
+describe('TasksPage — the records due for purge task', () => {
+  it('links its title to the retention list, says Admins own it, and offers no Mark done or Edit', () => {
+    Object.assign(perms, { isAdmin: true })
+    mockUseTasks.mockReturnValue({
+      data: pagedTasks([
+        { id: 't7', title: '2 participant records are due for purge', taskType: 'RetentionPurgeDue', ownerName: null, dueDate: null, priority: 'Medium', status: 'NotStarted', linkTo: '/settings?tab=retention' },
+      ]),
+      isLoading: false,
+    })
+    renderPage()
+    expect(screen.getByText('Records due for purge')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '2 participant records are due for purge' })).toHaveAttribute('href', '/settings?tab=retention')
+    expect(screen.getByText('Admins')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mark complete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Edit|Archive/ })).not.toBeInTheDocument()
+  })
+})

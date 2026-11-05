@@ -28,11 +28,14 @@ const TASK_STATUS_ITEMS = [
 /** The Admin's review of an emergency booking over budget. Only an Admin or SuperAdmin closes it: the server forbids everyone else, so this page does not offer what it would refuse. */
 const isBudgetReview = (task: { taskType?: string }) => task.taskType === 'BudgetEmergencyReview'
 
+/** The nightly retention scan opens this task and closes it itself once nothing is due, so the page offers no Mark done and no Edit (as the dashboard does for LeaveCoverage). */
+const isRetentionPurge = (task: { taskType?: string }) => task.taskType === 'RetentionPurgeDue'
+
 export default function TasksPage() {
   const { canWrite, isAdmin, isSuperAdmin, isReadOnly } = usePermissions()
   const mayCloseBudgetReview = !!isAdmin || !!isSuperAdmin
   // The one place the rule lives: a row the user may not change gets no tick, a held status and no edit or archive.
-  const mayChange = (task: { taskType?: string }) => canWrite && (!isBudgetReview(task) || mayCloseBudgetReview)
+  const mayChange = (task: { taskType?: string }) => canWrite && !isRetentionPurge(task) && (!isBudgetReview(task) || mayCloseBudgetReview)
   // The dashboard's Overdue tile links to /tasks?status=Overdue: open on that filter (the server answers it with the dashboard's own rule).
   const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState(() => {
@@ -79,7 +82,7 @@ export default function TasksPage() {
           ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(t) }
           : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(t) },
       ]
-    : isReadOnly && !isBudgetReview(t) ? [{ label: 'View', icon: <Eye className="w-4 h-4" />, to: `/tasks/${t.id}/edit` }] : []
+    : isReadOnly && !isBudgetReview(t) && !isRetentionPurge(t) ? [{ label: 'View', icon: <Eye className="w-4 h-4" />, to: `/tasks/${t.id}/edit` }] : []
 
   const taskColumns: Column<any>[] = [
     {
@@ -179,7 +182,7 @@ export default function TasksPage() {
       ) : (t.tripName ?? '—'),
     },
     // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
-    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '7rem', mobile: 'meta', className: 'max-md:max-w-[8rem]!', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '7rem', mobile: 'meta', className: 'max-md:max-w-[8rem]!', render: (t) => t.ownerName ?? (isBudgetReview(t) || isRetentionPurge(t) ? 'Admins' : '—') },
     { key: 'taskType', header: 'Type', sortable: true, wrap: true, minWidth: '9rem', mobile: 'hidden', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
     // The cluster overlays the row's last cells on a mouse and costs no column (RowMenu, overlay), so nothing is cut at 1440; one ⋯ menu on the phone card.
     { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (t) => <RowMenu name={t.title} items={rowItems(t)} /> },
