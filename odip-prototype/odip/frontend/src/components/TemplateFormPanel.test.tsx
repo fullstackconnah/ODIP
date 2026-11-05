@@ -130,3 +130,15 @@ describe('TemplateFormPanel as a dialog', () => {
     expect(mockUpdate).toHaveBeenCalledWith({ id: 'tpl-1', data: expect.objectContaining({ eventName: 'Gold Coast Beach Break 2', isActive: false }) })
   })
 })
+
+describe('TemplateFormPanel accommodation notes disclosure', () => {
+  it('toggle reports aria-expanded and flips on click', async () => {
+    const user = userEvent.setup()
+    render(<TemplateFormPanel isOpen onClose={() => {}} />)
+    const toggle = screen.getByRole('button', { name: 'Accommodation notes' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).toBeInTheDocument()
+  })
+})

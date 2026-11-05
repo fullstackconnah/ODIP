@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import {
   useCreateEventTemplate,
   useUpdateEventTemplate,
@@ -355,21 +355,10 @@ export default function TemplateFormPanel({
 
         {/* Collapsible accommodation notes */}
         <div className={modalSpan.full}>
-          <button
-            type="button"
-            onClick={() => setAccessibilityExpanded(p => !p)}
-            className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-          >
-            {accessibilityExpanded ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-            Accommodation notes
-          </button>
+          <DisclosureToggle label="Accommodation notes" open={accessibilityExpanded} onToggle={() => setAccessibilityExpanded(p => !p)} controls="accommodation-notes-panel" />
 
           {accessibilityExpanded && (
-            <div className="mt-3 flex flex-col gap-[var(--field-gap-y)] pl-5 border-l border-[var(--color-border)]">
+            <div id="accommodation-notes-panel" className="mt-3 flex flex-col gap-[var(--field-gap-y)] pl-5 border-l border-[var(--color-border)]">
               <div>
                 <label htmlFor="fullyModifiedAccommodationNotes" className={labelClass}>Fully modified accommodation</label>
                 <textarea
