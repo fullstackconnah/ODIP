@@ -296,6 +296,12 @@ for (const vp of VPS) {
       const cell = await page.locator('[title="Sam Lee, Chief executive expires within 30 days, on 27 Nov 2026"]').first().evaluate((e) => ({ cut: e.scrollHeight - e.clientHeight, lines: Math.round(e.clientHeight / parseFloat(getComputedStyle(e).lineHeight)) }))
       check(t('tasks-page-compliance: the 30-day title is not cut and is at most 3 lines'), cell.cut <= 1 && cell.lines <= 3, cell)
     }
+    if (!vp.touch) {
+      // The table's own scroll container must not scroll sideways, and the Type cell must show its whole label.
+      const tb = await page.locator('table').first().evaluate((tbl) => { let p = tbl.parentElement; while (p && !/(auto|scroll)/.test(getComputedStyle(p).overflowX)) p = p.parentElement; const td = [...tbl.querySelectorAll('td')].find((c) => c.textContent.trim() === 'Compliance date'); return { sw: p ? p.scrollWidth : -1, cw: p ? p.clientWidth : -1, typeCut: td ? Math.max(td.scrollWidth - td.clientWidth, td.scrollHeight - td.clientHeight) : -1, typeLines: td ? Math.round(td.clientHeight / parseFloat(getComputedStyle(td).lineHeight)) : -1 } })
+      check(t('tasks-page-compliance: no horizontal scroll in the table'), tb.sw <= tb.cw, tb)
+      check(t('tasks-page-compliance: the Type cell is not truncated'), tb.typeCut <= 1, tb)
+    }
     await noHScroll(page, t('tasks-page-compliance'))
     await crop(page, page.locator('main').first(), `tasks-page-compliance-${tag}.png`, vp)
     await context.close()
