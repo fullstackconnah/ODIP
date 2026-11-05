@@ -373,7 +373,7 @@ public class CatalogueServiceDateTests
         var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
 
         Assert.Single(preview.LineItems);
-        Assert.Equal("Not claimed: this trip's Weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days.", preview.UnpricedDaysNote);
+        Assert.Equal("Not claimed: this trip's weekday days (29/06/2026 to 02/07/2026) have no catalogue rate. Import the catalogue for that period, then claim those days.", preview.UnpricedDaysNote);
     }
 
     [Fact]
