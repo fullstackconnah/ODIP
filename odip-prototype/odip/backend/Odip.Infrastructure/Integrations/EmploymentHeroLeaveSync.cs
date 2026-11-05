@@ -382,7 +382,8 @@ public sealed class EmploymentHeroLeaveSync
             var firstCreate = row.ExternalId is null;
             try
             {
-                var (hours, defaulted) = EmploymentHeroLeave.Hours(leave.StartDate, leave.EndDate, await _client.GetStandardHoursPerDayAsync(key, biz, employee, ct));
+                var (hours, defaulted) = EmploymentHeroLeave.Hours(leave.StartDate, leave.EndDate, await _client.GetStandardHoursPerDayAsync(key, biz, employee, ct),
+                    await EmploymentHeroLeave.HolidaysAsync(db, tenantId, leave.StartDate, leave.EndDate, ct));
                 if (hours == 0)
                 {
                     Flag(row, EmploymentHeroLeave.WeekendMessage);
