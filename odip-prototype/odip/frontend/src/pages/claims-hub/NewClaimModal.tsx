@@ -85,7 +85,7 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade, o
   const [opening, setOpening] = useState<string | undefined>()
 
   const waiting = useUnclaimedShifts(true)
-  // shortcut: the list shows the first 200 completed, unclaimed trips (useTrips' ceiling); add server search if a tenant reaches it.
+  // shortcut: the 200 most recent completed, unclaimed trips (useTrips' ceiling), and the hint says so; send the search to /trips?search= if a tenant keeps more waiting.
   const trips = useTrips({ status: 'Completed', unclaimed: 'true' })
   const opened = useTrip(opening)
   const cancellations = useCancellationCandidates(true)
@@ -115,7 +115,7 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade, o
     if (c === 'cancellation') return cancellations.isLoading ? null : cancellations.isError || !cancellationCount ? undefined : `${cancellationCount} waiting`
     if (c === 'manual') return undefined   // any participant can have one, so there is nothing to count
     if (c === 'shifts') return waiting.loading ? null : waiting.error ? undefined : waiting.count === 0 ? 'None waiting' : `${waiting.count} waiting`
-    return trips.isLoading ? null : trips.isError || tripCount === undefined || tripCount === 0 ? undefined : `${tripCount} waiting`
+    return trips.isLoading ? null : trips.isError || tripCount === undefined || tripCount === 0 ? undefined : `${trips.data!.totalCount} waiting`
   }
 
   const chosenTrip = trips.data?.find(t => t.id === chosen)
@@ -172,7 +172,7 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade, o
       ) : noTrips ? (
         <EmptyState size="inline" icon={MapPin} title="No completed trips are waiting" description="A trip shows here once it is Completed and has no claim." />
       ) : (
-        <FormField label="Trip">
+        <FormField label="Trip" hint={trips.data?.isTruncated ? `Showing the ${trips.data.length} most recent of ${trips.data.totalCount} completed trips. Claim an older one from its trip's Claims tab.` : undefined}>
           <Dropdown
             id={TRIP_FIELD_ID}
             variant="form"

@@ -8,9 +8,12 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
+import { useManagedClaims } from '@/api/hooks/claimHub'
 import type { BatchDto, ManagedClaimDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
+import type { TruncatableList } from '@/api/hooks/pagedList'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { formatCurrency } from '@/lib/utils'
 import { ROWS_PER_PAGE, instantDay } from './claimHubSteps'
 
@@ -47,11 +50,13 @@ export function PaidPanel({ batches, loading, failed, onRetry, onOpen }: { batch
 const FUNDING_ITEMS: DropdownItem[] = [{ value: 'plan', label: 'Plan-managed' }, { value: 'self', label: 'Self-managed' }]
 const FUNDING_LABEL = { plan: 'Plan-managed', self: 'Self-managed' } as const
 
-export function OtherPanel({ claims, loading, failed, onRetry }: { claims: ManagedClaimDto[]; loading: boolean; failed: boolean; onRetry: () => void }) {
+export function OtherPanel() {
   const navigate = useNavigate()
   const [funding, setFunding] = useState('')
   const [page, setPage] = useState(1)
-  const rows = useMemo(() => funding ? claims.filter(c => c.fundingType === funding) : claims, [claims, funding])
+  const query = useManagedClaims({ page: String(page), pageSize: String(ROWS_PER_PAGE), ...(funding ? { funding } : {}) })
+  const { data: rows = [], isLoading, isError, refetch } = query
+  const { totalCount = rows.length } = rows as Partial<TruncatableList<ManagedClaimDto>>
   const columns: Column<ManagedClaimDto>[] = [
     { key: 'claim', header: 'Claim', mobile: 'primary', render: c => <Link to={`/claims/${c.claimId}`} className="font-medium hover:underline" onClick={e => e.stopPropagation()}>{c.claimReference}</Link> },
     { key: 'participant', header: 'Participant', mobile: 'meta', render: c => c.participantName },
@@ -66,8 +71,8 @@ export function OtherPanel({ claims, loading, failed, onRetry }: { claims: Manag
       Plan- and self-managed supports aren't claimed from the NDIA. Bunya Support issues an invoice when the claim is submitted: to the plan manager, or to the participant.
     </Callout>
   )
-  if (failed) return <div data-testid="claims-panel-other"><PageState kind="error" noun="claims" onRetry={onRetry} /></div>
-  if (!loading && claims.length === 0) {
+  if (isError || retryingAfterError(query)) return <div data-testid="claims-panel-other"><PageState kind="error" noun="claims" onRetry={() => refetch()} /></div>
+  if (!isLoading && totalCount === 0 && !funding) {
     return (
       <div data-testid="claims-panel-other">
         <EmptyState icon={Receipt} title="No plan- or self-managed claims" description="Claims for plan- and self-managed participants show here with their invoice." action={{ label: 'All invoices', to: '/invoices' }} />
@@ -80,9 +85,9 @@ export function OtherPanel({ claims, loading, failed, onRetry }: { claims: Manag
       <div>
         <Dropdown variant="pill" value={funding} onChange={v => { setFunding(v); setPage(1) }} label="Both" items={FUNDING_ITEMS} colorClass={FILTER_PILL} />
       </div>
-      <DataTable data={rows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE)} columns={columns} keyField="claimId" loading={loading}
+      <DataTable data={rows} columns={columns} keyField="claimId" loading={isLoading}
         emptyMessage="No claims match. Show both funding types." onRowClick={c => navigate(`/claims/${c.claimId}`)}
-        pagination={{ page, pageSize: ROWS_PER_PAGE, totalCount: rows.length, onPageChange: setPage }} />
+        pagination={{ page, pageSize: ROWS_PER_PAGE, totalCount, onPageChange: setPage }} />
     </div>
   )
 }
