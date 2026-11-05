@@ -98,6 +98,51 @@ public class ParticipantPurgePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task A_person_shared_with_another_participant_stays_and_one_only_X_uses_goes()
+    {
+        var w = await SeedAsync();
+        var (shared, only) = (new Person { Id = Guid.NewGuid(), TenantId = w.A, FirstName = "Sam", LastName = "Shared" }, new Person { Id = Guid.NewGuid(), TenantId = w.A, FirstName = "Olive", LastName = "Only" });
+        await using (var seed = PostgresFixture.NewContext(w.Cs))
+        {
+            seed.AddRange(shared, only,
+                new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = w.A, ParticipantId = w.XId, PersonId = shared.Id, RoleType = ContactRoleType.Guardian },
+                new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = w.A, ParticipantId = w.YId, PersonId = shared.Id, RoleType = ContactRoleType.Guardian },
+                new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = w.A, ParticipantId = w.XId, PersonId = only.Id, RoleType = ContactRoleType.Guardian });
+            await seed.SaveChangesAsync();
+        }
+
+        var outcome = await Purge(w, _clock);
+
+        Assert.Equal(PurgeResult.Purged, outcome.Result);
+        var counts = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(outcome.Record!.RowCounts)!;
+        Assert.Equal(1, counts["People"]);
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.True(await db.People.AnyAsync(p => p.Id == shared.Id));
+        Assert.False(await db.People.AnyAsync(p => p.Id == only.Id));
+    }
+
+    [SkippableFact]
+    public async Task An_incident_about_X_goes_even_when_its_reporter_belongs_to_no_staff_of_the_organisation()
+    {
+        var w = await SeedAsync();
+        var strayId = Guid.NewGuid();
+        await using (var seed = PostgresFixture.NewContext(w.Cs))
+        {
+            seed.IncidentReports.Add(new IncidentReport
+            {
+                Id = strayId, TenantId = w.A, ReportedByUserId = w.OfB.Ids[UserIx], InvolvedParticipantId = w.XId, IncidentType = IncidentType.Other, OtherTypeSpecify = "x",
+                Severity = IncidentSeverity.Low, Title = "Stray", Description = "About X", IncidentDateTime = new DateTime(2018, 5, 5, 9, 0, 0, DateTimeKind.Utc),
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.False(await db.IncidentReports.AnyAsync(i => i.Id == strayId));
+    }
+
+    [SkippableFact]
     public async Task The_purge_removes_every_row_of_X_and_leaves_Y_and_the_other_organisation_untouched()
     {
         var w = await SeedAsync();

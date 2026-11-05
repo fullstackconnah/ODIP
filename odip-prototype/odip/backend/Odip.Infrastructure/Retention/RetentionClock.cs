@@ -89,6 +89,11 @@ public static class RetentionClock
             .GroupBy(c => c.ParticipantId).Select(g => new { Id = g.Key, Last = g.Max(c => c.CreatedAt) }).ToListAsync(ct))
             Push(r.Id, LocalDate(r.Last));
 
+        // Complaints about the participant are records too, so one made after the archive pushes the date out.
+        foreach (var r in await Q<Complaint>().Where(c => c.TenantId == tenantId && c.ParticipantId != null && archived.Any(a => a.Id == c.ParticipantId))
+            .GroupBy(c => c.ParticipantId).Select(g => new { Id = g.Key, Last = g.Max(c => c.CreatedAt) }).ToListAsync(ct))
+            Push(r.Id, LocalDate(r.Last));
+
         foreach (var r in await Q<Invoice>().Where(i => i.TenantId == tenantId && archived.Any(a => a.Id == i.ParticipantId))
             .GroupBy(i => i.ParticipantId).Select(g => new { Id = g.Key, Last = g.Max(i => i.IssueDate) }).ToListAsync(ct))
             Push(r.Id, r.Last);

@@ -57,8 +57,8 @@ public sealed class PurgeScope
         Completions = Q<ShiftCompletion>().Where(c => c.TenantId == t && shifts.Contains(c.ShiftId)).Select(c => c.Id);
         ShiftNotes = Q<ShiftNote>().Where(n => n.TenantId == t && shifts.Contains(n.ShiftId)).Select(n => n.Id);
         Bookings = bookings;
-        // An incident is scoped through the staff member who reported it, as the export does (its own TenantId is nullable).
-        Incidents = Q<IncidentReport>().Where(i => i.InvolvedParticipantId == x && staff.Contains(i.ReportedByUserId)).Select(i => i.Id);
+        // An incident about X is the organisation's by its own TenantId or by the staff member who reported it (the column is nullable, so older rows go by the reporter), as the clock counts every incident involving X.
+        Incidents = Q<IncidentReport>().Where(i => i.InvolvedParticipantId == x && (i.TenantId == t || staff.Contains(i.ReportedByUserId))).Select(i => i.Id);
         MedAdministrations = Q<MedicationAdministration>().Where(m => m.TenantId == t && m.ParticipantId == x).Select(m => m.Id);
         Practices = Q<RestrictivePractice>().Where(r => r.TenantId == t && r.ParticipantId == x).Select(r => r.Id);
         Claims = claims;

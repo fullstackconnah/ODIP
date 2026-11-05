@@ -144,6 +144,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        if (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
         if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
             return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
@@ -181,6 +182,7 @@ public class TasksController : ControllerBase
     {
         // Only the server raises the review of an emergency (with the shift): nobody but an Admin can make one by hand.
         if (dto.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        if (dto.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
 
         if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
@@ -232,6 +234,8 @@ public class TasksController : ControllerBase
         // The review of an emergency booking over budget is an Admin's: complete, cancel, delete or retype it only as an Admin or SuperAdmin, and neither retype it away nor retype another task into it (C2).
         var isReview = t.TaskType == TaskType.BudgetEmergencyReview || dto.TaskType == TaskType.BudgetEmergencyReview;
         if (isReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        // Likewise the records-due task is an Admin's: no Coordinator completes, cancels, deletes or retypes it, or retypes another task into it.
+        if ((t.TaskType == TaskType.RetentionPurgeDue || dto.TaskType == TaskType.RetentionPurgeDue) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
 
         // Whoever completes the review owns it, unless the request names an owner: that is how the shift panel can say who reviewed the emergency.
         var ownerId = dto.OwnerId;
@@ -263,6 +267,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<bool>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        if (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (t.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled || t.TaskType == TaskType.LeaveCoverage)
             return Conflict(ApiResponse<bool>.Fail("Task is already closed or cannot be marked done here."));
 
@@ -282,6 +287,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<bool>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        if (t.TaskType == TaskType.RetentionPurgeDue && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         t.Status = TaskItemStatus.Cancelled; t.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));

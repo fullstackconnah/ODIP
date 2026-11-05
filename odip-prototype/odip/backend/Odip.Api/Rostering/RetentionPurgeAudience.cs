@@ -9,4 +9,7 @@ namespace Odip.Api.Rostering;
 public static class RetentionPurgeAudience
 {
     public static bool MaySee(ClaimsPrincipal? user) => user?.IsInRole("Admin") == true;
+
+    /// <summary>An Admin or SuperAdmin: the only roles that may change the task (a Coordinator cannot tick it off or retype it).</summary>
+    public static bool MayAct(ClaimsPrincipal? user) => user?.IsInRole("Admin") == true || user?.IsInRole("SuperAdmin") == true;
 }

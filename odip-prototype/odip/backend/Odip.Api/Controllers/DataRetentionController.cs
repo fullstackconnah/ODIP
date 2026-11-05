@@ -63,6 +63,7 @@ public class DataRetentionController : ControllerBase
             {
                 ParticipantId = p.Id, FirstName = p.FirstName, LastName = p.LastName, StartsOn = starts[p.Id],
                 StartEstimated = p.RetentionStartEstimated && p.RetentionStartsOn == starts[p.Id], DueOn = RetentionClock.DueOn(starts[p.Id]),
+                // shortcut: counts every participant's purge plan on each GET, fine below about 150 participants (the largest org today); page or cache past that.
                 RowCounts = await PurgePlan.CountAsync(_db, tenantId, p.Id, ct),
             });
         }

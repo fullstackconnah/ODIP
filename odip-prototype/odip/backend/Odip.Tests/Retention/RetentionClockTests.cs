@@ -151,6 +151,20 @@ public class RetentionClockTests
     }
 
     [Fact]
+    public async Task A_complaint_made_after_the_archive_pushes_the_start_out()
+    {
+        var (db, tenantId, clock) = Rig();
+        var p = Archive(db, tenantId, Archived);
+        db.Complaints.Add(new Complaint { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, ReceivedOn = new DateOnly(2025, 3, 1), Summary = "Late call", CreatedAt = new DateTime(2025, 3, 1, 1, 0, 0, DateTimeKind.Utc) });
+        db.SaveChanges();
+
+        var status = (await Status(db, tenantId, p, clock))!;
+
+        Assert.Equal(new DateOnly(2025, 3, 1), status.Start);
+        Assert.False(status.Due);
+    }
+
+    [Fact]
     public async Task A_later_trip_end_through_a_booking_and_a_later_incident_push_the_start_out()
     {
         var (db, tenantId, clock) = Rig();
