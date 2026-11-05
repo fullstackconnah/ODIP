@@ -66,7 +66,9 @@ export default function DataRetentionTab() {
     },
     { key: 'dueOn', header: 'Due for purge', mobile: 'meta', render: (r) => formatDateAu(r.dueOn) },
     {
-      key: 'rowCounts', header: 'Records', mobile: 'meta',
+      key: 'rowCounts', header: 'Records', mobile: 'meta', wrap: true,
+      // The card's meta cap and ellipsis would cut the kinds line; this cell takes the card's width and wraps.
+      className: 'max-md:!max-w-none max-md:[&>span]:!whitespace-normal max-md:[&>span]:![overflow:visible]',
       render: (r) => {
         const kinds = retentionKinds(r.rowCounts)
         return (
@@ -78,7 +80,7 @@ export default function DataRetentionTab() {
       },
     },
     {
-      key: 'actions', header: '', srHeader: 'Actions', mobile: 'trail',
+      key: 'actions', header: '', srHeader: 'Actions',
       render: (r) => {
         const name = `${r.firstName} ${r.lastName}`
         const thisOne = busyId === r.participantId

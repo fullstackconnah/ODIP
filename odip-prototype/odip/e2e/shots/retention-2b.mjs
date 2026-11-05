@@ -27,7 +27,7 @@ const check = (name, ctx, measured, pass) => {
 const safe = async (name, ctx, fn) => { try { await fn() } catch (e) { check(`${name} (script error)`, ctx, String(e.message).split('\n')[0], false) } }
 
 const ZOE = { participantId: 'ret-zoe-campbell', firstName: 'Zoe', lastName: 'Campbell', startsOn: '2018-11-06', startEstimated: false, dueOn: '2025-11-06', rowCounts: { Shifts: 820, ShiftNotes: 310, ClaimLineItems: 60, Invoices: 3, ParticipantNotes: 2, Participants: 1 } }
-const MARGARET = { participantId: 'ret-margaret-doyle', firstName: 'Margaret', lastName: 'Doyle', startsOn: '2019-09-06', startEstimated: true, dueOn: '2026-09-06', rowCounts: { Shifts: 22, ShiftNotes: 8, ParticipantNotes: 4, Participants: 1 } }
+const MARGARET = { participantId: 'ret-margaret-doyle', firstName: 'Margaret', lastName: 'Doyle', startsOn: '2019-09-06', startEstimated: true, dueOn: '2026-09-06', rowCounts: { Shifts: 22, ShiftNotes: 8, ParticipantNotes: 4, Participants: 1, ParticipantConsents: 1, FundingPlans: 1, Invoices: 1, ParticipantBookings: 1, ShiftBreaks: 1 } }
 const DUE_API = '**/api/v1/data-retention/due'
 const purgeApi = (id) => `**/api/v1/data-retention/${id}/purge`
 
@@ -56,6 +56,31 @@ const section = (page) => page.locator('section[aria-labelledby="data-retention-
 const dialog = (page) => page.getByRole('alertdialog')
 const confirmBtn = (page) => dialog(page).getByRole('button', { name: 'Purge record' })
 const box = (loc) => loc.boundingBox()
+// Fix round 1: at 390 no trail button covers a card's due date or records line and the card is not clipped; at 1280 the table and its records cell are not clipped.
+async function listFitChecks(page, ctx, touch) {
+  const m = await page.evaluate((isTouch) => {
+    const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+    const wrap = document.querySelector('section[aria-labelledby="data-retention-heading"] table')?.parentElement
+    const rows = [...document.querySelectorAll('section[aria-labelledby="data-retention-heading"] tbody tr')]
+    const clipped = (el) => el.scrollWidth > el.clientWidth + 1
+    const out = { rows: rows.length, overlaps: 0, clippedCells: 0, wrapClipped: wrap ? clipped(wrap) : null, tableWider: null }
+    const table = document.querySelector('section[aria-labelledby="data-retention-heading"] table')
+    if (table && wrap) out.tableWider = table.scrollWidth - wrap.clientWidth
+    for (const tr of rows) {
+      const cells = [...tr.children]
+      const btns = [...tr.querySelectorAll('button')].map((b) => b.getBoundingClientRect())
+      for (const c of cells) {
+        if (c.querySelector('button')) continue
+        const r = c.getBoundingClientRect()
+        if (isTouch && btns.some((b) => hit(r, b))) out.overlaps++
+        if (clipped(c) || [...c.querySelectorAll('span')].some(clipped)) { out.clippedCells++; out.clippedText = (out.clippedText || '') + c.innerText.slice(0, 40) + '|' }
+      }
+    }
+    return out
+  }, touch)
+  if (touch) check('R1 no trail button over the due date or records line, none clipped', ctx, m, m.rows >= 2 && m.overlaps === 0 && m.clippedCells === 0 && m.wrapClipped === false)
+  else check('R2 table fits the column and the records cell is not clipped', ctx, m, m.rows >= 2 && m.wrapClipped === false && m.tableWider <= 0 && m.clippedCells === 0)
+}
 async function openDialog(page, name = "Purge Zoe Campbell's record") {
   await page.getByRole('button', { name }).click()
   await dialog(page).waitFor({ timeout: 30_000 })
@@ -92,6 +117,7 @@ for (const [width, height, touch] of [[1280, 800, false], [390, 844, true]]) {
         const footnote = await page.locator('#retention-estimated-note').count()
         check('7 Estimated badges equal the estimated rows (1)', ctx, { badges, footnote }, badges === 1 && footnote === 1)
         check('5 no horizontal scroll on the tab', ctx, await overflow(page), (await overflow(page)) <= 0)
+        await listFitChecks(page, ctx, touch)
         if (touch) {
           const buttons = page.locator('section[aria-labelledby="data-retention-heading"]').getByRole('button')
           const sizes = await buttons.evaluateAll((els) => els.map((e) => { const b = e.getBoundingClientRect(); return [e.getAttribute('aria-label') ?? e.textContent.trim(), Math.round(b.width), Math.round(b.height)] }))
@@ -247,7 +273,15 @@ for (const [width, height, touch] of [[1280, 800, false], [390, 844, true]]) {
     const link = page.getByText('2 participant records are due for purge').first()
     await link.waitFor({ timeout: 60_000 })
     const row = link.locator('xpath=ancestor::*[self::tr or self::li or self::article][1]')
-    await crop(page, (await row.count()) ? row : link, `tasks-row-${w}.png`, touch)
+    const target = (await row.count()) ? row : link
+    await target.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+    await crop(page, target, `tasks-row-${w}.png`, touch, { hideChrome: true, pad: 24 })
+    const cellsIn = await target.evaluate((el) => {
+      const r = el.getBoundingClientRect(); const vh = innerHeight
+      const txt = el.innerText
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), vh, hasType: /Retention|Purge|purge/.test(txt), text: txt.replace(/ +/g, ' ').slice(0, 160) }
+    })
+    check('E1 tasks row shows Owner and Due (Type too at 1280) and its crop holds', ctx, cellsIn, cellsIn.text.includes('Admins') && (touch ? cellsIn.text.includes('Due') : cellsIn.hasType))
     await context.close()
   })
 }

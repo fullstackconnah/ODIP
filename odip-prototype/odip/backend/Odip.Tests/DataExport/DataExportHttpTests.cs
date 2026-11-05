@@ -318,6 +318,17 @@ public class DataExportHttpTests
     }
 
     [Fact]
+    public async Task A_superadmin_who_chose_an_organisation_may_download_one_of_its_participants()
+    {
+        await using var host = await Host.StartAsync();
+        var (tenantId, participantId, _) = await host.SeedParticipantsAsync();
+
+        using var response = await host.GetAsync($"/api/v1/data-export/participants/{participantId}", "SuperAdmin", tenantClaim: null, viewAs: tenantId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task A_superadmin_who_chose_an_organisation_gets_only_its_rows_whatever_tenant_their_token_names()
     {
         await using var host = await Host.StartAsync();
