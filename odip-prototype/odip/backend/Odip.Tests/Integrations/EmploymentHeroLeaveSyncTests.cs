@@ -60,12 +60,12 @@ public class EmploymentHeroLeaveSyncTests
     }
 
 
-    private static async Task<decimal?> SentHoursWithHolidayAsync(string? providerState, string? holidayState, TimeOnly? from = null)
+    private static async Task<decimal?> SentHoursWithHolidayAsync(string? providerState, string? holidayState, TimeOnly? from = null, int dayOffset = 2)
     {
         var (db, tenant, _, clock, worker, monday) = await OrgAsync();
         await using var _ = db;
         (await db.ProviderSettings.SingleAsync(p => p.TenantId == tenant)).State = providerState!;
-        db.PublicHolidayOverrides.Add(new PublicHolidayOverride { Id = Guid.NewGuid(), Date = monday.AddDays(2), State = holidayState, Name = "Test holiday", StartTime = from, Source = "test" });
+        db.PublicHolidayOverrides.Add(new PublicHolidayOverride { Id = Guid.NewGuid(), Date = monday.AddDays(dayOffset), State = holidayState, Name = "Test holiday", StartTime = from, Source = "test" });
         await db.SaveChangesAsync();
         await ApprovedLeaveAsync(db, tenant, worker, monday, monday.AddDays(4));
         await Sync(Eh(7.2m), clock).RunAsync(db, tenant, false, default);
@@ -74,7 +74,7 @@ public class EmploymentHeroLeaveSyncTests
 
     [Fact]
     public async Task A_public_holiday_of_the_providers_state_is_not_counted_in_the_hours() =>
-        Assert.Equal(28.8m, await SentHoursWithHolidayAsync("NSW", "NSW"));
+        Assert.Equal(28.8m, await SentHoursWithHolidayAsync("NSW", "NSW", dayOffset: 4));   // on the last leave day, so the inclusive end counts
 
     [Fact]
     public async Task A_national_holiday_is_not_counted() => Assert.Equal(28.8m, await SentHoursWithHolidayAsync("NSW", null));
@@ -86,7 +86,7 @@ public class EmploymentHeroLeaveSyncTests
     public async Task A_part_day_holiday_is_still_counted_as_a_full_day() => Assert.Equal(36.0m, await SentHoursWithHolidayAsync("NSW", "NSW", new TimeOnly(19, 0)));
 
     [Fact]
-    public async Task A_provider_with_no_state_counts_every_weekday() => Assert.Equal(36.0m, await SentHoursWithHolidayAsync("", "NSW"));
+    public async Task A_provider_with_no_state_skips_the_VIC_holidays() => Assert.Equal(28.8m, await SentHoursWithHolidayAsync("", "VIC"));
     [Fact]
     public async Task A_pending_answer_is_approved_once()
     {

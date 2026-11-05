@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Integrations;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -44,15 +45,15 @@ public static class EmploymentHeroLeave
             && MarkerPattern.Match(notes) is { Success: true } m && Guid.TryParse(m.Groups[1].Value, out leaveId);
     }
 
-    /// <summary>The whole-day public holidays of the provider's state in the range, read the way the roster and claims read them. No state set: none, so every weekday counts.</summary>
+    /// <summary>The whole-day public holidays of the provider's state in the range, read the way the roster and claims read them. No state set: VIC, as they do.</summary>
     public static async Task<IReadOnlySet<DateOnly>> HolidaysAsync(OdipDbContext db, Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var state = await db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
-        if (string.IsNullOrWhiteSpace(state)) return new HashSet<DateOnly>();   // the roster would assume VIC here; payroll hours stay Mon-Fri rather than guess
+        var providerState = await db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
+        var state = ClaimPricing.StateFor(null, providerState);
         return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(db, from, to, includePartDay: false, ct)).For(state).ToHashSet();
     }
 
-    // shortcut: Mon-Fri minus the state's whole-day public holidays (a part-day holiday still counts as a full day); EH's leaverequest/estimate is not used, move to it if payroll asks (Open gap 1).
+    // shortcut: Mon-Fri minus the state's whole-day public holidays (a part-day holiday still counts as a full day); EH's leaverequest/estimate is not used, move to it if payroll asks (Open gap 1); holidays follow the provider's state, not each employee's work location.
     public static (decimal Hours, bool Defaulted) Hours(DateOnly from, DateOnly to, decimal? perDay, IReadOnlySet<DateOnly>? holidays = null)
     {
         var days = 0;
