@@ -64,7 +64,13 @@ describe('DataRetentionTab list', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Due for purge' })).toBeInTheDocument()
     expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Participant', 'Retention starts', 'Due for purge', 'Records', 'Actions'])
     expect(screen.getByText('1,204 records')).toBeInTheDocument()
-    expect(screen.getByText('Shifts 820 · Shift notes 310 · Claim lines 60')).toBeInTheDocument()
+    const kindsLine = screen.getByText('Shift notes 310').parentElement!
+    expect(kindsLine).toHaveTextContent('Shifts 820 · Shift notes 310 · Claim lines 60')
+    // Each item stays on one line; the line wraps only at the separators.
+    expect(screen.getByText('Shift notes 310')).toHaveClass('whitespace-nowrap')
+    // The phone card has no caps labels on meta values, so the dates carry their own (hidden from md up, where the header labels them).
+    expect(screen.getAllByText('Starts')[0]).toHaveClass('md:hidden')
+    expect(screen.getAllByText('Due')[0]).toHaveClass('md:hidden')
     expect(screen.getByText('1 record')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: "Download Zoe Campbell's data" })).toHaveTextContent('Download their data')
     expect(screen.getByRole('button', { name: "Purge Zoe Campbell's record" })).toHaveTextContent('Purge')
