@@ -547,7 +547,7 @@ public enum AuditAction
     Created,
     Updated,
     Deleted,
-    /// <summary>The organisation's full data export was downloaded: EntityType "Tenant", EntityId the organisation, no Changes. Stored as its name.</summary>
+    /// <summary>A download of the organisation's data. EntityType "Tenant" = the full export (EntityId the organisation, no Changes); EntityType "Register" = one register CSV (EntityId the organisation, Changes names the register, the range and the row count). Stored as its name.</summary>
     Exported
 }
 

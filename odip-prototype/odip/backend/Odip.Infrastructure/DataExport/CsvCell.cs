@@ -21,6 +21,9 @@ public static class CsvCell
     public static string Quote(string value) =>
         value.IndexOfAny(NeedsQuotes) < 0 ? value : "\"" + value.Replace("\"", "\"\"") + "\"";
 
+    // Same rule as the frontend src/lib/csv.ts: a formula character after leading whitespace, or a leading tab or CR.
+    private static readonly Regex Formula = new(@"^\s*[=+\-@]|^[\t\r]");
+
     public static string Text(string value) =>
-        Quote(value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r' && !PhoneNumber.IsMatch(value) ? "'" + value : value);
+        Quote(Formula.IsMatch(value) && !PhoneNumber.IsMatch(value.TrimStart(' ')) ? "'" + value : value);
 }
