@@ -6,10 +6,10 @@ import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import type { MedicationListDto } from '@/api/types/medications'
 
 const {
-  mockProviderSettings, mockUseRestrictivePractices, mockUseParticipantMedications,
+  mockProviderToday, mockUseRestrictivePractices, mockUseParticipantMedications,
   mockUpdateMutateAsync, mockDeleteMutateAsync, mockBulkCreateMutateAsync,
 } = vi.hoisted(() => ({
-  mockProviderSettings: vi.fn(() => ({ data: undefined as unknown })),
+  mockProviderToday: vi.fn(() => ({ data: undefined as unknown })),
   mockUseRestrictivePractices: vi.fn(() => ({ data: [] as RestrictivePracticeDto[], isLoading: false })),
   mockUseParticipantMedications: vi.fn(() => ({ data: [] as MedicationListDto[], isLoading: false })),
   mockUpdateMutateAsync: vi.fn(),
@@ -21,7 +21,7 @@ const {
 // are the real components, so this exercises the actual add/edit/delete/bulk-add wiring (same
 // approach as RoutinesTab.test.tsx).
 vi.mock('@/api/hooks', () => ({
-  useProviderSettings: mockProviderSettings,
+  useProviderTodayQuery: mockProviderToday,
   useRestrictivePractices: mockUseRestrictivePractices,
   useParticipantMedications: mockUseParticipantMedications,
   useUpdateRestrictivePractice: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
@@ -1121,13 +1121,13 @@ describe('RestrictivePracticesTab edit modal: use kind, end date and plan dates'
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-05T14:30:00Z'))
     try {
-      mockProviderSettings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney', state: 'NSW' } })
+      mockProviderToday.mockReturnValue({ data: { date: '2026-11-06' } })
       const user = await openEdit({ ...authorised })
       await user.type(screen.getByLabelText('First used on'), '2026-11-06')
       await user.click(screen.getByRole('button', { name: /save entry/i }))
       await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled())
       expect(screen.queryByText("The first use date can't be in the future")).not.toBeInTheDocument()
-    } finally { vi.useRealTimers(); mockProviderSettings.mockReturnValue({ data: undefined }) }
+    } finally { vi.useRealTimers(); mockProviderToday.mockReturnValue({ data: undefined }) }
   })
 
   it('offers the earliest use on record and fills it on tap', async () => {
