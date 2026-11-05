@@ -306,7 +306,13 @@ for (const vp of VPS) {
     const { context, page } = await openPage(browser, vp)
     await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     const subject = page.getByText('Public liability insurance expired on 3 Nov 2026').first()
-    await subject.waitFor({ state: 'visible', timeout: 60_000 })
+    // The decision groups are tabs: open the Tasks one if it is not the one showing.
+    if (!(await subject.isVisible().catch(() => false))) {
+      await page.getByRole('tab', { name: /^Tasks/ }).first().click({ timeout: 20_000 }).catch(() => {})
+    }
+    await subject.waitFor({ state: 'visible', timeout: 30_000 }).catch(async (e) => {
+      throw new Error(e.message.split('\n')[0] + ' | main: ' + (await page.locator('main').first().innerText().catch(() => 'no main')).replace(/\s+/g, ' ').slice(0, 300))
+    })
     await page.waitForTimeout(400)
     const row = subject.locator('xpath=ancestor::*[self::li or self::tr or self::article or self::div][contains(., "Compliance date")][1]')
     check(t('dashboard-tasks-compliance: the row reads Compliance date, with the title'), (await row.count()) > 0 && (await row.first().innerText()).includes('Compliance date'))
