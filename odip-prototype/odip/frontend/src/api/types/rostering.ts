@@ -284,6 +284,11 @@ export interface ShiftCompletionDto {
   anythingToReport: boolean | null
   /** The worker sent a time recorded offline (a start, finish or break time from their phone). */
   sentFromOffline: boolean
+  /** Finish later: the deferrable answers still missing, from `ShiftDetailsRules` (kilometres, tripTo, tripAfter, notes, handover, report). Empty for a shift finished the usual way. */
+  missingDetails: string[]
+  /** "No trip" ticked for the leg before or after the shift: the leg is answered with nothing. */
+  preTravelNone: boolean
+  postTravelNone: boolean
 }
 
 /**
@@ -353,6 +358,8 @@ export interface CompletionQueueItemDto {
   extraTime?: ExtraTimeDecision | null
   /** Active incidents linked to the shift: the ones the review lists. A row is one-tap only when this is exactly 0 (dashboard). */
   incidentCount: number
+  /** Finish later: the deferrable answers still missing, from `ShiftDetailsRules` (kilometres, tripTo, tripAfter, notes, handover, report). Empty for a shift finished the usual way. */
+  missingDetails: string[]
 }
 
 /** POST rostering/shifts/{id}/completion/return body — reason is required server-side (400

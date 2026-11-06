@@ -11,7 +11,7 @@ vi.mock('@/api/client', async importOriginal => ({ ...(await importOriginal<type
 
 const shift = (id: string, serviceDate: string, over: Partial<PortalShiftSummaryDto> = {}): PortalShiftSummaryDto => ({
   id, participantId: 'p1', participantName: 'Mia Chen', serviceDate, startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
-  durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0, ...over,
+  durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0, missingDetails: [], ...over,
 })
 
 let shifts: PortalShiftSummaryDto[] = []
