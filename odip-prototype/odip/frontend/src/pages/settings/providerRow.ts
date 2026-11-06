@@ -75,6 +75,7 @@ export function useProviderRow<F extends Record<string, string | boolean | numbe
     const body: Partial<ProviderSettingsDto> = { ...row }
     delete body.participantReadinessMode
     delete body.medicationCompetencyMode
+    delete body.onboardingItemModes   // sent only by the Onboarding checklist section, when a pick changed
     delete body.employmentHeroConnected   // computed by the server on GET; never written
     delete body.updatedAt   // the version goes back as expectedUpdatedAt
     delete body.nextInvoiceDisplayNumber   // likewise (Xero PR1)

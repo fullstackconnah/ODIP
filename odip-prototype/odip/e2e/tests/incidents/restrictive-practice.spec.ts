@@ -22,8 +22,6 @@ async function toRpStep(page: Page, title: string, participantName: string) {
   await page.getByRole('option', { name: /Restrictive Practice Use/i }).click();
   await page.getByRole('radio', { name: '2 Medium' }).click();
   await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByLabel(/Restrictive Practice Type/).click();
-  await page.getByRole('option', { name: /^Physical restraint/ }).click();
   await expect(page.getByRole('radiogroup', { name: 'Which practice was used?' })).toBeVisible();
 }
 
@@ -53,6 +51,8 @@ test('a coordinator sees which practices are authorised, adds a "None of these" 
   await desk('rp-step-locked');
 
   await page.getByRole('radio', { name: /None of these — the practice used is not on this participant's register/ }).check();
+  await page.getByLabel(/Restrictive Practice Type/).click();
+  await page.getByRole('option', { name: /^Physical restraint/ }).click();
   await page.getByLabel(/Describe the restrictive practice that was used/).fill('Held both arms at the kerb to stop him running onto the road.');
   await page.getByRole('button', { name: 'Add to restrictive practice register' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add to restrictive practice register — Physical restraint' });
@@ -130,6 +130,8 @@ test('a coordinator sees which practices are authorised, adds a "None of these" 
   await narrow('rp-step-badges');
   await narrow('rp-step-locked', phone.getByRole('checkbox', { name: 'This use was not authorised' }));
   await phone.getByRole('radio', { name: /None of these/ }).check();
+  await phone.getByLabel(/Restrictive Practice Type/).click();
+  await phone.getByRole('option', { name: /^Physical restraint/ }).click();
   await phone.getByLabel(/Describe the restrictive practice that was used/).fill('Blocked the doorway with a chair.');
   await phone.getByRole('button', { name: 'Add to restrictive practice register' }).click();
   await expect(phone.getByRole('dialog', { name: /Add to restrictive practice register/ })).toBeVisible();

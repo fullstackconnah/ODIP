@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { useQuickAdd } from '@/hooks/useQuickAdd'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import AddContactRoleForm from '@/components/contacts/AddContactRoleForm'
@@ -68,6 +69,8 @@ export default function ContactsTab({ participantId, participant }: { participan
   function openCreate() {
     setModalState({ mode: 'create' })
   }
+  const addRef = useRef<HTMLButtonElement>(null)
+  useQuickAdd(openCreate, { enabled: canWrite && !!participantId, focusRef: addRef })
 
   function openEdit(role: ParticipantContactRoleDto) {
     setModalState({ mode: 'edit', role })
@@ -150,7 +153,7 @@ export default function ContactsTab({ participantId, participant }: { participan
           <Contact2 className="w-4 h-4" /> Contacts
         </h2>
         {canWrite && participantId && (
-          <Button onClick={openCreate}>
+          <Button ref={addRef} onClick={openCreate}>
             <Plus className="w-4 h-4" /> Add contact
           </Button>
         )}

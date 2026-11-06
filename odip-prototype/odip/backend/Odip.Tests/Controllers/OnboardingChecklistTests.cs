@@ -432,4 +432,124 @@ public class OnboardingChecklistTests
         Assert.DoesNotContain(ParticipantReadiness.OnboardingProfileNotComplete, issues);
         Assert.DoesNotContain(ParticipantReadiness.OnboardingServiceTypeNotComplete, issues);
     }
+
+    // --- Optional items (owner 2026-11-06): an organisation setting; optional items are listed, never counted and never block. ---
+
+    private static void Modes(OdipDbContext db, Guid tenant, string? json) =>
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenant, RegistrationNumber = "R", ABN = "12345678901", OrganisationName = "Org", Address = "1 St", OnboardingItemModes = json });
+
+    private static void Plan(OdipDbContext db, Guid tenant, Participant p, DateOnly end) =>
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = p.Id, PlanStart = new DateOnly(2025, 7, 1), PlanEnd = end });
+
+    private static Participant NonNdis(OdipDbContext db) => InOnboarding(db, x => { x.FundingSource = ParticipantFundingSource.Other; x.NdisNumber = null; });
+
+    [Fact]
+    public async Task WithNothingStored_NoItemIsOptional()
+    {
+        using var db = Db();
+        var p = InOnboarding(db);
+
+        Assert.All((await Checklist(db, p)).Items, i => Assert.False(i.Optional));
+    }
+
+    [Fact]
+    public async Task ComplaintsAndRightsOptional_AreFlagged_AndLeftOutOfIsReadyAndTheWorklistCounts()
+    {
+        using var db = Db();
+        Modes(db, Tenant, """{"complaints":"Optional","rights":"Optional","myProvider":"Required","budget":"Off"}""");
+        var p = InOnboarding(db);
+        ValidDraft(db, p);
+        Plan(db, Tenant, p, new DateOnly(2027, 6, 30));
+        db.SaveChanges();
+        Ok(await Controller(db).RecordAgreement(p.Id, new RecordOnboardingAgreementDto { NoAgreementReason = "Not practicable" }, CancellationToken.None));
+
+        var d = await Checklist(db, p);
+
+        Assert.True(d.IsReady);
+        Assert.Equal([false, false, false, true, true, false], d.Items.Select(i => i.Optional));
+        Assert.Equal([false, false], d.Items.Where(i => i.Optional).Select(i => i.Done));
+        var row = Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None)).Single();
+        Assert.Equal((4, 4, (string?)null), (row.CompletedSteps, row.TotalSteps, row.FirstMissing));
+    }
+
+    [Fact]
+    public async Task MyProviderOptional_FirstMissingSkipsIt_AndTheCountsLeaveItOut()
+    {
+        using var db = Db();
+        Modes(db, Tenant, """{"myProvider":"Optional"}""");
+        var p = InOnboarding(db, x => x.PlanType = PlanType.AgencyManaged);
+        ValidDraft(db, p);
+        Plan(db, Tenant, p, new DateOnly(2027, 6, 30));
+        db.SaveChanges();
+        Ok(await Controller(db).RecordAgreement(p.Id, new RecordOnboardingAgreementDto { NoAgreementReason = "Not practicable" }, CancellationToken.None));
+        Ok(await Controller(db).RecordExplained(p.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = new DateOnly(2026, 10, 3), RightsExplainedOn = new DateOnly(2026, 10, 3) }, CancellationToken.None));
+
+        var d = await Checklist(db, p);
+
+        Assert.True(d.IsReady);
+        Assert.Equal(("myProvider", true, false), (d.Items[^1].Key, d.Items[^1].Optional, d.Items[^1].Done));
+        var row = Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None)).Single();
+        Assert.Equal((6, 6, (string?)null), (row.CompletedSteps, row.TotalSteps, row.FirstMissing));
+    }
+
+    [Fact]
+    public async Task BudgetOptional_ForANonNdisParticipant_IsDoneOnlyOnACurrentPlan_NeverAnEndedOneOrAnotherTenantsOrNoPlan()
+    {
+        using var db = Db();
+        Modes(db, Tenant, """{"budget":"Optional"}""");
+        var none = NonNdis(db);
+        var ended = NonNdis(db);
+        var endsToday = NonNdis(db);
+        var strangerPlan = NonNdis(db);
+        Plan(db, Tenant, ended, new DateOnly(2026, 10, 12));      // the provider's today is 2026-10-13
+        Plan(db, Tenant, endsToday, new DateOnly(2026, 10, 13));
+        Plan(db, Guid.NewGuid(), strangerPlan, new DateOnly(2027, 6, 30));
+        db.SaveChanges();
+
+        foreach (var (p, done) in new[] { (none, false), (ended, false), (endsToday, true), (strangerPlan, false) })
+        {
+            var item = (await Checklist(db, p)).Items[^1];
+            Assert.Equal(("budget", "Plan budget added", true, done), (item.Key, item.Label, item.Optional, item.Done));
+        }
+        Assert.Equal("No current plan budget recorded.", (await Checklist(db, none)).Items[^1].Missing);
+        Assert.All(Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None)), r => Assert.Equal(5, r.TotalSteps));
+    }
+
+    [Fact]
+    public async Task Budget_IsHiddenForAnNdisParticipant_BecauseFundingIsThere_AndOffIsAbsentForEveryone()
+    {
+        using var db = Db();
+        Modes(db, Tenant, """{"budget":"Optional"}""");
+        var ndis = InOnboarding(db);
+        var other = NonNdis(db);
+
+        Assert.DoesNotContain("budget", (await Checklist(db, ndis)).Items.Select(i => i.Key));
+        Assert.Contains("budget", (await Checklist(db, other)).Items.Select(i => i.Key));
+
+        using var off = Db();
+        Assert.DoesNotContain("budget", (await Checklist(off, NonNdis(off))).Items.Select(i => i.Key));
+    }
+
+    [Fact]
+    public async Task TheModesAreTheParticipantsOwnTenants()
+    {
+        using var db = Db();
+        Modes(db, Guid.NewGuid(), """{"complaints":"Optional","rights":"Optional","myProvider":"Optional","budget":"Optional"}""");
+        var p = InOnboarding(db, x => x.PlanType = PlanType.AgencyManaged);
+
+        Assert.All((await Checklist(db, p)).Items, i => Assert.False(i.Optional));
+        Assert.Equal(7, Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None)).Single().TotalSteps);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"agreement":"Optional","complaints":"Off","rights":"maybe"}""")]
+    public async Task AStoredBadValueOrUnknownKey_IsIgnored_SoTheDefaultsApply(string stored)
+    {
+        using var db = Db();
+        Modes(db, Tenant, stored);
+        var p = InOnboarding(db);
+
+        Assert.All((await Checklist(db, p)).Items, i => Assert.False(i.Optional));
+    }
 }

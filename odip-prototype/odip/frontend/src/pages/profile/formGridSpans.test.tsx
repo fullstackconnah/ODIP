@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -126,7 +126,7 @@ function StepHarness({ step, editable = false }: { step: StepName; editable?: bo
   const participant = { firstName: 'Alexandra', lastName: 'Citizen-Smith', overnightSupport: 'Sleepover', overnightRatio: '1:1', supportRatio: '1:2' } as unknown as ParticipantDetailDto
   switch (step) {
     case 'keyIdentifiers':
-      return <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable={editable} />
+      return <MemoryRouter><KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable={editable} /></MemoryRouter>
     case 'behaviourCognition':
       return <BehaviourCognitionStep control={control} register={register} participant={participant} sharedFieldsEditable={editable} />
     case 'culturalDepth':

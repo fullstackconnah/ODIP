@@ -274,6 +274,7 @@ public class TenantsController : ControllerBase
             State = ps.State, TimeZoneId = ps.TimeZoneId,
             TradingName = ps.TradingName, ContactEmail = ps.ContactEmail, ContactPhone = ps.ContactPhone, Website = ps.Website, ParticipantReadinessMode = ps.ParticipantReadinessMode,
             MedicationCompetencyMode = ps.MedicationCompetencyMode,
+            OnboardingItemModes = OnboardingItemModeRules.Effective(ps.OnboardingItemModes),
             InvoiceNumberPrefix = ps.InvoiceNumberPrefix, CreditNotePrefix = ps.CreditNotePrefix,
             InvoiceStartNumber = ps.InvoiceStartNumber, PaymentTermsDays = ps.PaymentTermsDays,
             NextInvoiceDisplayNumber = next, InvoicesIssued = issued,
