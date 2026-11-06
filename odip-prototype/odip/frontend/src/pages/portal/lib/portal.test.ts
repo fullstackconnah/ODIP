@@ -17,6 +17,8 @@ describe('the list rules', () => {
     expect(portalStatusLabel(shift({ returnCount: 2 }))).toBe('Returned')
     expect(portalStatusLabel(shift({ status: 'PendingReview' }))).toBe('Submitted')
     expect(portalStatusLabel(shift({ status: 'Completed' }))).toBe('Approved')
+    expect(portalStatusLabel({ ...shift({ status: 'PendingReview' }), missingDetails: ['kilometres'] })).toBe('Needs details')
+    expect(portalStatusLabel({ ...shift({ status: 'PendingReview' }), missingDetails: [] })).toBe('Submitted')
     expect(portalStatusLabel(shift({ status: 'InProgress' }))).toBe('In progress')
   })
   it('ends a Rostered shift at its end time, an overnight one the next day, and never one in progress', () => {

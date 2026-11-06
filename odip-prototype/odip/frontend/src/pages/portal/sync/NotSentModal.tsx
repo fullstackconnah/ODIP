@@ -7,8 +7,8 @@ import { useQueueRecords } from '@/api/hooks/portal'
 import { offlineQueue, type QueueRecord } from '@/lib/offline/queue'
 import { clockTime, reasonFor, recordedLine } from '@/lib/offline/reasons'
 
-const KIND: Record<QueueRecord['kind'], string> = { start: 'Start', note: 'Note', breakStart: 'Break', breakEnd: 'Break', tick: 'Check', untick: 'Check', ack: 'Handover read', finish: 'Finish' }
-const NOUN: Record<QueueRecord['kind'], string> = { start: 'start', note: 'note', breakStart: 'break', breakEnd: 'break', tick: 'check', untick: 'check', ack: 'handover read', finish: 'Finish' }
+const KIND: Record<QueueRecord['kind'], string> = { start: 'Start', note: 'Note', breakStart: 'Break', breakEnd: 'Break', tick: 'Check', untick: 'Check', ack: 'Handover read', finish: 'Finish', details: 'Details' }
+const NOUN: Record<QueueRecord['kind'], string> = { start: 'start', note: 'note', breakStart: 'break', breakEnd: 'break', tick: 'check', untick: 'check', ack: 'handover read', finish: 'Finish', details: 'details' }
 
 const dayLabel = (serviceDate: string) =>
   new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${serviceDate.slice(0, 10)}T00:00:00Z`)).replace(',', '')

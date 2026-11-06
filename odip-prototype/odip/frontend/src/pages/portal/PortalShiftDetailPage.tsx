@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Armchair, Clock, MapPin, ScrollText, WifiOff } from 'lucide-react'
-import { usePortalShiftDetail, useShiftNotes, useStartShift, useSaveLocationReason, useStartBreak, useEndBreak } from '@/api/hooks'
+import { usePortalShiftDetail, useShiftNotes, useStartShift, useSaveLocationReason, useStartBreak, useEndBreak, useFinishShift } from '@/api/hooks'
 import { useQueueRecords, savedAtFor } from '@/api/hooks/portal'
 import { waitingBreak, waitingKind } from '@/lib/offline/overlay'
 import { isStillTrying, offlineQueue } from '@/lib/offline/queue'
@@ -25,15 +26,17 @@ import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import { formatShiftTimeRange, RATIO_LABELS, formatElapsedSince, formatMinutesSpan, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { httpStatusOf, isNotFoundError } from '@/lib/httpStatus'
-import { apiErrorMessages } from '@/lib/shiftPackageErrors'
-import { EARLIEST_START_LEAD_MINUTES, OVERNIGHT_SUPPORT_LABELS, offRosterMinutes, portalStatusLabel, rosteredInstants } from './lib/portal'
+import { apiErrorMessages, shiftDetailFromError } from '@/lib/shiftPackageErrors'
+import { joinList } from '@/lib/format'
+import { EARLIEST_START_LEAD_MINUTES, OVERNIGHT_SUPPORT_LABELS, needsDetails, offRosterMinutes, portalStatusLabel, rosteredInstants } from './lib/portal'
 import { ShiftNotesSection } from './components/ShiftNotesSection'
 import { HandoverSection, GlanceSection, ContactsSection, MustKnowLine } from './shift/BeforeSection'
 import { DuringSection } from './shift/DuringSection'
 import { FinishFlow } from './shift/FinishFlow'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
-import { clockLabel, dueDoseKeys } from './shift/checklist'
-import { loadEndDraft } from './shift/endDraft'
+import { clockLabel, detailLabel, dueDoseKeys, offlineDueDoses } from './shift/checklist'
+import { EMPTY_END_DRAFT, loadEndDraft, saveEndDraft } from './shift/endDraft'
+import { tapIsFresh } from './shift/finishDetails'
 import { requestGeolocation, type GeoCause } from './shift/geolocation'
 import { NoFixSheet, OffSiteSheet } from './shift/LocationSheets'
 import { TimeCheckSheet } from './shift/TimeCheckSheet'
@@ -147,6 +150,9 @@ export default function PortalShiftDetailPage() {
   const saveReason = useSaveLocationReason()
   const startBreak = useStartBreak()
   const endBreak = useEndBreak()
+  const finishShift = useFinishShift()
+  const qc = useQueryClient()
+  const { hash } = useLocation()
   const [actionError, setActionError] = useState<string | null>(null)
   // Set on the tap, before the location wait, so a second tap can't send a second Start (the mutation isn't pending yet).
   const [starting, setStarting] = useState(false)
@@ -156,8 +162,13 @@ export default function PortalShiftDetailPage() {
   // The time check comes first (minutes off the rostered start, signed). Its reason rides on whichever Start goes out, so the location sheets and retries need not know it.
   const [timeCheck, setTimeCheck] = useState<number | null>(null)
   const timeReason = useRef<string | null>(null)
-  // A draft with an open step means the worker was mid-finish (left for the incident form, or reloaded): open it again at that step.
-  const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.step != null)
+  // An open draft means the worker was mid-finish (left for the incident form, or reloaded): open the details page again.
+  const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.open === true)
+  // Set from the tap on End shift until the finish is sent: a second tap can't send a second one.
+  const [ending, setEnding] = useState(false)
+  const needsMore = !!shift && needsDetails(shift)
+  // A link to #finish (the my-shifts list) opens the details page for a shift that needs them, until the worker leaves it.
+  const [hashClosed, setHashClosed] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const submittedTitle = useRef<HTMLSpanElement>(null)
   useEffect(() => { if (submitted) submittedTitle.current?.focus() }, [submitted])
@@ -222,15 +233,40 @@ export default function PortalShiftDetailPage() {
     setTimeout(() => document.getElementById('finish')?.scrollIntoView?.({ block: 'start' }), 0)
   }
 
+  /** End shift: the end is taken now, at the tap, and the details page opens. A dose still without an outcome holds the end back (the page says so); the tap is kept. */
+  async function endShift() {
+    if (!id || !shift || ending) return
+    const prev = loadEndDraft(id)
+    const reuse = tapIsFresh(prev?.tappedAt)
+    const tappedAt = reuse && prev?.tappedAt ? prev.tappedAt : new Date().toISOString()
+    saveEndDraft(id, { ...(prev ?? EMPTY_END_DRAFT), open: true, tappedAt })
+    openFinish()
+    const doseDue = online ? shift.finishBlockers.some(b => b.code === 'DOSE_OUTCOME_MISSING') : offlineDueDoses(shift).length > 0
+    setEnding(true)
+    setActionError(null)
+    try {
+      if (running) await endBreak.mutateAsync({ id, breakId: running.id })   // the break ends at the tap even when a dose holds the finish back
+      if (doseDue) return
+      await finishShift.mutateAsync({ id, data: { detailsLater: true, ...(reuse && { endTappedAt: tappedAt }) } })
+    } catch (err) {
+      const fresh = shiftDetailFromError(err)
+      if (fresh) qc.setQueryData(['portal-shift-detail', id], fresh)
+      else setActionError(apiErrorMessages(err)[0] ?? "Couldn't end the shift. Check your connection and try again.")
+    } finally {
+      setEnding(false)
+    }
+  }
+
   function closeFinish(done: boolean) {
     setFinishing(false)
+    setHashClosed(true)
     if (done) {
       // A queued Finish leaves the shift InProgress on the server; the page reads it from the queue, so it is not "submitted" yet.
       if (!waitingKind(offlineQueue.getSnapshot(), id ?? '', 'finish')) setSubmitted(true)
       setTab('now')
     } else {
       // Back to shift returns focus to the control that opened the flow (SHAPE §6).
-      setTimeout(() => document.getElementById('end-shift')?.focus(), 0)
+      setTimeout(() => (document.getElementById('add-details') ?? document.getElementById('end-shift'))?.focus(), 0)
     }
   }
 
@@ -238,6 +274,7 @@ export default function PortalShiftDetailPage() {
   // Step 4's "Add or edit notes": close the flow (its entries are saved) and open Notes, focusing its tab as a tap on it would.
   function editNotes() {
     setFinishing(false)
+    setHashClosed(true)
     setTab('notes')
     setTimeout(() => document.getElementById('shift-tab-notes')?.focus(), 0)
   }
@@ -285,8 +322,8 @@ export default function PortalShiftDetailPage() {
   const startAt = rosteredInstants(shift).start
   const opensAt = startAt ? Date.parse(startAt) - EARLIEST_START_LEAD_MINUTES * 60_000 : 0
   const canStartNow = now.getTime() >= opensAt
-  // A draft can outlive the shift being in progress (another device submitted it): only an in-progress shift opens the flow.
-  const inFlow = finishing && inProgress
+  // A draft can outlive the shift being in progress (another device submitted it): only an in-progress shift, or a submitted one with details missing, opens the page.
+  const inFlow = (finishing || (hash === '#finish' && !hashClosed)) && (inProgress || needsMore)
   const tabbed = belowLg && !inFlow
   // Phone: real tab panels, all mounted. Desktop, or while finishing: plain columns, the flow in place of Now (Notes and, on a phone, About are hidden but stay mounted).
   const panel = (key: TabKey) => tabbed
@@ -297,7 +334,7 @@ export default function PortalShiftDetailPage() {
   const nowContent = (
     <>
       {finishWaiting && (
-        <Callout tone="info" polite title="Shift finished on this phone" actions={<Button to="/portal" variant="secondary" size="lg">Back to my shifts</Button>}>
+        <Callout tone="info" polite title="Shift finished on this phone" actions={<><Button to="/portal" variant="secondary" size="lg">Back to my shifts</Button>{loadEndDraft(shift.id)?.tappedAt && <Button id="add-details" size="lg" onClick={openFinish}>Add details</Button>}</>}>
           {finishStuck ? <>It&rsquo;s sent to your coordinator as soon as it goes through.</> : <>It&rsquo;s sent to your coordinator when you&rsquo;re back online.</>}&nbsp;<WaitingToSend stuck={finishStuck} />
         </Callout>
       )}
@@ -335,7 +372,12 @@ export default function PortalShiftDetailPage() {
       )}
       {inProgress && <DuringSection shift={shift} canAct={canAct} online={online} onRecord={target => setSheet({ target, notGiven: false })} />}
       {showBefore && <ContactsSection shift={shift} compact />}
-      {shift.status === 'PendingReview' && !submitted && <Callout tone="info">Submitted. It is waiting for a coordinator to review it.</Callout>}
+      {needsMore && !finishWaiting && canAct && (
+        <Callout tone="warning" title="Add the rest of this shift" actions={<Button id="add-details" size="lg" onClick={openFinish}>Add details</Button>}>
+          Still to add: {joinList(shift.missingDetails.map(k => detailLabel(k, participant.fullName.split(' ')[0])))}. Your coordinator can&rsquo;t approve it until it&rsquo;s done.
+        </Callout>
+      )}
+      {shift.status === 'PendingReview' && !submitted && !needsMore && <Callout tone="info">Submitted. It is waiting for a coordinator to review it.</Callout>}
       {(shift.status === 'PendingReview' || shift.status === 'Completed') && <SubmittedSummary shift={shift} />}
     </>
   )
@@ -435,7 +477,7 @@ export default function PortalShiftDetailPage() {
           disabled={startBreak.isPending || endBreak.isPending}>
           {running ? 'End break' : 'Start break'}
         </Button>
-        <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1 lg:flex-none" onClick={openFinish}>End shift</Button>
+        <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1 lg:flex-none" onClick={() => void endShift()} disabled={ending}>End shift</Button>
       </ActionBar>
     )
   }
@@ -450,7 +492,7 @@ export default function PortalShiftDetailPage() {
         title={participant.fullName}
         subtitle={
           <PageHeaderMeta>
-            <StatusBadge status={shift.status} label={portalStatusLabel(shift)} size="md" />
+            <StatusBadge status={shift.status} label={portalStatusLabel(shift)} tone={needsMore ? 'warning' : undefined} size="md" />
             {format(parseISO(shift.serviceDate), 'EEE d MMM')}
             {`${formatShiftTimeRange(shift.startTime, shift.endTime)}${shift.endsNextDay ? ' (+1 day)' : ''}`}
             {shift.ratio !== 'OneToOne' && (RATIO_LABELS[shift.ratio] ?? shift.ratio)}
@@ -484,7 +526,7 @@ export default function PortalShiftDetailPage() {
         <div className="space-y-4 min-w-0">
           <div {...panel('now')} className="space-y-3 lg:space-y-4">
             {inFlow
-              ? <FinishFlow shift={shift} online={online} canAct={canAct} onRecord={(target, notGiven) => setSheet({ target, notGiven })} onClose={closeFinish} onEditNotes={editNotes} />
+              ? <FinishFlow shift={shift} online={online} canAct={canAct} ending={ending} onRecord={(target, notGiven) => setSheet({ target, notGiven })} onClose={closeFinish} onEditNotes={editNotes} />
               : nowContent}
           </div>
           {/* Hidden, never unmounted, while finishing: ShiftNotesSection keeps a half-typed note in its own state (plan check S1). */}

@@ -263,6 +263,32 @@ export interface FinishShiftDto {
   nothingToHandOver?: boolean
   /** "Nothing to note", confirmed explicitly: lets Finish proceed with no shift notes (otherwise 409 SHIFT_NOTE_REQUIRED). */
   nothingToNote?: boolean
+  /** "End shift now, add the details later": the shift ends at the tap and approval waits for the details. */
+  detailsLater?: boolean
+  /** When the worker tapped End shift, resent after a dose block (UTC; at most 30 minutes old). Null: the server clock is the tap. */
+  endTappedAt?: string | null
+}
+
+/** PUT portal/shifts/{id}/finish-details: replaces every detail as a whole (so a save resends the saved start, reasons and end unchanged unless edited). */
+export interface FinishDetailsDto {
+  actualStart: string | null
+  actualEnd: string | null
+  timeAdjustmentReason: string | null
+  startTimeReason: string | null
+  finishTimeReason: string | null
+  kilometres: number | null
+  preShiftTravelMinutes: number | null
+  preShiftTravelKilometres: number | null
+  postShiftTravelMinutes: number | null
+  postShiftTravelKilometres: number | null
+  /** "No trip" ticked: the leg is stored empty and counts as answered. */
+  preTravelNone: boolean
+  postTravelNone: boolean
+  /** At most 2000 characters. */
+  handoverText: string | null
+  nothingToHandOver: boolean
+  nothingToNote: boolean
+  anythingToReport: boolean | null
 }
 
 // ── Witness approvals ────────────────────────────────────
