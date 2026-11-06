@@ -693,13 +693,47 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Fact]
-    public async Task StartShift_QueuedTapWithATypedReason_KeepsTheServersStartedOffline()
+    public async Task StartShift_QueuedTapWithATypedReason_StoresStartedOfflineAndTheReason()
     {
         var (db, controller, shift) = SeedPlacedShift();
 
         await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3), LocationReason = "Whatever I like" }, CancellationToken.None);
 
+        Assert.Equal("Started offline: Whatever I like", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Fact]
+    public async Task StartShift_QueuedTapWithNoTypedReason_StoresStartedOffline()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3), LocationReason = "  " }, CancellationToken.None);
+
         Assert.Equal("Started offline", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Fact]
+    public async Task StartShift_QueuedTapWithALongTypedReason_IsCutToMaxReasonLength()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3), LocationReason = new string('x', 900) }, CancellationToken.None);
+
+        var reason = (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason!;
+        Assert.Equal(LocationCheck.MaxReasonLength, reason.Length);
+        Assert.StartsWith("Started offline: xxx", reason);
+    }
+
+    [Fact]
+    public async Task LocationReason_AfterALiveStartTypedStartedOffline_CanStillBeChanged()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat + 0.00764m, Longitude = PinLon, AccuracyMetres = 5, LocationReason = "Started offline" }, CancellationToken.None);
+
+        var result = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = "Car park round the back" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Car park round the back", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
     }
 
     [Theory]
