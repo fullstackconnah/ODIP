@@ -6,6 +6,7 @@ import type {
   MedicationSupportLevel,
   MedicationStatus,
   MedicationAdministrationStatus,
+  MedicationAmendmentReason,
   PackagingType,
   MedicationFrequency,
   Weekday,
@@ -86,6 +87,14 @@ export const MEDICATION_STATUS_LABELS: Record<MedicationStatus, string> = {
   Active: 'Active',
   OnHold: 'On hold',
   Ceased: 'Ceased',
+}
+
+export const AMENDMENT_REASON_LABELS: Record<MedicationAmendmentReason, string> = {
+  WrongTime: 'Wrong time',
+  WrongDose: 'Wrong dose',
+  WrongPerson: 'Recorded for the wrong person',
+  EnteredInError: 'Entered in error',
+  Other: 'Other',
 }
 
 export const ADMIN_STATUS_LABELS: Record<MedicationAdministrationStatus, string> = {
@@ -275,6 +284,11 @@ export interface AdministrationDto {
    * record for its slot. Superseded records stay in the history lists (participant history, administration report) and are never shown by
    * the MAR or the shift package, which show the active record only. */
   supersededByAdministrationId?: string | null
+  /** The latest coordinator correction: why, the note, who made it and when (an instant). Absent or null on a record never amended, or amended before the reason was required. */
+  amendmentReason?: MedicationAmendmentReason | null
+  amendmentNote?: string | null
+  amendedByName?: string | null
+  amendedAt?: string | null
   /** Connection map: the incident this administration was filed into, if any (set once the
    * coordinator/support worker submits the drop-into-draft incident form — see
    * lib/incidentPrefill.ts's buildMarIncidentPrefill). Null until then. */
@@ -321,6 +335,10 @@ export interface UpdateAdministrationDto {
   prnOutcome?: string
   prnOutcomeAt?: string
   notes?: string
+  /** Required by the server: why this record is being corrected. Separate from `reason` (why a dose was not given). */
+  amendmentReason?: MedicationAmendmentReason
+  /** Required when amendmentReason is Other. */
+  amendmentNote?: string
 }
 
 export interface MarEntryDto {

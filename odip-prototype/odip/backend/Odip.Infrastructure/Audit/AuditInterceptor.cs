@@ -170,7 +170,8 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
                 case EntityState.Modified:
                     var orig = FormatValue(prop.OriginalValue);
                     var curr = FormatValue(prop.CurrentValue);
-                    if (orig != curr)
+                    if (orig != curr || (AuditedEntities.RecordedWith.TryGetValue((entry.Entity.GetType(), prop.Metadata.Name), out var trigger)
+                        && FormatValue(entry.Property(trigger).OriginalValue) != FormatValue(entry.Property(trigger).CurrentValue)))
                         changes.Add(new FieldChange(prop.Metadata.Name, orig, curr));
                     break;
             }

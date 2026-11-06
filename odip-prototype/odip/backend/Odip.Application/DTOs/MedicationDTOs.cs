@@ -204,6 +204,12 @@ public record AdministrationDto
     /// accepted and flagged for review. Always false in Enforce mode and for records that predate the flag.</summary>
     public bool RecordedWithoutCompetency { get; init; }
 
+    /// <summary>The latest coordinator correction: why, the note, who made it and when (an instant). Null on a record never amended, or amended before the reason was required.</summary>
+    public MedicationAmendmentReason? AmendmentReason { get; init; }
+    public string? AmendmentNote { get; init; }
+    public string? AmendedByName { get; init; }
+    public DateTime? AmendedAt { get; init; }
+
     /// <summary>Set on a Refused, Withheld or Missed record that a later Administered (or WrongMedication) record superseded: the id of the replacement. Null = the active record
     /// for its slot. Superseded records stay in the history lists; the MAR and the shift package show only the active one.</summary>
     public Guid? SupersededByAdministrationId { get; init; }
@@ -263,6 +269,13 @@ public record CreateAdministrationDto
 
 public record UpdateAdministrationDto
 {
+    /// <summary>Why this record is being corrected. Required; separate from <see cref="Reason"/> (why a dose was not given).</summary>
+    public MedicationAmendmentReason? AmendmentReason { get; init; }
+
+    /// <summary>Required when <see cref="AmendmentReason"/> is Other, optional otherwise.</summary>
+    [StringLength(500)]
+    public string? AmendmentNote { get; init; }
+
     public MedicationAdministrationStatus Status { get; init; }
     public DateTime? AdministeredAt { get; init; }
 

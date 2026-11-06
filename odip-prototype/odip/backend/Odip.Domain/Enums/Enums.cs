@@ -674,6 +674,17 @@ public enum MedicationAdministrationStatus
     WrongMedication
 }
 
+/// <summary>Why a coordinator amended a recorded administration. Stored as a plain int in a NULLABLE column: older amendments read null (blank), never Other,
+/// so Other stays last and no value is ever reused. The JSON wire value is the name.</summary>
+public enum MedicationAmendmentReason
+{
+    WrongTime,
+    WrongDose,
+    WrongPerson,
+    EnteredInError,
+    Other
+}
+
 /// <summary>How a medication is physically packaged for administration.</summary>
 public enum PackagingType
 {

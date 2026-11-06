@@ -6,13 +6,15 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField, labelClass } from '@/components/FormField'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { SelectField } from '@/components/SelectField'
 import { useRecordAdministration, useAmendAdministration, useStaff } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { getClientTimeZone, extractErrorMessage } from '@/lib/utils'
-import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
+import { ADMIN_STATUS_LABELS, AMENDMENT_REASON_LABELS } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
-import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
+import { MEDICATION_AMENDMENT_REASONS } from '@/api/types/enums'
+import type { MedicationAdministrationStatus, MedicationAmendmentReason, PackagingType } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -110,6 +112,9 @@ export function RecordAdministrationModal({
   const [witnessName, setWitnessName] = useState(existingAdministration?.witnessName ?? '')
   const [witnessStaffId, setWitnessStaffId] = useState(existingAdministration?.witnessStaffId ?? '')
   const [notes, setNotes] = useState(existingAdministration?.notes ?? '')
+  // Every correction states its own reason, so the picker never starts from the record's previous amendment.
+  const [amendmentReason, setAmendmentReason] = useState<MedicationAmendmentReason | ''>('')
+  const [amendmentNote, setAmendmentNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
@@ -131,7 +136,9 @@ export function RecordAdministrationModal({
     prnReason !== (existingAdministration?.prnReason ?? '') ||
     witnessName !== (existingAdministration?.witnessName ?? '') ||
     witnessStaffId !== (existingAdministration?.witnessStaffId ?? '') ||
-    notes !== (existingAdministration?.notes ?? '')
+    notes !== (existingAdministration?.notes ?? '') ||
+    amendmentReason !== '' ||
+    amendmentNote !== ''
 
   const requiresReason = status !== 'Administered'
   const requiresPrnReason = isPrn && status === 'Administered'
@@ -150,6 +157,8 @@ export function RecordAdministrationModal({
     setWitnessName(existingAdministration?.witnessName ?? '')
     setWitnessStaffId(existingAdministration?.witnessStaffId ?? '')
     setNotes(existingAdministration?.notes ?? '')
+    setAmendmentReason('')
+    setAmendmentNote('')
     setError(null)
     setFieldErrors({})
     setLimitBreachMessage(null)
@@ -188,6 +197,10 @@ export function RecordAdministrationModal({
 
   function validate(): boolean {
     const errs: Record<string, string> = {}
+    if (isAmend) {
+      if (!amendmentReason) errs.amendmentReason = 'Required — choose why this record is being corrected'
+      else if (amendmentReason === 'Other' && !amendmentNote.trim()) errs.amendmentNote = 'Required — say what was wrong'
+    }
     if (requiresReason && !reason.trim()) {
       errs.reason = requiresWrongMedNote
         ? 'Required — what led to the wrong medication being given'
@@ -206,6 +219,9 @@ export function RecordAdministrationModal({
       }
     }
     setFieldErrors(errs)
+    // The correction fields are the first block of the form: send the person back to the one that needs fixing.
+    const firstAmendmentError = errs.amendmentReason ? 'amendment-reason' : errs.amendmentNote ? 'amendment-note' : null
+    if (firstAmendmentError) document.getElementById(firstAmendmentError)?.focus()
     return Object.keys(errs).length === 0
   }
 
@@ -244,6 +260,8 @@ export function RecordAdministrationModal({
       // separately and isn't reassignable through this form. Always sent back, so an amendment that no
       // longer needs a witness (e.g. changed to Refused) doesn't blank the one already recorded.
       witnessName,
+      amendmentReason: amendmentReason || undefined,
+      amendmentNote: amendmentNote.trim() || undefined,
       // No outcome fields: the server keeps the stored PRN outcome when an amend sends none, so a copy cached when this modal
       // opened can never wipe, or roll back, an outcome somebody recorded since.
     }
@@ -374,9 +392,42 @@ export function RecordAdministrationModal({
             />
           </div>
         ) : (
-        <form id="record-administration-form" onSubmit={handleSubmit} className="space-y-4">
+        <form id="record-administration-form" onSubmit={handleSubmit} noValidate className="space-y-4">
           {error && (
             <Callout tone="error">{error}</Callout>
+          )}
+
+          {isAmend && (
+            <div className="space-y-4 border-b border-[var(--color-border)] pb-4">
+              <SelectField
+                id="amendment-reason"
+                label="Reason for correction"
+                required
+                placeholder="Choose a reason"
+                value={amendmentReason}
+                options={MEDICATION_AMENDMENT_REASONS.map(k => ({ value: k, label: AMENDMENT_REASON_LABELS[k] }))}
+                error={fieldErrors.amendmentReason}
+                onChange={e => {
+                  setAmendmentReason(e.target.value as MedicationAmendmentReason)
+                  clearFieldError('amendmentReason')
+                  if (e.target.value !== 'Other') clearFieldError('amendmentNote')
+                }}
+              />
+              <FormField
+                label="Correction note"
+                required={amendmentReason === 'Other'}
+                error={fieldErrors.amendmentNote}
+                hint={!fieldErrors.amendmentNote ? (amendmentReason === 'Other' ? 'Required when the reason is Other.' : 'Optional. What was wrong, and what you changed.') : undefined}
+              >
+                <textarea
+                  id="amendment-note"
+                  rows={2}
+                  maxLength={500}
+                  value={amendmentNote}
+                  onChange={e => { setAmendmentNote(e.target.value); clearFieldError('amendmentNote') }}
+                />
+              </FormField>
+            </div>
           )}
 
           <FormField label="Status" required>

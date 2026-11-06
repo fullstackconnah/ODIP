@@ -243,3 +243,22 @@ describe('participant-detail/MedicationsTab — restraint flags', () => {
     expect(reportable.closest('span')?.className).toContain('--color-error-container')
   })
 })
+
+describe('participant-detail/MedicationsTab — amendment line', () => {
+  it('shows why, who and when a record was corrected, with the note under it', () => {
+    mockUseParticipantAdministrations.mockReturnValue({
+      data: [administration({ amendmentReason: 'WrongDose', amendedByName: 'Sam Lee', amendedAt: '2026-11-06T00:42:00Z', amendmentNote: 'Gave two, not one' })],
+    })
+    renderTab()
+
+    expect(screen.getByText(/^Amended: Wrong dose by Sam Lee, \d{2}\/\d{2}, \d{1,2}:\d{2}/)).toBeInTheDocument()
+    expect(screen.getByText('Gave two, not one')).toBeInTheDocument()
+  })
+
+  it('shows no amendment line for a record without a reason', () => {
+    mockUseParticipantAdministrations.mockReturnValue({ data: [administration({ amendmentReason: null })] })
+    renderTab()
+
+    expect(screen.queryByText(/^Amended:/)).not.toBeInTheDocument()
+  })
+})
