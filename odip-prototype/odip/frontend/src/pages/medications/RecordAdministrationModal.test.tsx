@@ -698,3 +698,26 @@ describe('RecordAdministrationModal amendment reason', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 })
+
+describe('RecordAdministrationModal status group at narrow widths', () => {
+  it('wraps the five status options instead of squeezing them, with the plain labels and unchanged API values', async () => {
+    const user = userEvent.setup()
+    mockRecordMutateAsync.mockResolvedValue({ success: true, data: makeAdministration({ status: 'Withheld', reason: 'Nil by mouth' }) })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+
+    expect(screen.getByRole('radiogroup')).toHaveClass('flex-wrap')
+    expect(screen.getAllByRole('radio').map(r => r.textContent)).toEqual(['Administered', 'Refused', 'Withheld', 'Missed', 'Wrong medication given'])
+
+    await user.click(screen.getByRole('radio', { name: /^withheld$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Nil by mouth')
+    await user.click(screen.getByRole('button', { name: /record withheld dose/i }))
+    expect(mockRecordMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'Withheld' }) }))
+  })
+
+  it('a collapsed field adds no spacing of its own (the form is space-y-4)', () => {
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    const collapsed = screen.getByRole('radiogroup').closest('form')!.querySelectorAll('[inert]')
+    expect(collapsed.length).toBeGreaterThan(0)
+    collapsed.forEach(el => expect(el).toHaveClass('mb-0'))
+  })
+})
