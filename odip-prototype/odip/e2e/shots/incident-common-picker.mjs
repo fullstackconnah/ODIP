@@ -3,7 +3,7 @@
 // Computed boxes only; exits non-zero when a check fails. Runs at 390 (touch, coarse pointer) and 1280 (fine pointer), light theme.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, overlapCheck, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, overlapCheck, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -121,6 +121,12 @@ async function measureLayout(page, tag, touch, wide) {
   check(`${tag}: picker is focused on load`, await page.evaluate(() => document.activeElement?.getAttribute('aria-haspopup') === 'listbox' && document.getElementById(document.activeElement.getAttribute('aria-labelledby'))?.textContent === 'Common incident'))
 }
 
+// F4: the prompts fit the Description box, so none sits below its scroll.
+async function checkRowsShowPrompts(page, tag, pick) {
+  const m = await page.getByPlaceholder('Detailed description of the incident...').evaluate((t) => ({ scrollHeight: t.scrollHeight, clientHeight: t.clientHeight }))
+  check(`${tag}: ${pick} prompts fit the Description box without scrolling`, m.scrollHeight <= m.clientHeight + 1, m)
+}
+
 const browser = await chromium.launch({ headless: true })
 try {
   // ── 390, touch ───────────────────────────────────────────────────────────
@@ -144,7 +150,7 @@ try {
       check(`${tag}: open panel ends above the mobile nav`, pb <= nt + 0.5, [pb, nt])
     } else check(`${tag}: mobile nav present`, false, 'nav[aria-label="Mobile"] not found')
     check(`${tag}: no page overflow (open)`, await overflowOk(page))
-    await crop(page, tag, page.locator('[role=listbox]'), 'picker-open-390', { touch: true, also: trigger(page), pad: 12 })
+    await crop(page, tag, page.locator('[role=listbox]'), 'picker-open-390', { touch: true, also: cell(page), pad: 12 })
 
     await page.getByRole('option', { name: /Fell and was hurt/ }).click()
     await page.waitForTimeout(300)
@@ -157,9 +163,17 @@ try {
     const descField = desc.locator('xpath=ancestor::div[label][1]')
     check(`${tag}: Description holds the prompts and the hint shows`, (await desc.inputValue()).startsWith('Where they fell') && (await descField.textContent()).includes("Write under each prompt. Delete any that don't fit."))
     await crop(page, tag, descField, 'details-prompts-390', { touch: true })
+    checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'details-prompts-390.png'), { touch: true })).checks)
+    await checkRowsShowPrompts(page, tag, 'fall')
     await page.getByRole('button', { name: 'Next' }).click()
     await page.getByText('Write what happened under the prompts.').waitFor({ state: 'visible', timeout: 10_000 })
     await crop(page, tag, descField, 'details-untouched-error-390', { touch: true })
+
+    // The pick with the most prompt lines (seizure, 4 prompts) also shows whole.
+    await openForm(page)
+    await pickOption(page, /Had a seizure/)
+    await toDetails(page)
+    await checkRowsShowPrompts(page, tag, 'seizure')
     await context.close()
   }
 
@@ -185,6 +199,10 @@ try {
     check(`${tag}: no page overflow (chosen)`, await overflowOk(page))
     await measureLayout(page, `${tag} chosen`, false, true)
     await crop(page, tag, page.locator('form'), 'basics-picked-1280', { touch: false, pad: 16 })
+    await toDetails(page)
+    checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'details-prompts-1280.png'), { touch: false })).checks)
+    await openForm(page)
+    await pickOption(page, /Fell and was hurt/)
 
     // The MAR hand-off keeps what it brought.
     await page.evaluate((usr) => history.replaceState({ usr, key: 'default', idx: 0 }, '', '/incidents/new'), MAR_STATE)

@@ -569,6 +569,7 @@ function IncidentWizardForm() {
             wereEmergencyServicesCalled={wereEmergencyCalled}
             emergencyServices={emergencyServices}
             descriptionHint={pickedPrompts?.trim() ? "Write under each prompt. Delete any that don't fit." : undefined}
+            pickedPrompts={pickedPrompts}
           />
         )}
 
