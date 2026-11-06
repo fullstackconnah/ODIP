@@ -1382,6 +1382,8 @@ describe('AppLayout — Sign out', () => {
     renderAt('/trips')
 
     fireEvent.click(screen.getByRole('button', { name: /Sign out$/ }))
+    expect(mockEndSession).not.toHaveBeenCalled()
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Sign out?' })).getByRole('button', { name: 'Sign out' }))
 
     expect(mockEndSession).toHaveBeenCalledTimes(1)
   })

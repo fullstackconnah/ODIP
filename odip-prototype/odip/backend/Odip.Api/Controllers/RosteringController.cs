@@ -2161,7 +2161,7 @@ public class RosteringController : ControllerBase
         }
 
         row.Level = dto.Level;
-        row.Reason = dto.Reason;
+        row.Reason = string.IsNullOrWhiteSpace(dto.Reason) ? null : dto.Reason.Trim(); // the reason is optional
         row.UpdatedAt = DateTime.UtcNow;
         // This endpoint is the compatibility matrix's only human-facing writer — every call
         // takes ownership of the row away from the participant-preferred-staff auto-link (task
