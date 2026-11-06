@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { pickAddress, details, DETAILS } from '@/test/addressPick'
 import ServiceLocationsSection from './ServiceLocationsSection'
+
+vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).withAddressApi(await real<typeof import('@/api/client')>()))
 
 const { create, update, archive, perms, query } = vi.hoisted(() => ({
   create: vi.fn(),
@@ -163,5 +166,45 @@ describe('ServiceLocationsSection', () => {
     expect(screen.getByText('Your browser only shares location over a secure connection. Type the pin instead.')).toBeInTheDocument()
     await user.type(screen.getByLabelText(/^Map pin/), '-33.9, 151.2')
     expect(screen.getByLabelText(/^Map pin/)).toHaveValue('-33.9, 151.2')
+  })
+})
+
+describe('ServiceLocationsSection address lookup (caller H)', () => {
+  afterEach(() => { details.current = DETAILS })
+  it('a pick puts the formatted address in the Address field (max 300) and saves it', async () => {
+    const user = userEvent.setup()
+    render(<ServiceLocationsSection />)
+    await openAdd(user)
+    await user.type(screen.getByLabelText(/^Name/), 'North hub')
+    const field = screen.getByRole('combobox', { name: 'Address' })
+    expect(field).toHaveAttribute('maxlength', '300')
+    await pickAddress(user, field)
+    expect(field).toHaveValue('12 Example Street, Brisbane City QLD 4000')
+    await user.type(screen.getByLabelText(/^Map pin/), '-33.8688, 151.2093')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(create.mock.calls[0][0]).toMatchObject({ name: 'North hub', address: '12 Example Street, Brisbane City QLD 4000' })
+  })
+  it('with details failing, the whole prediction line saves', async () => {
+    details.current = null
+    const user = userEvent.setup()
+    render(<ServiceLocationsSection />)
+    await openAdd(user)
+    await user.type(screen.getByLabelText(/^Name/), 'North hub')
+    await pickAddress(user, screen.getByRole('combobox', { name: 'Address' }), '12 Exa', false)
+    await user.type(screen.getByLabelText(/^Map pin/), '-33.8688, 151.2093')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(create.mock.calls[0][0]).toMatchObject({ address: '12 Example Street, Brisbane City QLD' })
+  })
+
+  it('a 320-character formatted address saves 300', async () => {
+    details.current = { ...DETAILS, formattedAddress: 'A'.repeat(320) }
+    const user = userEvent.setup()
+    render(<ServiceLocationsSection />)
+    await openAdd(user)
+    await user.type(screen.getByLabelText(/^Name/), 'North hub')
+    await pickAddress(user, screen.getByRole('combobox', { name: 'Address' }))
+    await user.type(screen.getByLabelText(/^Map pin/), '-33.8688, 151.2093')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(create.mock.calls[0][0].address).toBe('A'.repeat(300))
   })
 })

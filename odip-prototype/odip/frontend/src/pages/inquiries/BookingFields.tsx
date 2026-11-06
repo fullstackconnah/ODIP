@@ -1,4 +1,5 @@
 import { FormField } from '@/components/FormField'
+import { AddressField } from '@/components/AddressField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { TextAreaField } from '@/components/TextAreaField'
 import { modalGrid } from '@/lib/formGrid'
@@ -44,7 +45,7 @@ export function BookingFields({ form, errors, zone, staff, onChange, dateRef }: 
 
       <div data-field="location">
         <FormField label="Where" required error={errors.location} hint={errors.location ? undefined : "Their home address, or wherever you're meeting."}>
-          <input type="text" maxLength={300} value={form.location} onChange={e => onChange('location', e.target.value)} />
+          <AddressField wholeLine maxLength={300} value={form.location} onChange={v => onChange('location', v)} onPick={a => onChange('location', a.formatted.slice(0, 300))} />
         </FormField>
       </div>
 
