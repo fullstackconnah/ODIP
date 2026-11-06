@@ -27,6 +27,8 @@ describe('reasonFor', () => {
     [{ httpStatus: 400, code: 'SHIFT_CLIENT_TIME_IN_FUTURE' }, `The time on this phone (${time}) is outside what Bunya Support accepts, for example if the phone's clock was wrong. Tell your coordinator the real time.`],
     [{ httpStatus: 400, code: 'SHIFT_CLIENT_TIME_BEFORE_START' }, `The time on this phone (${time}) is outside what Bunya Support accepts, for example if the phone's clock was wrong. Tell your coordinator the real time.`],
     [{ httpStatus: 400, code: 'SHIFT_CLIENT_TIME_TOO_OLD' }, 'This was recorded more than 48 hours before this phone could send it, which is too old for Bunya Support to accept. Tell your coordinator what happened and when.'],
+    [{ kind: 'details', httpStatus: 409, code: 'SHIFT_ALREADY_COMPLETED' }, "Details weren't sent: this shift was already approved."],
+    [{ kind: 'details', httpStatus: 409, code: 'SHIFT_NOT_PENDING_REVIEW' }, "Details weren't sent: this shift is no longer waiting for details."],
     [{ httpStatus: 409, code: 'SHIFT_NOT_PUBLISHED' }, "This shift isn't published, so this couldn't be added."],
     [{ httpStatus: 409, code: 'SHIFT_BREAK_ID_CONFLICT' }, "Bunya Support couldn't accept this break (code SHIFT_BREAK_ID_CONFLICT). Tell your coordinator."],
     [{ httpStatus: 409, code: 'SHIFT_X' }, 'Bunya Support couldn\'t accept this (code SHIFT_X). Tell your coordinator.'],

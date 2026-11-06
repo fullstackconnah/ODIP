@@ -9,7 +9,9 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { addDays, format, parseISO, subDays } from 'date-fns'
-import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
+import { RATIO_LABELS, hasEnded, needsDetails, pickCurrentShift, portalStatusLabel } from './lib/portal'
+import { detailLabel } from './shift/checklist'
+import { joinList } from '@/lib/format'
 import { formatHours } from '@/lib/planBlocks'
 import { useNow } from './shift/useNow'
 import { utcInstantToProviderLocal } from './shift/shiftTime'
@@ -110,6 +112,27 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
     : <div className={CARD}>{inner}</div>
 }
 
+/** A shift finished with details still to add: where it was, what is missing, and a way straight into the details page. Not week-filtered, so one from last week is never lost. */
+function NeedsDetailsLink({ shift }: { shift: PortalShiftSummaryDto }) {
+  const online = useOnline()
+  const openable = online || savedAtFor(`detail:${shift.id}`) !== null
+  const first = shift.participantName.split(' ')[0]
+  const inner = (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="font-medium text-[var(--color-foreground)] truncate">{shift.participantName}</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">{format(parseISO(shift.serviceDate), 'EEE d MMM')} · {formatShiftTimeRange(shift.startTime, shift.endTime)}</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">Still to add: {joinList(shift.missingDetails.map(k => detailLabel(k, first)))}</p>
+        {!openable && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Needs a connection to open</p>}
+      </div>
+      <StatusBadge status={shift.status} tone="warning" label={portalStatusLabel(shift)} />
+    </div>
+  )
+  return openable
+    ? <Link to={`/portal/shifts/${shift.id}#finish`} className={`${CARD} hover:border-[var(--color-primary)]/40 transition-colors`}>{inner}</Link>
+    : <div className={CARD}>{inner}</div>
+}
+
 /** A titled run of day groups (Coming up, Earlier) holding shifts and intake visits; not drawn when empty. The day headings sit under it as h3. */
 function ShiftSection({ id, title, today, shifts, visits, newestFirst }: { id: string; title: string; today: string; shifts: PortalShiftSummaryDto[]; visits: IntakeVisitDto[]; newestFirst?: boolean }) {
   if (shifts.length === 0 && visits.length === 0) return null
@@ -149,7 +172,9 @@ export default function PortalShiftsPage() {
   const to = format(addDays(parseISO(weekEnd), 1), 'yyyy-MM-dd')
   const { data, isLoading, isError, refetch } = useMyShifts(from, to)
   const inWeek = (day: string) => day >= weekStart && day <= weekEnd
-  const shifts = useMemo(() => (data?.shifts ?? []).filter(s => inWeek(s.serviceDate.slice(0, 10))), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Shifts waiting on details come from every day the request reached, not only the browsed week, and sit in their own section above the rest.
+  const needs = useMemo(() => (data?.shifts ?? []).filter(needsDetails).sort((a, b) => a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime)), [data])
+  const shifts = useMemo(() => (data?.shifts ?? []).filter(s => !needsDetails(s) && inWeek(s.serviceDate.slice(0, 10))), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
   const tripAssignments = (data?.tripAssignments ?? []).filter(a => a.assignmentStart.slice(0, 10) <= weekEnd && a.assignmentEnd.slice(0, 10) >= weekStart)
   // Intake visits you are going to, in the browsed week: their own query beside the shifts (a non-shift entry, not billable work).
   const { id: myId } = usePermissions()
@@ -172,7 +197,7 @@ export default function PortalShiftsPage() {
     setWeekStart(thisWeek)
   }, [tz, thisWeek])
   const goTo = (next: string | ((w: string) => string)) => { settled.current = true; setWeekStart(next) }
-  const current = isThisWeek && data ? pickCurrentShift(data.shifts, now, data.timeZoneId) : null
+  const current = isThisWeek && data ? pickCurrentShift(data.shifts.filter(s => !needsDetails(s)), now, data.timeZoneId) : null
   const rest = shifts.filter(s => s.id !== current?.id)
   const comingUp = rest.filter(s => !hasEnded(s, now, tz))
   const earlier = rest.filter(s => hasEnded(s, now, tz))
@@ -233,7 +258,7 @@ export default function PortalShiftsPage() {
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
         </Callout>
-      ) : shifts.length === 0 && tripAssignments.length === 0 && visits.length === 0 && !current && !visitsQuery.isError ? (
+      ) : needs.length === 0 && shifts.length === 0 && tripAssignments.length === 0 && visits.length === 0 && !current && !visitsQuery.isError ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Nothing rostered this week"
@@ -245,6 +270,12 @@ export default function PortalShiftsPage() {
             <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => visitsQuery.refetch()}>Try again</Button>}>
               Couldn't load your intake visits.
             </Callout>
+          )}
+          {needs.length > 0 && (
+            <section aria-labelledby="needs-details" className="space-y-3">
+              <h2 id="needs-details" className="text-base font-semibold">Needs details</h2>
+              <div className="space-y-2">{needs.map(shift => <NeedsDetailsLink key={shift.id} shift={shift} />)}</div>
+            </section>
           )}
           <ShiftSection id="coming-up" title="Coming up" today={today} shifts={comingUp} visits={visitsComingUp} />
           <ShiftSection id="earlier" title="Earlier" today={today} shifts={earlier} visits={visitsEarlier} newestFirst />
