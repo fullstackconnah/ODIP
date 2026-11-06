@@ -242,7 +242,7 @@ function DraftPage() {
     if (!details.agreementKind) list.push({ key: 'kind', tone: 'fix', title: 'Choose the agreement type.', shiftIds: [], step: 'agreement' })
     if (shifts.length === 0) list.push({ key: 'no-shifts', tone: 'fix', title: 'Add at least one shift to the week.', shiftIds: [], step: 'week' })
     return [...list, ...agreementIssues({ shifts, groups: pricing.groups, quoteIssues: pricing.issues, limits, to: end, settings: pricing.settings })]
-  }, [dates.start, dates.end, dates.plan, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
+  }, [dates.start, dates.end, dates.plan, details.agreementKind, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
   const blocking = issues.filter(issue => issue.tone === 'fix')
   const flagged = useMemo(() => new Set(issues.filter(issue => issue.step === 'week').flatMap(issue => issue.shiftIds)), [issues])
 
