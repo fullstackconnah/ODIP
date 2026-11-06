@@ -177,6 +177,12 @@ describe('TierBoard', () => {
       expect(column('Preferred').parentElement?.className).not.toContain('sm:grid-cols')
     })
 
+    it('left-aligns + Add at sm and up (CT-3)', async () => {
+      renderCompact()
+      await screen.findByText('Knows the routine')
+      expect(screen.getByRole('button', { name: 'Add to Backup' })).toHaveClass('sm:justify-start')
+    })
+
     it('keeps No read-only: no menu on a No chip, no + Mark No, and no Mark No on a ranked chip', async () => {
       const user = userEvent.setup()
       renderCompact()
