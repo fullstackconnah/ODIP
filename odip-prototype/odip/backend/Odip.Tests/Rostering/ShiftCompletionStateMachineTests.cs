@@ -737,17 +737,33 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Theory]
-    [InlineData("Whatever I like")]
-    [InlineData("")]
-    public async Task LocationReason_AfterAQueuedStart_CannotReplaceOrBlankStartedOffline(string reason)
+    [InlineData("Whatever I like", null, "Started offline")]
+    [InlineData("", null, "Started offline")]
+    [InlineData("Whatever I like", "Phone GPS broken", "Started offline: Phone GPS broken")]
+    public async Task LocationReason_AfterAQueuedStart_CannotReplaceOrBlankStartedOffline(string reason, string? typedAtStart, string stored)
     {
         var (db, controller, shift) = SeedPlacedShift();
-        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3) }, CancellationToken.None);
+        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3), LocationReason = typedAtStart }, CancellationToken.None);
 
         var result = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = reason }, CancellationToken.None);
 
         Assert.IsType<ConflictObjectResult>(result.Result);
-        Assert.Equal("Started offline", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+        Assert.Equal(stored, (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Fact]
+    public async Task LocationReason_AfterALiveOffSiteStartThenAQueuedBreak_CanStillBeChanged()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { Latitude = PinLat + 0.00764m, Longitude = PinLon, AccuracyMetres = 5 }, CancellationToken.None);
+        var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id);
+        completion.SentFromOffline = true;   // what ShiftBreakService sets for a queued break
+        await db.SaveChangesAsync();
+
+        var result = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = "Car park round the back" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Car park round the back", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
     }
 
     [Fact]
