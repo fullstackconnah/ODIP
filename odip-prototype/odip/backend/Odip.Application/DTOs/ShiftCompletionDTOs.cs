@@ -107,6 +107,37 @@ public record FinishShiftDto
 
     /// <summary>When the phone recorded the tap, if it was sent late (UTC). Null: the server clock stamps it.</summary>
     public DateTime? FinishedAt { get; init; }
+
+    /// <summary>"End shift now, add the details later" (finish-later): skips the shift-note gate and saves the completion as needing details, which hold approval until they are in. Absent (an older phone or a queued older finish) is today's Finish, unchanged.</summary>
+    public bool DetailsLater { get; init; }
+
+    /// <summary>When the worker tapped End shift, sent by an online re-send after a dose block (UTC). At most 30 minutes old against the server clock and no more than the clock-skew allowance ahead of it; older gets 400 SHIFT_CLIENT_TIME_TOO_OLD. Taps older than that arrive only through <see cref="FinishedAt"/> (the offline queue). Null: the server clock is the tap.</summary>
+    public DateTime? EndTappedAt { get; init; }
+}
+
+/// <summary>PUT portal/shifts/{id}/finish-details: the answers a "details later" finish left out, replaced as a whole. Doubles for the numbers, as <see cref="FinishShiftDto"/> does, so a bad number gets the coded refusal.</summary>
+public record FinishDetailsDto
+{
+    /// <summary>The worker's corrected start (within 15 minutes of the stamped start, with a reason). Null keeps the stamp.</summary>
+    public DateTime? ActualStart { get; init; }
+    /// <summary>The worker's corrected end: earlier than the tap, with a reason, and after the start. Null restores the tap.</summary>
+    public DateTime? ActualEnd { get; init; }
+    public string? TimeAdjustmentReason { get; init; }
+    public string? StartTimeReason { get; init; }
+    public string? FinishTimeReason { get; init; }
+    public double? Kilometres { get; init; }
+    public double? PreShiftTravelMinutes { get; init; }
+    public double? PreShiftTravelKilometres { get; init; }
+    public double? PostShiftTravelMinutes { get; init; }
+    public double? PostShiftTravelKilometres { get; init; }
+    /// <summary>"No trip" ticked: the leg's two values are stored as null whatever was sent.</summary>
+    public bool PreTravelNone { get; init; }
+    public bool PostTravelNone { get; init; }
+    [StringLength(2000)]
+    public string? HandoverText { get; init; }
+    public bool NothingToHandOver { get; init; }
+    public bool NothingToNote { get; init; }
+    public bool? AnythingToReport { get; init; }
 }
 
 /// <summary>
@@ -205,6 +236,11 @@ public record ShiftCompletionDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport,
     /// <summary>The worker sent a time recorded offline; the review page marks it.</summary>
     bool SentFromOffline,
+    /// <summary>The deferrable answers still to add on a "details later" finish, in a fixed order (kilometres, tripTo, tripAfter, notes, handover, report); empty otherwise. Approval is held while it is not empty.</summary>
+    IReadOnlyList<string> MissingDetails,
+    /// <summary>"No trip" ticked for the trip to the participant / after the shift.</summary>
+    bool PreTravelNone,
+    bool PostTravelNone,
     // ── Location check at Start: the answer only, never where the phone was ──
     /// <summary>Null when the shift was not checked (rows before the check, a manual start).</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] LocationCheckStatus? LocationCheck = null,
@@ -289,6 +325,8 @@ public record CompletionQueueItemDto(
     /// <summary>How many active incidents are linked to the shift: the rows the completion review's <c>incidents</c> list shows (ShiftId and IsActive), so a row the
     /// queue calls clean is one whose review lists no incident. No default value: an unknown count must never read as "no incident".</summary>
     int IncidentCount,
+    /// <summary>The deferrable answers still to add (same list as <c>ShiftCompletionDto.missingDetails</c>); a row with any is held from approval.</summary>
+    IReadOnlyList<string> MissingDetails,
     /// <summary>True when the start, or a set finish, is more than 5 minutes off the roster (<c>ShiftTimeRules.OffRosterMinutes</c>); a flagged row needs review.</summary>
     bool OffRoster = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] ExtraTimeDecision? ExtraTime = null);

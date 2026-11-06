@@ -11,6 +11,7 @@ import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 /** A queue row's review flags, in SHAPE's order (the first two are drawn). */
 export function completionFlags(item: CompletionQueueItemDto): Array<{ label: string; tone: Tone }> {
   const flags: Array<{ label: string; tone: Tone }> = []
+  if (item.missingDetails.length > 0) flags.push({ label: 'Needs details', tone: 'warning' })
   if (item.incidentCount > 0) flags.push({ label: plural(item.incidentCount, 'incident'), tone: 'danger' })
   if (item.dosesWithoutOutcome > 0) flags.push({ label: `${plural(item.dosesWithoutOutcome, 'dose')} unrecorded`, tone: 'warning' })
   if (item.isOutlierVariance) flags.push({ label: 'Outlier time', tone: 'warning' })

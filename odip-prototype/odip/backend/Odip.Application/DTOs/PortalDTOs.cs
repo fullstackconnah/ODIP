@@ -48,7 +48,9 @@ public record PortalShiftSummaryDto(
     /// <summary>How many times a coordinator returned this shift; a Published shift above 0 is shown as Returned.</summary>
     int ReturnCount,
     /// <summary>Where the coordinator typed that the shift happens; null when none. Never a participant's home address.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Location);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Location,
+    /// <summary>The details this shift's worker still has to add after a "details later" finish (same list as the completion's); empty for every other shift.</summary>
+    IReadOnlyList<string> MissingDetails);
 
 /// <summary>One of the caller's own upcoming trip staffing assignments — included in the shifts list when cheap; see brief.</summary>
 public record PortalTripAssignmentSummaryDto(
@@ -208,6 +210,8 @@ public record PortalShiftDetailDto(
     /// <summary>Whether the organisation claims provider travel (the organisation switch, on when there is no settings row). The portal shows the four
     /// travel fields at Finish only when this is true. Derived on the server, never trusted from the client.</summary>
     bool TravelAsked,
+    /// <summary>The details still to add after a "details later" finish (same list as <c>completion.missingDetails</c>, repeated so the shift page needs no completion); empty otherwise.</summary>
+    IReadOnlyList<string> MissingDetails,
     /// <summary>The saved place the shift is at (name and address), or null. Shown above the free-text <c>location</c> details.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalServiceLocationDto? ServiceLocation = null);
 
@@ -408,7 +412,14 @@ public record PortalHandoverDto(
     bool RequiresAcknowledgement,
     /// <summary>The caller has marked this handover as read.</summary>
     bool IsRead,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ReadAt);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ReadAt,
+    /// <summary>The first name of the author when their "details later" handover is still to come (the newest completion is waiting on it); null otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? OwedFrom = null,
+    /// <summary>While a handover is owed: the newest non-blank handover among the recent holders, so nothing safety-relevant is hidden; null otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalEarlierHandoverDto? EarlierHandover = null);
+
+/// <summary>An older handover shown beside "{first name}'s handover is still to come": its text and the service date of the shift it came from.</summary>
+public record PortalEarlierHandoverDto(string Text, DateOnly ShiftDate);
 
 /// <summary>One holder in the custody trail: who worked the participant, and on which shift date.</summary>
 public record PortalHandoverTrailEntryDto(Guid CompletionId, string WorkerName, DateOnly ShiftDate);
