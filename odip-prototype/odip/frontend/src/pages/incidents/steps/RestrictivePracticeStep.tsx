@@ -82,7 +82,7 @@ export function RestrictivePracticeStep({
   // INC-04/INC-05: the involved participant's ACTIVE register entries — useRestrictivePractices
   // defaults to active-only, exactly the set both the determination and the linked-entry picker
   // need. Disabled (participantId undefined) until a participant is chosen.
-  const { data: activePractices = [], isLoading } = useRestrictivePractices(involvedParticipantId || undefined)
+  const { data: activePractices = [], isLoading, isError } = useRestrictivePractices(involvedParticipantId || undefined)
   // IN-4's "show inactive/retired practices" disclosure — a second query, only fetched once the
   // toggle is actually on, requesting the full (active + inactive) set.
   const { data: allPractices = [] } = useRestrictivePractices(showInactive ? (involvedParticipantId || undefined) : undefined, true)
@@ -98,12 +98,13 @@ export function RestrictivePracticeStep({
   const inactivePractices = useMemo(() => allPractices.filter((p) => !p.isActive).sort(byKindThenDescription), [allPractices])
 
   // An empty register has one answer: "None of these" is picked for the reporter.
-  const noRegisterEntries = !!involvedParticipantId && !isLoading && registerEntries.length === 0
+  const noRegisterEntries = !!involvedParticipantId && !isLoading && !isError && registerEntries.length === 0
   const isUnapprovedMode = manualUnapprovedSelected || !!unapprovedRestrictivePracticeDetails?.trim() || noRegisterEntries
   const linkedChoice = restrictivePracticeId ? restrictivePracticeId : (isUnapprovedMode ? 'unapproved' : '')
   const linkedPractice = registerEntries.find((p) => p.id === restrictivePracticeId)
   // The kind is on the picked row, so the type is asked only for "None of these", or for a link whose entry is no longer on the list (an edit).
-  const askType = linkedChoice === 'unapproved' || (!!restrictivePracticeId && !linkedPractice)
+  // With no participant the type field is already at the top of the card, so it is never asked a second time here.
+  const askType = !!involvedParticipantId && (linkedChoice === 'unapproved' || (!!restrictivePracticeId && !linkedPractice && !isLoading))
   // A Not authorised entry locks the box ticked. Editing an incident whose link is unchanged keeps what it was stored with (frozen) instead.
   const incidentDate = incidentDateTime?.slice(0, 10) || null
   const lockedNotAuthorised = !!linkedPractice && !isRpAuthorisedOn(linkedPractice, incidentDate)
@@ -209,6 +210,10 @@ export function RestrictivePracticeStep({
             <p className="text-sm text-[var(--color-muted-foreground)]">
               Select the involved participant on the Basics step to see the restrictive practices on their register.
             </p>
+          ) : isError ? (
+            <p role="alert" className="text-sm text-[var(--color-destructive)]">
+              Couldn't load this participant's register. You can still choose None of these and describe the practice.
+            </p>
           ) : noRegisterEntries && (
             <p className="text-sm text-[var(--color-muted-foreground)]">
               No active practices are on this participant's register.
@@ -224,7 +229,7 @@ export function RestrictivePracticeStep({
                 <input
                   type="radio"
                   name="linkedRestrictivePractice"
-                  className="mt-1 w-4 h-4"
+                  className="mt-1 w-4 h-4 shrink-0"
                   checked={linkedChoice === p.id}
                   onChange={() => handleSelectLinkedPractice(p)}
                 />
@@ -243,11 +248,11 @@ export function RestrictivePracticeStep({
               <input
                 type="radio"
                 name="linkedRestrictivePractice"
-                className="mt-1 w-4 h-4"
+                className="mt-1 w-4 h-4 shrink-0"
                 checked={linkedChoice === 'unapproved'}
                 onChange={handleSelectUnapproved}
               />
-              <span className="text-sm font-medium">None of these — the practice used is not on this participant's register</span>
+              <span className="text-sm font-medium min-w-0 flex-1">None of these — the practice used is not on this participant's register</span>
             </label>
           </div>
 

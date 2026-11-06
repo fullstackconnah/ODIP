@@ -6,10 +6,10 @@ import { RestrictivePracticeStep } from './RestrictivePracticeStep'
 import type { IncidentFormData } from '../incidentFormSchema'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 
-const { mockActive, mockAll } = vi.hoisted(() => ({ mockActive: { current: [] as unknown[] }, mockAll: { current: [] as unknown[] } }))
+const { mockActive, mockAll, mockState } = vi.hoisted(() => ({ mockActive: { current: [] as unknown[] }, mockAll: { current: [] as unknown[] }, mockState: { current: { isLoading: false, isError: false } } }))
 
 vi.mock('@/api/hooks', () => ({
-  useRestrictivePractices: (_participantId: string | undefined, includeInactive?: boolean) => ({ data: includeInactive ? mockAll.current : mockActive.current, isLoading: false }),
+  useRestrictivePractices: (_participantId: string | undefined, includeInactive?: boolean) => ({ data: includeInactive ? mockAll.current : mockActive.current, ...mockState.current }),
   useParticipantMedications: () => ({ data: [], isLoading: false }),
   useBulkCreateRestrictivePractices: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -40,7 +40,7 @@ const values = () => JSON.parse(screen.getByTestId('values').textContent ?? '{}'
 const typeDropdown = () => screen.queryByLabelText(/Restrictive Practice Type/i)
 const noneRadio = () => screen.getByRole('radio', { name: /None of these/i })
 
-beforeEach(() => { mockActive.current = [SECLUSION, HOLD_B, HOLD]; mockAll.current = [SECLUSION, HOLD_B, HOLD, RETIRED] })
+beforeEach(() => { mockState.current = { isLoading: false, isError: false }; mockActive.current = [SECLUSION, HOLD_B, HOLD]; mockAll.current = [SECLUSION, HOLD_B, HOLD, RETIRED] })
 
 describe('RestrictivePracticeStep register list', () => {
   it('lists every active entry of every kind, kind first, sorted by kind then description, with "None of these" last and no type dropdown', () => {
@@ -91,6 +91,37 @@ describe('RestrictivePracticeStep register list', () => {
 
     expect(typeDropdown()).toBeInTheDocument()
     expect(screen.queryAllByRole('radio')).toHaveLength(0)
+  })
+
+  it('with no participant, picking a type then "None of these" still shows exactly one type field', async () => {
+    const user = userEvent.setup()
+    render(<Harness participantId="" />)
+    await user.click(screen.getByLabelText(/Restrictive Practice Type/i))
+    await user.click(await screen.findByRole('option', { name: /Seclusion/ }))
+
+    await user.click(noneRadio())
+
+    expect(screen.getAllByLabelText(/Restrictive Practice Type/i)).toHaveLength(1)
+  })
+
+  it('in edit mode, while the register loads, the type dropdown does not flash', () => {
+    mockState.current = { isLoading: true, isError: false }
+    mockActive.current = []
+    render(<Harness defaults={{ restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-1' }} />)
+
+    expect(typeDropdown()).not.toBeInTheDocument()
+  })
+
+  it('a failed register load shows the error, not the empty-register line, and keeps "None of these" usable', async () => {
+    mockState.current = { isLoading: false, isError: true }
+    mockActive.current = []
+    render(<Harness />)
+
+    expect(screen.getByText("Couldn't load this participant's register. You can still choose None of these and describe the practice.")).toBeInTheDocument()
+    expect(screen.queryByText(/No active practices are on this participant/)).not.toBeInTheDocument()
+    expect(noneRadio()).not.toBeChecked()
+    await userEvent.setup().click(noneRadio())
+    expect(screen.getByLabelText(/Describe the restrictive practice that was used/)).toBeInTheDocument()
   })
 
   it('the inactive disclosure lists every inactive entry with its kind', async () => {

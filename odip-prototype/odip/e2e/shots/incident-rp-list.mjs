@@ -2,7 +2,7 @@
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to this script> <outdir>
 // The register comes from page.route stubs over the mock API (synthetic names). Crops go through cropElement (chrome-aware); exits non-zero when a check fails.
 import path from 'node:path'
-import { AU_CONTEXT, cropElement, checkCropHolds, fullPage, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, cropElement, checkCropHolds, overlapCheck, fullPage, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -42,7 +42,7 @@ const add = (name, pass, detail) => checks.push({ name, pass, detail })
 
 const browser = await chromium.launch({ headless: true })
 // One signed-in session; `register` is read by the stub on every request, so a state with an empty register is a fresh session.
-async function session(vp, { register = [...ACTIVE], scheme = 'light' } = {}) {
+async function session(vp, { register = [...ACTIVE], scheme = 'light', participant = true } = {}) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: vp.width, height: vp.height }, hasTouch: !!vp.mobile, isMobile: !!vp.mobile, reducedMotion: 'reduce', colorScheme: scheme })
   const page = await context.newPage()
   const cdp = vp.mobile ? await context.newCDPSession(page) : null
@@ -65,20 +65,29 @@ async function session(vp, { register = [...ACTIVE], scheme = 'light' } = {}) {
   await pin()
   await page.goto(`${BASE_URL}/incidents/new`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByPlaceholder('Brief incident summary').fill('Held at the kerb')
-  await page.getByLabel('Involved Participant').click()
-  await page.getByRole('option', { name: NAME }).click()
+  if (participant) {
+    await page.getByLabel('Involved Participant').click()
+    await page.getByRole('option', { name: NAME }).click()
+  }
   await page.getByLabel('Incident Type *', { exact: true }).click()
   await page.getByRole('option', { name: /Restrictive Practice Use/i }).click()
   await page.getByRole('radio', { name: '2 Medium' }).click()
   await page.getByRole('button', { name: 'Next' }).click()
-  await page.getByRole('radiogroup', { name: 'Which practice was used?' }).waitFor({ timeout: 60_000 })
+  if (participant) await page.getByRole('radiogroup', { name: 'Which practice was used?' }).waitFor({ timeout: 60_000 })
+  else await page.getByLabel(TYPE_FIELD).waitFor({ timeout: 60_000 })
   return { context, page }
 }
 
 const fieldset = (page) => page.locator('fieldset', { has: page.getByRole('radiogroup', { name: 'Which practice was used?' }) })
 async function crop(page, state) {
-  const r = await cropElement(page, fieldset(page), path.join(OUT_DIR, `${state}.png`), { pad: 16, hideChrome: true })
-  checks.push(checkCropHolds(r))
+  const file = path.join(OUT_DIR, `${state}.png`)
+  // The disclosure row is the last thing in the fieldset: it must sit inside the clip with nothing (the fixed bottom nav) over it.
+  const toggle = page.getByRole('button', { name: /inactive\/retired practices/ })
+  const r = await cropElement(page, fieldset(page), file, {
+    pad: 16, hideChrome: true, natural: true,
+    during: async (clip) => ({ fieldset: await overlapCheck(fieldset(page), clip, `${state}.png`), toggle: await overlapCheck(toggle, clip, `${state}.png (disclosure row)`) })
+  })
+  checks.push(checkCropHolds(r), r.measured.fieldset, r.measured.toggle)
 }
 const noOverflow = async (page, state) => {
   const m = await page.evaluate(() => ({ sw: document.scrollingElement.scrollWidth, iw: window.innerWidth }))
@@ -96,6 +105,10 @@ async function rowChecks(page, state) {
   add(`${state}: every row leads with its kind`, rows.length === ACTIVE.length + 1 && wrong.length === 0, { rows: rows.map((r) => r.kind || r.text.slice(0, 12)), wrong: wrong.map((w) => w.id) })
   const order = rows.slice(0, -1).map((r) => r.kind)
   add(`${state}: sorted by kind`, JSON.stringify(order) === JSON.stringify([...order].sort((a, b) => a.localeCompare(b))), order)
+  // S-1: every radio in the fieldset is the same size and on the same left edge, and every row's text starts at the same x.
+  const dots = await fieldset(page).locator('input[type="radio"]').evaluateAll((els) => els.map((e) => { const b = e.getBoundingClientRect(), t = e.parentElement.querySelector('span').getBoundingClientRect(); return { w: Math.round(b.width * 10) / 10, x: Math.round(b.left * 10) / 10, tx: Math.round(t.left * 10) / 10 } }))
+  const same = (k) => dots.every((d) => Math.abs(d[k] - dots[0][k]) <= 0.5)
+  add(`${state}: every radio is the same width, left edge and text start`, dots.length === ACTIVE.length + 1 && same('w') && same('x') && same('tx'), dots)
   const short = rows.filter((r) => r.h < tapMin - 0.5)
   add(`${state}: rows >= --tap-min (${tapMin})`, short.length === 0, rows.map((r) => Math.round(r.h)))
 }
@@ -157,6 +170,19 @@ async function rowChecks(page, state) {
   await crop(page, 'none-picked-390')
   const full = await fullPage(page, path.join(OUT_DIR, 'full-page-390-touch.png'), { touch: true })
   checks.push(...full.checks)
+  await context.close()
+}
+
+// 1280, no participant: the type comes first; picking one then "None of these" must not add a second type field.
+{
+  const { context, page } = await session({ name: '1280 no participant', width: 1280, height: 800 }, { participant: false })
+  await page.getByLabel(TYPE_FIELD).click()
+  await page.getByRole('option', { name: /Seclusion/ }).click()
+  await page.getByRole('radio', { name: /None of these/ }).check()
+  const dd = await typeCount(page)
+  add('1280 no participant, none picked: exactly one type field', dd === 1, dd)
+  const r = await cropElement(page, fieldset(page), path.join(OUT_DIR, 'no-participant-none-1280.png'), { pad: 16, hideChrome: true, natural: true, during: (clip) => overlapCheck(fieldset(page), clip, 'no-participant-none-1280.png') })
+  checks.push(checkCropHolds(r), r.measured)
   await context.close()
 }
 
