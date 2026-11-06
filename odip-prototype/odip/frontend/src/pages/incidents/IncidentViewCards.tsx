@@ -28,8 +28,10 @@ type CardProps = { incident: IncidentDetailDto; edit: CardEdit }
 
 const MUTED = 'text-[var(--color-muted-foreground)]'
 const dateTime: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' }
-const at = (iso: string | null | undefined, zone: string | null | undefined) => (iso ? formatWithTimeZone(iso, zone, dateTime) : null)
-const wall = (v: string | null | undefined) => (v ? formatWallClock(v, dateTime) : null)
+// A no-break space before am/pm keeps "9:00 pm" on one line at 390 (the formatters are shared, so the join lives in this view).
+const unbreak = (text: string) => text.replace(/\s(?=[ap]m$)/i, '\u00a0')
+const at = (iso: string | null | undefined, zone: string | null | undefined) => (iso ? unbreak(formatWithTimeZone(iso, zone, dateTime)) : null)
+const wall = (v: string | null | undefined) => (v ? unbreak(formatWallClock(v, dateTime)) : null)
 
 function ViewCard({ title, group, edit, children }: { title: string; group: GroupKey; edit: CardEdit; children: ReactNode }) {
   return (
@@ -88,7 +90,7 @@ export function DetailsCards({ incident, edit }: CardProps) {
       <ViewCard title="Incident details" group="details" edit={edit}>
         <FactList
           items={[
-            { label: 'Date & time', value: <span className="tabular-nums">{formatWallClock(incident.incidentDateTime, dateTime)}</span> },
+            { label: 'Date & time', value: <span className="tabular-nums">{wall(incident.incidentDateTime)}</span> },
             { label: 'Location', value: incident.location },
             { label: 'Emergency services', value: incident.wereEmergencyServicesCalled ? <EmergencyServicesValue incident={incident} /> : 'Not called' },
           ]}
@@ -270,7 +272,7 @@ export function LinkedRecordsCard({ incident }: { incident: IncidentDetailDto })
             </p>
             <p className="text-[var(--color-muted-foreground)]">
               {incident.medicationContext.administeredAt
-                ? formatWithTimeZone(incident.medicationContext.administeredAt, null, dateTime)
+                ? at(incident.medicationContext.administeredAt, null)
                 : 'Not administered'}
               {incident.medicationContext.recordedByName ? ` · ${incident.medicationContext.recordedByName}` : ''}
             </p>

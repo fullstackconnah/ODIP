@@ -409,6 +409,10 @@ describe('IncidentDetailPage — the full view', () => {
 
     const [responded, pending, external] = screen.getAllByTestId('witness-row')
     expect(within(responded).getByText(/^Asked .* · Responded /)).toBeInTheDocument()
+    // The time and its am/pm stay on one line at 390: a no-break space joins them, in the witness line and in the page foot.
+    expect(responded.textContent).toMatch(/\d:\d\d\u00a0[ap]m/)
+    expect(responded.textContent).not.toMatch(/\d:\d\d [ap]m/)
+    expect(screen.getByText(/^Reported \d/).textContent).toMatch(/\d:\d\d\u00a0[ap]m/)
     expect(within(responded).getByText('I saw her slip.')).toBeInTheDocument()
     expect(within(pending).getByText('Waiting for their response.')).toBeInTheDocument()
     expect(within(pending).queryByText('Statement')).not.toBeInTheDocument()
