@@ -176,13 +176,19 @@ public static class ParticipantReadiness
         var issues = await IssuesAsync(db, participantIds, ct);
         if (issues.Count == 0) return issues;
 
-        var today = await ProviderTimeZoneResolver.TodayAsync(db, clock, ct);
+        // Each participant is judged by their own organisation's date: an unscoped SuperAdmin's ids can span organisations.
         var ids = issues.Keys.ToList();
-        var missing = await ParticipantReadinessGate.FundingMissingParticipants(db, today)
-            .Where(p => ids.Contains(p.Id))
-            .Select(p => p.Id)
-            .ToListAsync(ct);
-        foreach (var id in missing) issues[id].Add(FundingNotRecorded);
+        var tenants = await db.Participants.Where(p => ids.Contains(p.Id)).Select(p => new { p.Id, p.TenantId }).ToListAsync(ct);
+        foreach (var tenant in tenants.GroupBy(p => p.TenantId))
+        {
+            var today = await ProviderTimeZoneResolver.TodayAsync(db, tenant.Key, clock, ct);
+            var tenantIds = tenant.Select(p => p.Id).ToList();
+            var missing = await ParticipantReadinessGate.FundingMissingParticipants(db, today)
+                .Where(p => tenantIds.Contains(p.Id))
+                .Select(p => p.Id)
+                .ToListAsync(ct);
+            foreach (var id in missing) issues[id].Add(FundingNotRecorded);
+        }
         return issues;
     }
 

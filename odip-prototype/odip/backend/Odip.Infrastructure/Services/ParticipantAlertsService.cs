@@ -105,9 +105,9 @@ public class ParticipantAlertsService
     {
         // "Today" for the date rules (plan expiry, restrictive-practice review) is the provider's calendar date, not the UTC date: a plan
         // that ended yesterday in Sydney is expired from Sydney's midnight, not from 10:00 or 11:00 the next morning. The 7-day
-        // administration lookback is a span of instants, so it stays on the UTC clock.
+        // administration lookback is a span of instants, so it stays on the UTC clock. An unscoped SuperAdmin aggregate spans organisations,
+        // so each participant is judged by their own organisation's date (resolved once per organisation below).
         var nowUtc = _clock.GetUtcNow().UtcDateTime;
-        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var administrationWindowStart = nowUtc.AddDays(-AdministrationWindowDays);
 
         var participantsQuery = _db.Participants.AsQueryable();
@@ -136,6 +136,12 @@ public class ParticipantAlertsService
 
         if (participants.Count == 0) return new List<ParticipantAlertsDto>();
 
+        var todayByTenant = new Dictionary<Guid, DateOnly>();
+        foreach (var tenantId in participants.Select(p => p.TenantId).Distinct())
+            todayByTenant[tenantId] = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        var tenantOf = participants.ToDictionary(p => p.Id, p => p.TenantId);
+        DateOnly TodayOf(Guid participantId) => todayByTenant[tenantOf[participantId]];
+
         var participantIds = participants.Select(p => p.Id).ToList();
         var alertsByParticipant = participantIds.ToDictionary(id => id, _ => new List<ParticipantAlertDto>());
         void Add(Guid pid, string type, AlertSeverity severity, string message, string deepLinkTab, string? linkTo = null) =>
@@ -149,12 +155,13 @@ public class ParticipantAlertsService
             });
 
         // ── Rule 1: restrictive practice review overdue ──
+        var latestToday = todayByTenant.Values.Max(); // the query takes the widest cut-off; each row is then held to its own organisation's date
         var overdueReviews = await _db.RestrictivePractices
             .Where(rp => participantIds.Contains(rp.ParticipantId) && rp.IsActive
-                && rp.ReviewDate != null && rp.ReviewDate < today)
+                && rp.ReviewDate != null && rp.ReviewDate < latestToday)
             .Select(rp => new { rp.ParticipantId, rp.Type, rp.ReviewDate })
             .ToListAsync(ct);
-        foreach (var rp in overdueReviews)
+        foreach (var rp in overdueReviews.Where(rp => rp.ReviewDate < TodayOf(rp.ParticipantId)))
         {
             Add(rp.ParticipantId, "restrictive-practice-review-overdue", AlertSeverity.Warning,
                 $"{rp.Type} restrictive practice review was due {rp.ReviewDate:yyyy-MM-dd} and is overdue",
@@ -168,6 +175,7 @@ public class ParticipantAlertsService
             .ToListAsync(ct);
         foreach (var rp in bspEntries)
         {
+            var today = TodayOf(rp.ParticipantId);
             var phrase = RestrictivePracticeAuthorisation.TypePhrase(rp.Type);
             var interimDue = BspTimeline.InterimDue(rp.FirstUsedOn);
             var comprehensiveDue = BspTimeline.ComprehensiveDue(rp.FirstUsedOn);
@@ -266,6 +274,7 @@ public class ParticipantAlertsService
         foreach (var p in participants)
         {
             if (p.PlanEndDate is not { } planEndDate) continue;
+            var today = todayByTenant[p.TenantId];
 
             if (planEndDate < today)
             {
@@ -327,8 +336,10 @@ public class ParticipantAlertsService
 
         // ── Rule 12: the service agreement ending or ended (agreement PR 2) ──
         // Active participants only (D6): the participant page asks with activeOnly false, and an archived participant's agreement is nobody's task.
-        var activeIds = participants.Where(p => p.IsActive).Select(p => p.Id).ToList();
-        foreach (var ending in await AgreementEnding.FindAsync(_db, activeIds, today, ct))
+        var agreementEndings = new List<AgreementEndingRow>();
+        foreach (var tenantGroup in participants.Where(p => p.IsActive).GroupBy(p => p.TenantId))
+            agreementEndings.AddRange(await AgreementEnding.FindAsync(_db, tenantGroup.Select(p => p.Id).ToList(), todayByTenant[tenantGroup.Key], ct));
+        foreach (var ending in agreementEndings)
         {
             var ended = ending.DaysLeft < 0;
             Add(ending.ParticipantId, ended ? "agreement-ended" : "agreement-ending-soon", ended ? AlertSeverity.Critical : AlertSeverity.Warning,
