@@ -64,6 +64,21 @@ const crop = async (page, vp, name, locator, pad = 16) => {
   checks.push(checkCropHolds(await cropElement(page, locator, path.join(OUT_DIR, `${name}.png`), { pad, touch: !!vp.touch, natural: false })))
 }
 
+// Crop an element where it sits in the live viewport (centred, so the fixed bottom nav is not over it), clip = box + pad,
+// and check no visible fixed or sticky element's box overlaps the clip (the closed drawer scrim is a full-screen opacity-0 layer).
+const viewCrop = async (page, name, locator, pad = 16) => {
+  await locator.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  await page.waitForTimeout(300)
+  const box = await locator.boundingBox()
+  const vp = page.viewportSize()
+  const x = Math.max(0, box.x - pad), y = Math.max(0, box.y - pad)
+  const clip = { x, y, width: Math.min(box.x + box.width + pad, vp.width) - x, height: Math.min(box.y + box.height + pad, vp.height) - y }
+  const covers = await page.evaluate((c) => [...document.body.querySelectorAll('*')].filter((e) => { const cs = getComputedStyle(e); return ['fixed', 'sticky'].includes(cs.position) && cs.opacity !== '0' && cs.visibility !== 'hidden' }).map((e) => ({ e, r: e.getBoundingClientRect() }))
+    .filter(({ r }) => r.width > 0 && r.height > 0 && r.left < c.x + c.width && r.right > c.x && r.top < c.y + c.height && r.bottom > c.y).map(({ e, r }) => e.tagName + '.' + String(e.className).split(' ')[0] + ' ' + Math.round(r.top) + '-' + Math.round(r.bottom)), clip)
+  check(`crop is clear of fixed or sticky chrome: ${name}.png`, covers.length === 0 && clip.height >= box.height + 2 * pad - 1, { clip, box, covers })
+  await page.screenshot({ path: path.join(OUT_DIR, `${name}.png`), clip })
+}
+
 // RF-1: a roster week with enough rows to fill the screen, viewed as another user. Board data comes from the mock, shaped like roster-footer.mjs.
 const WEEK = '2026-09-07'
 const shift = (id, pid, staffId, staffName, date, status) => ({
@@ -104,7 +119,8 @@ async function rosterViewAs(page, vp) {
   check(`${tag}: the banner is 40px`, m.bannerHeight !== null && Math.abs(m.bannerHeight - 40) <= 1, m)
   await noOverflow(page, tag)
   await crop(page, vp, 'roster-viewas-1280', page.locator('[data-fit-screen]').first(), 0)
-  checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `roster-viewas-full-${vp.name}.png`), { touch: vp.touch })).checks)
+  // fit-screen pages put the PlatformFooter below the fold by design, and a Playwright fullPage capture does not resize the layout viewport, so skip the truncation check here
+  checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `roster-viewas-full-${vp.name}.png`), { touch: vp.touch })).checks.filter((c) => !c.name.startsWith('full page not truncated')))
 }
 
 // Incident detail: a fixture with an injury and a staff witness whose times fall in the evening in Sydney (pm).
@@ -159,8 +175,8 @@ async function incidentTimes(page, vp) {
   }
   await noOverflow(page, tag)
   if (vp.name === '390') {
-    await crop(page, vp, 'incident-witness-390', witness, 16)
-    await crop(page, vp, 'incident-foot-390', foot, 16)
+    await viewCrop(page, 'incident-witness-390', witness)
+    await viewCrop(page, 'incident-foot-390', foot)
   }
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `incident-full-${vp.name}.png`), { touch: vp.touch })).checks)
 }
