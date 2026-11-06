@@ -21,8 +21,12 @@ export const PORTAL_SHIFT_STATUS_LABELS: Partial<Record<ShiftStatus, string>> = 
   Cancelled: 'Cancelled',
 }
 
-/** A shift's worker label: a Published shift a coordinator sent back reads "Returned". */
-export function portalStatusLabel(s: { status: ShiftStatus; returnCount: number }): string | undefined {
+/** A submitted shift that still lacks details (finish later) reads "Needs details": it can't be approved until they are in. */
+export const needsDetails = (s: { status: ShiftStatus; missingDetails?: string[] }) => s.status === 'PendingReview' && (s.missingDetails?.length ?? 0) > 0
+
+/** A shift's worker label: a Published shift a coordinator sent back reads "Returned"; a submitted one with details missing reads "Needs details". */
+export function portalStatusLabel(s: { status: ShiftStatus; returnCount: number; missingDetails?: string[] }): string | undefined {
+  if (needsDetails(s)) return 'Needs details'
   return s.status === 'Published' && s.returnCount > 0 ? 'Returned' : PORTAL_SHIFT_STATUS_LABELS[s.status]
 }
 

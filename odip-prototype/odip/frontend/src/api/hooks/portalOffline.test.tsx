@@ -22,7 +22,7 @@ vi.mock('../client', () => ({
   apiPatch: vi.fn(),
 }))
 
-import { useCreateShiftNote, useShiftNotes, useMyShifts, usePortalShiftDetail, useRecordShiftDose, useStartShift } from './portal'
+import { useCreateShiftNote, useShiftNotes, useMyShifts, usePortalShiftDetail, useRecordShiftDose, useStartShift, useFinishShift, useSaveFinishDetails } from './portal'
 import { offlineQueue } from '@/lib/offline/queue'
 import { readSaved, writeSaved } from '@/lib/offline/store'
 import { refreshPortalAfterReplay } from '@/lib/offline/refresh'
@@ -155,5 +155,29 @@ describe('offline-aware portal hooks', () => {
     await waitFor(() => expect(notes.result.current.data).toMatchObject([{ id: queued.id, body: 'Settled well' }]))
     expect(offlineQueue.getSnapshot()).toEqual([])
     off()
+  })
+  const body = { actualStart: null, actualEnd: null, timeAdjustmentReason: null, startTimeReason: null, finishTimeReason: null, kilometres: 12, preShiftTravelMinutes: null, preShiftTravelKilometres: null, postShiftTravelMinutes: 10, postShiftTravelKilometres: 4, preTravelNone: true, postTravelNone: false, handoverText: 'All settled', nothingToHandOver: false, nothingToNote: false, anythingToReport: false }
+
+  it('details: offline, the PUT is queued with the typed body and no client time, behind the queued finish', async () => {
+    online.mockReturnValue(false)
+    const qc = newClient()
+    qc.setQueryData(['portal-shift-detail', 's1'], detail)
+    const fin = renderHook(() => useFinishShift(), { wrapper: wrapper(qc) })
+    const det = renderHook(() => useSaveFinishDetails(), { wrapper: wrapper(qc) })
+    await fin.result.current.mutateAsync({ id: 's1', data: { detailsLater: true } })
+    expect(await det.result.current.mutateAsync({ id: 's1', data: body })).toBeUndefined()
+    expect(mockRequest).not.toHaveBeenCalled()
+    expect(offlineQueue.getSnapshot()).toMatchObject([
+      { kind: 'finish', body: { detailsLater: true }, clientTimeField: 'finishedAt' },
+      { kind: 'details', shiftId: 's1', path: '/portal/shifts/s1/finish-details', method: 'PUT', body },
+    ])
+    expect(offlineQueue.getSnapshot()[1].clientTimeField).toBeUndefined()
+  })
+
+  it('details: online, the PUT goes straight out with the whole body', async () => {
+    const { result } = renderHook(() => useSaveFinishDetails(), { wrapper: wrapper(newClient()) })
+    await result.current.mutateAsync({ id: 's1', data: body })
+    expect(mockRequest).toHaveBeenCalledWith(expect.objectContaining({ url: '/portal/shifts/s1/finish-details', method: 'PUT', data: body }))
+    expect(offlineQueue.getSnapshot()).toEqual([])
   })
 })

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDeleteRaw } from '../client'
 import type {
-  PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto, LocationReasonDto,
+  PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto, FinishDetailsDto, LocationReasonDto,
   EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
 } from '../types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -153,6 +153,14 @@ export function useSaveLocationReason() {
 export function useFinishShift() {
   return useQueuedWrite<{ id: string; data: FinishShiftDto }, PortalShiftDetailDto>(
     ({ id, data }) => ({ kind: 'finish', path: `/portal/shifts/${id}/finish`, method: 'POST', body: data, clientTimeField: 'finishedAt' }),
+    (qc, _, vars) => refreshShift(qc, vars.id),
+  )
+}
+
+/** PUT portal/shifts/{id}/finish-details: the details after "End shift, add details later". Queued while offline behind the finish; the whole body is sent as entered. */
+export function useSaveFinishDetails() {
+  return useQueuedWrite<{ id: string; data: FinishDetailsDto }, PortalShiftDetailDto>(
+    ({ id, data }) => ({ kind: 'details', path: `/portal/shifts/${id}/finish-details`, method: 'PUT', body: data }),
     (qc, _, vars) => refreshShift(qc, vars.id),
   )
 }

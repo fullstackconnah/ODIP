@@ -47,6 +47,14 @@ describe('offline queue', () => {
     expect(sent.map((s) => s.rec.kind)).toEqual(['start', 'note', 'breakEnd', 'breakStart', 'tick', 'finish'])
   })
 
+  it('details replay after finish, even when queued first (D4)', async () => {
+    const q = make()
+    for (const k of ['details', 'finish'] as const) q.enqueue(rec(k))
+    online = true
+    await q.replay()
+    expect(sent.map((s) => s.rec.kind)).toEqual(['finish', 'details'])
+  })
+
   it('break start and end keep tap order within their rank', async () => {
     const q = make()
     for (const k of ['breakStart', 'breakEnd', 'breakStart', 'breakEnd'] as const) q.enqueue(rec(k))
