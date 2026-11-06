@@ -155,7 +155,7 @@ describe('Organisation profile: time zone', () => {
     api.get.mockResolvedValue({ ...row, state: 'VIC' })
     const user = userEvent.setup()
     show()
-    const address = await screen.findByRole('textbox', { name: 'Registered business address' })
+    const address = await screen.findByRole('combobox', { name: 'Registered business address' })
     await user.type(address, ' B')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
@@ -172,7 +172,7 @@ describe('Organisation profile: time zone', () => {
     api.put.mockRejectedValue({ response: { status: 409, data: { code: 'PROVIDER_SETTINGS_CHANGED' } } })
     const user = userEvent.setup()
     show()
-    await user.type(await screen.findByRole('textbox', { name: 'Registered business address' }), ' B')
+    await user.type(await screen.findByRole('combobox', { name: 'Registered business address' }), ' B')
     api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Perth', updatedAt: '2026-10-23T02:00:00.000000Z' })
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(zone()).toHaveValue('Australia/Perth'))
@@ -242,7 +242,7 @@ describe('Organisation profile: contact fields', () => {
 
   it('labels the address as the registered business address and says where it is printed', async () => {
     show()
-    const address = await screen.findByRole('textbox', { name: 'Registered business address' })
+    const address = await screen.findByRole('combobox', { name: 'Registered business address' })
     expect(address).toHaveAccessibleDescription('Printed on invoices and agreements.')
     expect(screen.queryByRole('textbox', { name: 'Address' })).not.toBeInTheDocument()
   })
@@ -293,7 +293,7 @@ describe('Organisation profile: contact fields', () => {
   it('echoes the row\'s own null for the four fields when only the address changed', async () => {
     const user = userEvent.setup()
     show()
-    await user.type(await screen.findByRole('textbox', { name: 'Registered business address' }), ' B')
+    await user.type(await screen.findByRole('combobox', { name: 'Registered business address' }), ' B')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
     expect(api.put.mock.calls[0][1]).toMatchObject({ tradingName: null, contactEmail: null, contactPhone: null, website: null })

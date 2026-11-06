@@ -105,7 +105,7 @@ describe('Organisation profile', () => {
     expect(await screen.findByLabelText('Legal name')).toHaveValue('Sunrise Support Services')
     expect(screen.getByLabelText('ABN')).toHaveValue('51824753556')
     expect(screen.getByLabelText('NDIS registration number')).toHaveValue('4050012345')
-    expect(screen.getByRole('textbox', { name: 'Registered business address' })).toHaveValue('12 Wattle St, Brisbane QLD 4000')
+    expect(screen.getByRole('combobox', { name: 'Registered business address' })).toHaveValue('12 Wattle St, Brisbane QLD 4000')
     expect(screen.getByRole('radio', { name: 'QLD' })).toBeChecked()
     expect(screen.getByRole('heading', { level: 3, name: 'Name and registration' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: 'Address and time zone' })).toBeInTheDocument()
@@ -202,7 +202,7 @@ describe('Organisation profile', () => {
     await user.type(name, 'Sunrise Care')
     await user.type(screen.getByLabelText('ABN'), '51824753556')
     await user.type(screen.getByLabelText('NDIS registration number'), '4050012345')
-    await user.type(screen.getByRole('textbox', { name: 'Registered business address' }), '1 Test St')
+    await user.type(screen.getByRole('combobox', { name: 'Registered business address' }), '1 Test St')
     expect(saveButton()).toBeDisabled() // no state chosen yet
     await user.click(screen.getByRole('radio', { name: 'WA' }))
     await user.click(saveButton())

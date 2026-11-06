@@ -270,7 +270,7 @@ async function pickFirst(page, vp) {
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
 }
-const valueIs = (page, v) => page.waitForFunction((x) => document.querySelector('input[role="combobox"]')?.value === x, v, { timeout: 30_000 })
+const valueIs = async (page, input, v) => page.waitForFunction(([el, x]) => el.value === x, [await input.elementHandle(), v], { timeout: 30_000 })
 
 // F: Accommodation create, the Address & contact card.
 async function runF(browser, vp) {
@@ -285,7 +285,7 @@ async function runF(browser, vp) {
     await measureOpen(page, ctx, vp, input)
     await crop(page, input, `f-suggestions-${vp.name}.png`, vp, popupOf(page))
     await pickFirst(page, vp)
-    await valueIs(page, PICKED.street)
+    await valueIs(page, input, PICKED.street)
     const got = { street: await input.inputValue(), suburb: await page.getByPlaceholder('e.g. Surfers Paradise').inputValue(), state: await page.getByPlaceholder('e.g. QLD').inputValue(), postcode: await page.getByPlaceholder('e.g. 4217').inputValue() }
     check(`${ctx} after a pick the four fields hold the fixture values`, got.street === PICKED.street && got.suburb === PICKED.suburb && got.state === PICKED.state && got.postcode === PICKED.postcode, got)
     await crop(page, group, `f-picked-filled-${vp.name}.png`, vp)
@@ -307,7 +307,7 @@ async function runH(browser, vp) {
     await measureOpen(page, ctx, vp, input)
     await crop(page, input, `h-suggestions-${vp.name}.png`, vp, popupOf(page))
     await pickFirst(page, vp)
-    await valueIs(page, PICKED.formattedAddress)
+    await valueIs(page, input, PICKED.formattedAddress)
     check(`${ctx} after a pick the field holds the formatted address`, (await input.inputValue()) === PICKED.formattedAddress, await input.inputValue())
   } catch (e) { check(`${ctx} script error`, false, String(e.message).split('\n')[0]) }
   await context.close()
@@ -324,7 +324,7 @@ async function runJ(browser, vp) {
     await input.waitFor({ state: 'visible', timeout: 60_000 })
     await openAndType(page, input)
     await pickFirst(page, vp)
-    await valueIs(page, PICKED.formattedAddress)
+    await valueIs(page, input, PICKED.formattedAddress)
     check(`${ctx} after a pick Where holds the formatted address`, (await input.inputValue()) === PICKED.formattedAddress, await input.inputValue())
     await crop(page, input, `j-picked-filled-${vp.name}.png`, vp)
   } catch (e) { check(`${ctx} script error`, false, String(e.message).split('\n')[0]) }

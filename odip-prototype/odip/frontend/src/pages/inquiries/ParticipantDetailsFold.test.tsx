@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { pickAddress } from '@/test/addressPick'
@@ -25,7 +26,11 @@ describe('ParticipantDetailsFold address lookup (caller D)', () => {
   it('a pick fills the street (cut to 200) and the other three address fields', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
-    render(<ParticipantDetailsFold form={form} errors={{}} open today="2026-10-28" onToggle={() => undefined} onChange={onChange} />)
+    function Harness() {
+      const [f, setF] = useState(form)
+      return <ParticipantDetailsFold form={f} errors={{}} open today="2026-10-28" onToggle={() => undefined} onChange={(k, v) => { onChange(k, v); setF(p => ({ ...p, [k]: v })) }} />
+    }
+    render(<Harness />)
     await pickAddress(user, screen.getByRole('combobox', { name: 'Street' }))
     expect(onChange.mock.calls).toEqual(expect.arrayContaining([
       ['addressStreet', '12 Example Street'], ['addressSuburb', 'Brisbane City'], ['addressState', 'QLD'], ['addressPostcode', '4000'],
