@@ -4099,6 +4099,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<string>("OnboardingItemModes")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("OrganisationName")
                         .IsRequired()
                         .HasMaxLength(200)

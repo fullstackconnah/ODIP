@@ -39,6 +39,8 @@ export interface ProviderSettingsDto {
   participantReadinessMode: ParticipantReadinessMode
   /** Warn (default): a user without a current Medication Competency may record and the record is flagged. Enforce: refused (403). */
   medicationCompetencyMode: MedicationCompetencyMode
+  /** Which optional onboarding checklist items show: always the full effective map of all four keys. */
+  onboardingItemModes: OnboardingItemModes
   /** Staff come from Employment Hero: "New staff member" and the staff import are hidden (the server refuses them too). Absent or false otherwise. */
   employmentHeroConnected?: boolean
   /** The row's version: a save sends it back as `expectedUpdatedAt`. */
@@ -53,6 +55,11 @@ export interface ProviderSettingsDto {
   /** Read-only: an invoice has been issued, so the starting number is fixed. Never sent back. */
   invoicesIssued: boolean
 }
+
+/** The Onboarding checklist setting: complaints, rights and myProvider are Required or Optional; budget is Off or Optional. */
+export type OnboardingItemKey = 'complaints' | 'rights' | 'myProvider' | 'budget'
+export type OnboardingItemMode = 'Required' | 'Optional' | 'Off'
+export type OnboardingItemModes = Record<OnboardingItemKey, OnboardingItemMode>
 
 export interface UpsertProviderSettingsDto {
   registrationNumber: string
@@ -85,6 +92,8 @@ export interface UpsertProviderSettingsDto {
    * would silently undo another admin's change. Only Warn and Enforce are accepted (400 otherwise). A request that changes the stored mode writes one
    * audit row (who, old, new). */
   medicationCompetencyMode?: MedicationCompetencyMode
+  /** Omit to leave the setting as it is (every section echoes the row, so null never resets). Send the whole four-key map, and ONLY when the user changed a pick. */
+  onboardingItemModes?: OnboardingItemModes
   /** The `updatedAt` the form loaded. Another save since then makes the PUT a 409 (nothing saves). Omit to skip the check (the row is unknown, or an older client). */
   expectedUpdatedAt?: string
 

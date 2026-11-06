@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { budgetSeries } from '@/test/fixtures/budgetSeries'
 import BudgetTrackCard from './BudgetTrackCard'
 
@@ -87,5 +88,34 @@ describe('BudgetTrackCard', () => {
     useBudgetSeries.mockReturnValue(reply({ data: { chart: null } }))
     const { container } = render(<BudgetTrackCard participantId="p-1" />)
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('BudgetTrackCard on the Overview', () => {
+  const overview = () => render(<MemoryRouter><BudgetTrackCard participantId="p-1" overview /></MemoryRouter>)
+
+  it('None is a titled card that says there is no plan budget to chart, and links to the plan budget', () => {
+    useBudgetSeries.mockReturnValue(reply({ data: budgetSeries({ chart: 'None', scopes: [] }) }))
+    overview()
+    expect(screen.getByRole('heading', { name: 'How the budget is tracking' })).toBeInTheDocument()
+    expect(screen.getByText('No plan budget to chart')).toBeInTheDocument()
+    expect(screen.getByText('The chart appears once a current plan budget with its pools is recorded.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open plan budget' })).toHaveAttribute('href', '/?tab=funding&section=plan-budget')
+  })
+
+  it('NoPricing keeps its sentence, inside the titled card', () => {
+    useBudgetSeries.mockReturnValue(reply({ data: budgetSeries({ chart: 'NoPricing', scopes: [] }) }))
+    overview()
+    expect(screen.getByRole('heading', { name: 'How the budget is tracking' })).toBeInTheDocument()
+    expect(document.querySelector('[data-chart-state="no-pricing"]')).toHaveTextContent("The chart needs the price list for this plan's dates before it can be drawn.")
+  })
+
+  it('a failed first load drops the sentence about the figures below, which the Overview does not have, and keeps Try again', async () => {
+    const refetch = vi.fn()
+    useBudgetSeries.mockReturnValue(reply({ isError: true, refetch }))
+    overview()
+    expect(screen.getByText("The budget chart couldn't load.")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 })

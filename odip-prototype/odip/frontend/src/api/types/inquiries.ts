@@ -187,9 +187,11 @@ export interface ParticipantInquiryDetailDto extends ParticipantInquiryDto, Inqu
 
 /** One onboarding checklist item. `key` names the item and its fix: profile (Edit profile), serviceNeeds (the agreement draft), agreement, complaints and rights (Record it), funding (the Funding tab). */
 export interface OnboardingChecklistItem {
-  key: 'profile' | 'serviceNeeds' | 'agreement' | 'complaints' | 'rights' | 'funding' | 'myProvider'
+  key: 'profile' | 'serviceNeeds' | 'agreement' | 'complaints' | 'rights' | 'funding' | 'myProvider' | 'budget'
   label: string
   done: boolean
+  /** The organisation made this item optional: shown in its own group, never counted, never blocks Make active. */
+  optional: boolean
   /** One line saying what is missing; null when the item is done. */
   missing?: string | null
 }
@@ -197,7 +199,7 @@ export interface OnboardingChecklistItem {
 /** GET /inquiries/{participantId}/onboarding: the checklist, derived by the server (owner decision 2026-10-13). */
 export interface ParticipantOnboardingDto {
   participantId: string
-  /** Six items, five for a participant who is not NDIS-funded. */
+  /** Six items by default, five for a participant who is not NDIS-funded. */
   items: OnboardingChecklistItem[]
   isReady: boolean
   servicesStartedAt?: string | null

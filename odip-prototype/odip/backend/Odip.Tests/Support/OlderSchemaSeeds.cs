@@ -16,6 +16,7 @@ internal static class OlderSchemaSeeds
         ("ServiceAgreementDrafts", "AgreementName", "character varying(80)"),
         ("ServiceAgreementDraftApprovals", "AgreementId", "uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'"),
         ("AppSettings", "HiddenTrips", "boolean NOT NULL DEFAULT FALSE"),
+        ("ProviderSettings", "OnboardingItemModes", "jsonb"),
         ("AppSettings", "AutoRosterReach", "integer NOT NULL DEFAULT 3"),
         ("IncidentReports", "AmbulanceOfficerName", "character varying(100)"),
         ("MedicationAdministrations", "AmendmentReason", "integer"),

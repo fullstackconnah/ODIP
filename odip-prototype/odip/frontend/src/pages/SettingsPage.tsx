@@ -36,6 +36,7 @@ import OrganisationProfileSection from '@/pages/settings/OrganisationProfileSect
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 import ProfileSection from '@/pages/settings/ProfileSection'
 import SafetyChecksSection from '@/pages/settings/SafetyChecksSection'
+import OnboardingChecklistSection from '@/pages/settings/OnboardingChecklistSection'
 import PublicHolidaysSection from '@/pages/settings/PublicHolidaysSection'
 import SettingsNav from '@/pages/settings/SettingsNav'
 import { SettingsSection, type SectionFrame } from '@/pages/settings/SettingsSection'
@@ -137,6 +138,7 @@ export default function SettingsPage() {
       case 'microsoft': return framed(<MicrosoftSignInSection />)
       case 'billing': return <BillingDetailsSection {...frame} />
       case 'safety': return <SafetyChecksSection {...frame} />
+      case 'onboarding': return <OnboardingChecklistSection {...frame} />
       case 'alerts': return <AlertWindowsSection {...frame} />
       case 'rostering': return <RosteringRulesSection {...frame} />
       case 'security': return <SecuritySection {...frame} />

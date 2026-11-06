@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import ContactsTab from './ContactsTab'
 import type { ParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -88,20 +88,20 @@ afterEach(() => {
 
 describe('ContactsTab', () => {
   it('renders an empty state when there are no contacts', () => {
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getByText('No contacts recorded')).toBeInTheDocument()
   })
 
   // VISUAL-1 V2: the empty state carried a second Add contact under the header's own.
   it('offers one Add contact on an empty list', () => {
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getAllByRole('button', { name: /Add contact/ })).toHaveLength(1)
   })
 
   it('renders a contact role row with person, role, and status', () => {
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })
 
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText('Karen Johnson')).toBeInTheDocument()
     expect(screen.getByText('Next of Kin')).toBeInTheDocument()
@@ -116,7 +116,7 @@ describe('ContactsTab', () => {
       makeRole({ id: 'r-ot', roleType: 'Other', relationshipToParticipant: 'Neighbour', isPrimary: false }),
     ], isLoading: false })
 
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText('Bayside Disability Services')).toBeInTheDocument()
     expect(screen.getByText('Neighbour')).toBeInTheDocument()
@@ -126,7 +126,7 @@ describe('ContactsTab', () => {
     setUserRole('ReadOnly')
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })
 
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByRole('button', { name: /add contact/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^edit/i })).not.toBeInTheDocument()
@@ -135,7 +135,7 @@ describe('ContactsTab', () => {
 
   it('adds a new-person contact and submits the mapped payload', async () => {
     const user = userEvent.setup()
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
     // PF-6: the person picker is now a single search-first name field — "New person" is reached
@@ -156,7 +156,7 @@ describe('ContactsTab', () => {
 
   it('adds an existing-person contact via the search-first picker', async () => {
     const user = userEvent.setup()
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
     await user.click(screen.getByPlaceholderText('Search people…'))
@@ -169,7 +169,7 @@ describe('ContactsTab', () => {
 
   it('blocks save when no person is selected', async () => {
     const user = userEvent.setup()
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
     await user.click(screen.getByRole('button', { name: 'Save contact' }))
@@ -181,7 +181,7 @@ describe('ContactsTab', () => {
   // PF-5: the single-select Role type Dropdown is now a multi-select checkbox group.
   it('disables the Plan Manager checkbox for a non-plan-managed participant', async () => {
     const user = userEvent.setup()
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add contact/i })[0])
     expect(screen.getByRole('checkbox', { name: 'Plan Manager' })).toBeDisabled()
@@ -194,7 +194,7 @@ describe('ContactsTab', () => {
       isLoading: false,
     })
 
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
     // One person can hold several roles, so the name carries the role as well as the person.
     expect(screen.getByRole('button', { name: 'Remove: Karen Johnson, Emergency Contact' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Edit: Karen Johnson, Emergency Contact' }))
@@ -207,7 +207,7 @@ describe('ContactsTab', () => {
     const user = userEvent.setup()
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })
 
-    render(<ContactsTab participantId="participant-1" />)
+    render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: /^remove: karen johnson, /i }))
     const dialog = screen.getByRole('alertdialog', { name: /remove this contact role/i })
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
@@ -223,7 +223,7 @@ describe('ContactsTab — long list (T10)', () => {
       data: Array.from({ length: 23 }, (_, i) => makeRole({ id: `c${i}`, personFullName: `Person ${i}` })),
       isLoading: false,
     })
-    const { container } = render(<ContactsTab participantId="participant-1" />)
+    const { container } = render(<ContactsTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(container.querySelectorAll('tbody tr')).toHaveLength(5)
     await user.click(screen.getByRole('button', { name: 'Show all 23' }))
     const rows = container.querySelectorAll('tbody tr')
@@ -255,5 +255,38 @@ describe('ContactsTab — one-home copies (T11)', () => {
     renderRouted(makeParticipant({ mainSupportPersonName: 'Jo Brown' }))
     expect(screen.getByText(/Recorded in Home and living: Jo Brown. Add them as a contact to keep their details./)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Home and living/ })).toHaveAttribute('href', '/?tab=about#home-and-living')
+  })
+})
+
+function Where() {
+  const { pathname, search } = useLocation()
+  return <p data-testid="where">{pathname + search}</p>
+}
+
+describe('Quick add from the Overview (?add=1)', () => {
+  const url = '/p?tab=people&section=contacts&add=1'
+  const renderAt = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><ContactsTab participantId="participant-1" /><Where /></MemoryRouter>)
+
+  it('opens the add once, removes the param with replace, and returns focus to the section Add button on close', async () => {
+    const user = userEvent.setup()
+    renderAt(url)
+    expect(await screen.findByRole('dialog', { name: /Add contact/i })).toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('/p?tab=people&section=contacts')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Add contact/i })[0]).toHaveFocus()
+  })
+
+  it('does not reopen after the param is gone (refresh, Back)', async () => {
+    renderAt('/p?tab=people&section=contacts')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('a role without the write gate opens nothing and still drops the param', async () => {
+    setUserRole('ReadOnly')
+    renderAt(url)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })
