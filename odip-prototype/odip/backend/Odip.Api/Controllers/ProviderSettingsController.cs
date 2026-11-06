@@ -68,6 +68,7 @@ public partial class ProviderSettingsController : ControllerBase
             TimeZoneId = s.TimeZoneId, // the stored value only: an effective zone would be echoed back and saved by every other section
             ParticipantReadinessMode = s.ParticipantReadinessMode,
             MedicationCompetencyMode = s.MedicationCompetencyMode,
+            OnboardingItemModes = OnboardingItemModeRules.Effective(s.OnboardingItemModes),
             EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct),
             InvoiceNumberPrefix = s.InvoiceNumberPrefix, CreditNotePrefix = s.CreditNotePrefix,
             InvoiceStartNumber = s.InvoiceStartNumber, PaymentTermsDays = s.PaymentTermsDays,
@@ -99,6 +100,9 @@ public partial class ProviderSettingsController : ControllerBase
         // value other than Warn as Enforce, but GET would send back 7 and the dropdown would show nothing.
         if (dto.MedicationCompetencyMode is { } requestedCompetency && !Enum.IsDefined(requestedCompetency))
             return BadRequest(ApiResponse<bool>.Fail("The medication competency mode must be Warn or Enforce."));
+
+        if (dto.OnboardingItemModes is { } sentModes && OnboardingItemModeRules.Problem(sentModes) is { } modesProblem)
+            return BadRequest(ApiResponse<bool>.Fail(modesProblem));
 
         var bad = PrefixProblem(dto.InvoiceNumberPrefix, "INV-") ?? PrefixProblem(dto.CreditNotePrefix, "CN-")
             ?? (dto.InvoiceStartNumber is < 1 or > 99_999_999 ? "Enter a whole number from 1 to 99,999,999." : null)
@@ -155,6 +159,7 @@ public partial class ProviderSettingsController : ControllerBase
         // A brand-new row starts at the defaults (Warn for both modes), which is what applied until now.
         var previousReadiness = s.ParticipantReadinessMode;
         var previousCompetency = s.MedicationCompetencyMode;
+        var previousModes = OnboardingItemModeRules.Effective(s.OnboardingItemModes);
         // The effective zone (a null row follows its State); a brand-new row had the Sydney fallback, not the entity's default State.
         var previousZone = _db.Entry(s).State == EntityState.Added ? StateTimeZoneMap.Resolve(null) : s.TimeZoneId ?? StateTimeZoneMap.Resolve(s.State);
 
@@ -195,6 +200,20 @@ public partial class ProviderSettingsController : ControllerBase
             _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(
                 nameof(ProviderSettings), s.Id, nameof(ProviderSettings.MedicationCompetencyMode),
                 previousCompetency.ToString(), newCompetency.ToString(), User));
+        }
+
+        // A sent map replaces the setting (a key it leaves out takes its default; {} resets). One audit row, and only when the effective map moves.
+        if (dto.OnboardingItemModes is { } modes)
+        {
+            var newModes = new Dictionary<string, string>(OnboardingItemModeRules.Defaults);
+            foreach (var (key, mode) in modes) newModes[key] = mode;
+            if (OnboardingItemModeRules.Describe(newModes) != OnboardingItemModeRules.Describe(previousModes))
+            {
+                s.OnboardingItemModes = OnboardingItemModeRules.Store(newModes);
+                _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(
+                    nameof(ProviderSettings), s.Id, nameof(ProviderSettings.OnboardingItemModes),
+                    OnboardingItemModeRules.Describe(previousModes), OnboardingItemModeRules.Describe(newModes), User));
+            }
         }
 
         // Each numbering change is one field-change audit row, like the modes above (the row holds bank details, so it is never audited whole).

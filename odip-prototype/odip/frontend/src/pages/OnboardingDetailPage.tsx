@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { CheckCircle2, Circle } from 'lucide-react'
+import { CheckCircle2, Circle, CircleDashed } from 'lucide-react'
 import { useBeginServices, useMakeParticipantActive, useOnboarding, useParticipant, useRecordOnboardingAgreement, useRecordOnboardingExplained } from '@/api/hooks'
 import type { OnboardingChecklistItem, ParticipantOnboardingDto } from '@/api/types/inquiries'
 import { BackButton } from '@/components/BackButton'
@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { FundingPlanEditor } from './funding/FundingPlanEditor'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { useProviderToday } from '@/hooks/useProviderToday'
@@ -39,6 +40,7 @@ export default function OnboardingDetailPage() {
   const beginServices = useBeginServices()
   const makeActive = useMakeParticipantActive()
   const [confirming, setConfirming] = useState<'begin' | 'active' | null>(null)
+  const [addingBudget, setAddingBudget] = useState(false)
   const [recording, setRecording] = useState<'agreement' | 'complaints' | 'rights' | null>(null)
   const d = detail.data
 
@@ -57,8 +59,12 @@ export default function OnboardingDetailPage() {
     : <StatusBadge tone={startedOn ? 'success' : 'info'} label={startedOn ? 'Services started' : 'Onboarding'} size="md" />
   // Only a participant still in onboarding has a lifecycle step left here.
   const canAct = canManageParticipantLifecycle && participant?.isDraft === true
-  const openItems = d.items.filter(item => !item.done)
-  const doneCount = d.items.length - openItems.length
+  // Optional items (the organisation's Onboarding checklist setting) are listed apart and never counted: the open lists and the heading count required items only.
+  const required = d.items.filter(item => !item.optional)
+  const optional = d.items.filter(item => item.optional)
+  const openItems = required.filter(item => !item.done)
+  const doneCount = required.length - openItems.length
+  const optionalDone = optional.filter(item => item.done).length
   const lifecycleError = beginServices.error ?? makeActive.error
   // One lifecycle step at a time. aria-disabled, not disabled, so focus can return to the button when its dialog closes.
   const pending = beginServices.isPending || makeActive.isPending
@@ -77,6 +83,24 @@ export default function OnboardingDetailPage() {
   const openList = openItems.length > 0
     ? <ul className="mt-2 list-disc space-y-0.5 pl-5">{openItems.map(item => <li key={item.key}>{item.label}</li>)}</ul>
     : null
+
+  const renderItem = (item: OnboardingChecklistItem) => (
+    <li key={item.key} className="flex flex-col gap-2 px-[var(--card-pad)] py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-2.5">
+        {item.done
+          ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
+          : item.optional
+            ? <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />
+            : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />}
+        <span className="sr-only">{item.optional ? (item.done ? 'Optional, done' : 'Optional, to do') : (item.done ? 'Done' : 'To do')}</span>
+        <div className="min-w-0">
+          <h3 className={`text-sm ${item.optional ? 'font-medium' : 'font-semibold'}`}>{item.label}</h3>
+          {item.missing ? <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.missing}</p> : null}
+        </div>
+      </div>
+      <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(item.key === 'agreement' || item.key === 'complaints' ? item.key : 'rights')} onAddBudget={() => setAddingBudget(true)} />
+    </li>
+  )
 
   return <div className="flex flex-col gap-[var(--section-gap)]">
     <div className="flex items-start gap-2">
@@ -107,25 +131,22 @@ export default function OnboardingDetailPage() {
     {lifecycleError ? <Callout tone="error">{extractErrorMessage(lifecycleError, 'That did not go through. Please try again.')}</Callout> : null}
 
     <section className="bg-[var(--color-card)] rounded-md border border-[var(--color-border)]">
-      <h2 id="checklist-heading" className="px-[var(--card-pad)] pt-[var(--card-pad)] pb-2 text-base font-semibold tabular-nums">{doneCount} of {d.items.length} done</h2>
+      <h2 id="checklist-heading" className="px-[var(--card-pad)] pt-[var(--card-pad)] pb-2 text-base font-semibold tabular-nums">{doneCount} of {required.length} done</h2>
       <ul aria-labelledby="checklist-heading" className="divide-y divide-[var(--color-border)]">
-        {d.items.map(item => (
-          <li key={item.key} className="flex flex-col gap-2 px-[var(--card-pad)] py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-2.5">
-              {item.done
-                ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
-                : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />}
-              <span className="sr-only">{item.done ? 'Done' : 'To do'}</span>
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold">{item.label}</h3>
-                {item.missing ? <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.missing}</p> : null}
-              </div>
-            </div>
-            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(item.key === 'agreement' || item.key === 'complaints' ? item.key : 'rights')} />
-          </li>
-        ))}
+        {required.map(renderItem)}
       </ul>
     </section>
+    {optional.length > 0 && (
+      <section className="bg-[var(--color-card)] rounded-md border border-[var(--color-border)]">
+        <h2 id="optional-heading" className="px-[var(--card-pad)] pt-[var(--card-pad)] pb-1 text-base font-semibold">
+          Optional<span className="font-normal tabular-nums text-[var(--color-muted-foreground)]"> · {optionalDone} of {optional.length} done</span>
+        </h2>
+        <p className="px-[var(--card-pad)] pb-2 text-[13px] text-[var(--color-muted-foreground)]">Not counted, and never stops Make active.</p>
+        <ul aria-labelledby="optional-heading" className="divide-y divide-[var(--color-border)]">
+          {optional.map(renderItem)}
+        </ul>
+      </section>
+    )}
 
     <ConfirmDialog
       open={confirming === 'begin'}
@@ -152,21 +173,24 @@ export default function OnboardingDetailPage() {
         {openList}
       </>}
     />
+    {participant && <FundingPlanEditor open={addingBudget} onClose={() => setAddingBudget(false)} participantId={id} defaultManagement={participant.planType} />}
     {recording === 'agreement' && <AgreementRecordDialog participantId={id} detail={d} onClose={() => setRecording(null)} />}
     {(recording === 'complaints' || recording === 'rights') && <ExplainedRecordDialog participantId={id} detail={d} focus={recording} onClose={() => setRecording(null)} />}
   </div>
 }
 
 /** The one fix for an item, for the roles that may open where it is fixed. */
-function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRecord }: {
-  item: OnboardingChecklistItem; participantId: string; canEdit: boolean; canOpenDraft: boolean; canOpenFunding: boolean; onRecord: () => void
+function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRecord, onAddBudget }: {
+  item: OnboardingChecklistItem; participantId: string; canEdit: boolean; canOpenDraft: boolean; canOpenFunding: boolean; onRecord: () => void; onAddBudget: () => void
 }) {
   // An open item's fix carries the weight; a done item's stays reachable but quiet. On a phone the row stacks, so the button keeps its own width.
-  const look = { variant: item.done ? 'ghost' as const : 'secondary' as const, size: 'sm' as const, className: 'self-start ml-[1.625rem] sm:ml-0 sm:self-auto' }
+  const look = { variant: item.done || item.optional ? 'ghost' as const : 'secondary' as const, size: 'sm' as const, className: 'self-start ml-[1.625rem] sm:ml-0 sm:self-auto' }
   if (item.key === 'profile') return canEdit ? <Button {...look} to={`/participants/${participantId}/profile?from=onboarding`}>Edit profile</Button> : null
   // The draft carries money, so only the roles the API admits to it are sent there.
   if (item.key === 'serviceNeeds') return canOpenDraft ? <Button {...look} to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null
   if (item.key === 'agreement' || item.key === 'complaints' || item.key === 'rights') return canEdit ? <Button {...look} onClick={onRecord}>Record it</Button> : null
+  // An open Budget item opens the plan editor right here; once a plan is recorded it is the Funding tab like the others.
+  if (item.key === 'budget' && !item.done) return canOpenFunding ? <Button {...look} onClick={onAddBudget}>Add plan budget</Button> : null
   return canOpenFunding ? <Button {...look} to={`/participants/${participantId}?tab=funding`}>Funding tab</Button> : null
 }
 

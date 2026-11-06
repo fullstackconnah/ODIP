@@ -33,7 +33,7 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
     id: 'ps-1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise Support Services', address: '12 Wattle St, Brisbane QLD 4000',
     state: 'QLD', gstRegistered: true, isPaceProvider: false, bankAccountName: 'Sunrise Support', bsb: '064-000', accountNumber: '12345678',
     invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null,
-    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', updatedAt: V1,
+    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', onboardingItemModes: { complaints: 'Required', rights: 'Required', myProvider: 'Required', budget: 'Off' }, updatedAt: V1,
     invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false, ...overrides,
   }
 }
@@ -61,7 +61,7 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks())
 
-function renderSection(section: 'organisation' | 'billing' | 'safety', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderSection(section: 'organisation' | 'billing' | 'safety' | 'onboarding', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: [`/settings?section=${section}`] })
   render(
     <QueryClientProvider client={queryClient}>
@@ -83,6 +83,7 @@ function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSe
   const body: Partial<ProviderSettingsDto> & { expectedUpdatedAt?: string } = { ...row }
   delete body.participantReadinessMode
   delete body.medicationCompetencyMode
+  delete body.onboardingItemModes   // goes only when a pick changed it
   delete body.employmentHeroConnected
   delete body.nextInvoiceDisplayNumber   // computed on GET (Xero PR1); never written
   delete body.invoicesIssued
@@ -804,6 +805,83 @@ describe('Safety checks', () => {
     mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
     renderSection('safety')
     expect(screen.getByText('Loading safety checks section…')).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+  })
+})
+
+describe('Onboarding checklist', () => {
+  const group = (label: string) => screen.getByRole('radiogroup', { name: label })
+  const pick = (label: string, mode: string) => within(group(label)).getByRole('radio', { name: mode })
+  const LABELS = ['Told how to make a complaint', 'Rights explained', 'Recorded as my provider', 'Plan budget added']
+  async function open() {
+    renderSection('onboarding')
+    await screen.findByRole('radiogroup', { name: LABELS[0] })
+  }
+
+  it('lists the four choosable items with their lines, at their defaults', async () => {
+    await open()
+    for (const label of LABELS) expect(group(label)).toBeInTheDocument()
+    expect(pick(LABELS[0], 'Required')).toBeChecked()
+    expect(pick(LABELS[2], 'Required')).toBeChecked()
+    expect(pick(LABELS[3], 'Off')).toBeChecked()
+    expect(within(group(LABELS[3])).queryByRole('radio', { name: 'Required' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('NDIS-registered providers must record this (Practice Standards).')).toHaveLength(2)
+  })
+
+  it('turns the Practice Standards line to warning ink when Complaints is Optional, but not for My provider', async () => {
+    const user = userEvent.setup()
+    await open()
+    const line = () => screen.getAllByText('NDIS-registered providers must record this (Practice Standards).')[0]
+    const before = line().className
+    await user.click(pick(LABELS[0], 'Optional'))
+    expect(line().className).not.toBe(before)
+    await user.click(pick(LABELS[2], 'Optional'))
+    expect(screen.getByText('Only for NDIS participants whose funds are agency or plan managed.').className).toBe(before)
+  })
+
+  it('sends all four keys, only after a pick', async () => {
+    const user = userEvent.setup()
+    await open()
+    await user.click(pick(LABELS[3], 'Optional'))
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody().onboardingItemModes).toEqual({ complaints: 'Required', rights: 'Required', myProvider: 'Required', budget: 'Optional' })
+    expect(server?.onboardingItemModes.budget).toBe('Optional')
+  })
+
+  it('a pick put back to the saved value is not a change: nothing is sent', async () => {
+    const user = userEvent.setup()
+    await open()
+    await user.click(pick(LABELS[1], 'Optional'))
+    await user.click(pick(LABELS[1], 'Required'))
+    expect(saveButton()).toBeDisabled()
+    expect(mockApiPut).not.toHaveBeenCalled()
+  })
+
+  it('saving Safety checks or Organisation never sends the map, so another section cannot reset it', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ onboardingItemModes: { complaints: 'Optional', rights: 'Required', myProvider: 'Required', budget: 'Optional' } })
+    renderSection('safety')
+    await user.type(await screen.findByLabelText('Manager name'), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('onboardingItemModes')
+    expect(server?.onboardingItemModes.complaints).toBe('Optional')
+  })
+
+  it('is read-only for a Coordinator: the toggles are disabled and there is no Save', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    await open()
+    for (const label of LABELS) for (const r of within(group(label)).getAllByRole('radio')) expect(r).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('shows a loading state, then an error with Try again when the row cannot be read', async () => {
+    mockApiGet.mockImplementation(async () => { throw new Error('boom') })
+    renderSection('onboarding')
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
   })
 })

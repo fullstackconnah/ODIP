@@ -562,6 +562,9 @@ public record ProviderSettingsDto
     /// <summary>"Warn" (default): a user without a current Medication Competency may record, and the record is flagged. "Enforce": refused (403).</summary>
     public MedicationCompetencyMode MedicationCompetencyMode { get; init; } = MedicationCompetencyMode.Warn;
 
+    /// <summary>Which optional onboarding checklist items show: always the full effective map of all four keys (complaints, rights, myProvider, budget) to Required, Optional or Off.</summary>
+    public Dictionary<string, string> OnboardingItemModes { get; init; } = new();
+
     /// <summary>The organisation's staff come from Employment Hero: the frontend hides "New staff member" and the staff import, and the server refuses them.</summary>
     public bool EmploymentHeroConnected { get; init; }
 
@@ -636,6 +639,10 @@ public record UpsertProviderSettingsDto
     /// (it is last-write-wins: a form that re-sent a stale value would silently undo another admin's change). Only Warn and Enforce are accepted
     /// (400 otherwise). A change that actually alters the stored mode writes one audit row (ProviderSettings, MedicationCompetencyMode, old, new, who).</summary>
     public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
+
+    /// <summary>Null or absent = leave the setting as it is (every settings section echoes the row, so null can never mean reset); {} resets to the defaults.
+    /// A key the server does not know, or a mode the key does not allow, is a 400 that writes nothing. A change writes one audit row (ProviderSettings, OnboardingItemModes, old, new, who).</summary>
+    public Dictionary<string, string>? OnboardingItemModes { get; init; }
 
     /// <summary>The UpdatedAt the form loaded. Another save since then makes this one a 409, enforced in the UPDATE itself. Null skips the check, so an older open tab still saves.</summary>
     public DateTime? ExpectedUpdatedAt { get; init; }
