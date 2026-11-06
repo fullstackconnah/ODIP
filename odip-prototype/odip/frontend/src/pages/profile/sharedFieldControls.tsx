@@ -13,7 +13,7 @@
  */
 import type { ReactNode } from 'react'
 import { Controller, useWatch } from 'react-hook-form'
-import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
+import type { Control, FieldErrors, UseFormRegister, UseFormSetValue } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { TextAreaField } from '@/components/TextAreaField'
@@ -26,6 +26,7 @@ import type { OvernightSupportType } from '@/api/types/enums'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { span } from '@/lib/formGrid'
 import { PlanTypeComplianceBanner, YesNoToggleField } from '../intake/intakeHelpers'
+import { AddressStreet } from '../intake/steps/ParticipantDetailsStep'
 import { PlanBudgetCard } from '../funding/PlanBudgetCard'
 import {
   ADDRESS_STATE_ITEMS, FUNDING_SOURCE_ITEMS, OVERNIGHT_RATIO_ITEMS, OVERNIGHT_SUPPORT_ITEMS, PLAN_TYPE_ITEMS,
@@ -74,11 +75,11 @@ export function PersonalInformationFields({ register, errors }: { register: Reg;
 }
 
 /** Street, suburb, state, postcode — Intake's "Address" card. */
-export function AddressFields({ control, register, errors }: { control: Ctl; register: Reg; errors: Errs }) {
+export function AddressFields({ control, register, setValue, errors }: { control: Ctl; register: Reg; setValue: UseFormSetValue<ParticipantFormData>; errors: Errs }) {
   return (
     <>
       <FormField label="Street" className={span.long}>
-        <input id="addressStreet" {...register('addressStreet')} placeholder="e.g. 12 Example Street" />
+        <AddressStreet id="addressStreet" control={control} setValue={setValue} />
       </FormField>
 
       <FormField label="Suburb" className={span.medium}>

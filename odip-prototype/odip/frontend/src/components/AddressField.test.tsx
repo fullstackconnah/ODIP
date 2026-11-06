@@ -14,9 +14,9 @@ const rows = [
 ]
 const details = { street: '12 Example Street', suburb: 'Brisbane City', state: 'QLD', postcode: '4000', formattedAddress: '12 Example Street, Brisbane City QLD 4000' }
 
-function Harness({ initial = '', maxLength, onPick = () => {}, onText = () => {} }: { initial?: string; maxLength?: number; onPick?: (p: AddressParts) => void; onText?: (t: string) => void }) {
+function Harness({ initial = '', maxLength, wholeLine, onPick = () => {}, onText = () => {} }: { initial?: string; maxLength?: number; wholeLine?: boolean; onPick?: (p: AddressParts) => void; onText?: (t: string) => void }) {
   const [value, setValue] = useState(initial)
-  return <AddressField id="street" value={value} maxLength={maxLength} onChange={(t) => { setValue(t); onText(t) }} onPick={onPick} />
+  return <AddressField id="street" value={value} maxLength={maxLength} wholeLine={wholeLine} onChange={(t) => { setValue(t); onText(t) }} onPick={onPick} />
 }
 
 const input = () => screen.getByRole('combobox')
@@ -221,6 +221,27 @@ describe('AddressField', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     expect(input()).toHaveValue('12 Example Street')
     expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('a failed details call on a whole-line field puts the main and secondary text of the prediction in; a street field keeps the main text', async () => {
+    apiGet.mockRejectedValue(new Error('502'))
+    const onText = vi.fn()
+    const { unmount } = render(<Harness wholeLine onText={onText} />)
+    input().focus()
+    type('12 Example')
+    await settle()
+    fireEvent.click(screen.getAllByRole('option')[0])
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(input()).toHaveValue('12 Example Street, Brisbane City QLD')
+    expect(onText).toHaveBeenLastCalledWith('12 Example Street, Brisbane City QLD')
+    unmount()
+    render(<Harness />)
+    input().focus()
+    type('12 Example')
+    await settle()
+    fireEvent.click(screen.getAllByRole('option')[0])
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(input()).toHaveValue('12 Example Street')
   })
 
   it('editing after a pick is plain typing', async () => {

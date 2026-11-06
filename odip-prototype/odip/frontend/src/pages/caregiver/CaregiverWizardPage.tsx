@@ -19,7 +19,7 @@
  */
 import { useParams } from 'react-router-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
-import type { Control, FieldErrors, UseFieldArrayReturn, UseFormRegister } from 'react-hook-form'
+import type { Control, FieldErrors, UseFieldArrayReturn, UseFormRegister, UseFormSetValue } from 'react-hook-form'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { usePublicCaregiverForm, useSaveCaregiverDraft, useSubmitCaregiverForm } from '@/api/hooks/caregiver'
@@ -89,6 +89,7 @@ export default function CaregiverWizardPage() {
   // writes `ParticipantFormData`'s own fields, so this narrowing cast is safe.
   const pControl = control as unknown as Control<ParticipantFormData>
   const pRegister = register as unknown as UseFormRegister<ParticipantFormData>
+  const pSetValue = setValue as unknown as UseFormSetValue<ParticipantFormData>
   const pErrors = errors as unknown as FieldErrors<ParticipantFormData>
   const pConsentsFieldArray = consentsFieldArray as unknown as UseFieldArrayReturn<ParticipantFormData, 'consents'>
   const pHealthConditionFieldArray = healthConditionFieldArray as unknown as UseFieldArrayReturn<ParticipantFormData, 'healthConditions'>
@@ -235,7 +236,7 @@ export default function CaregiverWizardPage() {
           <AboutYouStep register={register} errors={errors} />
         )}
         {!wizard.isReviewStep && wizard.currentStep.key === 'keyIdentifiers' && (
-          <KeyIdentifiersStep control={pControl} register={pRegister} errors={pErrors} participant={readOnlyParticipant} activeStaff={[]} hiddenFields={hidden} />
+          <KeyIdentifiersStep control={pControl} register={pRegister} setValue={pSetValue} errors={pErrors} participant={readOnlyParticipant} activeStaff={[]} hiddenFields={hidden} />
         )}
         {!wizard.isReviewStep && wizard.currentStep.key === 'culturalDepth' && (
           <CulturalDepthConsentsStep control={pControl} register={pRegister} participant={readOnlyParticipant} consentsFieldArray={pConsentsFieldArray} staVisible={false} />

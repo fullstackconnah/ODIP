@@ -504,7 +504,7 @@ export default function ProfileWizardPage() {
               label={isReviewStep ? 'Review' : currentStep.label}
             />
         {!isReviewStep && currentStep.key === 'keyIdentifiers' && (
-          <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={activeStaff} sharedFieldsEditable />
+          <KeyIdentifiersStep control={control} register={register} setValue={setValue} errors={errors} participant={participant} activeStaff={activeStaff} sharedFieldsEditable />
         )}
         {!isReviewStep && currentStep.key === 'culturalDepth' && (
           <CulturalDepthConsentsStep control={control} register={register} participant={participant} consentsFieldArray={consentsFieldArray} staVisible={staVisible} sharedFieldsEditable />

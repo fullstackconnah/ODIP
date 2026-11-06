@@ -51,13 +51,13 @@ function IntakeSteps() {
 
 /** Every Profile step that owns a shared field, in one form, with the shared fields editable. */
 function ProfileSteps() {
-  const { control, register, formState: { errors } } = useForm<ParticipantFormData>({ defaultValues: DEFAULTS })
+  const { control, register, setValue, formState: { errors } } = useForm<ParticipantFormData>({ defaultValues: DEFAULTS })
   const healthConditions = useFieldArray({ control, name: 'healthConditions' })
   const watched = useWatch({ control }) as Partial<ParticipantFormData>
   const participant = { id: 'participant-1' } as unknown as ParticipantDetailDto
   return (
     <>
-      <KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable />
+      <KeyIdentifiersStep control={control} register={register} setValue={setValue} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable />
       <MedicalDetailStep control={control} register={register} errors={errors} participant={participant} healthConditionFieldArray={healthConditions} watchedValues={watched} sharedFieldsEditable />
       <MobilityFunctionalStep control={control} register={register} participant={participant} errors={errors} sharedFieldsEditable />
       <BehaviourCognitionStep control={control} register={register} participant={participant} sharedFieldsEditable />
@@ -85,8 +85,7 @@ async function dropdownOptions(user: ReturnType<typeof userEvent.setup>, id: str
 
 const TEXT_CONTROLS = [
   'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'phone', 'email',
-  // addressStreet is the address lookup's combobox on Intake and still a plain input on Profile until the lookup reaches Profile's AddressFields (PR2), which restores it here.
-  'addressSuburb', 'addressPostcode',
+  'addressStreet', 'addressSuburb', 'addressPostcode',
   'ndisNumber', 'planStartDate', 'planEndDate',
   'medicalSummary', 'expressiveSkills', 'receptiveSkills', 'equipmentRequirements', 'behaviourRiskSummary',
   'mobilityAidWheelchair', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
