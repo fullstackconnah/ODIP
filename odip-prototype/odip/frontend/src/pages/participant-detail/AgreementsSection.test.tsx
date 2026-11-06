@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import type { ServiceAgreementDraftDto } from '@/api/types'
+import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
 
 const refetch = vi.fn()
 const deleteMutate = vi.fn()
 const endMutate = vi.fn()
 const pdfMutate = vi.fn()
+const checkArgs = vi.fn()
+let checkState: { data?: AgreementCheck } = {}
 let listState: { data?: ServiceAgreementDraftDto[]; isLoading?: boolean; isError?: boolean } = {}
 
 vi.mock('@/api/hooks', () => ({
@@ -15,13 +17,14 @@ vi.mock('@/api/hooks', () => ({
   useDeleteServiceAgreementDraft: () => ({ mutate: deleteMutate, isPending: false }),
   useEndAgreementEarly: () => ({ mutate: endMutate, isPending: false }),
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: pdfMutate, isPending: false }),
+  useStoredAgreementCheck: (...args: unknown[]) => { checkArgs(...args); return checkState },
 }))
 
 import { AgreementsSection } from './AgreementsSection'
 
 const approval = { approvedAt: '2026-06-20T01:00:00Z', approvedByName: 'Sam Lee', patternsCreated: 2, patternsEnded: 0, shiftsCreated: 0 }
 const version = (n: number, start: string, end: string, changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreementDraftDto => ({
-  id: `d-${n}`, participantId: 'p-1', version: n, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: start, agreementEndDate: end,
+  id: `d-${n}`, participantId: 'p-1', agreementId: 'a-1', agreementKind: 'Core', version: n, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: start, agreementEndDate: end,
   blocks: [], lines: [], isSummary: true, blockCount: 1, lineCount: 1, total: 1000 * n, caveats: [], approval, ...changes,
 }) as ServiceAgreementDraftDto
 
@@ -42,10 +45,12 @@ const action = (n: number, name: string | RegExp) => within(row(n)).queryByRole(
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-12T10:00:00') })
+  localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', id: 'u-1' }))
   listState = { data: mixed() }
-  for (const m of [refetch, deleteMutate, endMutate, pdfMutate]) m.mockReset()
+  checkState = {}
+  for (const m of [refetch, deleteMutate, endMutate, pdfMutate, checkArgs]) m.mockReset()
 })
-afterEach(() => vi.useRealTimers())
+afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
 describe('AgreementsSection: the table', () => {
   it('lists the columns in order, with an unnamed Actions column last', () => {
@@ -82,7 +87,7 @@ describe('AgreementsSection: the ended-early term', () => {
 describe('AgreementsSection: actions per status', () => {
   it('newest Draft: Edit, and Delete draft', () => {
     renderSection()
-    expect(action(4, 'Edit')).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(action(4, 'Edit')).toHaveAttribute('href', '/participants/p-1/agreement-draft?agreement=a-1')
     expect(action(4, 'Delete draft')).toBeInTheDocument()
     expect(action(4, /End early/)).toBeNull()
   })
@@ -97,7 +102,7 @@ describe('AgreementsSection: actions per status', () => {
   it('the newest approved row: Open, New revision (?revise=1), End early, Download PDF', () => {
     listState = { data: [version(3, '2026-07-01', '2027-06-30')] }
     renderSection()
-    expect(action(3, 'Open')).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(action(3, 'Open')).toHaveAttribute('href', '/participants/p-1/agreement-draft?agreement=a-1')
     expect(action(3, 'New revision')).toBeInTheDocument()
     expect(action(3, /End early/)).toBeInTheDocument()
     expect(action(3, 'Download PDF')).toBeInTheDocument()
@@ -128,7 +133,7 @@ describe('AgreementsSection: actions per status', () => {
     listState = { data: [version(3, '2026-07-01', '2027-06-30')] }
     renderSection()
     await userEvent.click(action(3, 'New revision')!)
-    expect(screen.getByTestId('where')).toHaveTextContent('/participants/p-1/agreement-draft?revise=1')
+    expect(screen.getByTestId('where')).toHaveTextContent('/participants/p-1/agreement-draft?agreement=a-1&revise=1')
   })
 
   it('Download PDF calls the download with the participant and the version id', async () => {
@@ -139,18 +144,69 @@ describe('AgreementsSection: actions per status', () => {
   })
 })
 
-describe('AgreementsSection: New agreement', () => {
-  it('is hidden while a version is Draft or Approved', () => {
+describe('AgreementsSection: Add agreement and New revision', () => {
+  it('Add agreement is always on the card and starts a new agreement', async () => {
+    vi.useRealTimers()
     renderSection()
-    expect(screen.queryByRole('link', { name: 'New agreement' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'New revision' })).toBeNull()
+    await userEvent.click(screen.getByRole('link', { name: 'Add agreement' }))
+    expect(screen.getByTestId('where')).toHaveTextContent(/^/participants/p-1/agreement-draft?agreement=new$/)
   })
 
-  it('shows when the newest has ended and goes to the draft page with no revise', async () => {
+  it('a plain agreement that has ended shows New revision beside it, for its own agreement', async () => {
     vi.useRealTimers()
     listState = { data: [version(2, '2025-07-01', '2026-06-30')] }
     renderSection()
-    await userEvent.click(screen.getByRole('link', { name: 'New agreement' }))
-    expect(screen.getByTestId('where')).toHaveTextContent(/^\/participants\/p-1\/agreement-draft$/)
+    await userEvent.click(screen.getByRole('link', { name: 'New revision' }))
+    expect(screen.getByTestId('where')).toHaveTextContent(/^/participants/p-1/agreement-draft?agreement=a-1$/)
+  })
+
+  it('is hidden from a role that cannot draft', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Support Worker', id: 'u-2' }))
+    renderSection()
+    expect(screen.queryByRole('link', { name: 'Add agreement' })).toBeNull()
+  })
+})
+
+describe('AgreementsSection: several agreements', () => {
+  const trip = (n: number, start: string, end: string, changes: Partial<ServiceAgreementDraftDto> = {}) =>
+    version(n, start, end, { id: `t-${n}`, agreementId: 'a-2', agreementKind: 'Trip', agreementName: 'Trip to Cairns', ...changes })
+  const two = () => ({ data: [trip(1, '2026-09-01', '2027-03-31'), version(3, '2026-07-01', '2027-06-30')] })
+
+  it('shows one block per agreement, named, each with its own versions', () => {
+    listState = two()
+    renderSection()
+    const headings = screen.getAllByRole('heading', { level: 4 })
+    expect(headings.map(h => h.textContent)).toEqual(['Trip to Cairns · Trip', 'Everyday support'])
+    expect(within(screen.getByRole('region', { name: 'Trip to Cairns' })).getAllByRole('row')).toHaveLength(2)
+  })
+
+  it('a single plain agreement has no block heading', () => {
+    renderSection()
+    expect(screen.queryAllByRole('heading', { level: 4 })).toHaveLength(0)
+  })
+
+  it('links and titles name the agreement they are for', async () => {
+    listState = { data: [trip(2, '2026-09-01', '2027-03-31', { approval: undefined }), version(3, '2026-07-01', '2027-06-30')] }
+    renderSection()
+    expect(action(2, 'Edit')).toHaveAttribute('href', '/participants/p-1/agreement-draft?agreement=a-2')
+    await userEvent.click(within(row(2)).getByRole('button', { name: /more|actions|version 2/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Delete draft/ }))
+    expect(screen.getByText('Delete draft version 2 of Trip to Cairns?')).toBeInTheDocument()
+  })
+
+  it('warns once, when together they plan more than the money, and asks about the agreement that ends last', () => {
+    listState = two()
+    checkState = { data: { combinedOver: true, hasBudget: true, pools: [{ poolName: 'Core', combinedCost: 9000, combinedOverBy: 1000 }], otherAgreements: [{ agreementId: 'a-2', agreementKind: 'Trip', agreementName: 'Trip to Cairns', version: 1, cost: 1 }] } as unknown as AgreementCheck }
+    renderSection()
+    expect(checkArgs).toHaveBeenCalledWith('p-1', 'd-3', 'a-1', true)
+    expect(screen.getByText('Together, these agreements plan more than the money available')).toBeInTheDocument()
+    expect(screen.getByText(/Counted: Everyday support (version 3), Trip to Cairns (version 1). Nothing is blocked./)).toBeInTheDocument()
+  })
+
+  it('asks nothing with one agreement', () => {
+    renderSection()
+    expect(checkArgs).toHaveBeenCalledWith('p-1', undefined, undefined, false)
   })
 })
 
@@ -274,11 +330,11 @@ describe('AgreementsSection: states', () => {
     expect(refetch).toHaveBeenCalled()
   })
 
-  it('empty: the plan copy and a New agreement action', () => {
+  it('empty: the plan copy and an Add agreement action', () => {
     listState = { data: [] }
     renderSection()
     expect(screen.getByText('No service agreements yet')).toBeInTheDocument()
     expect(screen.getByText("Create one to price this participant's supports and roster them once it's approved.")).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'New agreement' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add agreement' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?agreement=new')
   })
 })

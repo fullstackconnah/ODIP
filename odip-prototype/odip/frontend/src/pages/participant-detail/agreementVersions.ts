@@ -59,3 +59,14 @@ export function versionRows(drafts: readonly ServiceAgreementDraftDto[], today: 
     }
   })
 }
+
+/**
+ * The saved revision the participant page asks the combined check about: of the agreements with an approved revision running now, the one that ends last (it covers the most months, and the check counts
+ * only the periods the checked agreement touches), the earlier start on a tie. Null with fewer than two such agreements: there is nothing to add together.
+ */
+export function warningTarget(groups: readonly { agreementId: string; rows: readonly VersionRow[] }[]): { draftId: string; agreementId: string } | null {
+  const running = groups.flatMap(g => { const r = g.rows.find(x => x.status === 'Approved'); return r ? [{ agreementId: g.agreementId, row: r }] : [] })
+  if (running.length < 2) return null
+  const best = running.reduce((a, b) => (b.row.end > a.row.end || (b.row.end === a.row.end && b.row.start < a.row.start) ? b : a))
+  return { draftId: best.row.id, agreementId: best.agreementId }
+}
