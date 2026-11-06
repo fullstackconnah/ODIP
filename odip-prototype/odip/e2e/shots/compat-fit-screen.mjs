@@ -60,13 +60,15 @@ async function desktop(width, height, scrolled) {
   const list = page.locator(`${NAV} ul`), search = page.locator(`${NAV} input`)
   const m0 = await page.evaluate(() => {
     const foot = document.querySelector('footer')
-    return { over: document.documentElement.scrollHeight - innerHeight, foot: foot ? Math.round(foot.getBoundingClientRect().height) : 0, fit: !!document.querySelector('[data-fit-screen]') }
+    return { over: document.documentElement.scrollHeight - innerHeight, foot: foot ? Math.round(foot.getBoundingClientRect().height) : 0, fit: !!document.querySelector('[data-fit-screen]'),
+      tall: [...document.querySelectorAll('body *')].map((e) => ({ t: e.tagName + (e.id ? '#' + e.id : '') + '.' + String(e.className).slice(0, 40), b: Math.round(e.getBoundingClientRect().bottom + scrollY) })).sort((a, b) => b.b - a.b).slice(0, 3) }
   })
-  check(`page fits the screen (${bp}): overflow <= footer + 1`, `${m0.over} vs footer ${m0.foot}`, m0.fit && m0.over <= m0.foot + 1)
+  check(`page fits the screen (${bp}): overflow <= footer + 1`, `${m0.over} vs footer ${m0.foot} ${JSON.stringify(m0.tall)}`, m0.fit && m0.over <= m0.foot + 1)
   const l0 = await list.evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, st: el.scrollTop }))
   check(`list overflows its scroller (${bp})`, JSON.stringify(l0), l0.sh > l0.ch)
   const top0 = (await search.boundingBox()).y
-  await page.mouse.move(120, height / 2 + 60)
+  const lb = await list.boundingBox()
+  await page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height / 2)
   await page.mouse.wheel(0, 400)
   await page.waitForTimeout(400)
   const l1 = await list.evaluate((el) => el.scrollTop), wy = await page.evaluate(() => scrollY)
