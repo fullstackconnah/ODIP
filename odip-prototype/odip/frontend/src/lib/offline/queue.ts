@@ -12,7 +12,7 @@ import { apiErrorCode, apiErrorData, apiErrorStatus } from '@/lib/shiftPackageEr
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { OFFLINE_PREFIX, readSaved, readSession, writeSaved, wipeOffline, type OfflineSession } from './store'
 
-export type QueueKind = 'start' | 'note' | 'breakStart' | 'breakEnd' | 'tick' | 'untick' | 'ack' | 'finish'
+export type QueueKind = 'start' | 'note' | 'breakStart' | 'breakEnd' | 'tick' | 'untick' | 'ack' | 'finish' | 'details'
 
 export interface QueueRecord {
   /** newCompletionRequestId(); doubles as the break id / note id. */
@@ -55,7 +55,7 @@ export type SendOrQueueResult = { queued: false; data: unknown } | { queued: tru
 
 export interface ReplayResult { sent: number; notSent: number; waiting: number; offline: boolean }
 
-const RANK: Record<QueueKind, number> = { start: 0, note: 1, breakStart: 2, breakEnd: 2, tick: 3, untick: 3, ack: 4, finish: 5 }
+const RANK: Record<QueueKind, number> = { start: 0, note: 1, breakStart: 2, breakEnd: 2, tick: 3, untick: 3, ack: 4, finish: 5, details: 6 }
 
 /** On a weak signal navigator.onLine stays true and a request can stall; give up so the record is queued and a replay never hangs. */
 const REQUEST_TIMEOUT_MS = 15_000

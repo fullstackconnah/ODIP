@@ -17,6 +17,8 @@ export function reasonFor(rec: QueueRecord, ctx: { returnCount?: number } = {}):
       ? "Finish wasn't sent: a break is still running. End it on the shift, then try again."
       : "Finish wasn't sent: a dose is due with no outcome recorded. Record it on the shift, then try again."
   }
+  if (rec.kind === 'details' && code === 'SHIFT_ALREADY_COMPLETED') return "Details weren't sent: this shift was already approved."
+  if (rec.kind === 'details' && code === 'SHIFT_NOT_PENDING_REVIEW') return "Details weren't sent: this shift is no longer waiting for details."
   switch (code) {
     case 'SHIFT_CANCELLED': return 'This shift was cancelled.'
     case 'SHIFT_ALREADY_COMPLETED': return 'This shift was already reviewed and completed.'
