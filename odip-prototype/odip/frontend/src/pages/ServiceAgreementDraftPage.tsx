@@ -232,7 +232,7 @@ function DraftPage() {
   const limits = useMemo(() => engineLimits(shifts), [shifts])
 
   const pricing = useAgreementPricing({
-    participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
+    participantId: participantId ?? '', agreementId: isNew ? null : agreementId, shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
     canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
@@ -268,7 +268,7 @@ function DraftPage() {
   }
   if (!participantId || !participant.data) return <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   // A link for an agreement this participant does not have (deleted, or another participant's): say so, never fall back to a different one.
-  if (!isNew && drafts.data && series?.length === 0) {
+  if (!isNew && !drafts.isFetching && drafts.data && series?.length === 0) {
     return <EmptyState size="inline" icon={FileText} title="This agreement isn't on this participant's record" description="It may have been deleted, or the link is for another participant." action={{ label: `Back to ${participant.data.fullName}`, to: `/participants/${participantId}` }} />
   }
 
@@ -312,13 +312,16 @@ function DraftPage() {
     const data: CreateServiceAgreementDraftDto = {
       planStartDate: plan.start, planEndDate: plan.end, agreementStartDate: details.agreementStartDate, agreementEndDate: end, isOngoing: details.ongoing || undefined,
       state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, baseVersion, blocks,
-      agreementKind: details.agreementKind || undefined, agreementName: details.agreementName, ...(isNew ? { newAgreement: true } : { agreementId: agreementId ?? undefined }),
+      agreementKind: details.agreementKind || undefined, agreementName: details.agreementName, ...(agreementParam === 'new' ? { newAgreement: true } : isNew ? {} : { agreementId: agreementId ?? undefined }),
     }
     create.mutate({ participantId, data }, {
-      onSuccess: result => {
+      onSuccess: async result => {
         setBaseline(snapshotOf(details, shifts)); setSaved(true); setBaseVersion(result?.version ?? baseVersion); setConflict(null)
         // A first save makes the agreement: the address follows it, so a reload (or Back) shows this agreement and the next save is a revision of it.
-        if (isNew && result?.agreementId) setSearchParams(current => { const next = new URLSearchParams(current); next.set('agreement', result.agreementId); return next }, { replace: true })
+        if (isNew && result?.agreementId) {
+          await drafts.refetch() // the new agreement is on the list before the address names it
+          setSearchParams(current => { const next = new URLSearchParams(current); next.set('agreement', result.agreementId); return next }, { replace: true })
+        }
       },
       onError: error => {
         const newer = conflictVersionOf(error)
@@ -426,7 +429,7 @@ function DraftPage() {
   }
   const stepIndex = STEPS.findIndex(entry => entry.key === step)
   const current = STEPS[stepIndex]
-  const total = <RunningTotal status={pricing.status} answer={pricing.answer} refreshing={pricing.refreshing} error={pricing.error} onRetry={pricing.retry} budgetView={pricing.budgetView} leftOut={pricing.leftOut} />
+  const total = <RunningTotal status={pricing.status} answer={pricing.answer} refreshing={pricing.refreshing} error={pricing.error} onRetry={pricing.retry} budgetView={pricing.budgetView} leftOut={pricing.leftOut} several={agreementCount >= 2} />
 
   return <div className="flex max-w-6xl flex-col gap-[var(--section-gap)] animate-fade-in">
     <ConfirmDialog

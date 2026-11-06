@@ -139,6 +139,7 @@ export default function AgreementsPage() {
   const [dialog, setDialog] = useState<{ open: boolean; phase: ApprovePhase; progress: number; error: string | null; refused: boolean; results: AgreementApproveResult[]; stopped: ApproveStopped | null }>(
     { open: false, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })
   const [count, setCount] = useState(0)
+  const labels = useRef(new Map<string, { agreementId: string; title: string }>())
   const [action, setAction] = useState<AgreementBulkAction | null>(null)
   const [review, setReview] = useState<BulkRun | null>(null)
   const onProgress = useCallback((done: number) => setDialog(d => ({ ...d, progress: done })), [])
@@ -151,6 +152,8 @@ export default function AgreementsPage() {
     const sent = targets
     setCount(sent.length)
     setDialog(d => ({ ...d, phase: 'running', progress: 0, error: null, refused: false }))
+    // Taken now: once the list refetches, an approved draft is no longer waiting and the rows can't name it.
+    labels.current = new Map(rows.flatMap(r => (r.waiting && selected.has(r.key) ? [[r.waiting.draftId, { agreementId: r.agreementId, title: rowTitle(r, named) }] as const] : [])))
     const run = await approve.mutateAsync(sent)
     if (run.stopped && run.results.length === 0) {
       setDialog(d => ({ ...d, phase: 'confirm', error: failureWords(run.stopped!.error), refused: statusOf(run.stopped!.error) === 403 }))
@@ -259,7 +262,7 @@ export default function AgreementsPage() {
 
       <ApproveAgreementsDialog
         open={dialog.open} phase={dialog.phase} count={dialog.phase === 'confirm' ? targets.length : count} skipped={skipped} progress={dialog.progress}
-        error={dialog.error} refused={dialog.refused} results={dialog.results} agreementOf={draftId => { const row = rows.find(r => r.waiting?.draftId === draftId); return row ? { agreementId: row.agreementId, title: rowTitle(row, named) } : undefined }} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
+        error={dialog.error} refused={dialog.refused} results={dialog.results} agreementOf={draftId => labels.current.get(draftId)} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
       />
     </div>
   )
