@@ -1432,7 +1432,11 @@ public class PortalController : ControllerBase
             // An editor saved the incident since it was read (UpdatedAt is its concurrency token). The answer stands whatever they changed: take the stored version and stamp again.
             foreach (var entry in e.Entries.Where(x => x.Entity is IncidentReport)) await entry.ReloadAsync(ct);
             witness.IncidentReport.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync(ct);
+            try { await _db.SaveChangesAsync(ct); }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(ApiResponse<PortalWitnessRequestDto>.Fail("This incident changed while you were answering. Please send your answer again."));
+            }
         }
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToIncidentWitnessRequestDto(witness)));
