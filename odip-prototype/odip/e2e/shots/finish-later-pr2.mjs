@@ -62,11 +62,11 @@ async function route(page, w) {
   let last = null
   const detail = () => {
     const d = structuredClone(last.data)
-    const tz = d.timeZoneId ?? 'Australia/Sydney'
+    const tz = 'Australia/Sydney'   // pinned, so the draft's provider-local times below match
     const s = wall(at(-240), tz), e = wall(at(0), tz)
     const ended = w.status === 'PendingReview'
     Object.assign(d, {
-      id: SHIFT_ID, status: w.status, serviceDate: s.date, startTime: s.time, endTime: e.time, endsNextDay: e.date !== s.date, serviceLocation: null, travelAsked: w.travelAsked,
+      id: SHIFT_ID, timeZoneId: tz, status: w.status, serviceDate: s.date, startTime: `${s.date}T${s.time}`, endTime: `${e.date}T${e.time}`, endsNextDay: e.date !== s.date, serviceLocation: null, travelAsked: w.travelAsked,
       breaks: [], prn: [], shiftRoutines: [], canRecordDoses: true, missingDetails: ended ? w.missing : [],
       medicationsDue: w.dose ? [DOSE] : [], finishBlockers: w.dose && !ended ? [{ code: 'DOSE_OUTCOME_MISSING', message: 'Paracetamol 500mg was due at 8:00 am.', medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: DOSE.scheduledAt }] : [],
       completion: {
@@ -263,9 +263,12 @@ try {
       await page.route((u) => u.pathname === '/api/v1/portal/my-shifts', async (r) => {
         const response = await r.fetch()
         const body = await response.json()
-        const tz = body.data?.timeZoneId ?? 'Australia/Sydney'
+        const tz = 'Australia/Sydney'
         const s = wall(at(-240), tz), e = wall(at(0), tz)
-        const row = { id: SHIFT_ID, participantId: 'participant-1', participantName: 'Alexandra Reid', serviceDate: s.date, startTime: s.time, endTime: e.time, endsNextDay: false, durationHours: 4, ratio: 'OneToOne', nightType: 'None', status: 'PendingReview', notes: null, returnCount: 0, missingDetails: ALL_MISSING }
+        const sample = body.data?.shifts?.[0]   // the list sends whatever shape the mock does: copy it
+        const full = typeof sample?.startTime === 'string' && sample.startTime.includes('T')
+        const clock = (w) => (full ? `${w.date}T${w.time}` : w.time)
+        const row = { id: SHIFT_ID, participantId: 'participant-1', participantName: 'Alexandra Reid', serviceDate: s.date, startTime: clock(s), endTime: clock(e), endsNextDay: false, durationHours: 4, ratio: 'OneToOne', nightType: 'None', status: 'PendingReview', notes: null, returnCount: 0, missingDetails: ALL_MISSING }
         if (body.data) body.data.shifts = [row, ...body.data.shifts.filter((x) => x.id !== SHIFT_ID)]
         await r.fulfill({ response, json: body })
       })
