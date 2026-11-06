@@ -11,5 +11,16 @@ public static class ShiftDetailsRules
 
     /// <summary>The deferrable answers still missing, in a fixed order; empty for a completion that never opted in. Doses are not here: they block the end.
     /// The phone's live form runs the same rule (checklist.missingDetails); both are pinned by one case table.</summary>
-    public static IReadOnlyList<string> Missing(ShiftDetailsFacts f) => [];
+    public static IReadOnlyList<string> Missing(ShiftDetailsFacts f)
+    {
+        if (!f.DetailsRequired) return [];
+        var missing = new List<string>();
+        if (f.Kilometres is null) missing.Add(Kilometres);
+        if (f.TravelAsked && !f.PreNone && (f.PreMinutes is null || f.PreKm is null)) missing.Add(TripTo);
+        if (f.TravelAsked && !f.PostNone && (f.PostMinutes is null || f.PostKm is null)) missing.Add(TripAfter);
+        if (!f.HasNote && !f.NothingToNoteConfirmed) missing.Add(Notes);
+        if (string.IsNullOrWhiteSpace(f.HandoverText) && !f.NothingToHandOver) missing.Add(Handover);
+        if (f.AnythingToReport is null) missing.Add(Report);
+        return missing;
+    }
 }

@@ -54,7 +54,7 @@ public class PortalFinishDetailsTests
         var f = await FinishedLaterAsync();
 
         var detail = Detail(await f.Controller.FinishDetails(f.Shift.Id,
-            new FinishDetailsDto { Kilometres = 3, PreTravelNone = true, PreShiftTravelMinutes = 99, PreShiftTravelKilometres = 99 }, default));
+            new FinishDetailsDto { Kilometres = 3, PreTravelNone = true, PreShiftTravelMinutes = 10, PreShiftTravelKilometres = 4 }, default));
 
         Assert.Equal(["tripAfter", "notes", "handover", "report"], detail.MissingDetails);
         var c = await StoredAsync(f);

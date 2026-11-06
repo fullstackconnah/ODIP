@@ -1597,6 +1597,9 @@ public class RosteringController : ControllerBase
         await using var rowLock = await ShiftRowLock.AcquireAsync(_db, id, ct);
         var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
         if (error is not null) return error;
+        // A shift finished "details later" waits for the worker: nothing is approved while a detail is missing, so pay and claims never read a half-filled one.
+        if ((await ShiftCompletionMapper.MissingDetailsAsync(_db, [completion!.Id], ct))[completion.Id].Count > 0)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(DetailsMissingMessage, ShiftErrorCodes.ShiftDetailsMissing));
         // The dashboard's one tap asks for this: a flag that appeared since its queue read refuses rather than approves. The Completions page approves
         // a flagged shift deliberately, after its review, so it leaves this off.
         if (requireClean && (await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db, [(shift!, completion!)], ct)).Count > 0)
@@ -1621,6 +1624,8 @@ public class RosteringController : ControllerBase
         await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
+
+    private const string DetailsMissingMessage = "This shift is waiting on the worker to add its details.";
 
     private const string ExtraTimeChoiceMessage = "Choose to approve or decline the extra time.";
 
@@ -1865,6 +1870,9 @@ public class RosteringController : ControllerBase
             return (ShiftId: shiftId, Resolved: ResolvePendingReviewCompletion(shift, completion));
         }).ToList();
         // Clean only (the dashboard's Complete all): the queue's flags re-read now, in one pass for the batch; a flagged shift is skipped, never approved.
+        // A shift waiting on the worker for its details is left out, with or without CleanOnly: one query for the batch.
+        var missingById = await ShiftCompletionMapper.MissingDetailsAsync(_db,
+            resolved.Where(r => r.Resolved.Error is null).Select(r => r.Resolved.Completion!.Id).ToList(), ct);
         var needsReview = dto.CleanOnly
             ? await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db,
                 resolved.Where(r => r.Resolved.Error is null).Select(r => (r.Resolved.Shift!, r.Resolved.Completion!)).ToList(), ct)
@@ -1876,6 +1884,11 @@ public class RosteringController : ControllerBase
             {
                 var (code, message) = ExtractBatchFailure(error);
                 results.Add(new ApproveBatchResultDto(shiftId, false, code, message));
+                continue;
+            }
+            if (missingById[resolvedCompletion!.Id].Count > 0)
+            {
+                results.Add(new ApproveBatchResultDto(shiftId, false, ShiftErrorCodes.ShiftDetailsMissing, DetailsMissingMessage));
                 continue;
             }
             if (needsReview.Contains(shiftId))
