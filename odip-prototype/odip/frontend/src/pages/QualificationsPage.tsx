@@ -117,6 +117,14 @@ export default function QualificationsPage() {
     if (belowMd) window.scrollTo({ top: 0, behavior: 'instant' })
   }, [current?.staff.id, belowMd])
 
+  // A direct ?staff= load can pick a row below the list's fold: bring it into view once. Previous/Next scroll for themselves above.
+  const scrolledToChosen = useRef(false)
+  useEffect(() => {
+    if (scrolledToChosen.current || !chosen) return
+    scrolledToChosen.current = true
+    document.getElementById(`qual-staff-${chosen.staff.id}`)?.scrollIntoView({ block: 'nearest' })
+  }, [chosen])
+
   function closeEditor() {
     editSeq.current++
     setRereading(false)
@@ -317,6 +325,7 @@ export default function QualificationsPage() {
                   {
                     key: 'expiryDate',
                     header: 'Expiry Date',
+                    width: '11rem', // fits the date editor, so opening it does not reflow Expiry and Status
                     type: 'date',
                     editable: {
                       render: (r, onChange) => (
