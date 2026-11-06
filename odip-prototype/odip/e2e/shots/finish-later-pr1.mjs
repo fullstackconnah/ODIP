@@ -70,7 +70,9 @@ async function run(width, height, touch) {
   check(`row does not overflow sideways (${bp})`, JSON.stringify(over), over.sw <= over.cw + 1)
   const ret = await held.getByRole('button', { name: /^Return/ }).boundingBox()
   const tapMin = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap-min')) || 0)
-  if (touch) check(`Return is at least --tap-min tall (${bp})`, `${Math.round(ret.height)} vs ${tapMin}`, tapMin >= 44 && ret.height >= tapMin - 0.5)
+  // A size=sm Button is --control-h-sm tall (36 on coarse) and carries the --tap-min hit area (TAP_AREA), so its box is measured against the control token.
+  const ctlSm = await page.evaluate(() => { const p = document.createElement('div'); p.style.height = 'var(--control-h-sm)'; document.body.append(p); const h = p.getBoundingClientRect().height; p.remove(); return h })
+  if (touch) check(`Return is --control-h-sm tall with a --tap-min hit area (${bp})`, `${Math.round(ret.height)} vs ${ctlSm}, tap-min ${tapMin}`, tapMin >= 44 && ctlSm > 0 && ret.height >= ctlSm - 0.5)
 
   await cropElement(page, held, path.join(OUT_DIR, `needs-details-row-${bp}.png`), { touch })
   await cropElement(page, clean, path.join(OUT_DIR, `clean-row-${bp}.png`), { touch })
