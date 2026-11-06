@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agreementLabel, isPlainAgreement, KIND_LABEL, KIND_ORDER } from './agreementKind'
+import { agreementLabel, isPlainAgreement, KIND_LABEL, KIND_ORDER, splitAgreementFieldErrors } from './agreementKind'
 
 describe('agreementKind', () => {
   it('labels a kind neutrally, never "Core"', () => {
@@ -17,5 +17,14 @@ describe('agreementKind', () => {
     expect(isPlainAgreement({ agreementKind: 'Core', agreementName: null })).toBe(true)
     expect(isPlainAgreement({ agreementKind: 'Core', agreementName: 'Main' })).toBe(false)
     expect(isPlainAgreement({ agreementKind: 'Trip' })).toBe(false)
+  })
+})
+
+describe('splitAgreementFieldErrors', () => {
+  it('moves the type and name refusals to their fields and leaves the rest', () => {
+    const out = splitAgreementFieldErrors(['Choose the agreement type.', 'Keep the agreement name to 80 characters.', 'A block is wrong.'])
+    expect(out).toEqual({ kind: 'Choose the agreement type.', name: 'Keep the agreement name to 80 characters.', rest: ['A block is wrong.'] })
+    expect(splitAgreementFieldErrors(['Choose an agreement type from the list.']).kind).toBe('Choose an agreement type from the list.')
+    expect(splitAgreementFieldErrors(['The agreement name has a control character.']).name).toMatch(/agreement name/)
   })
 })

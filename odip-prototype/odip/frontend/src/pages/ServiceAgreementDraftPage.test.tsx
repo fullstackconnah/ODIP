@@ -46,7 +46,7 @@ vi.mock('@/pages/funding/FundingPlanEditor', () => ({
 const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role, id: 'u-1' }))
 
 const draft = (changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreementDraftDto => ({
-  id: 'd-2', participantId: 'p-1', version: 2, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30',
+  id: 'd-2', participantId: 'p-1', agreementId: 'a-1', agreementKind: 'Core', version: 2, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30',
   blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Charge' }))], lines: [], isSummary: false, blockCount: 1, lineCount: 0, total: 0, caveats: [], ...changes,
 }) as ServiceAgreementDraftDto
 
@@ -143,7 +143,7 @@ describe('ServiceAgreementDraftPage: the wizard', () => {
       participantId: 'p-1',
       data: {
         planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30', state: 'VIC', serviceTypes: ['Community access'],
-        representative: 'A. Representative', baseVersion: 0,
+        representative: 'A. Representative', baseVersion: 0, agreementKind: 'Core', agreementName: '', newAgreement: true,
         blocks: [{
           block: {
             id: 'b1', supportType: 'CommunityAccess', intensity: 'Standard', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '09:00:00', end: '13:00:00', workers: 1,
@@ -918,5 +918,64 @@ describe('Approving can move the participant to Active', () => {
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     renderPage()
     expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns; Populate roster adds the shifts. Approving also moves them to Active if they're ready.")
+  })
+})
+
+describe('ServiceAgreementDraftPage: several agreements', () => {
+  const trip = () => draft({ id: 'd-t', agreementId: 'a-2', agreementKind: 'Trip', agreementName: 'Trip to Cairns', version: 1 })
+  const both = () => drafts.mockReturnValue({ data: [draft(), trip()], isLoading: false, isError: false, refetch: refetchDrafts })
+
+  it('shows the agreement named in the link, titled with its label', () => {
+    both()
+    renderPage('/participants/p-1/agreement-draft?agreement=a-2')
+    expect(screen.getByText('Marcus Tran · Trip to Cairns')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Agreement type/)).toHaveValue('Trip')
+    expect(screen.getByLabelText('Name (optional)')).toHaveValue('Trip to Cairns')
+  })
+
+  it('says so for an agreement that is not on the record, and shows no other', () => {
+    both()
+    renderPage('/participants/p-1/agreement-draft?agreement=zzz')
+    expect(screen.getByText("This agreement isn't on this participant's record")).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to Marcus Tran' })).toHaveAttribute('href', '/participants/p-1')
+    expect(screen.queryByLabelText('Agreement starts')).toBeNull()
+  })
+
+  it('saves a revision with its own agreement id and the typed name', async () => {
+    both()
+    const user = userEvent.setup()
+    renderPage('/participants/p-1/agreement-draft?agreement=a-2')
+    await user.clear(screen.getByLabelText('Name (optional)'))
+    await user.type(screen.getByLabelText('Name (optional)'), 'Cairns trip')
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(createMutate.mock.calls[0][0].data).toMatchObject({ agreementId: 'a-2', agreementKind: 'Trip', agreementName: 'Cairns trip', baseVersion: 1 })
+    expect(createMutate.mock.calls[0][0].data.newAgreement).toBeUndefined()
+  })
+
+  it('starts a new agreement from nothing: type first, version 1, no agreement id', async () => {
+    both()
+    const user = userEvent.setup()
+    renderPage('/participants/p-1/agreement-draft?agreement=new')
+    expect(screen.getByText('Marcus Tran · New agreement')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Agreement type/)).toHaveValue('')
+    await user.selectOptions(screen.getByLabelText(/Agreement type/), 'Night support')
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2026-10-01' } })
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(createMutate.mock.calls[0][0].data).toMatchObject({ newAgreement: true, agreementKind: 'NightSupport', baseVersion: 0 })
+    expect(createMutate.mock.calls[0][0].data.agreementId).toBeUndefined()
+  })
+
+  it('puts the server\'s refusal of the name under the name, and keeps what was typed', async () => {
+    both()
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 400, data: { errors: ['Keep the agreement name to 80 characters.'] } } }))
+    const user = userEvent.setup()
+    renderPage('/participants/p-1/agreement-draft?agreement=a-2')
+    await user.type(screen.getByLabelText('Name (optional)'), '!')
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(await screen.findByText('Keep the agreement name to 80 characters.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Name (optional)')).toHaveValue('Trip to Cairns!')
   })
 })

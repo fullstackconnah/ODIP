@@ -17,3 +17,10 @@ export const agreementLabel = (d: Labelled) => d.agreementName?.trim() || KIND_L
 
 /** The unnamed everyday agreement every participant had before several were allowed: shown with no label. */
 export const isPlainAgreement = (d: Labelled) => !d.agreementName?.trim() && d.agreementKind === 'Core'
+
+/** The server's 400 texts about the type and the name go under their fields; everything else stays in the failure callout. */
+export function splitAgreementFieldErrors(messages: string[]) {
+  const kind = messages.find(m => /agreement type/i.test(m))
+  const name = messages.find(m => /agreement name/i.test(m))
+  return { kind, name, rest: messages.filter(m => m !== kind && m !== name) }
+}

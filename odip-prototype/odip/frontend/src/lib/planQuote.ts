@@ -276,6 +276,8 @@ export function describeQuoteError(error: unknown): FriendlyError {
   }
   if (status === 400) return { title: 'This plan cannot be priced yet', detail: plain(messages[0] ?? 'The pricing service refused the request.'), retryable: false }
   if (status === 403) return { title: 'You cannot price plans', detail: 'Pricing is for Admins and Coordinators. Ask one of them to build the plan.', retryable: false }
+  // A save that named no agreement while the participant has several (a stale tab or an old link): nothing was saved.
+  if (status === 409) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['Reload to choose which agreement to edit.'] }
   if (status === 413) return { title: 'The plan is too large to send', detail: 'Price fewer blocks at a time.', retryable: false }
   return { title: 'The plan could not be priced', detail: 'Check your connection and try again. Nothing you entered is lost.', retryable: true }
 }
