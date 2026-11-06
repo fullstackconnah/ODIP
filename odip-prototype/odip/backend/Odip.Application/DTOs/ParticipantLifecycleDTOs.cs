@@ -222,14 +222,14 @@ public record IntakeVisitDto
 }
 
 /// <summary>
-/// The onboarding checklist (owner decision 2026-10-13), read-only and derived from data: clients cannot tick an item. Exactly six items,
-/// five for a participant who is not NDIS-funded (no "Funding" item), in this order.
+/// The onboarding checklist (owner decision 2026-10-13), read-only and derived from data: clients cannot tick an item. Six items by default,
+/// five for a participant who is not NDIS-funded (no "Funding" item), in this order; the organisation may add a <c>budget</c> item (non-NDIS only) and mark complaints, rights and my provider optional, which follow their usual order.
 /// </summary>
 public record ParticipantOnboardingDto
 {
     public Guid ParticipantId { get; init; }
     public List<OnboardingChecklistItemDto> Items { get; init; } = [];
-    /// <summary>Every item is done.</summary>
+    /// <summary>Every required item is done (optional items are not counted).</summary>
     public bool IsReady { get; init; }
     /// <summary>When "Begin services" was used; null until then.</summary>
     public DateTime? ServicesStartedAt { get; init; }
@@ -243,7 +243,7 @@ public record ParticipantOnboardingDto
 
 /// <summary>
 /// One checklist item. <see cref="Key"/> names it and the screen's fix for it: <c>profile</c> (Edit profile), <c>serviceNeeds</c> (Open agreement
-/// draft), <c>agreement</c> (Record it: POST .../onboarding/agreement-record), <c>complaints</c> and <c>rights</c> (Record it: POST .../onboarding/explained-record), <c>funding</c> (the Funding tab).
+/// draft), <c>agreement</c> (Record it: POST .../onboarding/agreement-record), <c>complaints</c> and <c>rights</c> (Record it: POST .../onboarding/explained-record), <c>funding</c> (the Funding tab), <c>budget</c> (Add plan budget, optional).
 /// </summary>
 public record OnboardingChecklistItemDto
 {
@@ -252,6 +252,8 @@ public record OnboardingChecklistItemDto
     public bool Done { get; init; }
     /// <summary>One line saying what is missing; null when the item is done.</summary>
     public string? Missing { get; init; }
+    /// <summary>An optional item (the organisation's Onboarding checklist setting): listed, but never counted in IsReady or the worklist and never blocks Make active.</summary>
+    public bool Optional { get; init; }
 }
 
 /// <summary>POST /inquiries/{id}/onboarding/agreement-record: exactly one of the two, validated by the server.</summary>
