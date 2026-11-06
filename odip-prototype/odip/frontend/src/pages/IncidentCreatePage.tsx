@@ -369,7 +369,7 @@ function IncidentWizardForm() {
   }
   const commonIncidentPicker = (
     <>
-      <FormField label="Common incident" hint="Optional. Fills in the title, type and description prompts. You still choose the severity." keepHint>
+      <FormField label="Common incident" hint="Optional. Fills in the title, type and description prompts. You still choose the severity.">
         <Dropdown variant="form" label="Choose one to fill in the form faster" value={commonKey} onChange={pickCommonIncident} items={COMMON_INCIDENT_ITEMS} autoFocus />
       </FormField>
       <p role="status" className="text-xs text-[var(--color-muted-foreground)] [&:not(:empty)]:mt-1">{commonStatus}</p>
