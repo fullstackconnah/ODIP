@@ -1,4 +1,4 @@
-import type { ApprovalActivationDto } from './service-agreement-drafts'
+import type { AgreementKind, ApprovalActivationDto } from './service-agreement-drafts'
 
 export interface PriceList { version: string; start: string }
 
@@ -15,7 +15,12 @@ export type AgreementStatus = 'Active' | 'Ending' | 'Ended' | 'DraftWaiting' | '
 export type AgreementEndingState = 'None' | 'Ending' | 'Ended'
 
 export interface AgreementRow {
+  /** `${participantId}:${agreementId}`, added by useAgreements: a participant can have several rows. */
+  key: string
   participantId: string
+  agreementId: string
+  agreementKind: AgreementKind
+  agreementName?: string | null
   participantName: string
   status: AgreementStatus
   /** The current agreement's own state, apart from the one status word: the filters read this, not `status`. */
@@ -47,9 +52,11 @@ export interface AgreementApproveResult {
 
 export type AgreementBulkAction = 'renew' | 'extend' | 'reprice'
 
+export interface AgreementSeriesRef { participantId: string; agreementId: string }
+
 export interface AgreementBulkRequest {
   action: AgreementBulkAction
-  participantIds: string[]
+  items: AgreementSeriesRef[]
   /** Extend: the new end date. */
   endDate?: string
   /** Reprice: the catalogue version to price from. */
@@ -62,7 +69,10 @@ export interface AgreementTerm { start: string; end: string; total: number }
 export type AgreementBulkOutcome = 'Created' | 'Skipped' | 'Failed' | 'Busy'
 
 export interface AgreementBulkResult {
+  /** `${participantId}:${agreementId}`, added by useBulkAgreements. */
+  key: string
   participantId: string
+  agreementId: string
   name: string
   outcome: AgreementBulkOutcome
   reason: string | null

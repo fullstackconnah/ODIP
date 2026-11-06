@@ -2,6 +2,9 @@ import type { DraftBlock, PlanQuote, PlannedLineFlags } from './plan-pricing'
 import type { BudgetWarningDto } from './rostering'
 import type { ShiftStatus, SleepoverType, SupportRatio } from './enums'
 
+/** What a service agreement is for (the server enum, sent as its name). A participant can hold several at once. */
+export type AgreementKind = 'Core' | 'NightSupport' | 'ShortTermAccommodation' | 'Trip' | 'Other'
+
 export type AgreementState = 'ACT' | 'NSW' | 'NT' | 'QLD' | 'SA' | 'TAS' | 'VIC' | 'WA'
 
 /**
@@ -13,6 +16,11 @@ export interface ServiceAgreementDraftDto {
   id: string
   participantId: string
   version: number
+  /** The agreement this revision belongs to: versions are numbered inside it. */
+  agreementId: string
+  agreementKind: AgreementKind
+  /** Shown instead of the kind's label when set. */
+  agreementName?: string | null
   state: AgreementState
   planStartDate: string
   planEndDate: string
@@ -138,6 +146,8 @@ export interface DraftApprovalPreviewDto {
   changedPatterns?: number
   /** Ended patterns a coordinator edited by hand (their times, ratio or night type are not their block's) that approving puts back to the agreement's times. Absent from an older server. */
   handEditedPatterns?: number
+  /** New patterns that overlap in time an active pattern of another agreement of the participant. Information only: never blocks, never acknowledged. */
+  otherAgreementOverlaps?: number
   /** The version whose patterns would end, and the day they would end (the day before this revision starts). */
   endsFromVersion?: number
   endsOn?: string
@@ -289,6 +299,14 @@ export interface CreateServiceAgreementDraftDto {
    * version number, instead of making this plan the newest over their work.
    */
   baseVersion: number
+  /** The agreement a revision belongs to. Always sent with a revision: with 2 or more agreements the server refuses a save without it (409). */
+  agreementId?: string
+  /** Start a new agreement from nothing (version 1, baseVersion 0, no agreementId). */
+  newAgreement?: boolean
+  /** Required for a new agreement; a revision may change it. */
+  agreementKind?: AgreementKind
+  /** Trimmed by the server; blank is none. Up to 80 characters. */
+  agreementName?: string
 }
 
 /** The body of the 409 a save answers when somebody else saved a newer version first (`code` is "draft-version-conflict"). */
@@ -300,6 +318,9 @@ export interface DraftVersionConflictDto {
 export interface AgreementEndingDto {
   participantId: string
   participantName: string
+  agreementId: string
+  agreementKind: AgreementKind
+  agreementName?: string | null
   /** The approved revision that ends. */
   draftId: string
   version: number

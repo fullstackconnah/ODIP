@@ -1,4 +1,5 @@
 import type { PlanBlock } from './plan-pricing'
+import type { AgreementKind } from './service-agreement-drafts'
 import type { MyProviderRecord, PlanType } from './enums'
 
 // A participant's NDIS plan budget (budget feature, phase 1): the wire shapes of api/v1/participants/{id}/funding and api/v1/funding. Enums travel as their names, dates as
@@ -444,6 +445,8 @@ export interface AgreementCheckRequest {
   blocks?: PlanBlock[]
   periodFrom?: string
   periodTo?: string
+  /** With a draft it must be the draft's own; with blocks, null is a new agreement and an id leaves that agreement out of the others. */
+  agreementId?: string | null
 }
 
 export interface AgreementCheckPeriod {
@@ -483,6 +486,10 @@ export interface AgreementCheckPool {
    * A period's over-by is the agreement's cost PLUS that, so `overBy` can pass the agreement's cost; `overBy` less this is the agreement's own overshoot. 0 when no period was over before.
    */
   alreadyOverBy: number
+  /** What this agreement and the other active ones cost together in this pool. */
+  combinedCost: number
+  /** How far that passes the money available when the combined warning applies to the pool; 0 otherwise, and for a pool with no limit recorded. */
+  combinedOverBy: number
   /** The periods the agreement touches, in date order. */
   periods: AgreementCheckPeriod[]
 }
@@ -507,4 +514,16 @@ export interface AgreementCheck {
   notInARecordedPool: number
   /** The part of the agreement delivered outside the plan's dates: shown, never dropped. */
   outsideThePlan: number
+  /** The participant's other active agreements and what each current revision costs: the ones counted in the pools' combined figures. */
+  otherAgreements: OtherAgreementCost[]
+  /** Together with the others this agreement plans more than the money available, while it does not alone. Information only. */
+  combinedOver: boolean
+}
+
+export interface OtherAgreementCost {
+  agreementId: string
+  agreementKind: AgreementKind
+  agreementName?: string | null
+  version: number
+  cost: number
 }

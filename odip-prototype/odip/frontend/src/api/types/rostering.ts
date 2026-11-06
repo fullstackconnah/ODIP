@@ -6,6 +6,7 @@ import type {
 } from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, EmploymentType, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { LeaveStatus, UnavailabilityKind } from './leave'
+import type { AgreementKind } from './service-agreement-drafts'
 import type { PlanBlockRequirements } from './plan-pricing'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
@@ -424,6 +425,10 @@ export interface PendingAgreementDto {
   draftId: string
   version: number
   canReceiveServices: boolean
+  /** A participant's second agreement waiting is its own notice. */
+  agreementId: string
+  agreementKind: AgreementKind
+  agreementName?: string | null
 }
 
 /** One approved or pending leave request touching the board's week (participant board only; the Staff view has its rows' leave bars). Whole days, both ends inclusive, not clipped to the week. */
