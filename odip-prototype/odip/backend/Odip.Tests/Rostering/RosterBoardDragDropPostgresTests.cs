@@ -371,6 +371,29 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task PublishWeek_WithShiftIds_PublishesOnlyThoseDrafts()   // r3-deep N4: the ids filter was only proved on InMemory
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid chosen, left;
+        await using (var db = Open(tenantId))
+        {
+            var mia = Person(db, "Mia");
+            chosen = ShiftOf(db, mia.Id, Worker(db, "Sam").Id, ShiftStatus.Draft, Monday).Id;
+            left = ShiftOf(db, mia.Id, Worker(db, "Alex").Id, ShiftStatus.Draft, Monday.AddDays(1)).Id;
+            await db.SaveChangesAsync();
+        }
+
+        await using var publisher = Open(tenantId);
+        var result = await Controller(publisher, tenantId).PublishWeek(Monday, default, new PublishShiftsRequest { ShiftIds = [chosen] });
+
+        Assert.Equal(1, Assert.IsType<ApiResponse<PublishWeekResultDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Published);
+        await using var check = Open(tenantId);
+        Assert.Equal(ShiftStatus.Published, (await check.Shifts.SingleAsync(s => s.Id == chosen)).Status);
+        Assert.Equal(ShiftStatus.Draft, (await check.Shifts.SingleAsync(s => s.Id == left)).Status);
+    }
+
+    [SkippableFact]
     public async Task TwoPublishWeeksAtOnce_NotifyEachWorkerOnce_AndStayInTheirOrganisation()   // Review Focus 2
     {
         RequirePostgres();

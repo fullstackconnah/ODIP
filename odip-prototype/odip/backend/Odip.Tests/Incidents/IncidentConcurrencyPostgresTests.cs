@@ -4,6 +4,7 @@ using Odip.Api.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
@@ -173,5 +174,47 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
         await using var check = Open(tenantId);
         Assert.Equal(WitnessStatus.Approved, (await check.IncidentWitnesses.AsNoTracking().SingleAsync(w => w.Id == witnessId)).WitnessStatus);
         Assert.Equal("Edited", (await ReadAsync(check, id)).Title);
+        // Only the retry reloads the stale copy this context held; with no concurrency token the first save would just win and this would still say "Original".
+        Assert.Equal("Edited", witnessDb.IncidentReports.Local.Single(i => i.Id == id).Title);
+    }
+
+    [SkippableFact]
+    public async Task AWitnessAnswerThatLosesTheRetryToo_Is409_AndTheAnswerIsNotSaved()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, userId, id, loaded) = await SeedAsync();
+        var witnessId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        await using (var seed = Open(tenantId))
+        {
+            seed.Users.Add(new User { Id = staffId, TenantId = tenantId, FirstName = "Priya", LastName = "Nair", Username = $"priya.{Guid.NewGuid():N}", Email = $"priya.{Guid.NewGuid():N}@example.test", Role = UserRole.SupportWorker, IsActive = true });
+            seed.IncidentWitnesses.Add(new IncidentWitness { Id = witnessId, IncidentReportId = id, WitnessUserId = staffId, WitnessName = "Priya Nair", WitnessStatus = WitnessStatus.Pending });
+            await seed.SaveChangesAsync(Ct);
+        }
+        await using var editor = Open(tenantId);
+        await using var other = Open(tenantId);
+        await using var witnessDb = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString).AddInterceptors(new BumpBeforeSecondSave(other, id)).Options, TenantMock(tenantId).Object);
+        await witnessDb.IncidentReports.SingleAsync(i => i.Id == id, Ct);
+
+        Assert.IsType<OkObjectResult>((await As(editor, userId).Update(id, Form(userId, "Edited", loaded, new CreateIncidentWitnessDto { Id = witnessId, WitnessUserId = staffId, WitnessName = "Priya Nair" }), Ct)).Result);
+        var portal = new PortalController(witnessDb, TenantMock(tenantId).Object) { ControllerContext = Caller(staffId) };
+        var result = await portal.ApproveIncidentWitnessRequest(witnessId, new PortalRespondIncidentWitnessRequestDto("I saw it."), Ct);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("This incident changed while you were answering. Please send your answer again.", Assert.Single(Assert.IsType<ApiResponse<PortalWitnessRequestDto>>(conflict.Value).Errors!));
+        await using var check = Open(tenantId);
+        Assert.Equal(WitnessStatus.Pending, (await check.IncidentWitnesses.AsNoTracking().SingleAsync(w => w.Id == witnessId)).WitnessStatus);
+    }
+
+    /// <summary>Another editor saves between the witness answer's reload and its retry: the second save is the one that must lose.</summary>
+    private sealed class BumpBeforeSecondSave(OdipDbContext other, Guid incidentId) : SaveChangesInterceptor
+    {
+        private int _saves;
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (++_saves == 2)
+                await other.IncidentReports.Where(i => i.Id == incidentId).ExecuteUpdateAsync(u => u.SetProperty(i => i.UpdatedAt, DateTime.UtcNow.AddSeconds(30)), ct);
+            return result;
+        }
     }
 }
