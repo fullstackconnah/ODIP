@@ -33,12 +33,12 @@ const DEFAULTS = {
 
 /** Every Intake step that owns a shared field, in one form. */
 function IntakeSteps() {
-  const { control, register, formState: { errors } } = useForm<ParticipantFormData>({ defaultValues: DEFAULTS })
+  const { control, register, setValue, formState: { errors } } = useForm<ParticipantFormData>({ defaultValues: DEFAULTS })
   const riskEntries = useFieldArray({ control, name: 'riskEntries' })
   const watched = useWatch({ control })
   return (
     <>
-      <ParticipantDetailsStep control={control} register={register} errors={errors} livingArrangementValue={undefined} />
+      <ParticipantDetailsStep control={control} register={register} setValue={setValue} errors={errors} livingArrangementValue={undefined} />
       <NdisFundingStep control={control} register={register} errors={errors} fundingSourceValue={watched.fundingSource} planTypeComplianceWarningValue={null} />
       <SupportNeedsStep control={control} register={register} errors={errors} overnightSupportValue={watched.overnightSupport} />
       <MedicalSummaryStep register={register} />
@@ -84,7 +84,8 @@ async function dropdownOptions(user: ReturnType<typeof userEvent.setup>, id: str
 
 const TEXT_CONTROLS = [
   'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'phone', 'email',
-  'addressStreet', 'addressSuburb', 'addressPostcode',
+  // addressStreet is the address lookup's combobox on Intake and still a plain input on Profile until the lookup reaches Profile's AddressFields (PR2), which restores it here.
+  'addressSuburb', 'addressPostcode',
   'ndisNumber', 'planStartDate', 'planEndDate',
   'medicalSummary', 'expressiveSkills', 'receptiveSkills', 'equipmentRequirements', 'behaviourRiskSummary',
   'mobilityAidWheelchair', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
