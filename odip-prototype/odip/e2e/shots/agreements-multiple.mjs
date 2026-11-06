@@ -77,10 +77,10 @@ async function prepare(page) {
   }
   const body = (start, end, extra = {}) => ({ state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: start, agreementEndDate: end, blocks, ...extra })
   // p-0004: Core approved, a revision waiting, and an approved Trip that ends in 20 days (the Core ends later, so the warning picks it).
-  await call('POST', 'participants/p-0004/service-agreement-drafts/draft-p-0004-v1/approve', {})
+  await call('POST', 'participants/p-0004/service-agreement-drafts/draft-p-0004-v1/approve', { acknowledgeOverlaps: true })
   await call('POST', 'participants/p-0004/service-agreement-drafts', body('2026-10-01', '2027-06-30', { baseVersion: 1 }))
   const trip = await call('POST', 'participants/p-0004/service-agreement-drafts', body(day(-7), day(20), { newAgreement: true, agreementKind: 'Trip', agreementName: 'Trip to Cairns', baseVersion: 0 }))
-  if (trip) await call('POST', `participants/p-0004/service-agreement-drafts/${trip.id}/approve`, {})
+  if (trip) await call('POST', `participants/p-0004/service-agreement-drafts/${trip.id}/approve`, { acknowledgeOverlaps: true })
   // p-0005: a Core draft and a Trip with the longest name the field takes.
   await call('POST', 'participants/p-0005/service-agreement-drafts', body(day(30), day(300), { newAgreement: true, agreementKind: 'Trip', agreementName: LONG_NAME, baseVersion: 0 }))
 }
@@ -93,7 +93,7 @@ try {
     const opts = { touch: vp.touch }
     const rec = (name, ok, detail) => check(vp.name, name, ok, detail)
     const open = async (url) => { await page.goto(`${BASE_URL}${url}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }); await page.waitForTimeout(600) }
-    const agreementsCard = () => page.locator('h3', { hasText: /^Agreements$/ }).first().locator('xpath=../..')
+    const agreementsCard = () => page.locator('#agreements')
     const snap = async (state, locator, extra = {}) => {
       try {
         await locator.waitFor({ state: 'visible', timeout: 15_000 })
@@ -104,7 +104,7 @@ try {
         await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-${state}.png`) })
       }
     }
-    const participantPage = async (id) => { await open(`/participants/${id}?tab=details`); await agreementsCard().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) }
+    const participantPage = async (id) => { await open(`/participants/${id}?tab=agreements`); await agreementsCard().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) }
 
     // none, one plain agreement (C7), ended (C1/C2 on the lone New revision button).
     await participantPage('p-0006')
@@ -148,7 +148,7 @@ try {
     const gap = await tokenPx(page, '--section-gap')
     rec('C3 gap between agreement blocks = --section-gap', sections.length >= 2 && near(sections[1].top - sections[0].bottom, gap), `${sections.length >= 2 ? sections[1].top - sections[0].bottom : 'n/a'} vs ${gap}`)
     if (vp.touch) {
-      const h4 = await agreementsCard().locator('h4').first().boundingBox()
+      const h4 = (await agreementsCard().locator('h4').count()) ? await agreementsCard().locator('h4').first().boundingBox() : { y: 0, height: 0 }
       const revise = await agreementsCard().locator('section').first().getByRole('link', { name: 'New revision' }).count()
       rec('C6 stacked New revision sits below the heading', revise === 0 || (await agreementsCard().locator('section').first().getByRole('link', { name: 'New revision' }).first().boundingBox()).y >= h4.y + h4.height - 1)
     }
@@ -181,7 +181,7 @@ try {
     await snap('add-errors', page.locator('main'))
     await open('/participants/p-0004/agreement-draft?agreement=00000000-0000-0000-0000-00000000dead')
     await snap('unknown-id', page.locator('main'))
-    await open('/participants/p-0004/agreement-draft?agreement=p-0004-ag1')
+    await open('/participants/p-0004/agreement-draft?agreement=p-0004-ag2')
     const next = page.getByRole('button', { name: 'Next', exact: true })
     await next.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
     for (let i = 0; i < 3; i++) await next.click().catch(() => {})
@@ -214,7 +214,7 @@ try {
       const data = json.data ?? json
       await route.fulfill({ response, json: { ...json, ...(json.data ? { data: { ...data, otherAgreementOverlaps: 2 } } : { ...data, otherAgreementOverlaps: 2 }) } })
     })
-    await open('/participants/p-0004/agreement-draft?agreement=p-0004-ag1')
+    await open('/participants/p-0004/agreement-draft?agreement=p-0004-ag2')
     for (let i = 0; i < 3; i++) await next.click().catch(() => {})
     await page.getByRole('button', { name: 'Mark approved for rostering', exact: true }).click().catch(() => {})
     await snap('preview-overlap', page.getByRole('dialog').first())
@@ -222,11 +222,11 @@ try {
 
     // loading and error: the list answered late, then badly.
     await page.route('**/api/v1/participants/p-0003/service-agreement-drafts', () => {})
-    await open('/participants/p-0003?tab=details')
+    await open('/participants/p-0003?tab=agreements')
     await snap('loading', agreementsCard())
     await page.unroute('**/api/v1/participants/p-0003/service-agreement-drafts')
     await page.route('**/api/v1/participants/p-0003/service-agreement-drafts', (route) => route.fulfill({ status: 500, json: { success: false, data: null, message: 'Server error', errors: ['Server error'] } }))
-    await open('/participants/p-0003?tab=details')
+    await open('/participants/p-0003?tab=agreements')
     await snap('error', agreementsCard())
     await page.unroute('**/api/v1/participants/p-0003/service-agreement-drafts')
     await context.close()
@@ -234,14 +234,14 @@ try {
     // no-draft-role: a role that cannot start or edit agreements sees no Add agreement.
     const readonly = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, locale: 'en-AU', timezoneId: 'Australia/Sydney', hasTouch: vp.touch, isMobile: vp.touch, colorScheme: 'light', reducedMotion: 'reduce' })
     const ro = await signIn(readonly, 'ReadOnly')
-    await ro.goto(`${BASE_URL}/participants/p-0004?tab=details`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    await ro.goto(`${BASE_URL}/participants/p-0004?tab=agreements`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await ro.waitForTimeout(1200)
-    const roCard = ro.locator('h3', { hasText: /^Agreements$/ }).first().locator('xpath=../..')
+    const roCard = ro.locator('#agreements')
     if (await roCard.count()) {
       check(vp.name, 'no-draft-role: no Add agreement or New revision', (await roCard.getByRole('link', { name: /Add agreement|New revision/ }).count()) === 0)
       checks.push(checkCropHolds(await cropElement(ro, roCard, path.join(OUT_DIR, `${vp.name}-no-draft-role.png`), opts)))
     } else {
-      check(vp.name, 'no-draft-role: Agreements card present', false)
+      check(vp.name, 'no-draft-role: the Agreements tab is not offered, so no Add agreement', (await ro.getByRole('link', { name: /Add agreement|New revision/ }).count()) === 0)
       await ro.screenshot({ path: path.join(OUT_DIR, `${vp.name}-no-draft-role.png`) })
     }
     await readonly.close()
