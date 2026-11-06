@@ -20,7 +20,7 @@ public sealed class ElectronicSigningEvidenceService
     {
         var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).SingleOrDefaultAsync(x => x.Id == request.DraftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null || draft.Version != request.DraftVersion) return (null, "The selected document version is unavailable or stale.");
-        if (await HasNewerRevisionAsync(tenantId, participantId, draft.Version, ct)) return (null, SupersededDraftError);
+        if (await HasNewerRevisionAsync(tenantId, participantId, draft.Id, draft.Version, ct)) return (null, SupersededDraftError);
         if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         var existing = await _db.ElectronicSigningSnapshots.SingleOrDefaultAsync(x => x.DraftId == draft.Id && x.DraftVersion == draft.Version, ct);
         if (existing != null) return (existing, null);
@@ -35,7 +35,7 @@ public sealed class ElectronicSigningEvidenceService
     {
         var snapshot = await _db.ElectronicSigningSnapshots.Include(x => x.Evidence).SingleOrDefaultAsync(x => x.Id == snapshotId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (snapshot == null) return (null, "Document snapshot not found.");
-        if (await HasNewerRevisionAsync(tenantId, participantId, snapshot.DraftVersion, ct)) return (null, SupersededDraftError);
+        if (await HasNewerRevisionAsync(tenantId, participantId, snapshot.DraftId, snapshot.DraftVersion, ct)) return (null, SupersededDraftError);
         if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         if (Hash(snapshot.DocumentJson) != snapshot.DocumentHash) return (null, "Document integrity check failed.");
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.SignerName) || string.IsNullOrWhiteSpace(request.SignerCapacity))
@@ -70,8 +70,10 @@ public sealed class ElectronicSigningEvidenceService
     private static string? PricingHash(ServiceAgreementDraft draft) => string.IsNullOrWhiteSpace(draft.PricingJson) ? null
         : Hash(DraftJson.ReadQuote(draft.PricingJson) is { } quote ? DraftJson.Write(quote) : draft.PricingJson);   // an answer that cannot be read is hashed as it was written
 
-    private Task<bool> HasNewerRevisionAsync(Guid tenantId, Guid participantId, int version, CancellationToken ct) =>
-        _db.ServiceAgreementDrafts.AnyAsync(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version > version, ct);
+    // Only a newer revision of the same agreement supersedes it: another agreement's version numbers are its own.
+    private Task<bool> HasNewerRevisionAsync(Guid tenantId, Guid participantId, Guid draftId, int version, CancellationToken ct) =>
+        _db.ServiceAgreementDrafts.AnyAsync(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version > version
+            && x.AgreementId == _db.ServiceAgreementDrafts.Where(d => d.Id == draftId).Select(d => d.AgreementId).First(), ct);
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }

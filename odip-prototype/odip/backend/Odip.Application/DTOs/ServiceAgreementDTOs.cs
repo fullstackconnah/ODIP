@@ -30,6 +30,14 @@ public record CreateServiceAgreementDraftDto
     /// in practice once the participant has any revision.
     /// </summary>
     [Range(0, int.MaxValue)] public int? BaseVersion { get; init; }
+    /// <summary>The agreement this revision belongs to (BaseVersion is that agreement's newest). Left out with <see cref="NewAgreement"/> false: the participant's only agreement, or a 409 when there are several.</summary>
+    public Guid? AgreementId { get; init; }
+    /// <summary>Start a new agreement from nothing (version 1). Not with <see cref="AgreementId"/> and not with a BaseVersion above 0.</summary>
+    public bool NewAgreement { get; init; }
+    /// <summary>Required for a new agreement; on a revision, left out or null copies the base revision's.</summary>
+    public Odip.Domain.Enums.AgreementKind? AgreementKind { get; init; }
+    /// <summary>At most 80 characters after trimming (the service checks, so the 400 text is its own). Null copies the base revision's; empty or whitespace clears it.</summary>
+    public string? AgreementName { get; init; }
 }
 
 /// <summary>The body of the 409 a save answers when somebody else saved a newer version first: the version that is the participant's newest now.</summary>
@@ -51,6 +59,9 @@ public record AgreementEndingDto
     public string ParticipantName { get; init; } = string.Empty;
     /// <summary>The newest approved revision, the one ending.</summary>
     public Guid DraftId { get; init; }
+    public Guid AgreementId { get; init; }
+    public Odip.Domain.Enums.AgreementKind AgreementKind { get; init; }
+    public string? AgreementName { get; init; }
     public int Version { get; init; }
     public DateOnly AgreementEndDate { get; init; }
     /// <summary>The agreement is Ongoing: <see cref="AgreementEndDate"/> is the NDIS plan end, and the row reads as the plan ending.</summary>
@@ -151,6 +162,9 @@ public record ServiceAgreementDraftDto
 {
     public Guid Id { get; init; }
     public Guid ParticipantId { get; init; }
+    public Guid AgreementId { get; init; }
+    public Odip.Domain.Enums.AgreementKind AgreementKind { get; init; }
+    public string? AgreementName { get; init; }
     public int Version { get; init; }
     public string Status { get; init; } = "UnapprovedDraft";
     public string TemplateVersion { get; init; } = string.Empty;
@@ -393,6 +407,9 @@ public record AgreementRevisionRefDto { public Guid DraftId { get; init; } publi
 public record AgreementRowDto
 {
     public Guid ParticipantId { get; init; }
+    public Guid AgreementId { get; init; }
+    public Odip.Domain.Enums.AgreementKind AgreementKind { get; init; }
+    public string? AgreementName { get; init; }
     public string ParticipantName { get; init; } = "";
     /// <summary>The shown badge: NotApproved, DraftWaiting, Ended, Ending or Active.</summary>
     public string Status { get; init; } = "";
@@ -410,10 +427,13 @@ public record AgreementListDto { public bool CanApprove { get; init; } public Li
 public record AgreementDraftRefDto { public Guid ParticipantId { get; init; } public Guid DraftId { get; init; } }
 public record AgreementApproveBatchDto { public List<AgreementDraftRefDto> Items { get; init; } = []; }
 /// <summary>Renew, reprice or extend many agreements: Action is renew, reprice or extend; EndDate is the extend's new last day; PriceList is the reprice's list version (its start is read from the catalogue, never sent).</summary>
+public record AgreementSeriesRefDto { public Guid ParticipantId { get; init; } public Guid AgreementId { get; init; } }
 public record AgreementBulkRequestDto
 {
     public string Action { get; init; } = "";
+    /// <summary>Every agreement of each participant (an older client). Send this or <see cref="Items"/>, not both.</summary>
     public List<Guid> ParticipantIds { get; init; } = [];
+    public List<AgreementSeriesRefDto> Items { get; init; } = [];
     public DateOnly? EndDate { get; init; }
     public string? PriceList { get; init; }
 }
