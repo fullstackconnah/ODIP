@@ -2,7 +2,7 @@
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to this script> <outdir>
 // The register comes from page.route stubs over the mock API (synthetic names). Crops go through cropElement (chrome-aware); exits non-zero when a check fails.
 import path from 'node:path'
-import { AU_CONTEXT, cropElement, checkCropHolds, fullPage, prepareOutDir, writeChecks } from './lib/capture.mjs'
+import { AU_CONTEXT, cropElement, checkCropHolds, fullPage, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
