@@ -10,11 +10,18 @@ namespace Odip.Domain.Entities;
 /// </summary>
 public class ServiceAgreementDraft : ITenantEntity
 {
+    /// <summary>The unique index on tenant, participant, agreement and version. Pinned (the EF default is 68 characters, over Postgres's 63, and is truncated) so the version-race catch can match it.</summary>
+    public const string VersionIndexName = "IX_ServiceAgreementDrafts_Tenant_Participant_Agreement_Version";
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public Guid ParticipantId { get; set; }
     public Participant? Participant { get; set; }
     public int Version { get; set; }
+    /// <summary>Names the agreement this revision belongs to: versions count up inside one agreement, and a participant can hold several. The first agreement of a participant has the participant's own id (D-13), so two first saves collide on the unique index.</summary>
+    public Guid AgreementId { get; set; }
+    public Enums.AgreementKind AgreementKind { get; set; }
+    /// <summary>The agreement's own name (at most 80 characters); null when it has none, and the label falls back to the kind.</summary>
+    public string? AgreementName { get; set; }
     public DateOnly PlanStartDate { get; set; }
     public DateOnly PlanEndDate { get; set; }
     public DateOnly AgreementStartDate { get; set; }
@@ -59,6 +66,8 @@ public class ServiceAgreementDraftApproval : ITenantEntity
     public ServiceAgreementDraft? Draft { get; set; }
     public Guid ParticipantId { get; set; }
     public Participant? Participant { get; set; }
+    /// <summary>The agreement the revision belongs to, copied from the draft so the "earlier approvals" lookups scope without a join and the audit row carries it.</summary>
+    public Guid AgreementId { get; set; }
     /// <summary>The revision's version, kept here so the approval reads without its revision.</summary>
     public int DraftVersion { get; set; }
     /// <summary>The instant of the approval, from the injected clock (never the machine's).</summary>

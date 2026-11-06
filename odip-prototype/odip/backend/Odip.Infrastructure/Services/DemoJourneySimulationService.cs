@@ -38,7 +38,7 @@ public sealed class DemoJourneySimulationService
         if (participant == null || !participant.IsDraft) return (null, "Demo simulation requires a tenant-owned Demo draft participant.");
         var draft = await _db.ServiceAgreementDrafts.AsNoTracking().SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null) return (null, "Demo simulation requires the current tenant-owned draft.");
-        var hasNewerDraft = await _db.ServiceAgreementDrafts.AnyAsync(x => x.ParticipantId == participantId && x.TenantId == tenantId && x.Version > draft.Version, ct);
+        var hasNewerDraft = await _db.ServiceAgreementDrafts.AnyAsync(x => x.ParticipantId == participantId && x.TenantId == tenantId && x.AgreementId == draft.AgreementId && x.Version > draft.Version, ct);
         if (hasNewerDraft) return (null, "Demo simulation requires the newest tenant-owned draft version.");
         if (ProvisionalAgreementTemplate.State != "UnapprovedDraft") return (null, "Demo simulation is limited to the provisional UnapprovedDraft source.");
 

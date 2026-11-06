@@ -90,9 +90,9 @@ internal static class ApprovalTestSupport
     /// <summary>A revision as saving it would have stored it: the blocks, the engine's answer without its lines, and the lines it generated. <paramref name="shape"/> changes the answer (an issue, a Review line) the way a gap would.</summary>
     public static async Task<ServiceAgreementDraft> AddRevisionAsync(Fixture f, int version, IReadOnlyList<PlanBlock> blocks, DateOnly? start = null, DateOnly? end = null,
         Func<PlanQuote, PlanQuote>? shape = null, string state = "NSW", bool handTyped = false, DraftBlockRequirementsDto? requirements = null, IEnumerable<HolidayEntry>? holidays = null,
-        Guid? tenantId = null, Guid? participantId = null)
+        Guid? tenantId = null, Guid? participantId = null, Guid? agreementId = null)
     {
-        var draft = BuildRevision(tenantId ?? TenantA, participantId ?? f.ParticipantId, version, blocks, start, end, shape, state, handTyped, requirements, holidays);
+        var draft = BuildRevision(tenantId ?? TenantA, participantId ?? f.ParticipantId, version, blocks, start, end, shape, state, handTyped, requirements, holidays, agreementId);
         f.Db.ServiceAgreementDrafts.Add(draft);
         await f.Db.SaveChangesAsync();
         return draft;
@@ -118,7 +118,7 @@ internal static class ApprovalTestSupport
     {
         db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
         {
-            Id = Guid.NewGuid(), TenantId = draft.TenantId, DraftId = draft.Id, ParticipantId = draft.ParticipantId, DraftVersion = draft.Version,
+            Id = Guid.NewGuid(), TenantId = draft.TenantId, DraftId = draft.Id, ParticipantId = draft.ParticipantId, AgreementId = draft.AgreementId, DraftVersion = draft.Version,
             ApprovedAt = new DateTime(2026, 9, 1, 1, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex Admin",
         });
         await db.SaveChangesAsync();
@@ -126,7 +126,7 @@ internal static class ApprovalTestSupport
 
     /// <summary>The revision as saving it would have stored it (blocks, answer and lines), not yet in any context: the Postgres tests add it to theirs.</summary>
     public static ServiceAgreementDraft BuildRevision(Guid tenantId, Guid participantId, int version, IReadOnlyList<PlanBlock> blocks, DateOnly? start = null, DateOnly? end = null,
-        Func<PlanQuote, PlanQuote>? shape = null, string state = "NSW", bool handTyped = false, DraftBlockRequirementsDto? requirements = null, IEnumerable<HolidayEntry>? holidays = null)
+        Func<PlanQuote, PlanQuote>? shape = null, string state = "NSW", bool handTyped = false, DraftBlockRequirementsDto? requirements = null, IEnumerable<HolidayEntry>? holidays = null, Guid? agreementId = null)
     {
         var from = start ?? Start;
         var to = end ?? new DateOnly(2026, 12, 20);
@@ -134,7 +134,7 @@ internal static class ApprovalTestSupport
         if (shape is not null) quote = shape(quote);
         var draft = new ServiceAgreementDraft
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, Version = version, State = state, ParticipantNameSnapshot = "Amy Ng",
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, AgreementId = agreementId ?? default, Version = version, State = state, ParticipantNameSnapshot = "Amy Ng",
             PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = from, AgreementEndDate = to,
             ServiceTypesJson = "[]", PricingJson = handTyped ? null : DraftJson.Write(quote),
         };

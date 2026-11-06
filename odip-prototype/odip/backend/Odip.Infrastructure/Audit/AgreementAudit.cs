@@ -11,10 +11,10 @@ namespace Odip.Infrastructure.Audit;
 /// </summary>
 internal static class AgreementAudit
 {
-    public static AuditLog Row(Guid draftId, AuditAction action, string reason, ApprovalCaller caller, DateTimeOffset at) => new()
+    public static AuditLog Row(Guid draftId, Guid agreementId, AuditAction action, string reason, ApprovalCaller caller, DateTimeOffset at) => new()
     {
         Id = Guid.NewGuid(), EntityType = nameof(ServiceAgreementDraft), EntityId = draftId, Action = action, ChangedAt = at,
         ChangedById = caller.UserId, ChangedByName = caller.Name,
-        Changes = JsonSerializer.Serialize(new[] { new FieldChange("Reason", null, reason) }),
+        Changes = JsonSerializer.Serialize(new[] { new FieldChange("AgreementId", null, agreementId.ToString()), new FieldChange("Reason", null, reason) }),
     };
 }

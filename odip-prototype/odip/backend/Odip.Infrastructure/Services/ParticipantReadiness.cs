@@ -289,6 +289,7 @@ public static class ParticipantReadiness
                     && !db.ServiceAgreementDrafts.Any(newerDraft =>
                         newerDraft.TenantId == p.TenantId
                         && newerDraft.ParticipantId == p.Id
+                        && newerDraft.AgreementId == draft.AgreementId
                         && newerDraft.Version > draft.Version))
                 && db.ElectronicSigningEvidence.Any(evidence =>
                     evidence.SnapshotId == snapshot.Id

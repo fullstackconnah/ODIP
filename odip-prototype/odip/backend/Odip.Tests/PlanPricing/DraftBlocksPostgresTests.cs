@@ -148,12 +148,12 @@ public class DraftBlocksPostgresTests : IClassFixture<PostgresFixture>
         {
             db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
             {
-                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, Version = draft.Version, State = "NSW", ServiceTypesJson = "[]",
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, AgreementId = draft.AgreementId, Version = draft.Version, State = "NSW", ServiceTypesJson = "[]",
                 ParticipantNameSnapshot = "Synthetic Participant", CreatedBy = "test", PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate,
                 AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
             });
             await db.SaveChangesAsync();
-        }, "IX_ServiceAgreementDrafts_TenantId_ParticipantId_Version");
+        }, ServiceAgreementDraft.VersionIndexName);
         db.ChangeTracker.Clear();
 
         // A second block in position 0, and a second block with the key "b1".

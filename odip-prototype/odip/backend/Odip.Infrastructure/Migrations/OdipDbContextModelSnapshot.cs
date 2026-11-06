@@ -4721,6 +4721,16 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("AgreementEndDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid>("AgreementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AgreementKind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AgreementName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<DateOnly>("AgreementStartDate")
                         .HasColumnType("date");
 
@@ -4786,8 +4796,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ParticipantId");
 
-                    b.HasIndex("TenantId", "ParticipantId", "Version")
-                        .IsUnique();
+                    b.HasIndex("TenantId", "ParticipantId", "AgreementId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ServiceAgreementDrafts_Tenant_Participant_Agreement_Version");
 
                     b.ToTable("ServiceAgreementDrafts");
                 });
@@ -4807,6 +4818,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<int?>("AgreedHow")
                         .HasColumnType("integer");
+
+                    b.Property<Guid>("AgreementId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("ApprovedAt")
                         .HasColumnType("timestamp without time zone");
