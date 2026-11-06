@@ -119,8 +119,17 @@ public class MultipleAgreementsTests
         var sameTenant = await SaveAsync(f, Request(WeekdayBlock(), baseVersion: 1, agreementId: theirs.AgreementId));
         var unknown = await SaveAsync(f, Request(WeekdayBlock(), baseVersion: 1, agreementId: Guid.NewGuid()));
 
+        var otherTenant = new Participant { Id = Guid.NewGuid(), TenantId = TenantB, FirstName = "Cy", LastName = "Ng", IsActive = true };
+        f.Db.Participants.Add(otherTenant);
+        await f.Db.SaveChangesAsync();
+        var elsewhere = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, tenantId: TenantB, participantId: otherTenant.Id, agreementId: Guid.NewGuid());
+        before = await f.Db.ServiceAgreementDrafts.CountAsync();
+        var foreignTenant = await SaveAsync(f, Request(WeekdayBlock(), baseVersion: 1, agreementId: elsewhere.AgreementId));
+
         Assert.True(sameTenant.NotFound && unknown.NotFound);
         Assert.Equal("Agreement not found.", sameTenant.Errors.Single());
+        Assert.Equal(before, await f.Db.ServiceAgreementDrafts.CountAsync());
+        Assert.True(foreignTenant.NotFound);
         Assert.Equal(before, await f.Db.ServiceAgreementDrafts.CountAsync());
     }
 
