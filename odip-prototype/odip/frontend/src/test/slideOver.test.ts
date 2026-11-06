@@ -72,6 +72,7 @@ describe('useDialogBehavior', () => {
    *   NotificationBell, WhatsNewButton: the bell's and the What's new button's desktop panels, header popovers like the switchers (below lg they are a SlideOver on the hook).
    *   QuickGroup: a dashboard row's inline form closing itself (in the page's flow, not a layer; it calls preventDefault).
    *   ReferralSourcesSection: the Settings name box closing itself (an inline form in the page flow, not a layer, like QuickGroup).
+   *   QualificationsPage: the inline expiry-date editor closing itself (a table cell in the page flow, not a layer, like QuickGroup).
    *   RailFlyout, RailTooltip: the icon rail's flyout (a header-style popover, focus returns to its trigger) and its tooltip, not dialogs.
    *   ReadinessTrigger: the roster row's peek panel, a non-modal hover/focus popover with nothing interactive in it (not a layer; focus stays on its trigger).
    * (AppLayout, the nav drawer, left this list when the nav regroup moved it onto the hook.)
@@ -89,6 +90,7 @@ describe('useDialogBehavior', () => {
     'components/chart/useChartPoints.ts': 1, // the fill chart's readout, not a layer; Escape only hides the readout
     'pages/dashboard/QuickGroup.tsx': 1,
     'pages/settings/ReferralSourcesSection.tsx': 1,
+    'pages/QualificationsPage.tsx': 1,
     'hooks/useDialogBehavior.ts': 1,
   }
   const found: Record<string, number> = {}

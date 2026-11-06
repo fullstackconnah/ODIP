@@ -30,6 +30,8 @@ import type {
 
 export interface PortalShiftSummaryDto {
   id: string
+  /** Finish later: the deferrable answers still missing, from `ShiftDetailsRules` (kilometres, tripTo, tripAfter, notes, handover, report). Empty for a shift finished the usual way. */
+  missingDetails: string[]
   participantId: string
   participantName: string
   serviceDate: string
@@ -122,6 +124,8 @@ export interface PortalMedicationSummaryDto {
  */
 export interface PortalShiftDetailDto {
   id: string
+  /** Finish later: the deferrable answers still missing, from `ShiftDetailsRules` (kilometres, tripTo, tripAfter, notes, handover, report). Empty for a shift finished the usual way. */
+  missingDetails: string[]
   serviceDate: string
   startTime: string
   endTime: string

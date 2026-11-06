@@ -58,7 +58,7 @@ public sealed class ShiftHandoverService
                 select new
                 {
                     CompletionId = c.Id, SubmittedAt = c.SubmittedAt!.Value, c.HandoverText, c.NothingToHandOver,
-                    c.SubmittedByUserId, s.ServiceDate,
+                    c.SubmittedByUserId, s.ServiceDate, c.DetailsRequired,
                 })
             .Take(TrailLength)
             .ToListAsync(ct);
@@ -68,6 +68,7 @@ public sealed class ShiftHandoverService
         var names = (await _db.Users.Where(u => userIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.FirstName, u.LastName }).ToListAsync(ct))
             .ToDictionary(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
+        string FirstNameOf(Guid id) => NameOf(id).Split(' ')[0];
         string NameOf(Guid id) => names.TryGetValue(id, out var n) ? n : string.Empty;
 
         var trail = rows.Select(r => new PortalHandoverTrailEntryDto(r.CompletionId, NameOf(r.SubmittedByUserId), r.ServiceDate)).ToList();
@@ -79,10 +80,15 @@ public sealed class ShiftHandoverService
             .FirstOrDefaultAsync(ct);
         var text = string.IsNullOrWhiteSpace(latest.HandoverText) ? null : latest.HandoverText;
 
+        // Finished "details later" with the handover not yet answered: say whose it is, and offer the newest earlier text so the next worker is not left blind.
+        var owed = latest.DetailsRequired && text == null && !latest.NothingToHandOver;
+        var earlier = owed ? rows.Skip(1).FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.HandoverText)) : null;
         var dto = new PortalHandoverDto(
             latest.CompletionId, text, latest.NothingToHandOver, latest.SubmittedByUserId, NameOf(latest.SubmittedByUserId),
             latest.ServiceDate, ProviderLocalTime.AsUtc(latest.SubmittedAt), RequiresAcknowledgement: text != null,
-            IsRead: ack.HasValue, ReadAt: ProviderLocalTime.AsUtc(ack));
+            IsRead: ack.HasValue, ReadAt: ProviderLocalTime.AsUtc(ack),
+            OwedFrom: owed ? FirstNameOf(latest.SubmittedByUserId) : null,
+            EarlierHandover: earlier is null ? null : new PortalEarlierHandoverDto(earlier.HandoverText!, earlier.ServiceDate));
         return new HandoverView(dto, trail);
     }
 

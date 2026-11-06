@@ -118,7 +118,22 @@ public class PortalController : ControllerBase
             .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
-        var shiftDtos = shifts.Where(s => Participant.ServicesBegun(s.Participant!)).Select(ToSummaryDto).ToList();
+        // Finish later: a shift still waiting on its worker's details stays in the list whatever its date, until the details are in or it is approved or returned.
+        var outOfWindow = await _db.Shifts
+            .Include(s => s.Participant)
+            .Where(Shift.VisibleToWorker)
+            .Where(s => s.UserId == staffId.Value && s.Status == ShiftStatus.PendingReview && (s.ServiceDate < start || s.ServiceDate > end) && s.Participant != null
+                && _db.ShiftCompletions.Any(c => c.ShiftId == s.Id && c.IsActive && c.DetailsRequired))
+            .ToListAsync(ct);
+        var pendingShiftIds = shifts.Concat(outOfWindow).Where(s => s.Status == ShiftStatus.PendingReview).Select(s => s.Id).ToList();
+        var completionByShift = await _db.ShiftCompletions.AsNoTracking()
+            .Where(c => pendingShiftIds.Contains(c.ShiftId) && c.IsActive).Select(c => new { c.ShiftId, c.Id }).ToDictionaryAsync(c => c.ShiftId, c => c.Id, ct);
+        var missingByCompletion = await ShiftCompletionMapper.MissingDetailsAsync(_db, completionByShift.Values.ToList(), ct);
+        IReadOnlyList<string> MissingFor(Shift s) => completionByShift.TryGetValue(s.Id, out var cid) ? missingByCompletion[cid] : Array.Empty<string>();
+        var shiftDtos = shifts.Concat(outOfWindow.Where(s => MissingFor(s).Count > 0))
+            .Where(s => Participant.ServicesBegun(s.Participant!))
+            .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
+            .Select(s => ToSummaryDto(s, MissingFor(s))).ToList();
 
         // Trip staffing is optional per the brief — included here since it's a single cheap
         // query against the already-resolved staffId, scoped the same way the shifts are.
@@ -259,6 +274,7 @@ public class PortalController : ControllerBase
             access.Code,
             sensitiveWithheldReason,
             travelAsked,
+            completionDto?.MissingDetails ?? Array.Empty<string>(),
             serviceLocation);
     }
 
@@ -307,6 +323,8 @@ public class PortalController : ControllerBase
 
     /// <summary>How far either actual time may move at Finish (owner decision 3, 2026-10-14). The portal's finish flow mirrors it.</summary>
     public const int MaxTimeAdjustmentMinutes = 15;
+    /// <summary>How old an online re-sent finish tap (<c>EndTappedAt</c>) may be.</summary>
+    private static readonly TimeSpan EndTapMaxAge = TimeSpan.FromMinutes(30);
 
     /// <summary>The longest reason for a moved time; the finish flow's counter mirrors it.</summary>
     public const int MaxTimeAdjustmentReasonLength = 500;
@@ -513,13 +531,19 @@ public class PortalController : ControllerBase
 
         // A queued Finish carries the phone's time. Its future/age bounds run before the blockers, so an over-age time is a 400, not a 422.
         var now = NowUtc;
-        var endStamp = dto.FinishedAt is { } finishedIn ? ShiftBreakRules.ToUtc(finishedIn) : now;
-        if (dto.FinishedAt is not null && ClientTimeError(ClientTimeRules.Check(endStamp, now, null)) is { } lateEnd)
+        // EndTappedAt is the tap an online re-send carries: it is the end like FinishedAt, but the phone is online, so it is not marked offline, it is
+        // at most EndTapMaxAge old, and the dose blockers below are judged at the server's now.
+        var endStamp = dto.FinishedAt is { } finishedIn ? ShiftBreakRules.ToUtc(finishedIn) : dto.EndTappedAt is { } tappedIn ? ShiftBreakRules.ToUtc(tappedIn) : now;
+        var clientEnd = dto.FinishedAt is not null || dto.EndTappedAt is not null;
+        if (clientEnd && ClientTimeError(ClientTimeRules.Check(endStamp, now, null)) is { } lateEnd)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(lateEnd.Message, lateEnd.Code));
+        if (dto.FinishedAt is null && dto.EndTappedAt is not null && endStamp < now - EndTapMaxAge)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "That finish time is too old to send. Finish the shift again.", ShiftErrorCodes.ShiftClientTimeTooOld));
 
-        // A shift note is required - or, since the shift package, an explicit "nothing to note" confirmation.
+        // A shift note is required - or, since the shift package, an explicit "nothing to note" confirmation - unless the worker is adding the details later.
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
-        if (!hasNote && !dto.NothingToNote)
+        if (!hasNote && !dto.NothingToNote && !dto.DetailsLater)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Add a shift note before finishing.", ShiftErrorCodes.ShiftNoteRequired));
 
@@ -554,7 +578,7 @@ public class PortalController : ControllerBase
         {
             var checkedCompletion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
             var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, shift.TenantId, ct);
-            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct, asOfUtc: endStamp);
+            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct, asOfUtc: dto.FinishedAt is not null ? endStamp : now);
             if (blockers.Count > 0)
             {
                 var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };
@@ -626,7 +650,7 @@ public class PortalController : ControllerBase
         }
 
         // Only now is there an actual start to judge the phone's finish time against.
-        if (dto.FinishedAt is not null && ClientTimeError(ClientTimeRules.Check(endStamp, now, completion.ActualStart)) is { } beforeStart)
+        if (clientEnd && ClientTimeError(ClientTimeRules.Check(endStamp, now, completion.ActualStart)) is { } beforeStart)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(beforeStart.Message, beforeStart.Code));
 
         // Owner decision 3: either actual time may move up to MaxTimeAdjustmentMinutes from the server's stamp, with a reason. The worker picks
@@ -659,7 +683,7 @@ public class PortalController : ControllerBase
                     "Say why your times changed.", ShiftErrorCodes.ShiftTimeAdjustmentReasonRequired));
         }
         // A queued Finish can carry a phone time that lands before a break the server stamped, so FinishedAt is checked too.
-        if (startMoved || endMoved || dto.FinishedAt is not null)
+        if (startMoved || endMoved || clientEnd)
         {
             // NetWorked would clamp a break to the new span, but the coordinator would still see a break outside the shift.
             var breaks = await _db.ShiftBreaks.Where(b => b.ShiftCompletionId == completion.Id).ToListAsync(ct);
@@ -690,6 +714,7 @@ public class PortalController : ControllerBase
         completion.HandoverText = handoverText;
         completion.NothingToHandOver = dto.NothingToHandOver;
         completion.NothingToNoteConfirmed = dto.NothingToNote && !hasNote;
+        completion.DetailsRequired = dto.DetailsLater;
         // Finish no longer asks for the phone's location, and any latitude or longitude an older client still sends is ignored (owner, 2026-11-04).
         completion.GeolocationDeclined = completion.GeolocationDeclined || dto.GeolocationDeclined;
 
@@ -721,6 +746,116 @@ public class PortalController : ControllerBase
                     recipient.Email, workerName, shift.Participant!.FullName, shift.ServiceDate),
                 ct);
         }
+
+        await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    /// <summary>
+    /// The answers a "details later" finish left out, added after the shift (finish-later). Only the assigned worker, only while the shift awaits review and
+    /// was finished "details later". The end can only move earlier than the tap, with a reason; every deferrable field is written as sent (an edit, not a merge).
+    /// shortcut: stays open until approval even once nothing is missing, and approve checks no version (the same limit as RosteringController's approve); upgrade if a worker's late edit must be refused.
+    /// </summary>
+    [HttpPut("shifts/{id:guid}/finish-details")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishDetails(Guid id, [FromBody] FinishDetailsDto dto, CancellationToken ct)
+    {
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        // The same row lock approve takes, so an approval and a late save cannot interleave.
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, shift!.Id, ct);
+        if (rowLock.Held)
+        {
+            var ownerBeforeWaiting = shift.UserId;
+            await _db.Entry(shift).ReloadAsync(ct);
+            if (_db.Entry(shift).State == EntityState.Detached || shift.UserId != ownerBeforeWaiting)
+                return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
+        }
+
+        if (shift.Status != ShiftStatus.PendingReview)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("This shift is no longer waiting for review.", ShiftErrorCodes.ShiftNotPendingReview));
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
+        if (completion is null)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
+        if (!completion.DetailsRequired)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("This shift was finished with its details, so there is nothing to add.", ShiftErrorCodes.ShiftNotPendingReview));
+
+        var handoverText = string.IsNullOrWhiteSpace(dto.HandoverText) ? null : dto.HandoverText.Trim();
+        if (dto.NothingToHandOver && handoverText is not null)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Write a handover or confirm there is nothing to hand over, not both.", ShiftErrorCodes.ShiftHandoverConflict));
+        if (dto.TimeAdjustmentReason?.Trim().Length > MaxTimeAdjustmentReasonLength)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                $"Keep the reason to {MaxTimeAdjustmentReasonLength} characters.", ShiftErrorCodes.ShiftTimeAdjustmentReasonTooLong));
+        if (dto.Kilometres is < 0d or > (double)MaxKilometres)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Enter kilometres from 0 to 2,000.", ShiftErrorCodes.ShiftKilometresOutOfRange));
+        if (CheckTravel(dto.PreShiftTravelMinutes, dto.PreShiftTravelKilometres, dto.PostShiftTravelMinutes, dto.PostShiftTravelKilometres) is { } badTravel)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(badTravel.Message, badTravel.Code));
+
+        // Times are judged against the stamps Finish kept (the originals when a time was already moved): the start within 15 minutes of the stamp, the end only earlier than the tap.
+        var now = NowUtc;
+        var startStamp = TruncateToMinute(completion.OriginalActualStart ?? completion.ActualStart);
+        var tapStamp = completion.OriginalActualEnd ?? completion.ActualEnd ?? completion.ActualStart;
+        var tapMinute = TruncateToMinute(tapStamp);
+        DateTime? askedStart = dto.ActualStart is { } startIn ? TruncateToMinute(ShiftBreakRules.ToUtc(startIn)) : null;
+        DateTime? askedEnd = dto.ActualEnd is { } endIn ? TruncateToMinute(ShiftBreakRules.ToUtc(endIn)) : null;
+        if (askedEnd > tapMinute + ShiftBreakRules.ClockSkewAllowance)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Your finish time can't be later than when you ended the shift.", ShiftErrorCodes.ShiftActualEndAfterTap));
+        var startMoved = askedStart is not null && askedStart != startStamp;
+        var endMoved = askedEnd < tapMinute;
+        if (startMoved && (askedStart!.Value - startStamp).Duration() > TimeSpan.FromMinutes(MaxTimeAdjustmentMinutes))
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                $"You can change your start by up to {MaxTimeAdjustmentMinutes} minutes.", ShiftErrorCodes.ShiftTimeAdjustmentTooLarge));
+
+        var originalStart = completion.OriginalActualStart ?? completion.ActualStart;
+        var actualStart = startMoved ? askedStart!.Value : originalStart;
+        var actualEnd = endMoved ? askedEnd!.Value : tapStamp;
+        var reason = string.IsNullOrWhiteSpace(dto.TimeAdjustmentReason) ? null : dto.TimeAdjustmentReason.Trim();
+        if (startMoved || endMoved)
+        {
+            if (actualStart >= actualEnd)
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail("Your start must be before your finish.", ShiftErrorCodes.ShiftStartNotBeforeEnd));
+            if (reason is null)
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail("Say why your times changed.", ShiftErrorCodes.ShiftTimeAdjustmentReasonRequired));
+            var breaks = await _db.ShiftBreaks.Where(b => b.ShiftCompletionId == completion.Id).ToListAsync(ct);
+            if (breaks.Any(b => b.StartedAt < actualStart || (b.EndedAt ?? actualEnd) > actualEnd))
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Your times must include your breaks. Change the break first, or your times.", ShiftErrorCodes.ShiftBreakOutsideTimes));
+        }
+
+        var timesChanged = actualStart != completion.ActualStart || actualEnd != completion.ActualEnd;
+        completion.OriginalActualStart = startMoved ? originalStart : null;
+        completion.OriginalActualEnd = endMoved ? tapStamp : null;
+        completion.ActualStart = actualStart;
+        completion.ActualEnd = actualEnd;
+        completion.TimeAdjustmentReason = startMoved || endMoved ? reason : null;
+        completion.FinishTimeReason = ShiftTimeRules.CleanReason(dto.FinishTimeReason);
+        completion.StartTimeReason = ShiftTimeRules.CleanReason(dto.StartTimeReason);
+
+        var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
+        completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round((decimal)kmIn, 1, MidpointRounding.AwayFromZero) : null;
+        // "No trip" clears that leg whatever was sent.
+        completion.PreTravelNone = dto.PreTravelNone;
+        completion.PostTravelNone = dto.PostTravelNone;
+        completion.PreShiftTravelMinutes = dto.PreTravelNone ? null : TravelMinutes(dto.PreShiftTravelMinutes);
+        completion.PreShiftTravelKilometres = dto.PreTravelNone ? null : TravelKm(dto.PreShiftTravelKilometres);
+        completion.PostShiftTravelMinutes = dto.PostTravelNone ? null : TravelMinutes(dto.PostShiftTravelMinutes);
+        completion.PostShiftTravelKilometres = dto.PostTravelNone ? null : TravelKm(dto.PostShiftTravelKilometres);
+        completion.AnythingToReport = dto.AnythingToReport;
+        completion.HandoverText = handoverText;
+        completion.NothingToHandOver = dto.NothingToHandOver;
+        completion.NothingToNoteConfirmed = dto.NothingToNote && !hasNote;
+
+        var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
+        completion.VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(completion.ActualStart, rosteredStartUtc);
+        completion.VarianceMinutesEnd = ShiftVarianceCalculator.VarianceMinutes(completion.ActualEnd.Value, rosteredEndUtc);
+        // A coordinator's extra-time decision stands unless the times themselves changed in this save.
+        if (timesChanged)
+            completion.ExtraTime = shift.NightType != SleepoverType.Sleepover && ShiftTimeRules.HasExtraTime(completion.VarianceMinutesStart, completion.VarianceMinutesEnd) ? ExtraTimeDecision.Pending : null;
+        completion.UpdatedAt = now;
 
         await _db.SaveChangesAsync(ct);
         await rowLock.CommitAsync(ct);
@@ -1622,9 +1757,9 @@ public class PortalController : ControllerBase
 
     private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
+    private static PortalShiftSummaryDto ToSummaryDto(Shift s, IReadOnlyList<string> missingDetails) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,
-        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location);
+        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location, missingDetails);
 
     // These duplicate LeaveController's own ToDto overloads rather than sharing them — matches
     // the codebase's existing precedent of small per-controller mapping/validation helpers (e.g.
