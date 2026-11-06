@@ -1,8 +1,10 @@
 import { useRef } from 'react'
+import { Wallet } from 'lucide-react'
 import { useBudgetSeries } from '@/api/hooks'
 import { BudgetTrackChart, BudgetTrackLegend, BudgetTrackSwitch, BUDGET_TRACK_TITLE } from '@/components/BudgetTrackChart'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
+import { EmptyState } from '@/components/EmptyState'
 import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
 import { RetryCallout } from '@/components/PageState'
 import { chartHeight, EXPECTED_FOOTNOTE } from '@/lib/budgetTrack'
@@ -14,8 +16,11 @@ import { retryingAfterError } from '@/lib/queryPhase'
 // The longest sentence the card writes (every clause), laid out unseen so the loading card wraps to the loaded sentence's lines.
 const SENTENCE_SAMPLE = 'The whole plan: used $12,427.40 of $52,000.00 so far, $1,200.00 less than an even spread by 28 Oct. At this rate it reaches $50,000.00 by 30 Jun 2027, $2,000.00 under the budget. Booked shifts take it to $51,000.00. The agreement expects $52,000.00 by 30 Jun 2027.'
 
-/** `poolCount` is the ledger's pools: two or more put the plan / pool switch on the loaded card, so the loading card holds its place. */
-export default function BudgetTrackCard({ participantId, poolCount = 0 }: { participantId: string; poolCount?: number }) {
+/**
+ * `poolCount` is the ledger's pools: two or more put the plan / pool switch on the loaded card, so the loading card holds its place.
+ * `overview` is the participant Overview's wide card: it says so when there is nothing to chart (the Funding tab renders only for a plan with pools), and a failed load has no figures below it to reassure.
+ */
+export default function BudgetTrackCard({ participantId, poolCount = 0, overview = false }: { participantId: string; poolCount?: number; overview?: boolean }) {
   const query = useBudgetSeries(participantId)
   const boxRef = useRef<HTMLDivElement>(null)
   const width = useMeasuredWidth(boxRef)
@@ -50,16 +55,29 @@ export default function BudgetTrackCard({ participantId, poolCount = 0 }: { part
   if (!query.data) {
     return (
       <Card title={BUDGET_TRACK_TITLE}>
-        <RetryCallout tone="warning" onRetry={() => query.refetch()}>The budget chart couldn't load. The figures below are not affected.</RetryCallout>
+        <RetryCallout tone="warning" onRetry={() => query.refetch()}>The budget chart couldn't load.{!overview && ' The figures below are not affected.'}</RetryCallout>
       </Card>
     )
   }
 
   const series = query.data
   // A reply with no scopes (an empty or unexpected body) draws nothing, like no chart.
-  if (series.chart === 'None' || !series.scopes) return null
+  if (series.chart === 'None' || !series.scopes) {
+    return !overview ? null : (
+      <Card title={BUDGET_TRACK_TITLE}>
+        <EmptyState
+          size="inline"
+          icon={Wallet}
+          title="No plan budget to chart"
+          description="The chart appears once a current plan budget with its pools is recorded."
+          action={{ label: 'Open plan budget', to: '?tab=funding&section=plan-budget' }}
+        />
+      </Card>
+    )
+  }
   if (series.chart === 'NoPricing') {
-    return <p data-chart-state="no-pricing" className="text-[13px] text-[var(--color-muted-foreground)]">The chart needs the price list for this plan's dates before it can be drawn.</p>
+    const note = <p data-chart-state="no-pricing" className="text-[13px] text-[var(--color-muted-foreground)]">The chart needs the price list for this plan's dates before it can be drawn.</p>
+    return overview ? <Card title={BUDGET_TRACK_TITLE}>{note}</Card> : note
   }
 
   return (

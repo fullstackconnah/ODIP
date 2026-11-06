@@ -59,6 +59,8 @@ const {
 vi.mock('@/api/hooks', () => ({
   useProviderSettings: () => ({ data: undefined }),
   useProviderTodayQuery: () => ({ data: undefined }),
+  // The Quick add band asks whether a plan is recorded (the Plan budget tile); here it has not answered.
+  useFundingPlans: () => ({ data: undefined, isSuccess: false }),
   useParticipant: mockUseParticipant,
   useServiceAgreementDrafts: mockDrafts,
   useDeleteServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
@@ -2069,14 +2071,33 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(chip.className).toContain('--color-warning-container')
   })
 
-  it('Overview puts Before you start and Funding side by side from lg, Funding above the support profile review', () => {
+  it('Overview leads with Quick add, then the wide budget chart, then the two-column cards', () => {
+    setUserRole('Coordinator')
     renderAtTab('participant-1', 'overview')
-    const before = document.getElementById('before-you-start')!
+    const band = screen.getByRole('region', { name: 'Quick add' })
     const funding = screen.getByTestId('budget-track-card')
     expect(funding).toHaveAttribute('data-participant', 'participant-1')
-    const grid = before.closest('[class~="lg:grid-cols-2"]')!
+    const grid = document.getElementById('before-you-start')!.closest('[class~="lg:grid-cols-2"]')!
     expect(grid).not.toBeNull()
-    expect(grid.contains(funding)).toBe(true)
+    expect(grid.contains(funding)).toBe(false)
+    expect(band.compareDocumentPosition(funding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(funding.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('a role the series endpoint refuses gets no chart card (so no request, no 403 card), and Quick add shows only what it can add', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    renderAtTab('participant-1', 'overview')
+    expect(screen.queryByTestId('budget-track-card')).not.toBeInTheDocument()
+    const band = screen.getByRole('region', { name: 'Quick add' })
+    expect(within(band).getAllByRole('link').map(a => a.getAttribute('aria-label'))).toEqual(['Add a note', 'Add a routine'])
+  })
+
+  it('a Quick add tile opens the section with add=1', async () => {
+    setUserRole('Coordinator')
+    const user = userEvent.setup()
+    renderAtTab('participant-1', 'overview')
+    await user.click(screen.getByRole('link', { name: 'Add a note' }))
+    expect(await screen.findByTestId('notes-tab')).toBeInTheDocument()
   })
 
   it('T21: the Earlier checklist card needs the stream and an answered checklist', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import RestrictivePracticesTab from './RestrictivePracticesTab'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 
@@ -48,21 +49,21 @@ afterEach(() => localStorage.clear())
 
 describe('RestrictivePracticesTab: monthly report chips', () => {
   it('asks for the participant\'s lines once, only for a role that can lodge them', () => {
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     expect(mockUseRpLines).toHaveBeenCalledWith('participant-1', { enabled: true })
   })
 
   it('does not enable the request for a read-only role, and shows no chip', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     withLines([line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     expect(mockUseRpLines).toHaveBeenCalledWith('participant-1', { enabled: false })
   })
 
   it('shows a Due chip with the due date, and opens the lodge dialog on it', async () => {
     const user = userEvent.setup()
     withLines([line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     expect(screen.getByText('Monthly report due 06/11/2026')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Lodge the October 2026 monthly report' }))
     expect(screen.getByText('Lodge monthly report')).toBeInTheDocument()
@@ -71,7 +72,7 @@ describe('RestrictivePracticesTab: monthly report chips', () => {
   it('counts overdue months in the chip and opens on the oldest', async () => {
     const user = userEvent.setup()
     withLines([line({ month: '2026-09-01', dueOn: '2026-10-06', state: 'Overdue' }), line({ month: '2026-08-01', dueOn: '2026-09-04', state: 'Overdue' }), line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     expect(screen.getByText('2 monthly reports overdue')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Lodge the August 2026 monthly report' }))
     expect(screen.getByText(/Alex Demo · Physical restraint · August 2026/)).toBeInTheDocument()
@@ -79,7 +80,7 @@ describe('RestrictivePracticesTab: monthly report chips', () => {
 
   it('shows no chip once every month is lodged', () => {
     withLines([line({ state: 'Lodged', report: { id: 'r' } })])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     expect(screen.queryByText(/Monthly report/)).not.toBeInTheDocument()
   })
 })
@@ -94,7 +95,7 @@ describe('RestrictivePracticesTab: the deactivate prompt', () => {
   it('asks whether it was eliminated before saving a deactivation that leaves months owed', async () => {
     const user = userEvent.setup()
     withLines([line({ month: '2026-09-01', state: 'Overdue' }), line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     await deactivate(user)
     expect(screen.getByText('Was this practice eliminated?')).toBeInTheDocument()
     expect(screen.getByText(/Eliminated report for October 2026.* 2 months are still to lodge for this entry\./)).toBeInTheDocument()
@@ -104,7 +105,7 @@ describe('RestrictivePracticesTab: the deactivate prompt', () => {
   it('Deactivate only goes on with the save', async () => {
     const user = userEvent.setup()
     withLines([line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     await deactivate(user)
     await user.click(screen.getByRole('button', { name: 'Deactivate only' }))
     expect(mockUpdate).toHaveBeenCalledTimes(1)
@@ -114,7 +115,7 @@ describe('RestrictivePracticesTab: the deactivate prompt', () => {
   it('Back keeps the edit open without saving', async () => {
     const user = userEvent.setup()
     withLines([line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     await deactivate(user)
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.queryByText('Was this practice eliminated?')).not.toBeInTheDocument()
@@ -125,7 +126,7 @@ describe('RestrictivePracticesTab: the deactivate prompt', () => {
   it('Lodge a report closes the edit without saving and opens the lodge dialog on the newest month as Eliminated', async () => {
     const user = userEvent.setup()
     withLines([line({ month: '2026-09-01', state: 'Overdue' }), line()])
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     await deactivate(user)
     await user.click(screen.getByRole('button', { name: 'Lodge a report' }))
     expect(mockUpdate).not.toHaveBeenCalled()
@@ -136,7 +137,7 @@ describe('RestrictivePracticesTab: the deactivate prompt', () => {
 
   it('saves a deactivation straight away when no month is owed', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
     await deactivate(user)
     expect(mockUpdate).toHaveBeenCalledTimes(1)
   })

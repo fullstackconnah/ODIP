@@ -151,15 +151,14 @@ const BASE = [
   },
   {
     name: 'credentials', stage: 't1430', route: '/qualifications', now: '2026-08-08T10:00:00+10:00', viewport: { width: 1100, height: 900 }, w: 16, h: 10,
-    cropTarget: 'Qualifications: the issue tabs and the two staff groups opened, one credential expired and one expiring inside the 30-day window',
-    alt: "Qualifications with two issues across two active staff: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's first aid expired on 1 July, each listed with their current credentials and an Edit link.",
+    cropTarget: 'Qualifications: the staff list on the left with Tom Beattie selected, and his credentials on the right, first aid expired on 1 July',
+    alt: "Qualifications with every active staff member listed on the left, each with a status dot and their worst state; Tom Beattie is selected and his first aid, expired on 1 July, is listed on the right with his other credentials, an Edit button, and Previous and Next buttons.",
     async area({ page, goto, settle, unionRect }) {
       await goto('/qualifications')
-      await page.getByRole('button', { name: "Jack O'Sullivan" }).first().click()
-      await page.getByRole('button', { name: 'Tom Beattie' }).first().click()
+      await page.getByRole('navigation', { name: 'Staff' }).getByRole('link', { name: /Tom Beattie/ }).click()
       await settle()
-      const lastGroup = page.getByRole('button', { name: 'Tom Beattie' }).first().locator('xpath=ancestor::div[contains(@class,"overflow-hidden")][1]')
-      return unionRect([page.getByRole('heading', { level: 1, name: /Qualifications/ }), lastGroup], { x: 8, y: 10 })
+      const grid = page.getByRole('navigation', { name: 'Staff' }).locator('xpath=..')
+      return unionRect([page.getByRole('heading', { level: 1, name: /Qualifications/ }), grid], { x: 8, y: 10 })
     },
   },
   {

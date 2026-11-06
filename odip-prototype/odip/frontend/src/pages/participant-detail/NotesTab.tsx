@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
+import { useQuickAdd } from '@/hooks/useQuickAdd'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { parseApiDate, extractErrorMessage } from '@/lib/utils'
@@ -118,6 +119,8 @@ export default function NotesTab({ participantId }: { participantId: string | un
     setModalError(null)
     setModalState({ mode: 'create' })
   }
+  const addRef = useRef<HTMLButtonElement>(null)
+  useQuickAdd(openCreate, { enabled: canWriteNotes && !!participantId, focusRef: addRef })
 
   function openEdit(note: ParticipantNoteDto) {
     setForm({ title: note.title, description: note.description, isPinned: note.isPinned })
@@ -228,7 +231,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">Notes</h2>
         {canWriteNotes && participantId && (
-          <Button onClick={openCreate}>
+          <Button ref={addRef} onClick={openCreate}>
             <Plus className="w-4 h-4" /> New note
           </Button>
         )}

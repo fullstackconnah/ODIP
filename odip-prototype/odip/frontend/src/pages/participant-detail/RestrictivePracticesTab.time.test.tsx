@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import RestrictivePracticesTab from './RestrictivePracticesTab'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import { restoreZone, setZone } from '@/test/timeZone'
@@ -46,7 +47,7 @@ describe('RestrictivePracticesTab review badge on the due day (Sydney)', () => {
     vi.setSystemTime(new Date(now))
     mockUseRestrictivePractices.mockReturnValue({ data: [practice('2026-10-03')], isLoading: false })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
 
     expect(screen.getByText(expected)).toBeInTheDocument()
   })
@@ -65,7 +66,7 @@ describe('RestrictivePracticesTab authorisation end date (Sydney)', () => {
       data: [{ ...practice('2027-01-01'), authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01', authorisationEndDate: '2026-10-03' }], isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<MemoryRouter><RestrictivePracticesTab participantId="participant-1" /></MemoryRouter>)
 
     expect(screen.getByText(expected)).toBeInTheDocument()
   })
