@@ -212,12 +212,13 @@ async function runNoKey(browser, vp) {
     await typeStreet(page, '12 Exa')
     await page.waitForFunction(() => document.querySelector('input[role="combobox"]') === null, null, { timeout: 30_000 })
     const before = calls.suggest.length
+    const alertsBefore = await page.locator('[role="alert"]').count()   // other parts of the page may hold alerts; only a new one counts
     await input.pressSequentially('mple Street')
     await page.waitForTimeout(800)
-    check(`${ctx}: the street box is a plain textbox`, (await page.getByRole('textbox', { name: 'Street' }).count()) === 1 && (await page.getByRole('combobox').count()) === 0, '')
+    check(`${ctx}: the street box is a plain textbox`, (await input.getAttribute('role')) === null && (await input.getAttribute('aria-expanded')) === null && (await page.locator('input[role="combobox"]').count()) === 0, await input.getAttribute('role'))
     check(`${ctx}: no further lookup after the 404 (${before} so far)`, calls.suggest.length === before && before === 1, { before, after: calls.suggest.length })
     check(`${ctx}: typing still works`, (await input.inputValue()) === '12 Example Street', await input.inputValue())
-    check(`${ctx}: nothing is shown to the person`, (await page.locator('[role="listbox"],[role="alert"]').count()) === 0, '')
+    check(`${ctx}: nothing is shown to the person`, (await page.locator('[role="listbox"]').count()) === 0 && (await page.locator('[role="alert"]').count()) === alertsBefore, { alertsBefore })
     await crop(page, card, 'no-key-plain-1280.png', vp)
   } catch (e) {
     check(`${ctx} script error`, false, String(e.message).split('\n')[0])
