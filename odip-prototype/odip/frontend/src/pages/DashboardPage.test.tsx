@@ -70,7 +70,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
       asRole(role)
       const { unmount } = renderPage()
       const tile = screen.getByRole('group', { name: 'Qualification issues 1' })
-      expect(within(tile).getByRole('link', { name: 'Review qualifications' }), role).toHaveAttribute('href', '/qualifications')
+      expect(within(tile).getByRole('link', { name: 'Review qualifications' }), role).toHaveAttribute('href', '/qualifications?show=attention')
       unmount()
       localStorage.clear()
     }
@@ -86,7 +86,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     asRole('SupportWorker')
     renderPage()
     expect(screen.queryByText('Qualification issues')).not.toBeInTheDocument()
-    expect(document.querySelector('a[href="/qualifications"]')).toBeNull()
+    expect(document.querySelector('a[href^="/qualifications"]')).toBeNull()
   })
 
   it('spells the accommodation item out (the KPI row abbreviated it to fit a 136px tile)', () => {
@@ -149,7 +149,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 describe('DashboardPage — needs-attention band: each tile says what it means and where it is fixed', () => {
   // [label, the honest line at 3, the link's text, where it goes]. The Missing counts are of the trips the server calls upcoming (start today or within 60 days).
   const EXPECTED = [
-    ['Qualification issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
+    ['Qualification issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications?show=attention'],
     ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
     ['NDIS Commission overdue', 'Reportable incidents not reported to the NDIS Commission by their deadline.', 'Review NDIS Commission reports', '/incidents?qsc=overdue'],

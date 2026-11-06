@@ -89,7 +89,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     renderPage()
 
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
-    expect(within(band()).getByRole('link', { name: 'Qualification issues Loading' })).toHaveAttribute('href', '/qualifications')
+    expect(within(band()).getByRole('link', { name: 'Qualification issues Loading' })).toHaveAttribute('href', '/qualifications?show=attention')
     // The rest of the band HAS its data, so it says so, but not for the item that is waiting, and the band is not the all-clear field.
     expect(clearNames()).not.toMatch(/qualification issues/)
     expect(clearNames()).toMatch(/critical participant alerts/)
@@ -103,7 +103,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     renderPage()
 
     expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
-    expect(within(band()).getByRole('link', { name: "Qualification issues Couldn't load" })).toHaveAttribute('href', '/qualifications')
+    expect(within(band()).getByRole('link', { name: "Qualification issues Couldn't load" })).toHaveAttribute('href', '/qualifications?show=attention')
     expect(clearNames()).not.toMatch(/qualification issues/)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })

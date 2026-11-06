@@ -91,6 +91,7 @@ beforeEach(() => {
   mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 30 } })
   mockUseStaff.mockReturnValue({ data: STAFF, isLoading: false })
   pinToday()
+  window.scrollTo = vi.fn() // jsdom has none; a phone-width step scrolls to the top
 })
 
 afterEach(() => {
@@ -355,7 +356,7 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     fireEvent.click(row('Dana')) // list clicks are allowed during a PUT
     mockPending.current = false
     act(() => { sent.onError(); sent.onSettled() })
-    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save Medication Competency for Ivy OneIssue. Please try again.')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't save Medication Competency for Ivy OneIssue. Please try again.")
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -407,6 +408,7 @@ describe('QualificationsPage: what the date field saves', () => {
     renderList('/?staff=s5')
     fireEvent.click(screen.getByRole('button', { name: /^Add date: Medication Competency/ }))
     const input = screen.getByLabelText('Expiry date')
+    fireEvent.change(input, { target: { value: '2027-01-02' } }) // then the field is cleared part-way, which the input reports as ''
     Object.defineProperty(input, 'validity', { value: { badInput: true }, configurable: true })
     fireEvent.change(input, { target: { value: '' } })
 
