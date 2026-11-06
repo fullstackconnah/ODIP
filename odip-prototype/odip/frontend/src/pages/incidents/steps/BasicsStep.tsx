@@ -32,6 +32,8 @@ export type BasicsStepProps = {
   incidentServiceTypes: readonly string[]
   /** Muted line under the type field when a type change adds or removes fields elsewhere. */
   typeNote?: ReactNode
+  /** Create only: the common-incident picker, shown first so a hurried worker meets it before the title. */
+  commonIncident?: ReactNode
 }
 
 /**
@@ -49,10 +51,12 @@ export type BasicsStepProps = {
 export function BasicsStep({
   register, errors, setValue,
   serviceType, incidentType, severity, tripInstanceId, involvedParticipantId, reportedByStaffId, reporterName, involvedStaffId,
-  trips, staff, incidentServiceTypes, typeNote,
+  trips, staff, incidentServiceTypes, typeNote, commonIncident,
 }: BasicsStepProps) {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
+      {commonIncident && <div className={formGrid}><div className={span.medium}>{commonIncident}</div></div>}
+
       <Card title="Who">
         <div className={formGrid}>
           <FormField label="Involved Participant" className={span.medium}>
@@ -70,7 +74,7 @@ export function BasicsStep({
           </FormField>
 
           <FormField label="Title" required error={errors.title?.message} className={span.medium}>
-            <input {...register('title')} placeholder="Brief incident summary" autoFocus />
+            <input {...register('title')} placeholder="Brief incident summary" autoFocus={!commonIncident} />
           </FormField>
 
           {reporterName !== undefined ? (

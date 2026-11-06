@@ -17,6 +17,10 @@ export type IncidentDetailsStepProps = {
   incidentType: string | undefined
   wereEmergencyServicesCalled: boolean | undefined
   emergencyServices: readonly EmergencyService[] | undefined
+  /** Create only: shown under Description while it still holds a common incident's prompts. */
+  descriptionHint?: string
+  /** Create only: the picked prompts text; the Description box grows to show all of it. */
+  pickedPrompts?: string
 }
 
 /** Per service: the form fields behind its officer name and reference, in the order the shape lays them out. */
@@ -35,9 +39,11 @@ const SERVICE_FIELDS = {
  * The old free-text witnessNames/witnessStatements fields that used to sit here have moved to
  * IN-7's dedicated Witnesses step (WitnessesStep.tsx), replaced by the full witnesses[] entity.
  */
-export function IncidentDetailsStep({ register, control, setValue, errors, incidentType, wereEmergencyServicesCalled, emergencyServices }: IncidentDetailsStepProps) {
+export function IncidentDetailsStep({ register, control, setValue, errors, incidentType, wereEmergencyServicesCalled, emergencyServices, descriptionHint, pickedPrompts }: IncidentDetailsStepProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'injuries' })
   const chosen = emergencyServices ?? []
+  // Every picked prompt line shows without scrolling, plus one line to write on.
+  const descriptionRows = pickedPrompts?.trim() ? Math.max(4, pickedPrompts.split('\n').length + 1) : 4
 
   function toggleService(service: EmergencyService, on: boolean) {
     setValue('emergencyServices', EMERGENCY_SERVICES.filter((s) => (s === service ? on : chosen.includes(s))), { shouldDirty: true })
@@ -60,8 +66,8 @@ export function IncidentDetailsStep({ register, control, setValue, errors, incid
             <input {...register('location')} placeholder="Where the incident occurred" />
           </FormField>
 
-          <FormField label="Description" required error={errors.description?.message} className={span.long}>
-            <textarea {...register('description')} rows={4} placeholder="Detailed description of the incident..." />
+          <FormField label="Description" required error={errors.description?.message} hint={descriptionHint} className={span.long}>
+            <textarea {...register('description')} rows={descriptionRows} placeholder="Detailed description of the incident..." />
           </FormField>
 
           <FormField label="Immediate Actions Taken" className={span.long}>

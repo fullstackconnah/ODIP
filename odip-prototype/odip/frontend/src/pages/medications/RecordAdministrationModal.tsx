@@ -66,11 +66,11 @@ const SUBMIT_LABEL: Record<MedicationAdministrationStatus, string> = {
 function AnimatedField({ show, children }: { show: boolean; children: React.ReactNode }) {
   return (
     <div
-      className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${show ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      className={`mb-0 grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${show ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
       // React 19 forwards `inert` as the native DOM boolean attribute.
       inert={!show}
     >
-      <div className="min-h-0">{children}</div>
+      <div className="min-h-0"><div className="pb-4">{children}</div></div>
     </div>
   )
 }
@@ -431,7 +431,7 @@ export function RecordAdministrationModal({
           )}
 
           <FormField label="Status" required>
-            <ToggleGroup options={STATUS_OPTIONS.map(o => ({ key: o.key, label: o.label }))} value={status} onChange={v => setStatus(v as MedicationAdministrationStatus)} />
+            <ToggleGroup className="flex-wrap" options={STATUS_OPTIONS.map(o => ({ key: o.key, label: o.label }))} value={status} onChange={v => setStatus(v as MedicationAdministrationStatus)} />
           </FormField>
 
           {/* Read-only — the administering identity is always derived server-side from the

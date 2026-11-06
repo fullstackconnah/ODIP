@@ -33,6 +33,8 @@ export const incidentBaseSchema = z.object({
   rpUseVaried: z.boolean().nullable().optional(),
   /** Form-only, never sent: the description skeleton the step prefilled, so an untouched one counts as no description where the use was not authorised. */
   rpDescriptionSkeleton: z.string().optional(),
+  /** Form-only, never sent: the prompts a common incident placed in the description; untouched, they count as no description. */
+  pickedPrompts: z.string().optional(),
 
   // Step 2 — Incident Details (IN-6), plus IN-5's injuries (conditional on incidentType === 'Injury')
   incidentDateTime: z.string().min(1, 'Date/time is required'),
@@ -187,10 +189,13 @@ function restrictivePracticeRefine(
 /** IN-5: an Injury incident must record at least one injury row — mirrors the backend's own
  * `ValidateServiceTypeAndIncidentType` check (defense in depth, same idiom as every other rule
  * shared between a wizard step's Next gate and the server). */
-function detailsRefine(data: Pick<IncidentFormData, 'incidentType' | 'injuries' | 'unapprovedRestrictivePracticeDetails' | 'rpDescriptionSkeleton' | 'description'>, ctx: z.RefinementCtx) {
+function detailsRefine(data: Pick<IncidentFormData, 'incidentType' | 'injuries' | 'unapprovedRestrictivePracticeDetails' | 'rpDescriptionSkeleton' | 'pickedPrompts' | 'description'>, ctx: z.RefinementCtx) {
   // "None of these" after a practice was picked and unpicked: a description still exactly that practice's skeleton is no description.
   if (data.incidentType === 'RestrictivePracticeUse' && data.unapprovedRestrictivePracticeDetails?.trim() && data.description?.trim() && !writtenDescription(data)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'Description is required' })
+  }
+  if (data.pickedPrompts?.trim() && data.description?.trim() === data.pickedPrompts.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'Write what happened under the prompts.' })
   }
   if (data.incidentType === 'Injury' && (!data.injuries || data.injuries.length === 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['injuries'], message: 'Please record at least one injury.' })
@@ -218,7 +223,7 @@ export const restrictivePracticeSchema = incidentBaseSchema
   .superRefine(restrictivePracticeRefine)
 
 export const detailsSchema = incidentBaseSchema
-  .pick({ ...pickShape(STEP_DETAILS_FIELDS), incidentType: true, unapprovedRestrictivePracticeDetails: true, rpDescriptionSkeleton: true })
+  .pick({ ...pickShape(STEP_DETAILS_FIELDS), incidentType: true, unapprovedRestrictivePracticeDetails: true, rpDescriptionSkeleton: true, pickedPrompts: true })
   .superRefine(detailsRefine)
 
 // IN-7: no cross-field refine needed — a witness row's own `witnessName` non-empty check is
