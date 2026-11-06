@@ -57,6 +57,9 @@ export type RestrictivePracticeStepProps = {
  * registered practice offers "This use was not authorised", ticked and locked for a Not authorised
  * entry: the incident is then stored unauthorised, like "None of these", with the link kept.
  */
+const byKindThenDescription = (a: RestrictivePracticeDto, b: RestrictivePracticeDto) =>
+  RESTRICTIVE_PRACTICE_TYPE_LABELS[a.type].localeCompare(RESTRICTIVE_PRACTICE_TYPE_LABELS[b.type]) || a.description.localeCompare(b.description)
+
 export function RestrictivePracticeStep({
   getValues, setValue, errors,
   involvedParticipantId, restrictivePracticeType, restrictivePracticeId, unapprovedRestrictivePracticeDetails,
@@ -79,25 +82,28 @@ export function RestrictivePracticeStep({
   // INC-04/INC-05: the involved participant's ACTIVE register entries — useRestrictivePractices
   // defaults to active-only, exactly the set both the determination and the linked-entry picker
   // need. Disabled (participantId undefined) until a participant is chosen.
-  const { data: activePractices = [] } = useRestrictivePractices(involvedParticipantId || undefined)
+  const { data: activePractices = [], isLoading } = useRestrictivePractices(involvedParticipantId || undefined)
   // IN-4's "show inactive/retired practices" disclosure — a second query, only fetched once the
   // toggle is actually on, requesting the full (active + inactive) set.
   const { data: allPractices = [] } = useRestrictivePractices(showInactive ? (involvedParticipantId || undefined) : undefined, true)
 
-  const matchingActivePractices = useMemo(() => {
-    const matching = activePractices.filter((p) => p.type === restrictivePracticeType)
-    return addedPractice && addedPractice.type === restrictivePracticeType && addedPractice.participantId === involvedParticipantId
-      && !matching.some((p) => p.id === addedPractice.id)
-      ? [...matching, addedPractice] : matching
-  }, [activePractices, restrictivePracticeType, addedPractice, involvedParticipantId])
-  const matchingInactivePractices = useMemo(
-    () => allPractices.filter((p) => p.type === restrictivePracticeType && !p.isActive),
-    [allPractices, restrictivePracticeType],
-  )
+  // Every active entry of the participant, whatever its kind (the list leads with the kind), plus the one just added.
+  const registerEntries = useMemo(() => {
+    const withAdded = addedPractice && addedPractice.participantId === involvedParticipantId && !activePractices.some((p) => p.id === addedPractice.id)
+      ? [...activePractices, addedPractice] : activePractices
+    return [...withAdded].sort(byKindThenDescription)
+  }, [activePractices, addedPractice, involvedParticipantId])
+  // The determination below judges the current type, so it is still fed only that type's entries.
+  const matchingActivePractices = useMemo(() => registerEntries.filter((p) => p.type === restrictivePracticeType), [registerEntries, restrictivePracticeType])
+  const inactivePractices = useMemo(() => allPractices.filter((p) => !p.isActive).sort(byKindThenDescription), [allPractices])
 
-  const isUnapprovedMode = manualUnapprovedSelected || !!unapprovedRestrictivePracticeDetails?.trim()
+  // An empty register has one answer: "None of these" is picked for the reporter.
+  const noRegisterEntries = !!involvedParticipantId && !isLoading && registerEntries.length === 0
+  const isUnapprovedMode = manualUnapprovedSelected || !!unapprovedRestrictivePracticeDetails?.trim() || noRegisterEntries
   const linkedChoice = restrictivePracticeId ? restrictivePracticeId : (isUnapprovedMode ? 'unapproved' : '')
-  const linkedPractice = matchingActivePractices.find((p) => p.id === restrictivePracticeId)
+  const linkedPractice = registerEntries.find((p) => p.id === restrictivePracticeId)
+  // The kind is on the picked row, so the type is asked only for "None of these", or for a link whose entry is no longer on the list (an edit).
+  const askType = linkedChoice === 'unapproved' || (!!restrictivePracticeId && !linkedPractice)
   // A Not authorised entry locks the box ticked. Editing an incident whose link is unchanged keeps what it was stored with (frozen) instead.
   const incidentDate = incidentDateTime?.slice(0, 10) || null
   const lockedNotAuthorised = !!linkedPractice && !isRpAuthorisedOn(linkedPractice, incidentDate)
@@ -122,6 +128,7 @@ export function RestrictivePracticeStep({
   function handleSelectLinkedPractice(practice: RestrictivePracticeDto) {
     setManualUnapprovedSelected(false)
     setValue('restrictivePracticeId', practice.id, { shouldDirty: true, shouldValidate: true })
+    setValue('restrictivePracticeType', practice.type, { shouldDirty: true, shouldValidate: true })
     // Mutually exclusive with the unapproved-details text — selecting a registered practice
     // clears whatever unapproved description had been typed.
     setValue('unapprovedRestrictivePracticeDetails', '', { shouldDirty: true, shouldValidate: true })
@@ -171,42 +178,45 @@ export function RestrictivePracticeStep({
     handleSelectLinkedPractice(entry)
   }
 
+  const typeField = (
+    <div className={formGrid}>
+      <FormField label="Restrictive Practice Type" required error={errors.restrictivePracticeType?.message} className={span.medium}>
+        <Dropdown
+          variant="form"
+          value={restrictivePracticeType ?? ''}
+          onChange={(v) => setValue('restrictivePracticeType', v, { shouldDirty: true, shouldValidate: true })}
+          label="Select restrictive practice type..."
+          items={RESTRICTIVE_PRACTICE_TYPES.map((t) => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t] }))}
+        />
+      </FormField>
+    </div>
+  )
+
   return (
     <Card title="Restrictive practice details" className="space-y-4">
-      <div className={formGrid}>
-        <FormField label="Restrictive Practice Type" required error={errors.restrictivePracticeType?.message} className={span.medium}>
-          <Dropdown
-            variant="form"
-            value={restrictivePracticeType ?? ''}
-            onChange={(v) => setValue('restrictivePracticeType', v, { shouldDirty: true, shouldValidate: true })}
-            label="Select restrictive practice type..."
-            items={RESTRICTIVE_PRACTICE_TYPES.map((t) => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t] }))}
-          />
-        </FormField>
-      </div>
+      {/* With no participant there is no list, so the type comes first, as it always has. */}
+      {!involvedParticipantId && typeField}
 
-      {restrictivePracticeType && (
+      {(involvedParticipantId || restrictivePracticeType) && (
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium text-[var(--color-foreground)] mb-1">
             Which practice was used?
           </legend>
 
-          {/* The "None of these" option (and the detail field it reveals) is ALWAYS available once a
-              type is picked — an incident can describe an unregistered practice with no participant
-              selected at all. The active-practices list above it is necessarily participant-scoped,
-              so it's this hint or the list, never both. */}
+          {/* "None of these" (and the detail field it reveals) is always available — an incident can describe an unregistered
+              practice with no participant selected at all. The list is participant-scoped, so it's this hint or the list. */}
           {!involvedParticipantId ? (
             <p className="text-sm text-[var(--color-muted-foreground)]">
               Select the involved participant on the Basics step to see the restrictive practices on their register.
             </p>
-          ) : matchingActivePractices.length === 0 && (
+          ) : noRegisterEntries && (
             <p className="text-sm text-[var(--color-muted-foreground)]">
-              No active practices of this type are on this participant's register.
+              No active practices are on this participant's register.
             </p>
           )}
 
           <div role="radiogroup" aria-label="Which practice was used?" className="space-y-2">
-            {matchingActivePractices.map((p) => (
+            {registerEntries.map((p) => (
               <label
                 key={p.id}
                 className="flex items-start gap-3 p-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-accent)]"
@@ -219,6 +229,7 @@ export function RestrictivePracticeStep({
                   onChange={() => handleSelectLinkedPractice(p)}
                 />
                 <span className="text-sm min-w-0 flex-1">
+                  <span className="block text-xs font-medium text-[var(--color-muted-foreground)]">{RESTRICTIVE_PRACTICE_TYPE_LABELS[p.type]}</span>
                   <span className="block font-medium">{p.description}</span>
                   <span className="block text-[var(--color-muted-foreground)]">
                     {p.reviewDate ? `Review due ${formatDateAu(p.reviewDate)}` : 'No review date on file'}
@@ -239,6 +250,12 @@ export function RestrictivePracticeStep({
               <span className="text-sm font-medium">None of these — the practice used is not on this participant's register</span>
             </label>
           </div>
+
+          {linkedChoice === '' && (errors.restrictivePracticeType || errors.unapprovedRestrictivePracticeDetails) && (
+            <p role="alert" className="text-sm text-[var(--color-destructive)]">Choose a practice from the list, or "None of these".</p>
+          )}
+
+          {askType && typeField}
 
           {restrictivePracticeId && (
             <div className="space-y-3 pl-3 border-l-2 border-[var(--color-border)]">
@@ -310,7 +327,7 @@ export function RestrictivePracticeStep({
                 />
               </FormField>
               {involvedParticipantId && <div>{canWriteRestrictivePractices ? (
-                <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
+                <Button variant="secondary" size="sm" disabled={!restrictivePracticeType} onClick={() => setAdding(true)}>
                   Add to restrictive practice register
                 </Button>
               ) : (
@@ -323,11 +340,12 @@ export function RestrictivePracticeStep({
 
           {showInactive && (
             <div id="incident-inactive-practices" className="space-y-2">
-              {matchingInactivePractices.length === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)]">No inactive practices of this type on file.</p>
+              {inactivePractices.length === 0 ? (
+                <p className="text-sm text-[var(--color-muted-foreground)]">No inactive practices on file.</p>
               ) : (
-                matchingInactivePractices.map((p) => (
+                inactivePractices.map((p) => (
                   <div key={p.id} className="p-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)]">
+                    <span className="block text-xs font-medium">{RESTRICTIVE_PRACTICE_TYPE_LABELS[p.type]}</span>
                     <span className="block">{p.description}</span>
                     <span className="block text-xs">Retired — not selectable as the practice used.</span>
                   </div>
