@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties, KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { apiGet, apiPost } from '@/api/client'
@@ -53,10 +53,12 @@ export function AddressField({
   const [active, setActive] = useState(-1)
   const [status, setStatus] = useState('')
   const [used, setUsed] = useState(false)
+  const [plain, setPlain] = useState(addressLookup.off)   // the server said 404: a plain input from now on
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({})
 
   const boxRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const inflight = useRef<AbortController>(undefined)
   const session = useRef<string | null>(null)
@@ -70,19 +72,26 @@ export function AddressField({
   const showing = open && rows !== null
   const empty = showing && rows.length === 0
 
+  // Below the input when the list fits there, else above when that has more room; the list scrolls only when neither side holds it.
   const reposition = useCallback(() => {
     if (!boxRef.current) return
     const rect = boxRef.current.getBoundingClientRect()
-    const below = window.innerHeight - rect.bottom - 8
-    const style: CSSProperties = { position: 'fixed', zIndex: 9999, left: rect.left, width: rect.width }
-    if (below >= 120 || below >= rect.top - 8) style.top = rect.bottom + 4
-    else style.bottom = window.innerHeight - rect.top + 4
+    const need = panelRef.current?.scrollHeight ?? 0
+    const below = window.innerHeight - rect.bottom - 12
+    const above = rect.top - 12
+    const style: CSSProperties = { position: 'fixed', zIndex: 9999, left: rect.left, width: rect.width, overflowY: 'auto' }
+    if (need <= below || below >= above) { style.top = rect.bottom + 4; style.maxHeight = below }
+    else { style.bottom = window.innerHeight - rect.top + 4; style.maxHeight = above }
     setPanelStyle(style)
   }, [])
 
+  // Re-measured when the rows change, because the list's own height decides the side.
+  useLayoutEffect(() => {
+    if (showing) reposition()
+  }, [showing, rows, reposition])
+
   useEffect(() => {
     if (!showing) return
-    reposition()
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
     return () => {
@@ -113,7 +122,7 @@ export function AddressField({
       setOpen(document.activeElement === inputRef.current)
     } catch (err) {
       if (controller.signal.aborted) return
-      if (statusOf(err) === 404) switchAddressLookupOff()
+      if (statusOf(err) === 404) { switchAddressLookupOff(); setPlain(true) }
       // Any other failure (400, 429, 5xx, offline) is silent: the list closes and typing carries on.
       setRows(null)
       close()
@@ -181,9 +190,9 @@ export function AddressField({
     }
   }
 
-  const combo = !addressLookup.off
+  const combo = !plain
   const panel = showing && createPortal(
-    <div style={panelStyle} className="bg-[var(--color-popover)] rounded-[var(--radius-md)] shadow-[var(--shadow-float)] py-1">
+    <div ref={panelRef} style={panelStyle} className="bg-[var(--color-popover)] rounded-[var(--radius-md)] shadow-[var(--shadow-float)] py-1">
       {empty ? (
         <p className="px-3 py-2 text-sm text-[var(--color-muted-foreground)]">No matching address. Keep typing, or enter it yourself.</p>
       ) : (
