@@ -894,4 +894,46 @@ public class ParticipantAlertsServiceTests
         Assert.Contains(result.Single(r => r.ParticipantId == a.Id).Alerts, x => x.Type == "plan-expiring-soon");
         Assert.DoesNotContain(result.Single(r => r.ParticipantId == b.Id).Alerts, x => x.Type == "plan-expiring-soon");
     }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider { public override DateTimeOffset GetUtcNow() => now; }
+
+    // 2026-10-03T15:00Z is 01:00 on 4 Oct in Sydney and 23:00 on 3 Oct in Perth.
+    private static readonly DateTimeOffset PerthStillThe3rd = new(2026, 10, 3, 15, 0, 0, TimeSpan.Zero);
+
+    private static void SeedZone(OdipDbContext db, Guid org, string zone)
+    {
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = org, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = "Test", Address = "1 Test St", State = "NSW", TimeZoneId = zone });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task PlanEnd_UnscopedAggregate_EachOrganisationJudgedByItsOwnToday()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        SeedZone(db, OrgA, "Australia/Sydney");
+        SeedZone(db, OrgB, "Australia/Perth");
+        var planEnd = new DateOnly(2026, 10, 3);
+        var sydney = SeedOrgParticipant(db, OrgA, planEnd);
+        var perth = SeedOrgParticipant(db, OrgB, planEnd);
+
+        var result = await new ParticipantAlertsService(db, new FixedClock(PerthStillThe3rd)).GetAlertsAsync(null);
+
+        Assert.Contains(result.Single(r => r.ParticipantId == sydney.Id).Alerts, a => a.Type == "plan-expired");
+        Assert.DoesNotContain(result.Single(r => r.ParticipantId == perth.Id).Alerts, a => a.Type == "plan-expired");
+    }
+
+    [Fact]
+    public async Task PlanEnd_TenantScopedRequest_UsesTheOrganisationsToday()
+    {
+        var name = Guid.NewGuid().ToString();
+        using (var seed = CreateDb(name)) SeedZone(seed, OrgB, "Australia/Perth");
+        using var db = CreateTenantScopedDb(name, OrgB);
+        var perth = SeedOrgParticipant(db, OrgB, new DateOnly(2026, 10, 3));
+
+        var perthAlerts = (await new ParticipantAlertsService(db, new FixedClock(PerthStillThe3rd)).GetAlertsAsync(perth.Id)).Single().Alerts;
+        var later = (await new ParticipantAlertsService(db, new FixedClock(PerthStillThe3rd.AddHours(1))).GetAlertsAsync(perth.Id)).Single().Alerts;
+
+        Assert.DoesNotContain(perthAlerts, a => a.Type == "plan-expired");
+        Assert.Contains(later, a => a.Type == "plan-expired");
+    }
 }
