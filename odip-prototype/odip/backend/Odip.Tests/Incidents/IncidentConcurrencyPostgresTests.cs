@@ -65,10 +65,10 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
         return (tenantId, user.Id, incident.Id, (await db.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == incident.Id)).UpdatedAt);
     }
 
-    private static UpdateIncidentDto Form(Guid reporterId, string title, DateTime expected) => new()
+    private static UpdateIncidentDto Form(Guid reporterId, string title, DateTime expected, params CreateIncidentWitnessDto[] witnesses) => new()
     {
         ReportedByStaffId = reporterId, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Medium, Title = title,
-        Description = "What happened.", IncidentDateTime = new DateTime(2026, 8, 30, 10, 0, 0, DateTimeKind.Utc), Status = IncidentStatus.Submitted, ExpectedUpdatedAt = expected,
+        Description = "What happened.", IncidentDateTime = new DateTime(2026, 8, 30, 10, 0, 0, DateTimeKind.Utc), Status = IncidentStatus.Submitted, ExpectedUpdatedAt = expected, Witnesses = witnesses.ToList(),
     };
 
     private static void AssertRefused<T>(ActionResult<ApiResponse<T>> result) =>
@@ -155,17 +155,19 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
         var (tenantId, userId, id, loaded) = await SeedAsync();
         var witnessId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
         await using (var seed = Open(tenantId))
         {
-            seed.IncidentWitnesses.Add(new IncidentWitness { Id = witnessId, IncidentReportId = id, WitnessUserId = userId, WitnessName = "Sam Lee", WitnessStatus = WitnessStatus.Pending });
+            seed.Users.Add(new User { Id = staffId, TenantId = tenantId, FirstName = "Priya", LastName = "Nair", Username = $"priya.{Guid.NewGuid():N}", Email = $"priya.{Guid.NewGuid():N}@example.test", Role = UserRole.SupportWorker, IsActive = true });
+            seed.IncidentWitnesses.Add(new IncidentWitness { Id = witnessId, IncidentReportId = id, WitnessUserId = staffId, WitnessName = "Priya Nair", WitnessStatus = WitnessStatus.Pending });
             await seed.SaveChangesAsync(Ct);
         }
         await using var editor = Open(tenantId);
         await using var witnessDb = Open(tenantId);
         await witnessDb.IncidentReports.SingleAsync(i => i.Id == id, Ct);
 
-        Assert.IsType<OkObjectResult>((await As(editor, userId).Update(id, Form(userId, "Edited", loaded), Ct)).Result);
-        var portal = new PortalController(witnessDb, TenantMock(tenantId).Object) { ControllerContext = Caller(userId) };
+        Assert.IsType<OkObjectResult>((await As(editor, userId).Update(id, Form(userId, "Edited", loaded, new CreateIncidentWitnessDto { Id = witnessId, WitnessUserId = staffId, WitnessName = "Priya Nair" }), Ct)).Result);
+        var portal = new PortalController(witnessDb, TenantMock(tenantId).Object) { ControllerContext = Caller(staffId) };
         Assert.IsType<OkObjectResult>((await portal.ApproveIncidentWitnessRequest(witnessId, new PortalRespondIncidentWitnessRequestDto("I saw it."), Ct)).Result);
 
         await using var check = Open(tenantId);

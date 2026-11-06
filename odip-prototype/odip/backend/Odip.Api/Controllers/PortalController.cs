@@ -1426,7 +1426,14 @@ public class PortalController : ControllerBase
             witness.StatementText = dto!.StatementText!.Trim();
         // So an editor's form loaded before this answer is refused (409) instead of deleting it.
         witness.IncidentReport!.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException e)
+        {
+            // An editor saved the incident since it was read (UpdatedAt is its concurrency token). The answer stands whatever they changed: take the stored version and stamp again.
+            foreach (var entry in e.Entries.Where(x => x.Entity is IncidentReport)) await entry.ReloadAsync(ct);
+            witness.IncidentReport.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToIncidentWitnessRequestDto(witness)));
     }
