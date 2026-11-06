@@ -260,6 +260,10 @@ export interface PortalHandoverDto {
   requiresAcknowledgement: boolean
   isRead: boolean
   readAt: string | null
+  /** First name of the worker whose handover is still to come (finish later). Null when nothing is owed. */
+  owedFrom?: string | null
+  /** The newest earlier handover text, shown while one is owed. */
+  earlierHandover?: { text: string; shiftDate: string } | null
 }
 
 /** One holder in the custody trail (the last 3, most recent first, including the handover's author). Name and date only. */

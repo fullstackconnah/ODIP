@@ -143,8 +143,10 @@ public class PortalFinishLaterTests
     public async Task EndTappedAt_before_the_start_is_refused()
     {
         var f = Create();
+        f.Completion!.ActualStart = Now.AddMinutes(-10);   // started 10 minutes ago, so a tap 20 minutes ago is inside the age bound but before the start
+        f.Db.SaveChanges();
 
-        var body = Failure(await f.Controller.FinishShift(f.Shift.Id, Later(tappedAt: ActualStartUtc.AddMinutes(-10)), default), 400);
+        var body = Failure(await f.Controller.FinishShift(f.Shift.Id, Later(tappedAt: Now.AddMinutes(-20)), default), 400);
 
         Assert.Equal(ShiftErrorCodes.ShiftClientTimeBeforeStart, body.Code);
     }
