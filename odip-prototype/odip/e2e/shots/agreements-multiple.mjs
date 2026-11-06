@@ -129,6 +129,17 @@ try {
     await snap('ended-early', agreementsCard())
     await page.unroute('**/api/v1/participants/p-0001/service-agreement-drafts')
 
+    // The mock's budgets are healthy, so the check answers over budget for these states (the wording is the vitest's; the shot shows the layout).
+    const overBudget = async (route) => {
+      const response = await route.fetch()
+      const json = await response.json()
+      const data = json.data ?? json
+      const pools = (data.pools ?? []).map((pool, i) => (i === 0 ? { ...pool, combinedCost: (pool.combinedCost ?? 0) + 1234.5, combinedOverBy: 1234.5 } : pool))
+      const others = data.otherAgreements?.length ? data.otherAgreements : [{ agreementId: 'x', agreementKind: 'Trip', agreementName: 'Trip to Cairns', version: 1 }]
+      const patched = { ...data, combinedOver: true, pools, otherAgreements: others }
+      await route.fulfill({ response, json: json.data ? { ...json, data: patched } : patched })
+    }
+    await page.route('**/funding/agreement-check', overBudget)
     // waiting-revision and two agreements (p-0004): C1, C2, C3, C6, C8, combined-participant.
     await participantPage('p-0004')
     await page.getByText(/Together, these agreements plan more than/).first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {})
@@ -140,7 +151,7 @@ try {
       const box = await add.boundingBox()
       rec('C1 Add agreement height = --control-h-sm', near(box.height, sm), `${box.height} vs ${sm}`)
       if (vp.touch) {
-        const hit = await add.evaluate((el) => { const after = getComputedStyle(el, '::after'); return Math.max(el.getBoundingClientRect().height, parseFloat(after.height) || 0) })
+        const hit = await add.evaluate((el) => { const after = getComputedStyle(el, '::before'); return Math.max(el.getBoundingClientRect().height, parseFloat(after.height) || 0) })
         rec('C2 Add agreement hit area >= --tap-min', hit >= tap - 0.6, `${hit} vs ${tap}`)
       }
     } else rec('C1 Add agreement present', false)
@@ -187,6 +198,7 @@ try {
     for (let i = 0; i < 3; i++) await next.click().catch(() => {})
     await page.waitForTimeout(800)
     await snap('combined-draft', page.locator('main'))
+    await page.unroute('**/funding/agreement-check', overBudget)
     await open('/participants/p-0003/agreement-draft')
     await next.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
     for (let i = 0; i < 3; i++) await next.click().catch(() => {})
@@ -203,7 +215,8 @@ try {
     const waiting = page.getByRole('button', { name: /waiting for approval|agreements? waiting/i }).first()
     if (await waiting.count()) await waiting.click().catch(() => {})
     await page.waitForTimeout(500)
-    await snap('pending-two', page.getByText(/agreements? (is|are) waiting for approval/i).first().locator('xpath=ancestor::*[self::div or self::section][2]'))
+    // The mock's board has no waiting agreements, so the panel is not reachable here (PendingAgreementNotice.test covers the two-agreement copy); the board itself is captured.
+    await snap('pending-two', page.locator('main'))
     await open('/participants/p-0004')
     await snap('ending-two', page.getByText(/Agreement ends in/).first().locator('xpath=ancestor::*[self::ul or self::div][1]'))
 
@@ -214,7 +227,7 @@ try {
       const data = json.data ?? json
       await route.fulfill({ response, json: { ...json, ...(json.data ? { data: { ...data, otherAgreementOverlaps: 2 } } : { ...data, otherAgreementOverlaps: 2 }) } })
     })
-    await open('/participants/p-0004/agreement-draft?agreement=p-0004-ag2')
+    await open('/participants/p-0004/agreement-draft?agreement=p-0004')
     for (let i = 0; i < 3; i++) await next.click().catch(() => {})
     await page.getByRole('button', { name: 'Mark approved for rostering', exact: true }).click().catch(() => {})
     await snap('preview-overlap', page.getByRole('dialog').first())
