@@ -24,7 +24,9 @@ describe('locationCheckLine (plan 6.4 table)', () => {
   })
 
   it('unavailable, with and without a reason', () => {
-    expect(line('Unavailable', { locationReason: 'Started offline' })).toBe('Location not available: Started offline')
+    expect(line('Unavailable', { locationReason: 'Started offline' })).toBe('Started offline')
+    expect(line('Unavailable', { locationReason: 'Started offline: Phone GPS broken' })).toBe('Started offline: Phone GPS broken')
+    expect(line('Unavailable', { locationReason: 'Phone GPS broken' })).toBe('Location not available: Phone GPS broken')
     expect(line('Unavailable')).toBe('Location not available. No reason given.')
   })
 
