@@ -127,6 +127,7 @@ describe('AgreementsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Approve 1' }))
     expect(screen.getByRole('heading', { name: 'Approve 1 agreement?' })).toBeInTheDocument()
     expect(screen.getByText(/1 ticked row has no draft/)).toBeInTheDocument()
+    expect(screen.getByRole('dialog').textContent).toContain('made from it. 1 ticked row') // a space between the two sentences
 
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve 1' }))
 
