@@ -65,6 +65,7 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     timesAdjusted: false,
     offRoster: false,
     incidentCount: 0,
+    missingDetails: [],
     ...overrides,
   }
 }

@@ -54,6 +54,7 @@ type CompletionPackageFields = Pick<
   ShiftCompletionDto,
   'breaks' | 'breakMinutes' | 'netWorkedMinutes' | 'handoverText' | 'nothingToHandOver' | 'nothingToNoteConfirmed'
   | 'timesAdjusted' | 'originalActualStart' | 'originalActualEnd' | 'timeAdjustmentReason' | 'kilometres' | 'anythingToReport' | 'sentFromOffline'
+  | 'missingDetails' | 'preTravelNone' | 'postTravelNone'
 >
 
 /** The shift-package fields of a completion, empty: no breaks, nothing handed over or confirmed. */
@@ -71,6 +72,7 @@ export function emptyCompletionPackage(overrides: Partial<CompletionPackageField
     timeAdjustmentReason: null,
     kilometres: null,
     anythingToReport: null, sentFromOffline: false,
+    missingDetails: [], preTravelNone: false, postTravelNone: false,
     ...overrides,
   }
 }

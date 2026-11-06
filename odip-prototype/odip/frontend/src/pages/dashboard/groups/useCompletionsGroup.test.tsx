@@ -11,7 +11,7 @@ const item = (o: Record<string, unknown> = {}) => ({
   shiftId: 's1', completionId: 'c1', participantName: 'Grace Palmer-Hughes', staffName: 'Sam Lee', serviceDate: '2026-10-14',
   rosteredStart: '2026-10-13T22:00:00Z', rosteredEnd: '2026-10-14T04:00:00Z', actualStart: '2026-10-13T22:02:00Z', actualEnd: '2026-10-14T04:04:00Z',
   varianceMinutesStart: 2, varianceMinutesEnd: 4, status: 'PendingReview', timeZoneId: 'Australia/Sydney', isOutlierVariance: false, varianceReviewMinutes: 15,
-  returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 0, startWasManual: false, timesAdjusted: false, offRoster: false, incidentCount: 0, ...o,
+  returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 0, startWasManual: false, timesAdjusted: false, offRoster: false, incidentCount: 0, missingDetails: [], ...o,
 })
 const page = (items: unknown[], totalCount = items.length) => ({ items, totalCount, page: 1, pageSize: 5, totalPages: 1, hasNext: false, hasPrevious: false, nextCursor: items.length ? `after-${(items[items.length - 1] as { shiftId: string }).shiftId}` : null })
 const APPROVE = 'Approve shift: Sam Lee with Grace Palmer-Hughes, 14 Oct'
