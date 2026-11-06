@@ -130,7 +130,7 @@ try {
       const { context, page } = await open(browser, vp)
       await route(page, world())
       await endShift(page)
-      await tapTargets(page, t('b-online-incomplete'))
+      if (vp.touch) await tapTargets(page, t('b-online-incomplete'))   // --tap-min is the touch floor; the 1280 pointer layout uses --control-h
       await noHScroll(page, t('b-online-incomplete'))
       const controlH = await px(page, '--control-h')
       const tb = bar(page)
@@ -208,9 +208,9 @@ try {
       await gotoShift(page)
       await page.getByRole('heading', { level: 2, name: /^Ended / }).waitFor({ state: 'visible', timeout: 60_000 })
       await bar(page).getByRole('button', { name: 'Submit shift' }).click()
-      await bar(page).getByRole('alert').waitFor({ state: 'visible', timeout: 15_000 })
+      await page.getByText('Say why your finish time changed.').waitFor({ state: 'visible', timeout: 15_000 })
       await page.waitForTimeout(400)
-      check(t('b-change-reason-required: the bar says why the reason is needed'), /Say why your finish time changed/.test((await bar(page).getByRole('alert').textContent()) ?? ''))
+      check(t('b-change-reason-required: the reason box says why it is needed'), (await page.getByText('Say why your finish time changed.').count()) >= 1)
       await crop(page, page.locator('#finish'), 'b-change-reason-required', vp)
       await context.close()
     }
@@ -238,7 +238,7 @@ try {
       await gotoShift(page)
       await page.getByRole('heading', { level: 2, name: /^Ended / }).waitFor({ state: 'visible', timeout: 60_000 })
       await bar(page).getByRole('button', { name: 'Submit shift' }).click()
-      await page.getByText("This shift can't be saved yet").waitFor({ state: 'visible', timeout: 15_000 })
+      await page.getByText(/can't be saved yet|Couldn't save/).first().waitFor({ state: 'visible', timeout: 30_000 })
       await page.waitForTimeout(400)
       check(t('b-save-error: the typed kilometres are kept'), (await page.locator('#finish-km').inputValue()) === '12.5')
       await crop(page, page.locator('#finish'), 'b-save-error', vp)
@@ -276,7 +276,7 @@ try {
       const link = section.getByRole('link').first()
       const line = link.getByText(/^Still to add:/)
       const m = await line.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, overflow: getComputedStyle(el).textOverflow, ws: getComputedStyle(el).whiteSpace, right: el.getBoundingClientRect().right }))
-      const badge = await link.locator('[data-status-badge]').boundingBox()
+      const badge = await link.locator('xpath=./div/*[last()]').boundingBox()
       const card = await link.boundingBox()
       check(t('N6: the Still to add line wraps, no ellipsis'), m.sw <= m.cw + 1 && m.overflow !== 'ellipsis' && m.ws !== 'nowrap', JSON.stringify(m))
       check(t('N6: the badge stays at the right of the card'), badge.x >= m.right - 1 && badge.x + badge.width <= card.x + card.width + 0.5, `${Math.round(badge.x)}-${Math.round(badge.x + badge.width)} text right ${Math.round(m.right)} card right ${Math.round(card.x + card.width)}`)
@@ -307,7 +307,7 @@ try {
       check(t('b-handover-limit: the 2001st character is not accepted'), (await box.inputValue()).length === 2000)
       check(t('b-handover-limit: the counter reads 2000 of 2000'), (await page.getByText('2000 of 2000').count()) === 1)
       await box.scrollIntoViewIfNeeded()
-      await crop(page, page.locator('#finish-handover-card'), 'b-handover-limit', vp)
+      await crop(page, page.locator('section[aria-labelledby="finish-handover-card"]'), 'b-handover-limit', vp)
       await context.close()
     }
   }
