@@ -112,6 +112,7 @@ public class PortalLateWritesTests
         f.Advance(TimeSpan.FromMinutes(5));
         Detail(await f.Controller.EndBreak(f.Shift.Id, brk.Id, null, default));
         Assert.Equal(f.Clock.GetUtcNow().UtcDateTime, (await f.Db.ShiftBreaks.SingleAsync()).EndedAt);
+        Assert.False((await f.Db.ShiftCompletions.SingleAsync()).StartSentFromOffline);   // the break path never sets the Start flag
 
         Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto { NothingToNote = true }, default));
         var done = await f.Db.ShiftCompletions.SingleAsync();
