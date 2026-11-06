@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
+import { AddressField } from '@/components/AddressField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
@@ -95,7 +96,11 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
         <div className="space-y-4">
           <div className={formGrid}>
             <FormField label="Street" className={span.medium}>
-              <input value={draft.addressStreet} onChange={(e) => setDraft((d) => ({ ...d, addressStreet: e.target.value }))} />
+              <AddressField
+                value={draft.addressStreet}
+                onChange={(addressStreet) => setDraft((d) => ({ ...d, addressStreet }))}
+                onPick={(a) => setDraft((d) => ({ ...d, addressSuburb: a.suburb, addressState: a.state, addressPostcode: a.postcode }))}
+              />
             </FormField>
             <FormField label="Suburb" className={span.medium}>
               <input value={draft.addressSuburb} onChange={(e) => setDraft((d) => ({ ...d, addressSuburb: e.target.value }))} />
