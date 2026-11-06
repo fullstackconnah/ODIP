@@ -1,132 +1,50 @@
-import { useEffect, useState } from 'react'
-import { Flag } from 'lucide-react'
-import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/hooks'
-import { useQueueRecords } from '@/api/hooks/portal'
-import { isStillTrying } from '@/lib/offline/queue'
-import { waitingBreak } from '@/lib/offline/overlay'
+import { Car, Flag } from 'lucide-react'
+import { useShiftNotes } from '@/api/hooks'
 import { fieldSurface } from '@/components/FormField'
 import { Button } from '@/components/Button'
-import { Callout } from '@/components/Callout'
-import { FactList, type FactListItem } from '@/components/FactList'
 import { formatWithTimeZone } from '@/lib/utils'
-import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
-import { minutesWords, rosteredInstants } from '../lib/portal'
-import { ToggleGroup } from '@/components/ToggleGroup'
-import { breaksLabel, clockLabel, FINISH_STEPS, unpaidBreakMinutes, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
+import { minutesWords } from '../lib/portal'
+import { breaksLabel, clockLabel, dosesSummary, HANDOVER_MAX, REASON_MAX, unpaidBreakMinutes, type TimesField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
-import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
-import { Fold, WaitingToSend } from './ui'
+import { utcInstantToProviderLocal } from './shiftTime'
+import { Chip, Fold } from './ui'
 import { plural } from '@/lib/format'
 import type { DoseTarget } from './DoseSheet'
-import { timeQuestions, type EndDraft } from './endDraft'
-import type { PortalFinishBlockerDto, PortalShiftDetailDto, ShiftBreakDto, ShiftNoteDto } from '@/api/types'
+import type { EndDraft } from './endDraft'
+import type { PortalFinishBlockerDto, PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
 
-const HANDOVER_MAX = 2000
 const fieldClass = `w-full py-2 min-h-[44px] text-sm ${fieldSurface}`
+const muted = 'text-xs text-[var(--color-muted-foreground)]'
+const CARD = 'bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 lg:p-5 space-y-3'
 const clock = (iso: string, tz: string) => formatWithTimeZone(iso, tz, { hour: 'numeric', minute: '2-digit' })
 
-/** A submit the server refused, with the step that can fix it (stepForCode). */
-export type Refusal = { message: string; step: FinishStepKey | null }
+/** A submit the server refused, in the server's words. */
+export type Refusal = { message: string }
 
-export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; brk: ShiftBreakDto; online: boolean }) {
+/** The breaks, read only: once the shift has ended they are fixed by the coordinator (the same help line the old Breaks step carried). */
+export function BreaksFold({ shift }: { shift: PortalShiftDetailDto }) {
   const tz = shift.timeZoneId
-  const edit = useEditBreak()
-  const del = useDeleteBreak()
-  const end = useEndBreak()
-  const waiting = waitingBreak(useQueueRecords(), shift.id, brk.id)
-  // A break still waiting to send is not on the server yet, so it cannot be edited or removed until it is.
-  const locked = !online || !!waiting
-  const [editing, setEditing] = useState(false)
-  const [start, setStart] = useState('')
-  const [stop, setStop] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  function open() {
-    setStart(utcInstantToProviderLocal(brk.startedAt, tz))
-    setStop(brk.endedAt ? utcInstantToProviderLocal(brk.endedAt, tz) : '')
-    setError(null)
-    setEditing(true)
-  }
-
-  async function save() {
-    // The two controls hold provider-zone digits; the API wants instants, so convert with the provider zone and send with Z.
-    const startedAt = providerLocalToUtcInstant(start, tz)
-    const endedAt = stop ? providerLocalToUtcInstant(stop, tz) : null
-    if (!startedAt || (stop && !endedAt)) { setError('Enter the break times.'); return }
-    if (brk.endedAt && !endedAt) { setError('A finished break needs an end time.'); return }
-    setError(null)
-    try {
-      await edit.mutateAsync({ id: shift.id, breakId: brk.id, data: { startedAt, endedAt } })
-      setEditing(false)
-    } catch (err) {
-      setError(apiErrorMessages(err)[0] ?? "Couldn't save the break. Your times are kept. Try again.")
-    }
-  }
-
-  // A tap saves at once with the break's own times (a running break sends no end, which keeps it running).
-  async function setKind(key: string) {
-    setError(null)
-    try { await edit.mutateAsync({ id: shift.id, breakId: brk.id, data: { startedAt: brk.startedAt, endedAt: brk.endedAt, withParticipant: key === 'with' } }) }
-    catch (err) { setError(apiErrorMessages(err)[0] ?? "Couldn't change the break. Try again.") }
-  }
-
-  async function remove() {
-    setError(null)
-    try { await del.mutateAsync({ id: shift.id, breakId: brk.id }) }
-    catch (err) { setError(apiErrorMessages(err)[0] ?? "Couldn't remove the break. Try again.") }
-  }
-
-  async function endNow() {
-    setError(null)
-    try { await end.mutateAsync({ id: shift.id, breakId: brk.id }) }
-    catch (err) { setError(apiErrorMessages(err)[0] ?? "Couldn't end the break. Try again.") }
-  }
-
-  const range = `${formatWithTimeZone(brk.startedAt, tz, { hour: 'numeric', minute: '2-digit' })} to ${brk.endedAt ? formatWithTimeZone(brk.endedAt, tz, { hour: 'numeric', minute: '2-digit' }) : 'now'}`
+  const first = shift.participant.fullName.split(' ')[0]
+  const withMinutes = shift.breaks.reduce((sum, b) => sum + (b.withParticipant ? b.minutes : 0), 0)
+  const summary = `Breaks · ${breaksLabel(shift.breaks.length, unpaidBreakMinutes(shift.breaks) + withMinutes, withMinutes, first)}`
   return (
-    <li className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
-      {editing ? (
-        <div className="space-y-2">
-          <div>
-            <label className="text-sm font-medium" htmlFor={`brk-start-${brk.id}`}>Break started</label>
-            <input id={`brk-start-${brk.id}`} type="datetime-local" className={fieldClass} value={start} onChange={e => setStart(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium" htmlFor={`brk-end-${brk.id}`}>Break ended</label>
-            <input id={`brk-end-${brk.id}`} type="datetime-local" className={fieldClass} value={stop} onChange={e => setStop(e.target.value)} />
-          </div>
-          <div className="flex gap-2">
-            <Button size="lg" onClick={save} disabled={edit.isPending || !online}>{edit.isPending ? 'Saving…' : 'Save break'}</Button>
-            <Button size="lg" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p>{range}, {brk.minutes} min{brk.isRunning ? ' so far' : ''}{brk.editedAt ? ' (edited)' : ''}{waiting && <>&nbsp;<WaitingToSend stuck={isStillTrying(waiting)} /></>}</p>
-          <div className="flex gap-2">
-            {brk.isRunning && <Button id={`brk-end-now-${brk.id}`} size="lg" onClick={endNow} disabled={end.isPending}>End break</Button>}
-            <Button id={`brk-edit-${brk.id}`} size="lg" variant="secondary" onClick={open} disabled={locked}>Edit</Button>
-            <Button size="lg" variant="ghost-danger" onClick={remove} disabled={del.isPending || locked}>Remove</Button>
-          </div>
-          <ToggleGroup
-            className="w-full"
-            ariaLabel="Who was your break with?"
-            value={brk.withParticipant ? 'with' : 'alone'}
-            onChange={setKind}
-            disabled={locked || edit.isPending}
-            options={[{ key: 'alone', label: 'On my own' }, { key: 'with', label: `With ${shift.participant.fullName.split(' ')[0]}` }]}
-          />
-        </div>
-      )}
-      {locked && !editing && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Editing a break needs a connection.</p>}
-      {error && <p role="alert" className="mt-1 text-sm text-[var(--color-destructive)]">{error}</p>}
-    </li>
+    <section className={CARD} aria-label="Breaks">
+      <Fold summary={summary}>
+        {shift.breaks.length > 0 && (
+          <ul className="space-y-1 text-sm">
+            {shift.breaks.map(b => (
+              <li key={b.id}>{clock(b.startedAt, tz)} to {b.endedAt ? clock(b.endedAt, tz) : 'now'}, {b.minutes} min{b.withParticipant ? `, with ${first}` : ''}</li>
+            ))}
+          </ul>
+        )}
+        <p className={muted}>To fix a break, ask your coordinator.</p>
+      </Fold>
+    </section>
   )
 }
 
-/** A flagged note, as one line of context on step 3: "Yes, report it" files the incident from it, so there is one way to report (finish review fix 4). */
+/** A flagged note, as one line of context on "Anything to report?": "Yes, report it" files the incident from it, so there is one way to report (finish review fix 4). */
 export function FlaggedNoteLine({ note }: { note: ShiftNoteDto }) {
   return (
     <p className="flex items-start gap-2 text-sm">
@@ -136,68 +54,21 @@ export function FlaggedNoteLine({ note }: { note: ShiftNoteDto }) {
   )
 }
 
-/** One recorded time and its Change control (SHAPE §4, step 1): a datetime-local held to the server's window, the stamp to the minute ±15 or the end's 15 minutes. */
-function TimeField({ label, figure, sub, rostered, tz, id, name, value, bounds, helper, invalid, onOpen, onChange, onReset }: {
-  label: string; figure: string; sub?: string; rostered: string | null; tz: string
-  id: string; name: 'start' | 'finish'; value: string | null; bounds: { min: string; max: string } | null; helper: string; invalid: boolean
-  onOpen: () => void; onChange: (value: string) => void; onReset: () => void
+/** One time's Change editor: a datetime-local held to the server's window, with the way back to the recorded or tapped time. */
+function TimeEditor({ id, name, value, bounds, helper, invalid, resetLabel, onChange, onReset }: {
+  id: string; name: 'start' | 'finish'; value: string; bounds: { min: string; max: string } | null; helper: string; invalid: boolean
+  resetLabel: string; onChange: (value: string) => void; onReset: () => void
 }) {
   return (
     <div className="space-y-1">
-      <p className="text-sm text-[var(--color-muted-foreground)]">{label}</p>
-      <p className="text-xl font-bold tabular-nums">{figure}</p>
-      {sub && <p className="text-sm">{sub}</p>}
-      {rostered && <p className="text-xs text-[var(--color-muted-foreground)]">Rostered {clock(rostered, tz)}</p>}
-      {value === null ? (
-        <Button variant="secondary" size="md" onClick={onOpen} disabled={!bounds} aria-label={`Change your ${name} time`}>Change</Button>
-      ) : (
-        <div className="space-y-1">
-          <label htmlFor={id} className="sr-only">{`Your ${name} time`}</label>
-          <input
-            id={id} type="datetime-local" className={fieldClass} value={value} min={bounds?.min} max={bounds?.max}
-            aria-describedby={`${id}-help`} aria-invalid={invalid || undefined} onChange={e => onChange(e.target.value)}
-          />
-          <p id={`${id}-help`} className="text-xs text-[var(--color-muted-foreground)]">{helper}</p>
-          <Button variant="secondary" size="md" onClick={onReset} aria-label={`Use the recorded time for your ${name}`}>Use the recorded time</Button>
-        </div>
-      )}
+      <label htmlFor={id} className="sr-only">{`Your ${name} time`}</label>
+      <input
+        id={id} type="datetime-local" className={fieldClass} value={value} min={bounds?.min} max={bounds?.max}
+        aria-describedby={`${id}-help`} aria-invalid={invalid || undefined} onChange={e => onChange(e.target.value)}
+      />
+      <p id={`${id}-help`} className={muted}>{helper}</p>
+      <Button variant="secondary" size="md" onClick={onReset} aria-label={`${resetLabel} for your ${name}`}>{resetLabel}</Button>
     </div>
-  )
-}
-
-/** One leg of provider travel on step 1: minutes and kilometres side by side under a legend. The unit sits inside the field, clear of the typed value. */
-function TravelLeg({ id, legend, help, draft, set, invalid, message }: {
-  id: 'pre' | 'post'; legend: string; help: string; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; message?: string
-}) {
-  const inputs = [
-    { part: 'min', label: 'Minutes', unit: 'min', mode: 'numeric', field: `${id}TravelMinutes` },
-    { part: 'km', label: 'Kilometres', unit: 'km', mode: 'decimal', field: `${id}TravelKilometres` },
-  ] as const
-  const bad = inputs.some(x => invalid === x.field)
-  return (
-    <fieldset className="space-y-1">
-      <legend className="text-sm font-medium">{legend}</legend>
-      <p id={`finish-${id}-help`} className="text-xs text-[var(--color-muted-foreground)]">{help}</p>
-      <div className="grid grid-cols-2 gap-3">
-        {inputs.map(x => {
-          const mine = invalid === x.field
-          return (
-            <div key={x.part}>
-              <label htmlFor={`finish-${id}-${x.part}`} className="text-xs text-[var(--color-muted-foreground)]">{x.label}</label>
-              <div className="relative">
-                <input
-                  id={`finish-${id}-${x.part}`} inputMode={x.mode} className={`${fieldClass} pr-12`} value={draft[x.field]}
-                  aria-describedby={mine ? `finish-${id}-help finish-${id}-error` : `finish-${id}-help`} aria-invalid={mine || undefined}
-                  onChange={e => set({ [x.field]: e.target.value })}
-                />
-                <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-[var(--color-muted-foreground)]">{x.unit}</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      {bad && message && <p id={`finish-${id}-error`} className="text-xs text-[var(--color-destructive)]">{message}</p>}
-    </fieldset>
   )
 }
 
@@ -210,48 +81,51 @@ function timeQuestionLabel({ start, finish }: { start: number | null; finish: nu
   return `Why are you finishing ${minutesWords(finish)} ${early(finish)}? (optional)`
 }
 
-/** Step 1, Your times (SHAPE §4): change either time by up to 15 minutes with a reason, correct the breaks, add kilometres. */
-export function TimesStep({ shift, online, now, draft, set, invalid, invalidMessage }: {
-  shift: PortalShiftDetailDto; online: boolean; now: Date; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; invalidMessage?: string
+/**
+ * Where the shift ended: the tap's time as the heading, the start beneath it, and a Change for each. The finish can only move earlier than the tap;
+ * the start by up to 15 minutes; either needs a reason, which the worker's coordinator sees.
+ */
+export function EndedCard({ shift, endIso, tappedIso, draft, set, editStart, editEnd, setEditStart, setEditEnd, bounds, invalid, asks }: {
+  shift: PortalShiftDetailDto; endIso: string; tappedIso: string; draft: EndDraft; set: (patch: Partial<EndDraft>) => void
+  editStart: boolean; editEnd: boolean; setEditStart: (v: boolean) => void; setEditEnd: (v: boolean) => void
+  bounds: { start: { stamp: string; min: string; max: string }; end: { tap: string; min: string; max: string } } | null
+  invalid?: TimesField; asks: { start: number | null; finish: number | null }
 }) {
   const tz = shift.timeZoneId
   const c = shift.completion
-  const rostered = rosteredInstants(shift)
-  const b = c ? timeBounds(c.actualStart, tz, now) : null
-  const first = shift.participant.fullName.split(' ')[0]
-  const instant = (local: string | null) => (local ? providerLocalToUtcInstant(local, tz) : null)
-  const startIso = instant(draft.startOverride) ?? c?.actualStart ?? null
-  const endIso = instant(draft.endOverride) ?? now.toISOString()
-  const breakMinutes = unpaidBreakMinutes(shift.breaks)
-  const worked = startIso ? Math.max(0, minutesBetween(startIso, endIso) - breakMinutes) : 0
+  const rostered = { start: shift.startTime, end: shift.endTime }
   const say = (local: string) => clockLabel(`${local}:00`)
-  const muted = 'text-xs text-[var(--color-muted-foreground)]'
-  const asks = timeQuestions(shift, draft, now)
+  const moved = Date.parse(endIso) < Date.parse(tappedIso)
   const asking = asks.start !== null || asks.finish !== null
-  // Remember whether step 1 was asking about the finish, so Submit nudges only for a finish that drifted off roster after this step.
-  const finishAsked = asks.finish !== null
-  useEffect(() => { if (draft.finishAsked !== finishAsked) set({ finishAsked }) }, [draft.finishAsked, finishAsked, set])
-
+  const startMoved = draft.startOverride !== null && bounds !== null && draft.startOverride !== bounds.start.stamp
   return (
-    <div className="space-y-4">
-      <p className="text-sm">Check when you started and finished. You can change either by up to 15 minutes.</p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TimeField
-          label="Started" figure={c ? clock(c.actualStart, tz) : 'Not recorded'} rostered={rostered.start} tz={tz}
-          id="finish-start" name="start" value={draft.startOverride} bounds={b && b.start} invalid={invalid === 'start'}
-          helper={b ? `Between ${say(b.start.min)} and ${say(b.start.max)}` : ''}
-          onOpen={() => b && set({ startOverride: b.start.stamp })} onChange={v => set({ startOverride: v })} onReset={() => set({ startOverride: null })}
+    <section aria-labelledby="finish-ended" className={CARD}>
+      <h2 id="finish-ended" className="font-semibold text-lg tabular-nums">Ended {clock(endIso, tz)}</h2>
+      {moved && <p className="text-sm">Changed from {clock(tappedIso, tz)}</p>}
+      <p className={muted}>Rostered {clockLabel(rostered.start)} to {clockLabel(rostered.end)}</p>
+      {editEnd && bounds ? (
+        <TimeEditor
+          id="finish-end" name="finish" value={draft.endOverride ?? bounds.end.tap} bounds={bounds.end} invalid={invalid === 'end'}
+          helper={`Between ${say(bounds.end.min)} and ${say(bounds.end.max)}`} resetLabel="Use the tapped time"
+          onChange={v => set({ endOverride: v })} onReset={() => { setEditEnd(false); set({ endOverride: bounds.end.tap }) }}
         />
-        <TimeField
-          label="Finished" figure="When you submit" sub={`now ${clock(now.toISOString(), tz)}`} rostered={rostered.end} tz={tz}
-          id="finish-end" name="finish" value={draft.endOverride} bounds={b && b.end} invalid={invalid === 'end'}
-          helper="Up to 15 minutes before you submit."
-          onOpen={() => b && set({ endOverride: b.end.max })} onChange={v => set({ endOverride: v })} onReset={() => set({ endOverride: null })}
-        />
+      ) : (
+        <Button variant="secondary" size="md" onClick={() => { setEditEnd(true); if (bounds) set({ endOverride: draft.endOverride ?? utcInstantToProviderLocal(endIso, tz) }) }} disabled={!bounds} aria-label="Change your finish time">Change</Button>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm">Started <span className="font-semibold tabular-nums">{c ? clock(c.actualStart, tz) : 'Not recorded'}</span></p>
+        {!editStart && <Button variant="secondary" size="md" onClick={() => { setEditStart(true); if (bounds) set({ startOverride: bounds.start.stamp }) }} disabled={!bounds} aria-label="Change your start time">Change</Button>}
       </div>
-      {(draft.startOverride !== null || draft.endOverride !== null) && (
+      {editStart && bounds && (
+        <TimeEditor
+          id="finish-start" name="start" value={draft.startOverride ?? bounds.start.stamp} bounds={bounds.start} invalid={invalid === 'start'}
+          helper={`Between ${say(bounds.start.min)} and ${say(bounds.start.max)}`} resetLabel="Use the recorded time"
+          onChange={v => set({ startOverride: v })} onReset={() => { setEditStart(false); set({ startOverride: bounds.start.stamp }) }}
+        />
+      )}
+      {(moved || startMoved) && (
         <div className="space-y-1">
-          <label htmlFor="finish-reason" className="text-sm font-medium">Why did your times change?</label>
+          <label htmlFor="finish-reason" className="text-sm font-medium">{startMoved ? 'Why did your times change?' : 'Why did your finish time change?'}</label>
           <p id="finish-reason-help" className={muted}>Your coordinator sees this.</p>
           <textarea
             id="finish-reason" rows={3} maxLength={REASON_MAX} className={fieldClass} aria-describedby="finish-reason-help"
@@ -271,36 +145,12 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
           <p className={muted}>{draft.timeReason.length} of {REASON_MAX}</p>
         </div>
       )}
-      <section aria-labelledby="finish-breaks" className="space-y-2">
-        <h3 id="finish-breaks" className="text-sm font-semibold">Breaks</h3>
-        {shift.breaks.length === 0
-          ? <p className="text-sm text-[var(--color-muted-foreground)]">No breaks taken.</p>
-          : <ul className="space-y-2">{shift.breaks.map(x => <BreakRow key={x.id} shift={shift} brk={x} online={online} />)}</ul>}
-      </section>
-      <p className="text-sm">Time worked <span className="font-semibold tabular-nums">{formatMinutesSpan(worked)}</span></p>
-      {shift.breaks.some(x => x.withParticipant) && <p className={muted}>Breaks with {first} count as time worked.</p>}
-      <section aria-labelledby="finish-travel" className="space-y-3">
-        <h3 id="finish-travel" className="text-sm font-semibold">Travel</h3>
-        {shift.travelAsked && (
-          <>
-            <TravelLeg id="pre" legend={`Your trip to ${first} (optional)`} help="From wherever you were before this shift." draft={draft} set={set} invalid={invalid} message={invalidMessage} />
-            <TravelLeg id="post" legend="Your trip after the shift (optional)" help="To your base or home. If you're going straight to another shift, leave this empty and add the trip on that shift." draft={draft} set={set} invalid={invalid} message={invalidMessage} />
-          </>
-        )}
-        <div className="space-y-1">
-        <label htmlFor="finish-km" className="text-sm font-medium">Kilometres driven with {first}</label>
-        <p id="finish-km-help" className={muted}>{shift.travelAsked ? `Only driving with ${first} during the shift. Enter 0 if you didn't drive.` : `Only driving with ${first}, not your trip to or from the shift. Enter 0 if you didn't drive.`}</p>
-        <input
-          id="finish-km" inputMode="decimal" className={fieldClass} aria-describedby="finish-km-help"
-          aria-invalid={invalid === 'kilometres' || undefined} value={draft.kilometres} onChange={e => set({ kilometres: e.target.value })}
-        />
-        </div>
-      </section>
-    </div>
+    </section>
   )
 }
 
-/** Step 2, Doses & routines (SHAPE §4): what needs an outcome (the server's blockers), routines not ticked (shown, never blocking), as-needed medicines. */
+
+/** The doses still to record, and the routines and as-needed medicines, shown only while a dose blocks the end. */
 export function DosesStep({ shift, online, canAct, onRecord }: {
   shift: PortalShiftDetailDto; online: boolean; canAct: boolean; onRecord: (t: DoseTarget, notGiven: boolean) => void
 }) {
@@ -355,7 +205,8 @@ export function DosesStep({ shift, online, canAct, onRecord }: {
   )
 }
 
-/** Step 3, Anything to report? (SHAPE §4): optional. Yes leaves for the incident form; a flagged note keeps its own Report incident. */
+
+/** Anything to report? Optional. Yes leaves for the incident form; a flagged note keeps its own Report incident. */
 export function ReportStep({ shift, answer, onYes, onNo }: {
   shift: PortalShiftDetailDto; answer: EndDraft['anythingToReport']; onYes: (note?: ShiftNoteDto) => void; onNo: () => void
 }) {
@@ -373,7 +224,7 @@ export function ReportStep({ shift, answer, onYes, onNo }: {
       ) : (
         <div className="grid gap-2">
           {answer === 'no' && <p className="text-sm">You said there's nothing to report.</p>}
-          <Button size="lg" variant="secondary" className="w-full" onClick={() => onYes(flagged[0])}>Yes, report it</Button>
+          <Button id="finish-report-yes" size="lg" variant="secondary" className="w-full" onClick={() => onYes(flagged[0])}>Yes, report it</Button>
           <Button size="lg" variant="secondary" className="w-full" onClick={onNo}>No, nothing to report</Button>
         </div>
       )}
@@ -381,10 +232,7 @@ export function ReportStep({ shift, answer, onYes, onNo }: {
   )
 }
 
-/**
- * Step 4, Note & handover (SHAPE §4): the notes count with a way to the Notes tab, "Nothing to note" while there are none, and the handover.
- * The notes themselves stay in the Notes panel, mounted behind the flow, so a note half-typed there is never lost and never doubled (plan check S1).
- */
+/** Notes and handover. The notes stay in the Notes panel, mounted behind the flow, so a note half-typed there is never lost or doubled. */
 export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
   noteCount: number; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; onEditNotes: () => void
 }) {
@@ -418,89 +266,82 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
   )
 }
 
-/** Step 5, Check and submit (SHAPE §4): what will be sent, grouped by step with a way back to each, then the server's answer if it refused. */
-export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, kilometres, travel, drifted, onUseSubmitTime, onChangeTimes }: {
-  shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey, focusId?: string) => void
-  moved: { start: string | null; end: string | null }; kilometres: number | null; travel: Record<TravelField, number | null>; drifted: boolean; onUseSubmitTime: () => void; onChangeTimes: () => void
+
+/** One leg of provider travel: minutes and kilometres side by side, or "No trip" (answered with nothing). */
+function TravelLeg({ id, legend, help, draft, set, invalid, message }: {
+  id: 'pre' | 'post'; legend: string; help: string; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; message?: string
 }) {
-  const tz = shift.timeZoneId
-  const c = shift.completion
-  const breakMinutes = unpaidBreakMinutes(shift.breaks)
-  const withMinutes = shift.breaks.reduce((sum, b) => sum + (b.withParticipant ? b.minutes : 0), 0)
-  const worked = c ? Math.max(0, minutesBetween(moved.start ?? c.actualStart, moved.end ?? now.toISOString()) - breakMinutes) : 0
-  const handover = draft.handoverText.trim()
-  const first = shift.participant.fullName.split(' ')[0]
-  const groups: { step: FinishStepKey; title: string; items: FactListItem[] }[] = [
-    { step: 'times', title: 'Times', items: [
-      { label: 'Started', value: c ? (moved.start ? `${clock(moved.start, tz)} (changed from ${clock(c.actualStart, tz)})` : clock(c.actualStart, tz)) : null },
-      { label: 'Finishing', value: moved.end ? clock(moved.end, tz) : 'When you submit' },
-      ...(moved.start || moved.end ? [{ label: 'Reason', value: draft.adjustmentReason.trim() }] : []),
-      { label: 'Breaks', value: breaksLabel(shift.breaks.length, breakMinutes + withMinutes, withMinutes, first) },
-      { label: 'Time worked', value: formatMinutesSpan(worked) },
-      ...(shift.travelAsked ? [
-        { label: `Trip to ${first}`, value: travelLabel(travel.preTravelMinutes, travel.preTravelKilometres) },
-        { label: 'Trip after the shift', value: travelLabel(travel.postTravelMinutes, travel.postTravelKilometres) },
-      ] : []),
-      { label: 'Kilometres', value: kilometres === null ? 'None' : `${kilometres} km` },
-    ] },
-    { step: 'doses', title: 'Doses and routines', items: [{ label: 'Recorded', value: dosesSummary(shift.medicationsDue, shift.shiftRoutines) || 'Nothing due' }] },
-    { step: 'report', title: 'Report', items: [{ label: 'Anything to report', value: draft.anythingToReport === 'yes' ? 'Yes' : draft.anythingToReport === 'no' ? 'No' : 'Not answered' }] },
-    { step: 'handover', title: 'Notes and handover', items: [
-      { label: 'Notes', value: noteCount > 0 ? plural(noteCount, 'note') : 'Nothing to note' },
-      { label: 'Handover', value: draft.nothingToHandOver || !handover ? 'Nothing to hand over' : handover.split('\n')[0] },
-    ] },
-  ]
-  const finishOff = timeQuestions(shift, { ...draft, endOverride: moved.end ? utcInstantToProviderLocal(moved.end, tz) : null }, now).finish
+  const none = draft[`${id}TravelNone`]
+  const inputs = [
+    { part: 'min', label: 'Minutes', unit: 'min', mode: 'numeric', field: `${id}TravelMinutes` },
+    { part: 'km', label: 'Kilometres', unit: 'km', mode: 'decimal', field: `${id}TravelKilometres` },
+  ] as const
+  const bad = inputs.some(x => invalid === x.field)
   return (
-    <div className="space-y-4">
-      {finishOff !== null && !draft.finishAsked && !draft.timeReason.trim() && (
-        <Callout
-          tone="info"
-          title={(
-            <>
-              {`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}.`}
-              <Button variant="ghost" size="lg" className="underline" onClick={() => go('times', 'finish-time-reason')}>Add a reason</Button>
-            </>
-          )}
+    <fieldset className="space-y-1">
+      <legend className="text-sm font-medium">{legend}</legend>
+      <p id={`finish-${id}-help`} className={muted}>{help}</p>
+      <div className="grid grid-cols-2 gap-3">
+        {inputs.map(x => {
+          const mine = invalid === x.field
+          return (
+            <div key={x.part}>
+              <label htmlFor={`finish-${id}-${x.part}`} className={muted}>{x.label}</label>
+              <div className="relative">
+                <input
+                  id={`finish-${id}-${x.part}`} inputMode={x.mode} className={`${fieldClass} pr-12`} value={none ? '' : draft[x.field]} disabled={none}
+                  aria-describedby={mine ? `finish-${id}-help finish-${id}-error` : `finish-${id}-help`} aria-invalid={mine || undefined}
+                  onChange={e => set({ [x.field]: e.target.value })}
+                />
+                <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-[var(--color-muted-foreground)]">{x.unit}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <label className="flex items-center gap-2 text-sm min-h-[44px]">
+        <input
+          type="checkbox" checked={none}
+          onChange={e => set(e.target.checked ? { [`${id}TravelNone`]: true, [`${id}TravelMinutes`]: '', [`${id}TravelKilometres`]: '' } : { [`${id}TravelNone`]: false })}
         />
+        No trip
+      </label>
+      {bad && message && <p id={`finish-${id}-error`} className="text-xs text-[var(--color-destructive)]">{message}</p>}
+    </fieldset>
+  )
+}
+
+/** The paid travel and kilometres, set apart with the primary border so it is not missed. Without travel asked it is just the kilometres. */
+export function TravelCard({ shift, draft, set, invalid, message }: {
+  shift: PortalShiftDetailDto; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; message?: string
+}) {
+  const first = shift.participant.fullName.split(' ')[0]
+  const asked = shift.travelAsked
+  const kmBad = invalid === 'kilometres'
+  return (
+    <section aria-labelledby="finish-travel" className={`${CARD} border-2 border-[var(--color-primary)]`}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="finish-travel" className="font-semibold text-lg flex items-center gap-2"><Car className="w-5 h-5" aria-hidden="true" />{asked ? 'Travel and kilometres' : 'Kilometres'}</h2>
+        {asked && <Chip tone="info">For pay</Chip>}
+      </div>
+      {asked && (
+        <TravelLeg id="pre" legend={`Your trip to ${first}`} help="From wherever you were before this shift." draft={draft} set={set} invalid={invalid} message={message} />
       )}
-      {drifted && (
-        <Callout
-          tone="warning"
-          title="Your finish time is now more than 15 minutes ago."
-          actions={(
-            <>
-              <Button variant="secondary" size="md" onClick={onUseSubmitTime}>Use the time I submit</Button>
-              <Button variant="ghost" size="md" onClick={onChangeTimes}>Change it</Button>
-            </>
-          )}
-        />
-      )}
-      {groups.map(g => (
-        <section key={g.step} aria-labelledby={`finish-check-${g.step}`} className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <h3 id={`finish-check-${g.step}`} className="text-sm font-semibold">{g.title}</h3>
-            <Button variant="ghost" size="md" onClick={() => go(g.step)} aria-label={`Change: ${g.title}`}>Change</Button>
-          </div>
-          <FactList items={g.items} />
-        </section>
-      ))}
-      <p className="text-sm">A coordinator reviews your shift next. You can still add notes after you submit.</p>
-      {/* scroll-margin: the bar (about 5.5rem with its padding) plus the phone nav plus 16px, so the whole callout clears the bar. */}
-      {refusals.length > 0 && (
-        <div id="finish-refusals" tabIndex={-1} className="focus:outline-none scroll-mb-[calc(var(--mobile-nav-h)+5.5rem)] lg:scroll-mb-[5.5rem]">
-          <Callout tone="info" title="You can't submit yet">
-            <ul className="space-y-1">
-              {refusals.map((r, i) => (
-                <li key={i} className="flex flex-wrap items-center gap-2">
-                  {r.message}
-                  {r.step && <Button variant="secondary" size="lg" onClick={() => go(r.step!)}>Go to {FINISH_STEPS.find(s => s.key === r.step)!.label}</Button>}
-                </li>
-              ))}
-            </ul>
-          </Callout>
+      <div className="space-y-1">
+        <label htmlFor="finish-km" className="text-sm font-medium">{`Kilometres driven with ${first}`}</label>
+        <p id="finish-km-help" className={muted}>{`Only driving with ${first} during the shift. Enter 0 if you didn't drive.`}</p>
+        <div className="relative">
+          <input
+            id="finish-km" inputMode="decimal" className={`${fieldClass} pr-12`} value={draft.kilometres} onChange={e => set({ kilometres: e.target.value })}
+            aria-describedby={kmBad ? 'finish-km-help finish-km-error' : 'finish-km-help'} aria-invalid={kmBad || undefined}
+          />
+          <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-[var(--color-muted-foreground)]">km</span>
         </div>
+        {kmBad && message && <p id="finish-km-error" className="text-xs text-[var(--color-destructive)]">{message}</p>}
+      </div>
+      {asked && (
+        <TravelLeg id="post" legend="Your trip after the shift" help="To your base or home. Going straight to another shift? Tick No trip and add the trip on that shift." draft={draft} set={set} invalid={invalid} message={message} />
       )}
-    </div>
+    </section>
   )
 }
