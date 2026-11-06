@@ -101,7 +101,7 @@ public class AgreementEndingAlertsTests
     {
         await using var renewed = await SetUpAsync();
         await ApprovedEndingAsync(renewed, Today.AddDays(-3));
-        var renewal = await AddRevisionAsync(renewed, 2, new[] { WeekdayBlock() }, start: Today.AddDays(-2), end: Today.AddDays(40));
+        var renewal = await AddRevisionAsync(renewed, 2, new[] { WeekdayBlock() }, start: Today.AddDays(-2), end: Today.AddDays(40), agreementId: renewed.ParticipantId);
         Assert.Equal("agreement-ended", Assert.Single(await AgreementAlertsAsync(renewed)).Type);           // still Critical while the renewal only waits
         await MarkApprovedAsync(renewed.Db, renewal);
         Assert.Equal("agreement-ending-soon", Assert.Single(await AgreementAlertsAsync(renewed)).Type);    // the renewal is the agreement now, ending in 40 days
