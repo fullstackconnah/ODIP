@@ -159,4 +159,82 @@ public class ClaimGenerationRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(RosterBusyException.Words, Assert.Single(Assert.IsType<Odip.Application.Common.ApiResponse<Odip.Application.DTOs.ShiftCompletionDto>>(conflict.Value).Errors!));   // the participant words, not the roster board's
         Assert.Equal(10, (await kit.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.ShiftId == shift.Id, Ct)).PreShiftTravelMinutes);
     }
+
+    private Mock<ICurrentTenant> TenantOf(Guid tenantId)
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        return tenant;
+    }
+
+    [SkippableFact(DisplayName = "Postgres: a trip claim waits on each booked participant's claim-generate lock, the one a shift claim takes (a day is claimed once)")]
+    public async Task ATripClaim_WaitsOnTheBookedParticipantsLock()
+    {
+        RequirePostgres();
+        using var kit = await KitAsync();
+        var person = kit.SeedParticipant();
+        var trip = kit.SeedTrip(Today, 1, TripStatus.Completed, "Today trip", activeHours: 8m);
+        kit.SeedBooking(trip, person, BookingStatus.Confirmed);
+        var tenant = TenantOf(kit.TenantId);
+        await using var holder = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        var held = await RosterGenerationLock.AcquireAsync(holder, person.Id, Ct, scope: "claim-generate");   // a shift claim for this participant, still running
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+
+        var generating = new ClaimGenerationService(db).GenerateDraftClaimAsync(trip.Id, null, Ct);
+        await Task.Delay(1500);
+        var finishedWhileHeld = generating.IsCompleted;
+        await held.DisposeAsync();
+        await generating;
+
+        Assert.False(finishedWhileHeld, "the trip claim did not wait for the participant's lock");
+        Assert.Equal(1, await kit.Db.TripClaims.CountAsync(c => c.TripInstanceId == trip.Id, Ct));
+    }
+
+    [SkippableFact(DisplayName = "Postgres: a trip claim and a shift claim for the same participant and day, made at once, leave one live line on that day")]
+    public async Task ATripClaimAndAShiftClaimAtOnce_ClaimTheDayOnce()
+    {
+        RequirePostgres();
+        using var kit = await KitAsync();
+        var person = kit.SeedParticipant();
+        kit.SeedShift(person, Today, ShiftStatus.Completed);
+        var trip = kit.SeedTrip(Today, 1, TripStatus.Completed, "Today trip", activeHours: 8m);
+        kit.SeedBooking(trip, person, BookingStatus.Confirmed);
+        var tenant = TenantOf(kit.TenantId);
+
+        async Task Run(Func<Infrastructure.Data.OdipDbContext, Task> generate)
+        {
+            await using var db = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+            try { await generate(db); } catch (InvalidOperationException) { /* the one that comes second may be refused */ }
+        }
+        await Task.WhenAll(
+            Run(db => new ClaimGenerationService(db).GenerateDraftClaimAsync(trip.Id, null, Ct)),
+            Run(db => new ShiftClaimGenerationService(db).GenerateAsync(person.Id, Today, Today, Ct)));
+
+        var claimsOnTheDay = await kit.Db.ClaimLineItems.AsNoTracking().Where(BudgetLedgerService.ClaimLineStillCounts)
+            .Where(l => l.SupportsDeliveredFrom == Today && ((l.Shift != null && l.Shift.ParticipantId == person.Id) || (l.ParticipantBooking != null && l.ParticipantBooking.ParticipantId == person.Id)))
+            .Select(l => l.TripClaimId).Distinct().CountAsync(Ct);
+        Assert.Equal(1, claimsOnTheDay);
+    }
+
+    [SkippableFact(DisplayName = "Postgres: two trip claims that share participants, made at once, both complete (no lock cycle)")]
+    public async Task TwoTripClaimsSharingParticipants_BothComplete()
+    {
+        RequirePostgres();
+        using var kit = await KitAsync();
+        var people = new[] { kit.SeedParticipant(first: "Ann", last: "Share"), kit.SeedParticipant(first: "Bo", last: "Share") };
+        var tripA = kit.SeedTrip(Today, 1, TripStatus.Completed, "Trip A", activeHours: 8m);
+        var tripB = kit.SeedTrip(Today.AddDays(10), 1, TripStatus.Completed, "Trip B", activeHours: 8m);
+        foreach (var p in people) kit.SeedBooking(tripA, p, BookingStatus.Confirmed);
+        foreach (var p in people.Reverse()) kit.SeedBooking(tripB, p, BookingStatus.Confirmed);   // booked in the other order
+        var tenant = TenantOf(kit.TenantId);
+
+        await Task.WhenAll(new[] { tripA.Id, tripB.Id }.Select(async id =>
+        {
+            await using var db = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+            await new ClaimGenerationService(db).GenerateDraftClaimAsync(id, null, Ct);
+        }));
+
+        Assert.Equal(2, await kit.Db.TripClaims.CountAsync(c => c.TripInstanceId == tripA.Id || c.TripInstanceId == tripB.Id, Ct));
+    }
 }
