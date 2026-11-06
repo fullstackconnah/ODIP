@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { useForm, useWatch } from 'react-hook-form'
 import { IncidentDetailsStep } from './IncidentDetailsStep'
 import type { IncidentFormData } from '../incidentFormSchema'
+import { COMMON_INCIDENTS, promptsText } from '../commonIncidents'
 
 function Harness({ called = true, services = [] as ('Police' | 'Ambulance' | 'Fire')[] }) {
   const { register, control, setValue, formState } = useForm<IncidentFormData>({
@@ -58,5 +59,26 @@ describe('IncidentDetailsStep emergency services', () => {
 
     expect(screen.queryByLabelText("Police officer's name")).not.toBeInTheDocument()
     expect(screen.getByTestId('police')).toHaveTextContent('')
+  })
+})
+
+describe('IncidentDetailsStep description rows', () => {
+  const rowsFor = (pickedPrompts?: string) => {
+    function H() {
+      const { register, control, setValue, formState } = useForm<IncidentFormData>({ defaultValues: { injuries: [] } })
+      return <IncidentDetailsStep register={register} control={control} setValue={setValue} errors={formState.errors} incidentType="Illness"
+        wereEmergencyServicesCalled={false} emergencyServices={[]} pickedPrompts={pickedPrompts} />
+    }
+    render(<H />)
+    return Number(screen.getByPlaceholderText('Detailed description of the incident...').getAttribute('rows'))
+  }
+
+  it('shows every line of the longest prompt set plus a writing line', () => {
+    const longest = COMMON_INCIDENTS.reduce((a, b) => (promptsText(b).split('\n').length > promptsText(a).split('\n').length ? b : a))
+    expect(rowsFor(promptsText(longest))).toBeGreaterThanOrEqual(promptsText(longest).split('\n').length + 1)
+  })
+
+  it('stays at 4 rows with no pick', () => {
+    expect(rowsFor(undefined)).toBe(4)
   })
 })

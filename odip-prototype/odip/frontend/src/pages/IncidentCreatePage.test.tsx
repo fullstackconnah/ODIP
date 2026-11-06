@@ -10,6 +10,7 @@ import {
   suggestedIncidentTypeForShiftNote,
 } from '@/lib/incidentPrefill'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
+import { COMMON_INCIDENTS, promptsText } from './incidents/commonIncidents'
 
 const {
   mockCreateMutateAsync, mockUseRestrictivePractices, mockApiPost,
@@ -1690,5 +1691,118 @@ describe('IncidentCreatePage — incident form: type, severity and emergency ser
       severity: 'Medium', wereEmergencyServicesCalled: true, emergencyServices: 'Police', policeOfficerName: 'Sgt Jane Doe', policeReference: '2611-0042',
     })
     expect(mockCreateMutateAsync.mock.calls[0][0].fireOfficerName).toBeUndefined()
+  })
+})
+
+describe('IncidentCreatePage — common incident picker', () => {
+  const pick = (user: ReturnType<typeof userEvent.setup>, name: RegExp) => openAndSelect(user, 'Common incident', name)
+  const fallText = promptsText(COMMON_INCIDENTS.find((e) => e.key === 'fall')!)
+  const typeTrigger = () => screen.getByLabelText('Incident Type *').textContent
+  const marState: MarIncidentPrefillState = {
+    source: 'mar-administration', outcome: 'WrongMedication', participantId: 'participant-1', participantName: 'Sophie Brown',
+    medicationName: 'Insulin', strength: '18 units', doseDescription: null, scheduledAt: '2026-08-01T00:30:00Z',
+    administeredAt: '2026-08-01T01:00:00Z', administeredAtTimeZone: 'Australia/Brisbane', recordedByName: 'Alex Rivera',
+    recordedByUserId: 'staff-1', reason: 'Grabbed the wrong blister pack', notes: 'Gave Paracetamol 500mg instead',
+    tripInstanceId: null, medicationAdministrationId: 'admin-1',
+  }
+
+  it('shows Common incident first, focused, with nothing chosen', () => {
+    renderCreatePage()
+    const picker = screen.getByLabelText('Common incident')
+    expect(picker.compareDocumentPosition(screen.getByPlaceholderText('Brief incident summary')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(picker.compareDocumentPosition(screen.getByLabelText(/Service Type/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(picker).toHaveTextContent('Choose one to fill in the form faster')
+    expect(picker).toHaveFocus()
+    expect(screen.getByText('Optional. Fills in the title, type and description prompts. You still choose the severity.')).toBeInTheDocument()
+  })
+
+  it('picking Fell and was hurt fills title and type, leaves severity, says what it filled', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pick(user, /Fell and was hurt/)
+    expect(screen.getByPlaceholderText('Brief incident summary')).toHaveValue('Fell and was hurt')
+    expect(typeTrigger()).toBe('Injury')
+    expect(screen.getAllByRole('radio').some((r) => r.getAttribute('aria-checked') === 'true')).toBe(false)
+    expect(screen.getByRole('status')).toHaveTextContent('Filled in the title, type and description prompts.')
+  })
+
+  it('puts the prompts in Description with a hint, and Next blocks until something is written under them', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pick(user, /Fell and was hurt/)
+    await pickTypeAndSeverity(user)
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)
+
+    const description = screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement
+    expect(description.value).toBe(fallText)
+    expect(screen.getByText("Write under each prompt. Delete any that don't fit.")).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await addMinimalInjury(user)
+    await clickNext(user)
+    expect(await screen.findByText('Write what happened under the prompts.')).toBeInTheDocument()
+
+    await user.type(description, 'Slipped on the kitchen floor')
+    await clickNext(user)
+    expect(screen.queryByPlaceholderText('Detailed description of the incident...')).not.toBeInTheDocument()
+  })
+
+  it('a typed title survives a pick', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'My own title')
+    await pick(user, /Fell and was hurt/)
+    expect(screen.getByPlaceholderText('Brief incident summary')).toHaveValue('My own title')
+    expect(screen.getByRole('status')).toHaveTextContent('Filled in the type and description prompts. Kept what was already there.')
+  })
+
+  it('a MAR prefill keeps its title, type and description when a common incident is picked', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: marState })
+    const title = (screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value
+    await pick(user, /Had a seizure/)
+    expect(screen.getByPlaceholderText('Brief incident summary')).toHaveValue(title)
+    expect(typeTrigger()).toBe(INCIDENT_TYPE_LABELS.MedicationError)
+    expect(screen.getByRole('status')).toHaveTextContent('Nothing changed. Kept what was already there.')
+    await clickNext(user)
+    expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value).toContain('Sophie Brown')
+  })
+
+  it('picking Restrictive practice used adds the Restrictive practice step', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    expect(screen.queryByText('Restrictive practice')).not.toBeInTheDocument()
+    await pick(user, /Restrictive practice used/)
+    expect(screen.getAllByText('Restrictive practice').length).toBeGreaterThan(0)
+  })
+
+  it('still shows the chosen common incident after Next then Back', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pick(user, /Fell and was hurt/)
+    await pickTypeAndSeverity(user)
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)
+    await clickBack(user)
+    expect(screen.getByLabelText('Common incident')).toHaveTextContent('Fell and was hurt')
+  })
+
+  it('never sends the prompts record in the submitted body', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pick(user, /Became unwell/)
+    await pickTypeAndSeverity(user)
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Looked pale and tired')
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user)
+    await clickNext(user)
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    const body = mockCreateMutateAsync.mock.calls[0][0]
+    expect(body).toMatchObject({ title: 'Became unwell', incidentType: 'Illness' })
+    expect(body.description).toContain('Looked pale and tired')
+    expect(body).not.toHaveProperty('pickedPrompts')
   })
 })
