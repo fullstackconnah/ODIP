@@ -33,6 +33,7 @@ async function run({ name, width, height, touch, scheme, unsent, drawer, title }
   const page = await context.newPage()
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
+  page.on('pageerror', (e) => check(`${name}: page error`, false, e.message))
   let logout = 0
   await page.route('**/api/v1/auth/logout', (r) => { logout++; r.fulfill({ json: envelope(null) }) })
   try {
@@ -43,7 +44,7 @@ async function run({ name, width, height, touch, scheme, unsent, drawer, title }
       await page.locator('aside').getByRole('button', { name: /Sign out$/ }).first().waitFor({ timeout: 60_000 })
       const uid = await page.evaluate(() => JSON.parse(localStorage.getItem('odip_user') ?? '{}').id)
       await page.evaluate(([k, v]) => localStorage.setItem(k, v), [`odip_offline:${uid}:queue`, JSON.stringify([queued('q1'), queued('q2')])])
-      await page.route('**/portal/**', (r) => r.abort()) // the queue sends on load; a refused send keeps the records waiting
+      await page.route('**/api/v1/portal/**', (r) => r.abort()) // the queue sends on load; a refused send keeps the records waiting
       await page.reload({ waitUntil: 'domcontentloaded' })
     }
     await page.waitForLoadState('networkidle')

@@ -325,7 +325,7 @@ export default function QualificationsPage() {
                   {
                     key: 'expiryDate',
                     header: 'Expiry Date',
-                    width: '11rem', // fits the date editor, so opening it does not reflow Expiry and Status
+                    width: '13rem', // fits the date editor, so opening it does not reflow the columns
                     type: 'date',
                     editable: {
                       render: (r, onChange) => (
@@ -359,6 +359,7 @@ export default function QualificationsPage() {
                     key: 'actions',
                     header: '',
                     align: 'right' as const,
+                    width: '12rem', // fits Save and Cancel, so the editor opening does not squeeze the other columns
                     render: (r) => {
                       const isEditing = editingKey === r.key
                       const isSaving = savingKey === r.key || (isEditing && rereading) // one editor is open at a time, so rereading belongs to it
