@@ -26,6 +26,7 @@ public class AddressLookupController(IConfiguration config, GooglePlacesClient g
     private static readonly Regex PlaceIdFormat = new(@"^[A-Za-z0-9_-]{1,300}\z", RegexOptions.Compiled);
 
     [HttpPost("suggest")]
+    [RequestSizeLimit(4096)]
     public async Task<IActionResult> Suggest([FromBody] AddressSuggestRequest? body, CancellationToken ct)
     {
         if (Key() is not { } key) return NotFound();

@@ -150,11 +150,13 @@ export function AddressField({
     session.current = null   // the details call ends Google's billing session; the next typing starts a new one
     close()
     setRows(null)
+    const at = latest.current
     let parts: AddressParts | null = null
     try {
       const d = await apiGet<Details>('/address/details', { placeId: row.placeId, session: token })
       parts = { street: d.street, suburb: d.suburb, state: d.state, postcode: d.postcode, formatted: d.formattedAddress }
     } catch { /* silent: the prediction's own text goes in below */ }
+    if (latest.current !== at) return   // the person kept typing while details loaded
     const street = (parts ? parts.street : row.mainText).slice(0, maxLength ?? Infinity)
     latest.current = street
     onChangeRef.current(street)

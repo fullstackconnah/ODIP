@@ -58,6 +58,8 @@ services:
       - Microsoft__ClientId=${MICROSOFT_CLIENT_ID:-}
       - Microsoft__ClientSecret=${MICROSOFT_CLIENT_SECRET:-}
       - Microsoft__PublicBaseUrl=${MICROSOFT_PUBLIC_BASE_URL:-}
+      # Address lookup (Google Places). Empty = address lookup off.
+      - GooglePlaces__ApiKey=${GOOGLE_PLACES_API_KEY:-}
       # Problem reports (Report a problem) go to the Work Board. BaseUrl is the board's LAN address, not 127.0.0.1 (that is this container). Empty = reports stay saved.
       - WorkBoard__BaseUrl=${WORKBOARD_BASE_URL:-}
       - WorkBoard__Token=${WORKBOARD_TOKEN:-}

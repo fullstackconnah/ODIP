@@ -195,6 +195,21 @@ describe('AddressField', () => {
     expect(input()).toHaveValue('12 Examp')
   })
 
+  it('typing while details load is not overwritten, and nothing is handed over', async () => {
+    let resolveDetails: (v: unknown) => void = () => {}
+    apiGet.mockImplementationOnce(() => new Promise((r) => { resolveDetails = r }))
+    const onPick = vi.fn()
+    render(<Harness onPick={onPick} />)
+    input().focus()
+    type('12 Example')
+    await settle()
+    fireEvent.click(screen.getAllByRole('option')[0])
+    type('12 Example Street, Unit 4')
+    await act(async () => { resolveDetails(details) })
+    expect(input()).toHaveValue('12 Example Street, Unit 4')
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
   it('a failed details call puts the prediction text in and fills nothing else, silently', async () => {
     apiGet.mockRejectedValue(new Error('502'))
     const onPick = vi.fn()

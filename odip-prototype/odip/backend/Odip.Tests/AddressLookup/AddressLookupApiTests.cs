@@ -237,5 +237,14 @@ public class AddressLookupApiTests
         Assert.Equal(HttpStatusCode.TooManyRequests, (await host.SuggestAsync(Body("12 Example"))).StatusCode);
     }
 
+    [Fact]
+    public async Task ASuggestBodyOver4096Bytes_Is413_AndANormalBodyIs200()
+    {
+        await using var host = await AddressLookupHost.StartAsync(FakeGoogle());
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await host.SuggestAsync(Body(new string('a', 5000)))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await host.SuggestAsync(Body("12 Example"))).StatusCode);
+    }
+
     private static JsonElement Data(string json) => JsonDocument.Parse(json).RootElement.GetProperty("data");
 }
