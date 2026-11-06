@@ -13,7 +13,7 @@ import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 import { queryPhase } from '@/lib/queryPhase'
 import { MedicationBadges, ComplianceFlagChips } from '../medications'
-import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
+import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS, AMENDMENT_REASON_LABELS } from '@/api/types/medications'
 import type { MedicationListDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import { plural } from '@/lib/format'
@@ -176,6 +176,17 @@ export default function MedicationsTab({ participantId }: { participantId: strin
                     {formatWithTimeZone(a.administeredAt, a.administeredAtTimeZone, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     {a.recordedByName ? ` · ${a.recordedByName}` : ''}
                   </p>
+                  {a.amendmentReason && (
+                    <>
+                      <p className="text-xs text-[var(--color-muted-foreground)]">
+                        Amended: {AMENDMENT_REASON_LABELS[a.amendmentReason]}
+                        {a.amendedByName ? ` by ${a.amendedByName}` : ''}
+                        {/* An instant, shown in the viewer's zone like a record with no zone of its own. */}
+                        {a.amendedAt ? `, ${formatWithTimeZone(a.amendedAt, null, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </p>
+                      {a.amendmentNote && <p className="text-xs text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{a.amendmentNote}</p>}
+                    </>
+                  )}
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
                   <StatusBadge status={a.status} />
