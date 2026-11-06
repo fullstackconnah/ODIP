@@ -18,6 +18,8 @@ export type AddressFieldProps = {
   onPick: (parts: AddressParts) => void
   maxLength?: number
   placeholder?: string
+  /** A read-only field stays a read-only input (no typing, so no lookup). */
+  readOnly?: boolean
   onBlur?: () => void
   'aria-labelledby'?: string
   'aria-required'?: 'true'
@@ -44,7 +46,7 @@ const statusOf = (err: unknown) => (err as { response?: { status?: number } })?.
  * The list never opens on focus alone, so tabbing through a filled form stays quiet; Down opens it once there are suggestions.
  */
 export function AddressField({
-  id, value, onChange, onPick, maxLength, placeholder, onBlur,
+  id, value, onChange, onPick, maxLength, placeholder, readOnly, onBlur,
   'aria-labelledby': ariaLabelledBy, 'aria-required': ariaRequired, 'aria-describedby': ariaDescribedBy, 'aria-invalid': ariaInvalid,
 }: AddressFieldProps) {
   const listboxId = useId()
@@ -236,6 +238,7 @@ export function AddressField({
         value={value}
         maxLength={maxLength}
         placeholder={placeholder}
+        readOnly={readOnly}
         autoComplete="off"
         role={combo ? 'combobox' : undefined}
         aria-autocomplete={combo ? 'list' : undefined}

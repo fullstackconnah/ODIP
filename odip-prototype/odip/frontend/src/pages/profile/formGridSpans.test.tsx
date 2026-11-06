@@ -114,7 +114,7 @@ type StepName = 'keyIdentifiers' | 'behaviourCognition' | 'culturalDepth' | 'med
 
 /** Renders one Profile step against a real react-hook-form instance, the way ProfileWizardPage does. */
 function StepHarness({ step, editable = false }: { step: StepName; editable?: boolean }) {
-  const { control, register, formState: { errors } } = useForm<ParticipantFormData>({
+  const { control, register, setValue, formState: { errors } } = useForm<ParticipantFormData>({
     defaultValues: { consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [] },
   })
   const consents = useFieldArray({ control, name: 'consents' })
@@ -126,7 +126,7 @@ function StepHarness({ step, editable = false }: { step: StepName; editable?: bo
   const participant = { firstName: 'Alexandra', lastName: 'Citizen-Smith', overnightSupport: 'Sleepover', overnightRatio: '1:1', supportRatio: '1:2' } as unknown as ParticipantDetailDto
   switch (step) {
     case 'keyIdentifiers':
-      return <MemoryRouter><KeyIdentifiersStep control={control} register={register} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable={editable} /></MemoryRouter>
+      return <MemoryRouter><KeyIdentifiersStep control={control} register={register} setValue={setValue} errors={errors} participant={participant} activeStaff={[]} sharedFieldsEditable={editable} /></MemoryRouter>
     case 'behaviourCognition':
       return <BehaviourCognitionStep control={control} register={register} participant={participant} sharedFieldsEditable={editable} />
     case 'culturalDepth':

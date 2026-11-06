@@ -490,11 +490,12 @@ describe('ProfileWizardPage — DIAG-02 epilepsy derivation (re-homed from the r
 // (CAREGIVER_INTERNAL_FIELDS: preferredStaffId, behaviourRiskRating).
 describe('KeyIdentifiersStep / BehaviourCognitionStep — hiddenFields prop', () => {
   function KeyIdentifiersHarness({ hiddenFields }: { hiddenFields?: ReadonlySet<string> }) {
-    const { control, register, formState: { errors } } = useForm<ParticipantFormData>()
+    const { control, register, setValue, formState: { errors } } = useForm<ParticipantFormData>()
     return (
       <KeyIdentifiersStep
         control={control}
         register={register}
+        setValue={setValue}
         errors={errors}
         participant={makeParticipant()}
         activeStaff={[{ id: 'staff-1', fullName: 'Alex Rivera' }]}
