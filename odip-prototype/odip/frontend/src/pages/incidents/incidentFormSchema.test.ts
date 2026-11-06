@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { incidentSchema, restrictivePracticeSchema } from './incidentFormSchema'
+import { incidentSchema, restrictivePracticeSchema, detailsSchema } from './incidentFormSchema'
 import { buildRpIncidentDescriptionSkeleton } from '@/lib/incidentPrefill'
 
 const skeleton = buildRpIncidentDescriptionSkeleton({ description: 'Two-person hold during transfers.', reviewDate: null })
@@ -121,5 +121,27 @@ describe('reportable class reason (edit)', () => {
 
   it('still asks for a reason once the flag leaves the default at None', () => {
     expect(reasonIssues({ ...injury, isRestrictivePracticeAuthorised: true, reportableClass: 'Within24h' })).toHaveLength(1)
+  })
+})
+
+// A common incident's prompts are a starting point: untouched, they say nothing about what happened.
+describe('incident description left as the picked prompts', () => {
+  const prompts = 'How it happened:\n\nWho you told:\n'
+  const base = {
+    title: 'Cut', reportedByStaffId: 'staff-1', incidentType: 'Illness', severity: 'Medium',
+    incidentDateTime: '2026-10-13T10:00', injuries: [], witnesses: [], pickedPrompts: prompts,
+  }
+  const message = 'Write what happened under the prompts.'
+
+  it('detailsSchema refuses a description that is still the picked prompts, even padded', () => {
+    expect(descriptionErrors(detailsSchema.safeParse({ ...base, description: `  ${prompts}\n` }))).toEqual([message])
+  })
+
+  it('detailsSchema accepts the prompts once text is added under one', () => {
+    expect(descriptionErrors(detailsSchema.safeParse({ ...base, description: `${prompts}\nCaught it on a door.` }))).toEqual([])
+  })
+
+  it('incidentSchema (final submit) refuses untouched picked prompts too', () => {
+    expect(descriptionErrors(incidentSchema.safeParse({ ...base, description: prompts }))).toEqual([message])
   })
 })
