@@ -12,6 +12,7 @@ internal static class OlderSchemaSeeds
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
         ("AppSettings", "HiddenTrips", "boolean NOT NULL DEFAULT FALSE"),
+        ("ProviderSettings", "OnboardingItemModes", "jsonb"),
         ("AppSettings", "AutoRosterReach", "integer NOT NULL DEFAULT 3"),
         ("IncidentReports", "AmbulanceOfficerName", "character varying(100)"),
         ("MedicationAdministrations", "AmendmentReason", "integer"),
