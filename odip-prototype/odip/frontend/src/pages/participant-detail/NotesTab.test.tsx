@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import NotesTab from './NotesTab'
 import type { ParticipantNoteDto } from '@/api/types/notes'
 
@@ -61,7 +62,7 @@ afterEach(() => {
 
 describe('NotesTab', () => {
   it('renders an empty state when there are no notes', () => {
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getByText('No notes yet')).toBeInTheDocument()
   })
 
@@ -76,7 +77,7 @@ describe('NotesTab', () => {
       isLoading: false,
     })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     // The tag renders as a sibling of the title within the same title-row wrapper.
     const manualTitleRow = screen.getByText('Manual note').closest('div')!
@@ -91,7 +92,7 @@ describe('NotesTab', () => {
       isLoading: false,
     })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByText(/source data has changed/i)).not.toBeInTheDocument()
   })
@@ -105,7 +106,7 @@ describe('NotesTab', () => {
       isLoading: false,
     })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText(/source data has changed since this note was edited/i)).toBeInTheDocument()
 
@@ -122,7 +123,7 @@ describe('NotesTab', () => {
       isLoading: false,
     })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     const hint = screen.getByText(/source data has changed since this note was edited/i).closest('[class*="warning-container"]') as HTMLElement
     expect(hint).not.toBeNull()
@@ -142,7 +143,7 @@ describe('NotesTab', () => {
       isLoading: false,
     })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText(/source data has changed/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
@@ -161,7 +162,7 @@ describe('NotesTab', () => {
       isLoading: false,
     })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(screen.getByLabelText(/title/i)).toHaveValue('Allergies (auto)')
@@ -184,7 +185,7 @@ describe('NotesTab', () => {
     const user = userEvent.setup()
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Archive' }))
     const dialog = screen.getByRole('alertdialog')
@@ -200,7 +201,7 @@ describe('NotesTab', () => {
     const user = userEvent.setup()
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote({ isArchived: true })], isLoading: false })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     // Archived notes are collapsed behind the "Archived" toggle.
     await user.click(screen.getByRole('button', { name: /archived/i }))
@@ -214,7 +215,7 @@ describe('NotesTab', () => {
 
   it('creates a new note with the entered title, description and pin flag', async () => {
     const user = userEvent.setup()
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     // The header button and the empty-state action both read "New note" — the header one is first.
     await user.click(screen.getAllByRole('button', { name: /new note/i })[0])
@@ -233,7 +234,7 @@ describe('NotesTab', () => {
     const user = userEvent.setup()
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Archive' }))
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
@@ -250,7 +251,7 @@ describe('NotesTab', () => {
     setUserRole('ReadOnly')
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
 
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
@@ -275,7 +276,7 @@ describe('NotesTab — how long ago', () => {
       ],
       isLoading: false,
     })
-    render(<NotesTab participantId="participant-1" />)
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText(/Sam Coordinator · 2 days ago/)).toBeInTheDocument()
     expect(screen.getByText(/Sam Coordinator · 2 hrs ago/)).toBeInTheDocument()
@@ -291,11 +292,44 @@ describe('NotesTab — long list (T10)', () => {
       data: Array.from({ length: 23 }, (_, i) => makeNote({ id: `n${i}`, title: `Note ${i}` })),
       isLoading: false,
     })
-    const { container } = render(<NotesTab participantId="participant-1" />)
+    const { container } = render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
     await user.click(screen.getByRole('button', { name: 'Show all 23' }))
     const rows = container.querySelectorAll('[data-show-row]')
     expect(rows).toHaveLength(23)
     expect(rows[5]).toHaveFocus()
+  })
+})
+
+function Where() {
+  const { pathname, search } = useLocation()
+  return <p data-testid="where">{pathname + search}</p>
+}
+
+describe('Quick add from the Overview (?add=1)', () => {
+  const url = '/p?tab=records&section=notes&add=1'
+  const renderAt = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><NotesTab participantId="participant-1" /><Where /></MemoryRouter>)
+
+  it('opens the add once, removes the param with replace, and returns focus to the section Add button on close', async () => {
+    const user = userEvent.setup()
+    renderAt(url)
+    expect(await screen.findByRole('dialog', { name: /New note/i })).toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('/p?tab=records&section=notes')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /New note/i })[0]).toHaveFocus()
+  })
+
+  it('does not reopen after the param is gone (refresh, Back)', async () => {
+    renderAt('/p?tab=records&section=notes')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('a role without the write gate opens nothing and still drops the param', async () => {
+    setUserRole('ReadOnly')
+    renderAt(url)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })

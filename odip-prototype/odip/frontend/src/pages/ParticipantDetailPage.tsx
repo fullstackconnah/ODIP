@@ -48,6 +48,7 @@ import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFl
 import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
 import { TodayRoutinesCard } from './participant-detail/TodayRoutinesCard'
 import BudgetTrackCard from './participant-detail/BudgetTrackCard'
+import QuickAddBand from './participant-detail/QuickAddBand'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
 import { SectionLine } from './participant-detail/SectionLine'
 import { ProfileMapCard } from './participant-detail/ProfileMapCard'
@@ -120,6 +121,7 @@ export default function ParticipantDetailPage() {
   )
   const [tab] = useTabParam(tabKeys, 'overview')
   const goTo = useParticipantGoTo(tabKeys)
+  const navigate = useNavigate()
   useParticipantTabRedirect(tabKeys)
   const counts = useParticipantTabCounts(id)
   const pageQuery = useParticipant(id)
@@ -482,13 +484,15 @@ export default function ParticipantDetailPage() {
               <ParticipantAlertsBanner severity="other" alerts={alertsData.alerts} onSelectTab={goTo} />
             </section>
           )}
+          <QuickAddBand participantId={id!} onGo={to => guarded(() => navigate(to))} />
+          {/* The budget chart is the one wide card, for the roles the series endpoint admits (SuperAdmin, Admin, Coordinator): anyone else would only meet its 403. */}
+          {canManageFunding && <BudgetTrackCard participantId={id!} overview />}
           <div className="grid items-start gap-[var(--section-gap)] lg:grid-cols-2">
             <div className="flex flex-col gap-[var(--section-gap)]">
               <BeforeYouStartCard participant={p} />
               <TodayRoutinesCard participantId={id!} />
             </div>
             <div className="flex flex-col gap-[var(--section-gap)]">
-              <BudgetTrackCard participantId={id!} />
               <ProfileMapCard lines={profileLines} />
               {topic('Support profile review', 'reviewDate')}
             </div>

@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useApplyPlanDatesToProfile, useFundingLedger, useFundingPlans } from '@/api/hooks'
+import { useQuickAdd } from '@/hooks/useQuickAdd'
+import { usePermissions } from '@/lib/permissions'
 import type { FundingPlanDto } from '@/api/types'
 import type { PlanType } from '@/api/types/enums'
 import { Button } from '@/components/Button'
@@ -51,11 +53,15 @@ export default function FundingTab({ participantId, planType, otherFunded }: { p
   const today = ledgerQuery.data?.asOf ?? browserToday
 
   const data = plansQuery.data
+  const plans = data?.plans ?? []
+  const current = currentPlanOf(plans, today)
+  // Overview's Quick add: `?add=1` opens the editor once the plans have answered, and only when there is no budget to build on (with one, "Record a new plan" stays a deliberate act).
+  const { canManageFunding } = usePermissions()
+  const recordRef = useRef<HTMLButtonElement>(null)
+  useQuickAdd(() => { if (!current) setEditing({}) }, { enabled: canManageFunding, ready: plansQuery.isSuccess, focusRef: recordRef })
   if (plansQuery.isLoading && !retryingAfterError(plansQuery)) return <PageState kind="loading" noun="budget" />
   if (!data) return <PageState kind="error" noun="budget" onRetry={() => plansQuery.refetch()} />
 
-  const plans = data.plans ?? []
-  const current = currentPlanOf(plans, today)
   const others = plans.filter(plan => plan.id !== current?.id)
   const past = others.filter(plan => planStatus(plan, today) === 'Ended')
   const upcoming = others.filter(plan => planStatus(plan, today) === 'Upcoming')
@@ -82,7 +88,7 @@ export default function FundingTab({ participantId, planType, otherFunded }: { p
           <p className="text-sm text-[var(--color-muted-foreground)]">
             The figures come from the plan the participant shares, or their plan manager. The NDIA does not show providers a participant's budget.
           </p>
-          <Button onClick={() => setEditing({})}>Record plan budget</Button>
+          <Button ref={recordRef} onClick={() => setEditing({})}>Record plan budget</Button>
         </div>
         {editor}
       </Card>
