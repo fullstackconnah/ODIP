@@ -399,7 +399,7 @@ export default function CompletionReviewPage() {
     { key: 'serviceDate', header: 'Date', render: row => formatDateAu(row.serviceDate) },
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
-      key: 'variance', header: 'Variance', render: row => (
+      key: 'variance', header: 'Variance', className: 'md:min-w-[16rem]', render: row => (
         <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
           {row.missingDetails.length > 0 && (
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Needs details</span>
@@ -423,7 +423,7 @@ export default function CompletionReviewPage() {
           )}
           <IncidentIndicator shiftId={row.shiftId} />
           {row.missingDetails.length > 0 && (
-            <p id={`missing-${row.shiftId}`} className="w-full text-xs text-[var(--color-muted-foreground)]">
+            <p id={`missing-${row.shiftId}`} className="w-full min-w-0 whitespace-normal break-words text-xs text-[var(--color-muted-foreground)]">
               Waiting on {firstName(row.staffName)} to add: {joinList(row.missingDetails.map(k => detailLabel(k, firstName(row.participantName))))}.
             </p>
           )}

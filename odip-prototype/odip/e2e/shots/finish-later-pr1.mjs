@@ -68,6 +68,15 @@ async function run(width, height, touch) {
 
   const over = await held.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }))
   check(`row does not overflow sideways (${bp})`, JSON.stringify(over), over.sw <= over.cw + 1)
+  // The line is the text Approve points at: it must wrap inside its cell and read in full, and the table must not scroll sideways at 1280.
+  const line = await page.locator(`[id="${describedBy}"]`).evaluate((p) => {
+    const cell = p.closest('td, [role="cell"]') ?? p.parentElement
+    let sc = p.parentElement
+    while (sc && !/(auto|scroll)/.test(getComputedStyle(sc).overflowX)) sc = sc.parentElement
+    return { sw: p.scrollWidth, cw: p.clientWidth, right: p.getBoundingClientRect().right, cellRight: cell.getBoundingClientRect().right, scSw: sc?.scrollWidth ?? 0, scCw: sc?.clientWidth ?? 0 }
+  })
+  check(`missing line wraps inside its cell and reads in full (${bp})`, JSON.stringify(line), line.sw <= line.cw + 1 && line.right <= line.cellRight + 1)
+  if (!touch) check(`table scroll container does not scroll sideways (${bp})`, JSON.stringify(line), line.scCw > 0 && line.scSw <= line.scCw + 1)
   const ret = await held.getByRole('button', { name: /^Return/ }).boundingBox()
   const tapMin = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap-min')) || 0)
   // A size=sm Button is --control-h-sm tall (36 on coarse) and carries the --tap-min hit area (TAP_AREA), so its box is measured against the control token.
@@ -76,7 +85,8 @@ async function run(width, height, touch) {
 
   await cropElement(page, held, path.join(OUT_DIR, `needs-details-row-${bp}.png`), { touch })
   await cropElement(page, clean, path.join(OUT_DIR, `clean-row-${bp}.png`), { touch })
-  await approve.focus().catch(() => {})
+  await page.keyboard.press('Shift')   // keyboard modality, so :focus-visible paints the ring
+  await held.getByRole('button', { name: /^Return/ }).focus()   // a disabled Approve takes no focus, so the ring is on Return
   await cropElement(page, held, path.join(OUT_DIR, `approve-disabled-focus-${bp}.png`), { touch })
 
   await page.getByLabel('Select row s-held').check()
