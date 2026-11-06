@@ -166,8 +166,9 @@ export default function CompatibilityPage() {
     setRemoving(null)
   }
 
+  // By participant fits the screen from lg (the roster board's pattern, AppLayout's has-[[data-fit-screen]]): the grid takes the height left and each column scrolls inside itself. The Table view keeps the window scroll.  lg:relative on the board panel keeps the board's absolutely placed sr-only text inside the scroller, so it can't stretch the window.
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div {...(!noPeopleYet && !showTable ? { 'data-fit-screen': true } : {})} className="flex flex-col gap-[var(--section-gap)] animate-fade-in lg:min-h-0 lg:flex-1">
       <PageHeader
         title="Compatibility"
         subtitle="Pairings that differ from the default. A worker marked No can’t be rostered for that participant."
@@ -205,14 +206,14 @@ export default function CompatibilityPage() {
       )}
 
       {!noPeopleYet && !showTable && (
-        <div className="md:grid md:grid-cols-[15.5rem_minmax(0,1fr)] md:items-start md:gap-6">
+        <div className="md:grid md:grid-cols-[15.5rem_minmax(0,1fr)] md:items-start md:gap-6 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
           {/* Below md the list and the board are two steps: the list until a participant is chosen, then the board. */}
-          <nav aria-label="Participants" className={cn('space-y-2 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto', chosen && 'max-md:hidden')}>
+          <nav aria-label="Participants" className={cn('space-y-2 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto lg:static lg:flex lg:min-h-0 lg:max-h-none lg:flex-col lg:overflow-visible', chosen && 'max-md:hidden')}>
             <SearchInput value={query} onChange={setQuery} placeholder="Search participants" className="w-full" />
             {listed.length === 0 ? (
               <p className="text-sm text-muted-foreground">No participants match “{query.trim()}”.</p>
             ) : (
-              <ul>
+              <ul className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-0.5">
                 {listed.map(p => (
                   <li key={p.id}>
                     <Link
@@ -232,7 +233,7 @@ export default function CompatibilityPage() {
             )}
           </nav>
           {current && (
-            <div className={cn('min-w-0 space-y-4', !chosen && 'max-md:hidden')}>
+            <div className={cn('min-w-0 space-y-4 lg:relative lg:min-h-0 lg:overflow-y-auto lg:p-0.5', !chosen && 'max-md:hidden')}>
               <BackButton variant="link" label="participants" onBack={() => setParam('participant', null)} className="md:hidden" />
               <h2 className="text-lg font-semibold">{current.fullName}</h2>
               <TierBoard

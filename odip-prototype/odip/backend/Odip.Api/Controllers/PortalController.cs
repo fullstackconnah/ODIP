@@ -400,7 +400,7 @@ public class PortalController : ControllerBase
             ? await _db.ServiceLocations.AsNoTracking().FirstOrDefaultAsync(l => l.Id == placeId && l.TenantId == shift.TenantId, ct)
             : null;
         var check = LocationCheck.Evaluate(place, dto.Latitude, dto.Longitude, dto.AccuracyMetres, dto.GeolocationDeclined, queued: dto.StartedAt is not null);
-        var typedReason = check.Status is LocationCheckStatus.Unavailable or LocationCheckStatus.NotAtLocation ? LocationCheck.CleanReason(dto.LocationReason) : null;
+        var typedReason = check.Status is (LocationCheckStatus.Unavailable or LocationCheckStatus.NotAtLocation) ? LocationCheck.CleanReason(dto.LocationReason) : null;
 
         var completion = new ShiftCompletion
         {
@@ -413,7 +413,9 @@ public class PortalController : ControllerBase
             LocationCheck = check.Status,
             LocationDistanceMetres = check.DistanceMetres,
             LocationAccuracyMetres = check.AccuracyMetres,
-            LocationReason = typedReason ?? check.DefaultReason,
+            LocationReason = dto.StartedAt is not null   // a queued Start keeps both facts in the one column
+                ? LocationCheck.CleanReason(typedReason is null ? LocationCheck.StartedOfflineReason : $"{LocationCheck.StartedOfflineReason}: {typedReason}")
+                : typedReason ?? check.DefaultReason,
             LocationCheckedAt = startStamp,
             StartTimeReason = ShiftTimeRules.CleanReason(dto.StartTimeReason),
             StartWasManual = false,
@@ -459,7 +461,8 @@ public class PortalController : ControllerBase
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("This shift isn't in progress.", ShiftErrorCodes.ShiftNotInProgress));
 
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
-        if (completion is null || completion.LocationCheck is not (LocationCheckStatus.NotAtLocation or LocationCheckStatus.Unavailable))
+        if (completion is null || completion.LocationCheck is not (LocationCheckStatus.NotAtLocation or LocationCheckStatus.Unavailable)
+            || completion.SentFromOffline)   // a queued Start's reason is not the worker's to replace or clear
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("There's nothing to explain for this start.", ShiftErrorCodes.ShiftLocationReasonNotNeeded));
 
         completion.LocationReason = LocationCheck.CleanReason(dto.Reason);
@@ -1433,7 +1436,11 @@ public class PortalController : ControllerBase
             // An editor saved the incident since it was read (UpdatedAt is its concurrency token). The answer stands whatever they changed: take the stored version and stamp again.
             foreach (var entry in e.Entries.Where(x => x.Entity is IncidentReport)) await entry.ReloadAsync(ct);
             witness.IncidentReport.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync(ct);
+            try { await _db.SaveChangesAsync(ct); }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(ApiResponse<PortalWitnessRequestDto>.Fail("This incident changed while you were answering. Please send your answer again."));
+            }
         }
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToIncidentWitnessRequestDto(witness)));

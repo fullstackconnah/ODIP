@@ -20,13 +20,30 @@ function setup({ scrollY, overflows = true }: { scrollY: number; overflows?: boo
 
 describe('useWindowFirstScrollUp', () => {
   beforeEach(() => { document.body.innerHTML = '' })
-  afterEach(() => { vi.restoreAllMocks(); Object.defineProperty(window, 'scrollY', { value: 0, configurable: true }) })
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Object.defineProperty(window, 'scrollY', { value: 0, configurable: true }) })
 
   it('wheeling up with the page scrolled moves the window, not the board', () => {
     const { wheel, scrollBy } = setup({ scrollY: 80 })
     const e = wheel({ deltaY: -120 })
     expect(scrollBy).toHaveBeenCalledWith({ top: -120, behavior: 'instant' })
     expect(e.defaultPrevented).toBe(true)
+  })
+
+  it('animates a wheel notch while motion is allowed, so the footer scrolls away instead of snapping', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    const { wheel, scrollBy } = setup({ scrollY: 80 })
+    expect(wheel({ deltaY: -100 }).defaultPrevented).toBe(true)
+    expect(scrollBy).toHaveBeenCalledWith({ top: -100, behavior: 'smooth' })
+  })
+
+  it('tracks a small trackpad delta 1:1 and jumps under reduced motion', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    const { wheel, scrollBy } = setup({ scrollY: 80 })
+    wheel({ deltaY: -12 })
+    expect(scrollBy).toHaveBeenLastCalledWith({ top: -12, behavior: 'instant' })
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+    wheel({ deltaY: -100 })
+    expect(scrollBy).toHaveBeenLastCalledWith({ top: -100, behavior: 'instant' })
   })
 
   it('scales a page-mode wheel (deltaMode 2) by the window height', () => {
