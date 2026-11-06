@@ -5,6 +5,9 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { FactList } from '@/components/FactList'
 import { FormField } from '@/components/FormField'
+import { SelectField } from '@/components/SelectField'
+import { TextField } from '@/components/TextField'
+import { KIND_LABEL, KIND_ORDER, isPlainAgreement } from '@/lib/agreementKind'
 import { useStickyOpen } from '@/hooks/useStickyOpen'
 import { formGrid, span } from '@/lib/formGrid'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
@@ -32,7 +35,7 @@ type AgreementStepProps = {
   recorded: { start: string; end: string } | null
   plan: { start: string; end: string }
   /** Problems with the dates, shown once the person has tried to go on. */
-  errors: { start?: string; end?: string }
+  errors: { start?: string; end?: string; kind?: string; name?: string }
   readOnly: boolean
   fundingTab: string
   /** Opens the editor to record the plan over the agreement, for a person who may; without it the button goes to the Funding tab. */
@@ -49,6 +52,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
   if (readOnly) {
     return (
       <FactList items={[
+        ...(details.agreementKind && !isPlainAgreement(details) ? [{ label: 'Type', value: details.agreementName.trim() ? `${details.agreementName.trim()} (${KIND_LABEL[details.agreementKind]})` : KIND_LABEL[details.agreementKind] }] : []),
         { label: 'Agreement', value: details.ongoing ? `${writtenDay(details.agreementStartDate)}, ongoing, repeating every week` : `${writtenSpan(details.agreementStartDate, details.agreementEndDate)}, repeating every week` },
         { label: 'NDIS plan', value: writtenSpan(plan.start, plan.end) },
         { label: 'State', value: details.state },
@@ -71,6 +75,10 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
   return (
     <div className="flex max-w-4xl flex-col gap-[var(--section-gap)]">
       <div className={formGrid}>
+        <SelectField label="Agreement type" required className={span.medium} error={errors.kind} value={details.agreementKind ?? ''} placeholder="Choose a type"
+          options={KIND_ORDER.map(kind => ({ value: kind, label: KIND_LABEL[kind] }))} onChange={event => onEdit({ agreementKind: event.target.value as Details['agreementKind'] })} />
+        <TextField label="Name (optional)" className={span.medium} error={errors.name} value={details.agreementName ?? ''}
+          hint="Shown instead of the type, for example 'Trip to Cairns'. Up to 80 characters." onChange={event => onEdit({ agreementName: withoutControlCharacters(event.target.value) })} />
         <FormField label="Agreement starts" className={startCol} error={errors.start}>
           <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementStartDate} onChange={event => onEdit({ agreementStartDate: event.target.value })} />
         </FormField>

@@ -1,4 +1,4 @@
-import type { AgreementState, PlanPriceZone } from '@/api/types'
+import type { AgreementKind, AgreementState, PlanPriceZone } from '@/api/types'
 
 export const STATES: AgreementState[] = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
 export const ZONES: { value: PlanPriceZone; label: string }[] = [
@@ -14,6 +14,10 @@ export const ZONES: { value: PlanPriceZone; label: string }[] = [
 export const withoutControlCharacters = (text: string) => text.replace(/[\t\r\n]+/g, ' ').replace(/\p{Cc}/gu, '')
 
 export type Details = {
+  /** Empty until chosen on a new agreement; a revision starts from its base's. */
+  agreementKind: AgreementKind | ''
+  /** As typed; the server trims it and a blank is none. */
+  agreementName: string
   state: AgreementState
   zone: PlanPriceZone
   /** The participant's MM level when the agreement's blocks carry it (a new agreement's default, or a saved block's own); stamped only while it agrees with `zone`. */

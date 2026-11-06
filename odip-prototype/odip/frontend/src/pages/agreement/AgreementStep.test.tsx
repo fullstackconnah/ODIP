@@ -94,3 +94,30 @@ describe('AgreementStep: Length presets and Ongoing', () => {
     expect(screen.getByText(/ongoing, repeating every week/)).toBeTruthy()
   })
 })
+
+describe('AgreementStep: type and name', () => {
+  const typed = { ...base, agreementKind: '', agreementName: '' } as unknown as Details
+  const typeBox = () => screen.getByLabelText(/Agreement type/) as HTMLSelectElement
+  const nameBox = () => screen.getByLabelText('Name (optional)') as HTMLInputElement
+
+  it('asks for a type first, in the house order, with Other last', async () => {
+    render(<Harness initial={typed} />)
+    expect(typeBox().value).toBe('')
+    expect([...typeBox().options].map(o => o.text)).toEqual(['Choose a type', 'Everyday support', 'Night support', 'Short-term accommodation', 'Trip', 'Other'])
+    await userEvent.selectOptions(typeBox(), 'Trip')
+    expect(typeBox().value).toBe('Trip')
+  })
+
+  it('keeps what is typed as the name, leaving the length to the server', async () => {
+    render(<Harness initial={typed} />)
+    await userEvent.type(nameBox(), 'Trip to Cairns')
+    expect(nameBox().value).toBe('Trip to Cairns')
+    expect(nameBox()).not.toHaveAttribute('maxlength')
+  })
+
+  it('shows the server\'s refusals under the field they name', () => {
+    render(<AgreementStep details={typed} onEdit={() => {}} recorded={null} plan={{ start: '2026-10-01', end: '2027-09-30' }} errors={{ kind: 'Choose the agreement type.', name: 'Keep the agreement name to 80 characters.' }} readOnly={false} fundingTab="" />)
+    expect(screen.getByText('Choose the agreement type.')).toBeInTheDocument()
+    expect(screen.getByText('Keep the agreement name to 80 characters.')).toBeInTheDocument()
+  })
+})
