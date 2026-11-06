@@ -138,7 +138,7 @@ export default function ServiceLocationsSection() {
     { key: 'zone', header: 'Time zone', className: `${CELL} ${HALF}`, render: (p: ServiceLocationDto) => p.timeZoneId ? zoneLabel(p.timeZoneId) : 'Same as your organisation' },
     { key: 'radius', header: 'Check-in distance', className: `${CELL} ${HALF}`, render: (p: ServiceLocationDto) => `${p.radiusMetres} m` },
     ...(canEdit && !archivedRows ? [{
-      key: 'actions', header: 'Actions', className: CELL,
+      key: 'actions', header: '', srHeader: 'Actions', className: CELL,
       render: (p: ServiceLocationDto) => (
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" className={TAP_AREA} onClick={() => open({ id: p.id, initial: formOf(p) })} aria-label={`Edit: ${p.name}`}>Edit</Button>
