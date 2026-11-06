@@ -131,6 +131,9 @@ async function fillBasicsMinimallyAndNext(
  * practice to link) and clicks Next — used by tests that don't care about the RP determination
  * itself, just need to get past this step's own required fields. */
 async function fillUnapprovedRpAndNext(user: ReturnType<typeof userEvent.setup>, typeOption: string | RegExp, details = 'Improvised, not on the register.') {
+  // With a participant who has register entries the list leads and the type is asked after "None of these"; without one the type comes first.
+  const none = () => screen.queryByRole('radio', { name: /none of these/i })
+  if (none()) await user.click(none()!)
   await openAndSelect(user, /Restrictive Practice Type/i, typeOption)
   await user.click(screen.getByRole('radio', { name: /none of these/i }))
   await user.type(screen.getByLabelText(/Describe the restrictive practice/i), details)
@@ -748,7 +751,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     renderCreatePage()
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
-    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
 
     expect(await screen.findByText(/matches an authorised practice/i)).toBeInTheDocument()
   })
@@ -790,7 +793,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
 })
 
 describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
-  it("lists the involved participant's active practices of the selected type, not other types, as selectable rows", async () => {
+  it("lists every active practice the involved participant has, whatever its kind, each with its kind", async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
       { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
       { id: 'rp-2', type: 'PhysicalRestraint', description: 'Two-person hold.', reviewDate: null, isActive: true, ...AUTHORISED },
@@ -799,10 +802,9 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
-    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
-    expect(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i })).toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: /Two-person hold/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }).closest('label')).toHaveTextContent(/^Seclusion/)
+    expect(screen.getByRole('radio', { name: /Two-person hold/i }).closest('label')).toHaveTextContent(/^Physical restraint/)
   })
 
   it('linking a practice prepopulates an empty description (visible once Incident Details is reached)', async () => {
@@ -813,7 +815,6 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
-    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
     await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
@@ -853,7 +854,6 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
-    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
     await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
@@ -881,7 +881,6 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     renderCreatePage()
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
-    await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
     await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
@@ -1177,7 +1176,6 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
 
   async function toPhysicalRestraintStep(user: ReturnType<typeof userEvent.setup>) {
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
-    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
   }
 
   function rowFor(name: RegExp) {
@@ -1466,6 +1464,7 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     const { container } = renderCreatePage()
     await toPhysicalRestraintStep(user)
     await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
     await user.type(screen.getByLabelText(/Describe the restrictive practice that was used/i), 'Held both arms at the kerb.')
     await user.click(screen.getByRole('button', { name: 'Add to restrictive practice register' }))
 
@@ -1486,6 +1485,7 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     renderCreatePage()
     await toPhysicalRestraintStep(user)
     await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
     await user.type(screen.getByLabelText(/Describe the restrictive practice that was used/i), 'Held both arms at the kerb.')
     await user.click(screen.getByRole('button', { name: 'Add to restrictive practice register' }))
     await user.click(screen.getByRole('button', { name: 'Save 1 entry' }))
@@ -1804,5 +1804,76 @@ describe('IncidentCreatePage — common incident picker', () => {
     expect(body).toMatchObject({ title: 'Became unwell', incidentType: 'Illness' })
     expect(body.description).toContain('Looked pale and tired')
     expect(body).not.toHaveProperty('pickedPrompts')
+  })
+})
+
+// The register list leads: a picked row supplies the type, "None of these" asks for it; either way exactly one of the link or the written details is saved.
+describe('IncidentCreatePage — the register list and what is saved', () => {
+  const seclusion = { id: 'rp-1', participantId: 'participant-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true, ...AUTHORISED }
+  const hold = { id: 'rp-2', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Two-person hold.', reviewDate: null, isActive: true, authorisedBy: null, authorisationDate: null, isAuthorised: false }
+
+  async function toList(user: ReturnType<typeof userEvent.setup>) {
+    mockUseRestrictivePractices.mockReturnValue({ data: [seclusion, hold] })
+    renderCreatePage()
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+  }
+  async function submitFromDetails(user: ReturnType<typeof userEvent.setup>) {
+    await clickNext(user) // Restrictive Practice -> Incident Details
+    await fillDetailsMinimallyAndNext(user)
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    return mockCreateMutateAsync.mock.calls[0][0]
+  }
+
+  it('saves a picked practice as its id and its type, with no details', async () => {
+    const user = userEvent.setup()
+    await toList(user)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
+
+    const payload = await submitFromDetails(user)
+
+    expect(payload).toMatchObject({ restrictivePracticeId: 'rp-1', restrictivePracticeType: 'Seclusion' })
+    expect(payload.unapprovedRestrictivePracticeDetails).toBeFalsy()
+  })
+
+  it('saves "None of these" as the chosen type and the details, with no id', async () => {
+    const user = userEvent.setup()
+    await toList(user)
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
+    await user.type(screen.getByLabelText(/Describe the restrictive practice/i), 'Improvised hold at the door.')
+
+    const payload = await submitFromDetails(user)
+
+    expect(payload).toMatchObject({ restrictivePracticeType: 'PhysicalRestraint', unapprovedRestrictivePracticeDetails: 'Improvised hold at the door.' })
+    expect(payload.restrictivePracticeId).toBeFalsy()
+  })
+
+  it('saves only the link after a practice, then "None of these", then the practice again', async () => {
+    const user = userEvent.setup()
+    await toList(user)
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    await user.type(screen.getByLabelText(/Describe the restrictive practice/i), 'typed, then dropped')
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
+
+    const payload = await submitFromDetails(user)
+
+    expect(payload).toMatchObject({ restrictivePracticeId: 'rp-1', restrictivePracticeType: 'Seclusion' })
+    expect(payload.unapprovedRestrictivePracticeDetails).toBeFalsy()
+  })
+
+  it('previews Not authorised for a picked unauthorised practice and for "None of these" with a type that has an authorised entry', async () => {
+    const user = userEvent.setup()
+    await toList(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/i }))
+    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    expect(await screen.findByText(/matches an authorised practice/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 })
