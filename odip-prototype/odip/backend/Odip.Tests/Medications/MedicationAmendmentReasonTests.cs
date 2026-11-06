@@ -85,6 +85,18 @@ public class MedicationAmendmentReasonTests
     public Task Amend_OtherWithBlankNote_Returns400(string? note) =>
         AssertRefusedAsync(MedicationAmendmentReason.Other, note, "Add a note saying why this record is being corrected.");
 
+    // The 500 limit is the DTO's [StringLength]: [ApiController] model validation refuses the request before the action runs, so nothing is written.
+    [Theory]
+    [InlineData(500, true)]
+    [InlineData(501, false)]
+    public void Amend_NoteOver500Characters_FailsModelValidation(int length, bool valid)
+    {
+        var dto = Dto(MedicationAmendmentReason.Other, new string('x', length));
+        var errors = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        Assert.Equal(valid, System.ComponentModel.DataAnnotations.Validator.TryValidateObject(dto, new(dto), errors, true));
+        if (!valid) Assert.Equal(nameof(UpdateAdministrationDto.AmendmentNote), Assert.Single(errors).MemberNames.Single());
+    }
+
     [Fact]
     public async Task Amend_StoresReasonNoteByAndAt()
     {
