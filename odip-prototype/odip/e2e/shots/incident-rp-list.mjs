@@ -69,6 +69,7 @@ async function session(vp, { register = [...ACTIVE], scheme = 'light' } = {}) {
   await page.getByRole('option', { name: NAME }).click()
   await page.getByLabel('Incident Type *', { exact: true }).click()
   await page.getByRole('option', { name: /Restrictive Practice Use/i }).click()
+  await page.getByRole('radio', { name: '2 Medium' }).click()
   await page.getByRole('button', { name: 'Next' }).click()
   await page.getByRole('radiogroup', { name: 'Which practice was used?' }).waitFor({ timeout: 60_000 })
   return { context, page }
