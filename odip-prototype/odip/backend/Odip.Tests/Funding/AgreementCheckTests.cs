@@ -546,6 +546,21 @@ public class AgreementCheckTests
     }
 
     [Fact]
+    public async Task Check_OtherAgreementOverAloneElsewhere_IsNotCombinedOver()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a, october: 500m);   // A alone ($588.64 from 19 Oct) is over October; the draft costs nothing there
+        Revision(a, Guid.NewGuid(), approved: true, Mondays("a"));
+
+        var check = Body(await a.Controller().Check(a.Person.Id, BlocksFrom(D(2026, 11, 1), Mondays("b")), CancellationToken.None));
+
+        var core = Assert.Single(check.Pools);
+        Assert.False(core.Over);
+        Assert.False(check.CombinedOver);
+        Assert.Equal(0m, core.CombinedOverBy);
+    }
+
+    [Fact]
     public async Task Check_DraftAloneOver_IsNotCombinedOver()
     {
         using var a = await ArrangeAsync();
@@ -605,12 +620,15 @@ public class AgreementCheckTests
     [Fact]
     public async Task Check_ForeignAgreementId_Is404()
     {
-        using var a = await ArrangeAsync();
+        var database = Guid.NewGuid().ToString();
+        using var a = await ArrangeAsync(LedgerKit.TenantA, database);
+        using var otherTenant = await ArrangeAsync(LedgerKit.TenantB, database);
         CoreOctober(a);
         var someoneElse = a.Kit.SeedParticipant();
         var theirs = Revision(a, Guid.NewGuid(), approved: true, Mondays(), person: someoneElse);
+        var otherOrganisations = Revision(otherTenant, Guid.NewGuid(), approved: true, Mondays());
 
-        foreach (var id in new[] { theirs.AgreementId, Guid.NewGuid() })
+        foreach (var id in new[] { theirs.AgreementId, otherOrganisations.AgreementId, Guid.NewGuid() })
             Assert.Equal(404, StatusOf(await a.Controller().Check(a.Person.Id, Blocks(Mondays()) with { AgreementId = id }, CancellationToken.None)));
     }
 

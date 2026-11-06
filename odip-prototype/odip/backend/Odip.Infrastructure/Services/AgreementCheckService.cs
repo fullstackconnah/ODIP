@@ -156,7 +156,9 @@ public sealed class AgreementCheckService
             // agreements' booked and claimed shifts. It warns only when the same walk over this agreement alone is within, so an agreement that is over by itself is not reported twice.
             var combined = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, 0m, byPeriod.GetValueOrDefault(p.Period.Id) + otherByPeriod.GetValueOrDefault(p.Period.Id), p.Period.RolloverOverride)).ToList());
             var aloneOver = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, 0m, byPeriod.GetValueOrDefault(p.Period.Id), p.Period.RolloverOverride)).ToList()).Any(o => o.OverBy > 0m);
-            var combinedOverBy = !aloneOver && combined.Any(o => o.OverBy > 0m) ? combined.Sum(o => o.OverBy) : 0m;
+            // shortcut: counts only the periods this draft touches, so a later period only the other agreements touch is not warned; upgrade to a walk over the others alone if that matters.
+            var mine = combined.Where((_, i) => byPeriod.ContainsKey(ordered[i].Period.Id)).ToList();
+            var combinedOverBy = !aloneOver && mine.Any(o => o.OverBy > 0m) ? mine.Sum(o => o.OverBy) : 0m;
             var periods = new List<AgreementCheckPeriodDto>();
             var alreadyOver = 0m;
             for (var i = 0; i < ordered.Count; i++)
@@ -175,7 +177,7 @@ public sealed class AgreementCheckService
             {
                 PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind, ManagementType = pool.Pool.ManagementType,
                 AgreementCost = periods.Sum(p => p.AgreementCost), Over = periods.Any(p => p.OverBy > 0m), OverBy = periods.Sum(p => p.OverBy), AlreadyOverBy = alreadyOver, Periods = periods,
-                CombinedCost = ordered.Sum(p => byPeriod.GetValueOrDefault(p.Period.Id) + otherByPeriod.GetValueOrDefault(p.Period.Id)), CombinedOverBy = combinedOverBy,
+                CombinedCost = ordered.Where(p => byPeriod.ContainsKey(p.Period.Id)).Sum(p => byPeriod[p.Period.Id] + otherByPeriod.GetValueOrDefault(p.Period.Id)), CombinedOverBy = combinedOverBy,
             });
         }
 
