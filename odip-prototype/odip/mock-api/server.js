@@ -3002,7 +3002,7 @@ const routes = [
       { id: 'au-2', action: 'Updated', changedAt: '2026-07-10T02:15:00Z', changedByName: 'Dev Admin', changes: [{ field: 'Preferred name', old: null, new: 'Sam' }] },
       { id: 'au-1', action: 'Created', changedAt: '2026-07-01T00:00:00Z', changedByName: null, changes: [] },
     ]
-    return { entries, total: entries.length, page: 1, pageSize: 20, totalPages: 1 }
+    return respond(200, { entries, total: entries.length, page: 1, pageSize: 20, totalPages: 1 }) // the controller returns the bare object, not the ApiResponse envelope
   }],
   // IC7: newest first, the first row is the report itself. The server reads these from the audit trail and returns no other detail.
   ['incidents/:id/status-history', (id) => {
