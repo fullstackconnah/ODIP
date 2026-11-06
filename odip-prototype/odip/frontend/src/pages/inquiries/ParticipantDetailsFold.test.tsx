@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -8,6 +8,8 @@ vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).wit
 
 const form: DetailsForm = { addressStreet: '', addressSuburb: '', addressState: '', addressPostcode: '', dateOfBirth: '', ndisNumber: '', planType: '', planStartDate: '', planEndDate: '' }
 const fold = (open: boolean) => <ParticipantDetailsFold form={form} errors={{}} open={open} today="2026-10-28" onToggle={() => undefined} onChange={() => undefined} />
+
+afterEach(() => { details.current = DETAILS })
 
 describe('ParticipantDetailsFold motion', () => {
   it('marks a fold that is open when it mounts as static, so it appears at once', () => {
@@ -48,6 +50,5 @@ describe('ParticipantDetailsFold address lookup (caller D)', () => {
     render(<Harness />)
     await pickAddress(user, screen.getByRole('combobox', { name: 'Street' }))
     expect(onChange).toHaveBeenCalledWith('addressStreet', 'S'.repeat(200))
-    details.current = DETAILS
   })
 })
