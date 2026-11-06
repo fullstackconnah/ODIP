@@ -87,7 +87,7 @@ describe('TenantSwitcher — touch target and small-screen trigger', () => {
     render(<TenantSwitcher />)
 
     await user.click(screen.getByRole('button', { name: 'SA Demo' }))
-    const rows = [screen.getByRole('button', { name: /^Demo/ }), screen.getByRole('button', { name: /^Acme/ })]
+    const rows = [screen.getByRole('menuitemradio', { name: /^Demo/ }), screen.getByRole('menuitemradio', { name: /^Acme/ })]
     for (const row of rows) expect(row).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
   })
 })
@@ -99,7 +99,7 @@ describe('TenantSwitcher — a switch whose reload was cancelled', () => {
     render(<TenantSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /^SA /i }))
-    await user.click(screen.getByRole('button', { name: /Acme/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Acme/ }))
     await user.click(screen.getByRole('button', { name: 'Switch tenant' }))
     expect(window.location.reload).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-2')   // what the reloaded page reads
@@ -125,7 +125,7 @@ describe("TenantSwitcher dismissal", () => {
     const trigger = screen.getByRole("button", { name: /^SA / });
     await user.click(trigger);
 
-    const acme = screen.getByRole("button", { name: "Acme" });
+    const acme = screen.getByRole("menuitemradio", { name: "Acme" });
     await user.click(acme);
 
     const dialog = screen.getByRole("alertdialog", { name: "Switch tenant?" });
@@ -179,7 +179,7 @@ describe('TenantSwitcher: focus ring', () => {
     render(<TenantSwitcher />)
 
     await user.click(screen.getByRole('button', { name: 'SA Demo' }))
-    const row = screen.getByRole('button', { name: /^Acme/ })
+    const row = screen.getByRole('menuitemradio', { name: /^Acme/ })
     expect(row).toHaveClass('focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]', 'focus-visible:relative')
     expect(row).not.toHaveClass('focus:ring-2')
   })
@@ -194,5 +194,90 @@ describe('TenantSwitcher: popover stays on screen on a phone', () => {
     await user.click(screen.getByRole('button', { name: 'SA Demo' }))
     const popover = screen.getByText(/viewing as tenant/i).closest('div.absolute')
     expect(popover).toHaveClass('right-0', 'max-sm:right-auto', 'max-sm:left-0', 'w-56')
+  })
+})
+
+describe('TenantSwitcher: menu semantics and keyboard', () => {
+  const openByKey = async (key: string) => {
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+    const trigger = screen.getByRole('button', { name: 'SA Demo' })
+    trigger.focus()
+    await user.keyboard(key)
+    return { user, trigger }
+  }
+
+  it('is a labelled menu of radio items, the viewed tenant checked, wired to the trigger', async () => {
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+    const trigger = screen.getByRole('button', { name: 'SA Demo' })
+    await user.click(trigger)
+
+    const menu = screen.getByRole('menu', { name: 'Viewing as tenant' })
+    expect(trigger).toHaveAttribute('aria-controls', menu.id)
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('opens on a click with focus on the checked item, and only that item is in the tab order', async () => {
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+    await user.click(screen.getByRole('button', { name: 'SA Demo' }))
+
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveFocus()
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveAttribute('tabindex', '-1')
+  })
+
+  it.each(['{Enter}', ' ', '{ArrowDown}'])('opens on %j with focus on the checked item', async key => {
+    await openByKey(key)
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveFocus()
+  })
+
+  it('opens on ArrowUp with focus on the last item', async () => {
+    await openByKey('{ArrowUp}')
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveFocus()
+  })
+
+  it('moves with the arrows (wrapping), Home and End', async () => {
+    const { user } = await openByKey('{Enter}')
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveFocus()
+    await user.keyboard('{ArrowUp}')
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveFocus()
+    await user.keyboard('{Home}')
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveFocus()
+    await user.keyboard('{End}')
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveFocus()
+    expect(screen.getByRole('menuitemradio', { name: /^Acme/ })).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('menuitemradio', { name: /^Demo/ })).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('picks the focused item with Enter: the same confirm as a click', async () => {
+    const { user } = await openByKey('{Enter}')
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(screen.getByRole('alertdialog', { name: 'Switch tenant?' })).toBeInTheDocument()
+  })
+
+  it('closes on Escape and puts focus back on the trigger', async () => {
+    const { user, trigger } = await openByKey('{Enter}')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('closes on Tab', async () => {
+    const { user, trigger } = await openByKey('{Enter}')
+    await user.tab()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes on a press outside', async () => {
+    const { user } = await openByKey('{Enter}')
+    await user.click(document.body)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })
