@@ -7058,6 +7058,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<bool>("DetailsRequired")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("ExtraTime")
                         .HasColumnType("integer");
 
@@ -7114,12 +7117,18 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int?>("PostShiftTravelMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("PostTravelNone")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal?>("PreShiftTravelKilometres")
                         .HasPrecision(6, 1)
                         .HasColumnType("numeric(6,1)");
 
                     b.Property<int?>("PreShiftTravelMinutes")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("PreTravelNone")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ReturnReason")
                         .HasMaxLength(2000)
