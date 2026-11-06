@@ -252,9 +252,9 @@ try {
     await tick('Amy Ng', 0); await tick('Amy Ng', 1); await tick('Cal Ng', 0); await tick('Dee Ng', 0)
     const approveButton = page.getByRole('button', { name: /^Approve [0-9]/ }).first()
     if (!(await approveButton.count())) { await page.getByRole('button', { name: 'Actions' }).first().click().catch(() => {}); await page.getByRole('option', { name: /^Approve/ }).first().click().catch(() => {}) } else await approveButton.click().catch(() => {})
-    await snap('bulk-items', page.getByRole('dialog').first())
-    // approve-skipped: the skipped sentence follows the first one with a space (no "it.2 ticked rows").
-    rec('approve-skipped: a space between the two sentences', /made from it. d+ ticked rows? ha(s|ve) no draft/.test(await page.getByRole('dialog').first().innerText()))
+    // approve-skipped (the bulk-items dialog): whatever sentence follows the first one is separated from it by a space (no "it.2 ticked rows").
+    const approveText = await page.getByRole('dialog').first().innerText()
+    rec('approve-skipped: a space between the two sentences', /made from it\. \S/.test(approveText) && !/made from it\.\S/.test(approveText), approveText.replace(/\s+/g, ' ').slice(0, 220))
     await snap('approve-skipped', page.getByRole('dialog').first())
     await page.keyboard.press('Escape')
     // The mock's board has no waiting agreements, so the board answer carries two of one participant's.
