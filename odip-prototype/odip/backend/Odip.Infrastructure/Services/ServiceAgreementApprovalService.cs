@@ -392,6 +392,8 @@ public sealed class ServiceAgreementApprovalService
         public int? EndsFromVersion { get; set; }
         public DateOnly EndsOn { get; set; }
         public List<ShiftPattern> Overlaps { get; set; } = new();
+        /// <summary>How many new patterns overlap in time an active pattern of another agreement of the participant (D-8). Information only: not in <see cref="Overlaps"/>, so it refuses nothing. Preview only.</summary>
+        public int OtherAgreementOverlaps { get; set; }
         public OldShiftsRemainingDto OldShifts { get; set; } = new();
         /// <summary>The unfilled Draft shifts of the revisions before that approval removes (tracked, so its own save deletes them).</summary>
         public List<Shift> ToRemove { get; set; } = new();
@@ -407,7 +409,8 @@ public sealed class ServiceAgreementApprovalService
         {
             CanApprove = Existing is null && !Superseded && Reasons.Count == 0,
             AlreadyApproved = Existing is not null,
-            Reasons = Reasons.ToList(),
+            Reasons = OtherAgreementOverlaps == 0 ? Reasons.ToList() : [.. Reasons, new ApprovalReasonDto { Code = "OtherAgreementOverlap", Message = string.Create(CultureInfo.InvariantCulture, $"{OtherAgreementOverlaps} of the new weekly patterns overlap in time another agreement's patterns for this participant. Approval is not held up by it.") }],
+            OtherAgreementOverlaps = OtherAgreementOverlaps,
             PatternsToCreate = NewPatterns.Count, PatternsToEnd = ToEnd.Count, EndsFromVersion = EndsFromVersion, EndsOn = ToEnd.Count > 0 ? EndsOn : null,
             // A new pattern no ended one matches, or for a renewal no pattern ending the day before it (D12), is a changed support: it starts with no default staff. A first approval has none to count.
             ChangedPatterns = ToEnd.Count > 0 || HandedOn.Count > 0 ? NewPatterns.Count - CarryTo.Values.Union(HandedOn).Count() : 0,
@@ -536,6 +539,16 @@ public sealed class ServiceAgreementApprovalService
             var handMade = await _db.ShiftPatterns.AsNoTracking()
                 .Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId == null && p.IsActive).ToListAsync(ct);
             plan.Overlaps = handMade.Where(p => plan.NewPatterns.Any(made => Overlap(p, made))).ToList();
+
+            // D-8: the same participant's other agreements' active patterns. Reported on the preview and never refused for (approval itself skips the read).
+            if (!approving)
+            {
+                var otherDrafts = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
+                    .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.AgreementId != draft.AgreementId).Select(a => a.DraftId).ToListAsync(ct);
+                var theirs = await _db.ShiftPatterns.AsNoTracking()
+                    .Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.IsActive && p.SourceDraftId != null && otherDrafts.Contains(p.SourceDraftId.Value) && (p.EffectiveTo == null || p.EffectiveTo >= plan.Today)).ToListAsync(ct);
+                plan.OtherAgreementOverlaps = plan.NewPatterns.Count(made => theirs.Any(p => Overlap(p, made)));
+            }
         }
     }
 

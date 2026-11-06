@@ -493,4 +493,159 @@ public class AgreementCheckTests
         Assert.Equal(before, (a.Kit.Db.TripClaims.Count(), a.Kit.Db.Shifts.Count(), a.Kit.Db.ServiceAgreementDrafts.Count(), a.Kit.Db.AuditLogs.Count()));
         Assert.False(a.Kit.Db.ChangeTracker.HasChanges());
     }
+
+    // ── Several agreements: the combined warning (PR A2, D-5) ───────────────
+
+    /// <summary>One revision of an agreement, stored as saving would; approved when <paramref name="approved"/>. Mondays at $588.64 a month, from 19 Oct to 15 Nov unless the end is moved.</summary>
+    private static ServiceAgreementDraft Revision(Arrangement a, Guid agreementId, bool approved, PlanBlock block, DateOnly? end = null, int version = 1, Participant? person = null)
+    {
+        person ??= a.Person;
+        var draft = new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = person.TenantId, ParticipantId = person.Id, AgreementId = agreementId, Version = version, PlanStartDate = D(2026, 10, 1), PlanEndDate = D(2026, 12, 31),
+            AgreementStartDate = From, AgreementEndDate = end ?? To, State = "NSW", ParticipantNameSnapshot = "Sophie Brown", AgreementKind = AgreementKind.Trip, AgreementName = "Beach trip",
+        };
+        draft.Blocks.Add(new ServiceAgreementDraftBlock { Id = Guid.NewGuid(), DraftId = draft.Id, Position = 0, BlockKey = block.Id, BlockJson = Odip.Infrastructure.Services.DraftJson.Write(block) });
+        a.Kit.Db.ServiceAgreementDrafts.Add(draft);
+        if (approved)
+            a.Kit.Db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = person.TenantId, DraftId = draft.Id, ParticipantId = person.Id, AgreementId = agreementId, DraftVersion = version, ApprovedAt = new DateTime(2026, 9, 1, 1, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex Admin" });
+        a.Kit.Db.SaveChanges();
+        return draft;
+    }
+
+    /// <summary>October holds $1,000 and November $5,000 of Core: one Mondays agreement ($588.64 in October) fits, two together ($1,177.28) pass October by $177.28.</summary>
+    private static void CoreOctober(Arrangement a, decimal october = 1000m) =>
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, october), Month(11, 5000m), Month(12, 5000m)));
+
+    private static Task<ActionResult<ApiResponse<AgreementCheckDto>>> CheckDraft(Arrangement a, ServiceAgreementDraft draft, Guid? agreementId = null) =>
+        a.Controller().Check(a.Person.Id, new AgreementCheckRequestDto { DraftId = draft.Id, AgreementId = agreementId }, CancellationToken.None);
+
+    [Fact]
+    public async Task Check_TwoAgreementsTogetherOverWarn_OneAloneDoesNot()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a);
+        var first = Revision(a, Guid.NewGuid(), approved: true, Mondays("a"));
+        var second = Revision(a, Guid.NewGuid(), approved: false, Mondays("b"));
+
+        var check = Body(await CheckDraft(a, second, second.AgreementId));
+
+        var core = Assert.Single(check.Pools);
+        Assert.False(core.Over);   // B alone fits
+        Assert.True(check.CombinedOver);
+        Assert.Equal(2 * TwoBlocks - 1000m, core.CombinedOverBy);
+        Assert.Equal(2 * 4 * Block, core.CombinedCost);
+        var other = Assert.Single(check.OtherAgreements);
+        Assert.Equal((first.AgreementId, 1, AgreementKind.Trip, "Beach trip", 4 * Block), (other.AgreementId, other.Version, other.AgreementKind, other.AgreementName, other.Cost));
+
+        first.AgreementEndDate = D(2026, 10, 3);   // A ended before today (4 Oct): no longer active
+        a.Kit.Db.SaveChanges();
+        var ended = Body(await CheckDraft(a, second));
+        Assert.False(ended.CombinedOver);
+        Assert.Empty(ended.OtherAgreements);
+    }
+
+    [Fact]
+    public async Task Check_OtherAgreementOverAloneElsewhere_IsNotCombinedOver()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a, october: 500m);   // A alone ($588.64 from 19 Oct) is over October; the draft costs nothing there
+        Revision(a, Guid.NewGuid(), approved: true, Mondays("a"));
+
+        var check = Body(await a.Controller().Check(a.Person.Id, BlocksFrom(D(2026, 11, 1), Mondays("b")), CancellationToken.None));
+
+        var core = Assert.Single(check.Pools);
+        Assert.False(core.Over);
+        Assert.False(check.CombinedOver);
+        Assert.Equal(0m, core.CombinedOverBy);
+    }
+
+    [Fact]
+    public async Task Check_DraftAloneOver_IsNotCombinedOver()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a, october: 500m);   // $588.64 passes $500 on its own
+        Revision(a, Guid.NewGuid(), approved: true, Mondays("a"));
+        var second = Revision(a, Guid.NewGuid(), approved: false, Mondays("b"));
+
+        var check = Body(await CheckDraft(a, second));
+
+        Assert.True(Assert.Single(check.Pools).Over);
+        Assert.False(check.CombinedOver);
+        Assert.Equal(0m, check.Pools[0].CombinedOverBy);
+    }
+
+    [Fact]
+    public async Task Check_NoOtherAgreements_CombinedEqualsOwn()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a);
+        var only = Revision(a, Guid.NewGuid(), approved: false, Mondays("a"));
+
+        var check = Body(await CheckDraft(a, only));
+
+        var core = Assert.Single(check.Pools);
+        Assert.Equal(core.AgreementCost, core.CombinedCost);
+        Assert.False(check.CombinedOver);
+        Assert.Empty(check.OtherAgreements);
+    }
+
+    [Fact]
+    public async Task Check_PoolWithNoPlan_NeverCombinedOver()
+    {
+        using var a = await ArrangeAsync();
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 0m), Month(11, 0m), Month(12, 0m)));
+        Revision(a, Guid.NewGuid(), approved: true, Mondays("a"));
+        var second = Revision(a, Guid.NewGuid(), approved: false, Mondays("b"));
+
+        var check = Body(await CheckDraft(a, second));
+
+        Assert.False(check.CombinedOver);
+        Assert.All(check.Pools, p => Assert.Equal(0m, p.CombinedOverBy));
+    }
+
+    [Fact]
+    public async Task Check_AgreementIdMismatch_Is400()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a);
+        var draft = Revision(a, Guid.NewGuid(), approved: false, Mondays());
+
+        var errors = Errors(await CheckDraft(a, draft, Guid.NewGuid()), 400);
+
+        Assert.Equal("The agreement doesn't match the draft.", Assert.Single(errors));
+        Assert.Equal(200, StatusOf(await CheckDraft(a, draft, draft.AgreementId)));
+    }
+
+    [Fact]
+    public async Task Check_ForeignAgreementId_Is404()
+    {
+        var database = Guid.NewGuid().ToString();
+        using var a = await ArrangeAsync(LedgerKit.TenantA, database);
+        using var otherTenant = await ArrangeAsync(LedgerKit.TenantB, database);
+        CoreOctober(a);
+        var someoneElse = a.Kit.SeedParticipant();
+        var theirs = Revision(a, Guid.NewGuid(), approved: true, Mondays(), person: someoneElse);
+        var otherOrganisations = Revision(otherTenant, Guid.NewGuid(), approved: true, Mondays());
+
+        foreach (var id in new[] { theirs.AgreementId, otherOrganisations.AgreementId, Guid.NewGuid() })
+            Assert.Equal(404, StatusOf(await a.Controller().Check(a.Person.Id, Blocks(Mondays()) with { AgreementId = id }, CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task Check_NewAgreement_CountsEveryActiveAgreement()
+    {
+        using var a = await ArrangeAsync();
+        CoreOctober(a);
+        var first = Revision(a, Guid.NewGuid(), approved: true, Mondays("a"));
+        Revision(a, Guid.NewGuid(), approved: true, Mondays("b"));
+
+        var asNew = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays("c")), CancellationToken.None));
+        var asFirst = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays("c")) with { AgreementId = first.AgreementId }, CancellationToken.None));
+
+        Assert.Equal(2, asNew.OtherAgreements.Count);
+        Assert.Equal(3 * 4 * Block, asNew.Pools[0].CombinedCost);
+        Assert.Single(asFirst.OtherAgreements);
+        Assert.DoesNotContain(asFirst.OtherAgreements, o => o.AgreementId == first.AgreementId);
+    }
 }

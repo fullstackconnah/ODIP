@@ -390,4 +390,44 @@ public class MultipleAgreementsTests
 
         Assert.NotEqual(ElectronicSigningEvidenceService.SupersededDraftError, error);
     }
+
+    // ── D-8: another agreement's patterns overlapping in time (PR A2) ──
+
+    /// <summary>B's weekday patterns overlap A's active ones: the preview counts them and says so, and neither the preview's Overlaps nor the approval refuses.</summary>
+    [Fact]
+    public async Task PreviewB_ReportsOtherAgreementOverlap_NotRefused()
+    {
+        await using var f = await SetUpWithCatalogueAsync();
+        var a = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
+        await ApproveAsync(f, a);
+        var b = await AddRevisionAsync(f, 2, new[] { WeekdayBlock("weekdays-b") }, agreementId: Guid.NewGuid());
+
+        var outcome = await f.Service.PreviewAsync(TenantA, f.ParticipantId, b.Id, Admin, CancellationToken.None);
+        var preview = Assert.IsType<DraftApprovalPreviewDto>(outcome.Preview);
+
+        Assert.True(preview.CanApprove);
+        Assert.Equal(preview.PatternsToCreate, preview.OtherAgreementOverlaps);
+        Assert.True(preview.OtherAgreementOverlaps > 0);
+        Assert.Contains("OtherAgreementOverlap", preview.Reasons.Select(r => r.Code));
+        Assert.Empty(preview.OverlappingPatterns);
+        await ApproveAsync(f, b);   // acknowledged nothing, and approved
+    }
+
+    /// <summary>Today's behaviour: a revision overlaps its own agreement's earlier patterns, which approval ends, so nothing is reported.</summary>
+    [Fact]
+    public async Task Preview_SameAgreementOverlap_Unchanged()
+    {
+        await using var f = await SetUpWithCatalogueAsync();
+        var a1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
+        await ApproveAsync(f, a1);
+        var a2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
+
+        var preview = Assert.IsType<DraftApprovalPreviewDto>((await f.Service.PreviewAsync(TenantA, f.ParticipantId, a2.Id, Admin, CancellationToken.None)).Preview);
+
+        Assert.True(preview.CanApprove);
+        Assert.True(preview.PatternsToEnd > 0);
+        Assert.Equal(0, preview.OtherAgreementOverlaps);
+        Assert.Empty(preview.Reasons);
+        Assert.Empty(preview.OverlappingPatterns);
+    }
 }

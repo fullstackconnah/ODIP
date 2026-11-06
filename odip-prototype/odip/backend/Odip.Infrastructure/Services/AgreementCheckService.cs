@@ -49,6 +49,7 @@ public sealed class AgreementCheckService
         // What to price: a saved draft's own blocks and dates, or the blocks and dates sent. Exactly one of the two.
         IReadOnlyList<PlanBlock> blocks;
         DateOnly from, to;
+        Guid? thisAgreement = null;   // left out of the others: the draft's own, or the one the blocks are a new revision of; null is a new agreement
         if (request.DraftId is { } draftId)
         {
             if (request.Blocks is not null || request.PeriodFrom is not null || request.PeriodTo is not null)
@@ -58,6 +59,8 @@ public sealed class AgreementCheckService
                 .FirstOrDefaultAsync(d => d.Id == draftId && d.ParticipantId == participantId && d.TenantId == tenantId, ct);
             if (draft is null) return AgreementCheckResult.Missing("That draft was not found for this participant.");
 
+            if (request.AgreementId is { } sent && sent != draft.AgreementId) return AgreementCheckResult.Refused("The agreement doesn't match the draft.");
+            thisAgreement = draft.AgreementId;
             blocks = draft.Blocks.OrderBy(b => b.Position).Select(b => DraftJson.ReadBlock(b.BlockJson)).ToList();
             (from, to) = (draft.AgreementStartDate, draft.AgreementEndDate);
         }
@@ -65,6 +68,12 @@ public sealed class AgreementCheckService
         {
             if (request.Blocks is null || request.PeriodFrom is null || request.PeriodTo is null)
                 return AgreementCheckResult.Refused("Send the draft's blocks with the agreement's first and last day, or the id of a saved draft.");
+
+            if (request.AgreementId is { } named)
+            {
+                if (!await _db.ServiceAgreementDrafts.AnyAsync(d => d.TenantId == tenantId && d.ParticipantId == participantId && d.AgreementId == named, ct)) return AgreementCheckResult.Missing("Agreement not found.");
+                thisAgreement = named;
+            }
 
             blocks = request.Blocks;
             (from, to) = (request.PeriodFrom.Value, request.PeriodTo.Value);
@@ -95,24 +104,42 @@ public sealed class AgreementCheckService
             });
         }
 
-        var quote = await _pricing.QuoteAsync(tenantId, blocks, from, to, ct);
-
         // Each priced line goes where the ledger would put it. A line with no price contributes nothing (the bar already says the agreement is not fully priced).
-        var byPeriod = new Dictionary<Guid, decimal>();
-        decimal total = 0m, notInAPool = 0m, outside = 0m;
-        foreach (var line in quote.Lines.Where(l => l.IsPriced && l.Total > 0m))
+        (Dictionary<Guid, decimal> ByPeriod, decimal Total, decimal NotInAPool, decimal Outside) Place(PlanQuote priced)
         {
-            total += line.Total;
-            var place = BudgetLedgerCalculator.Place(plan.Plan, new LedgerItem
+            var byPeriod = new Dictionary<Guid, decimal>();
+            decimal total = 0m, notInAPool = 0m, outside = 0m;
+            foreach (var line in priced.Lines.Where(l => l.IsPriced && l.Total > 0m))
             {
-                Kind = LedgerRowKind.FutureShift, Group = LedgerGroup.BookedAhead, Date = line.ServiceDate, Amount = line.Total, PaceCategory = line.PaceCategory, PlanType = person.PlanType,
-            });
-            switch (place.Placement)
-            {
-                case LedgerPlacement.InPeriod: byPeriod[place.Period!.Id] = byPeriod.GetValueOrDefault(place.Period.Id) + line.Total; break;
-                case LedgerPlacement.NotInAPool: notInAPool += line.Total; break;
-                default: outside += line.Total; break;
+                total += line.Total;
+                var place = BudgetLedgerCalculator.Place(plan.Plan, new LedgerItem
+                {
+                    Kind = LedgerRowKind.FutureShift, Group = LedgerGroup.BookedAhead, Date = line.ServiceDate, Amount = line.Total, PaceCategory = line.PaceCategory, PlanType = person.PlanType,
+                });
+                switch (place.Placement)
+                {
+                    case LedgerPlacement.InPeriod: byPeriod[place.Period!.Id] = byPeriod.GetValueOrDefault(place.Period.Id) + line.Total; break;
+                    case LedgerPlacement.NotInAPool: notInAPool += line.Total; break;
+                    default: outside += line.Total; break;
+                }
             }
+
+            return (byPeriod, total, notInAPool, outside);
+        }
+
+        var (byPeriod, total, notInAPool, outside) = Place(await _pricing.QuoteAsync(tenantId, blocks, from, to, ct));
+
+        // The other active agreements (current revision ends on or after today), priced and placed the same way, for the combined figures (D-5).
+        var otherByPeriod = new Dictionary<Guid, decimal>();
+        var otherAgreements = new List<OtherAgreementCostDto>();
+        var latest = await AgreementRevisions.LatestPerAgreementAsync(_db, tenantId, new[] { participantId }, ct);
+        foreach (var (key, set) in latest.Where(x => x.Key.AgreementId != thisAgreement && x.Value.Current is { } c && c.AgreementEndDate >= ledger.Today).OrderBy(x => x.Key.AgreementId))
+        {
+            var current = set.Current!;
+            var stored = await _db.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks).FirstAsync(d => d.Id == current.DraftId, ct);
+            var otherQuote = await _pricing.QuoteAsync(tenantId, stored.Blocks.OrderBy(b => b.Position).Select(b => DraftJson.ReadBlock(b.BlockJson)).ToList(), stored.AgreementStartDate, stored.AgreementEndDate, ct);
+            foreach (var (period, cost) in Place(otherQuote).ByPeriod) otherByPeriod[period] = otherByPeriod.GetValueOrDefault(period) + cost;
+            otherAgreements.Add(new OtherAgreementCostDto { AgreementId = key.AgreementId, AgreementKind = set.AgreementKind, AgreementName = set.AgreementName, Version = current.Version, Cost = AgreementPriceLists.PricedTotal(otherQuote) });
         }
 
         var severalCorePools = plan.Pools.Count(p => p.Pool.Kind == FundingPoolKind.CoreFlexible) > 1;
@@ -125,6 +152,13 @@ public sealed class AgreementCheckService
             // for a later one (AgreementCarry). Only the periods the agreement touches are answered.
             var ordered = pool.Periods.OrderBy(p => p.Period.PeriodStart).ToList();
             var walk = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, p.Used, byPeriod.GetValueOrDefault(p.Period.Id), p.Period.RolloverOverride)).ToList());
+            // The combined walk (D-5): this agreement and the other active ones as PLANNED cost against the money available (limit plus carry-in), used left out because the ledger's used already holds those
+            // agreements' booked and claimed shifts. It warns only when the same walk over this agreement alone is within, so an agreement that is over by itself is not reported twice.
+            var combined = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, 0m, byPeriod.GetValueOrDefault(p.Period.Id) + otherByPeriod.GetValueOrDefault(p.Period.Id), p.Period.RolloverOverride)).ToList());
+            var aloneOver = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, 0m, byPeriod.GetValueOrDefault(p.Period.Id), p.Period.RolloverOverride)).ToList()).Any(o => o.OverBy > 0m);
+            // shortcut: counts only the periods this draft touches, so a later period only the other agreements touch is not warned; upgrade to a walk over the others alone if that matters.
+            var mine = combined.Where((_, i) => byPeriod.ContainsKey(ordered[i].Period.Id)).ToList();
+            var combinedOverBy = !aloneOver && mine.Any(o => o.OverBy > 0m) ? mine.Sum(o => o.OverBy) : 0m;
             var periods = new List<AgreementCheckPeriodDto>();
             var alreadyOver = 0m;
             for (var i = 0; i < ordered.Count; i++)
@@ -143,6 +177,7 @@ public sealed class AgreementCheckService
             {
                 PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind, ManagementType = pool.Pool.ManagementType,
                 AgreementCost = periods.Sum(p => p.AgreementCost), Over = periods.Any(p => p.OverBy > 0m), OverBy = periods.Sum(p => p.OverBy), AlreadyOverBy = alreadyOver, Periods = periods,
+                CombinedCost = ordered.Where(p => byPeriod.ContainsKey(p.Period.Id)).Sum(p => byPeriod[p.Period.Id] + otherByPeriod.GetValueOrDefault(p.Period.Id)), CombinedOverBy = combinedOverBy,
             });
         }
 
@@ -150,6 +185,7 @@ public sealed class AgreementCheckService
         {
             HasBudget = true, PlanId = plan.Plan.Id, PlanStart = plan.Plan.PlanStart, PlanEnd = plan.Plan.PlanEnd, AsOf = ledger.Today, PeriodFrom = from, PeriodTo = to,
             AgreementCost = total, Pools = pools, NotInARecordedPool = notInAPool, OutsideThePlan = outside,
+            OtherAgreements = otherAgreements, CombinedOver = pools.Any(p => p.CombinedOverBy > 0m),
         });
     }
 }

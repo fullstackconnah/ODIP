@@ -20,6 +20,8 @@ public record AgreementCheckRequestDto
     public DateOnly? PeriodFrom { get; init; }
     /// <summary>The agreement period, last day included.</summary>
     public DateOnly? PeriodTo { get; init; }
+    /// <summary>The agreement being checked. With <see cref="DraftId"/> it must be the draft's own (else 400). With blocks: null is a new agreement, so every active agreement counts as another; an id of one of the participant's agreements leaves that one out of the others (404 for any other id).</summary>
+    public Guid? AgreementId { get; init; }
 }
 
 /// <summary>One funding period of one pool the agreement touches.</summary>
@@ -73,6 +75,10 @@ public record AgreementCheckPoolDto
     public decimal AlreadyOverBy { get; init; }
     /// <summary>The periods the agreement touches, in date order.</summary>
     public List<AgreementCheckPeriodDto> Periods { get; init; } = new();
+    /// <summary>What this agreement and the participant's other active agreements cost together in this pool, over all its periods.</summary>
+    public decimal CombinedCost { get; init; }
+    /// <summary>How far the combined cost passes the money available, when the combined warning applies to this pool (see <see cref="AgreementCheckDto.CombinedOver"/>); 0 otherwise, and always 0 for a pool with no limit recorded.</summary>
+    public decimal CombinedOverBy { get; init; }
 }
 
 public record AgreementCheckDto
@@ -101,4 +107,18 @@ public record AgreementCheckDto
     public decimal NotInARecordedPool { get; init; }
     /// <summary>The part of the agreement delivered outside the plan's dates: shown, never dropped.</summary>
     public decimal OutsideThePlan { get; init; }
+    /// <summary>The participant's other active agreements, each with what its current revision costs: the ones counted in the pools' combined figures.</summary>
+    public List<OtherAgreementCostDto> OtherAgreements { get; init; } = new();
+    /// <summary>Together with the other active agreements this one plans more than the money available (planned cost against limit plus carry-in, used left out), while it does not alone. Information only.</summary>
+    public bool CombinedOver { get; init; }
+}
+
+/// <summary>One other active agreement of the participant and what its current revision costs.</summary>
+public record OtherAgreementCostDto
+{
+    public Guid AgreementId { get; init; }
+    public AgreementKind AgreementKind { get; init; }
+    public string? AgreementName { get; init; }
+    public int Version { get; init; }
+    public decimal Cost { get; init; }
 }
