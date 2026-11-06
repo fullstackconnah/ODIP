@@ -336,6 +336,8 @@ public record DraftApprovalPreviewDto
     public bool ShiftsOnApproval { get; init; }
     public OldShiftsRemainingDto OldShiftsRemaining { get; init; } = new();
     public List<OverlappingPatternDto> OverlappingPatterns { get; init; } = [];
+    /// <summary>How many of the new patterns overlap in time an active pattern of another agreement of the participant. Information only: it is not in <c>Overlaps</c> and refuses nothing.</summary>
+    public int OtherAgreementOverlaps { get; init; }
 }
 
 /// <summary>The body of POST .../populate. No week: every started week from today.</summary>
