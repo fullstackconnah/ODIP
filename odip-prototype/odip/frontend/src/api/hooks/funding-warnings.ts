@@ -36,15 +36,30 @@ export async function postAgreementCheck(participantId: string, request: Agreeme
  * (one request when somebody pauses, never one per keystroke), a busy service (429) is asked again after a pause, and `enabled` is how the plan builder holds it back until the running budget's own
  * quotes have finished, so the two never add up to more than the two the organisation is allowed at once. The previous answer stays on screen while a newer one is on its way.
  */
-export function useAgreementCheck(participantId: string | undefined, blocks: readonly PlanBlock[], from: string, to: string, enabled = true) {
+export function useAgreementCheck(participantId: string | undefined, blocks: readonly PlanBlock[], from: string, to: string, enabled = true, agreementId?: string | null) {
   const ready = !!participantId && enabled && blocks.length > 0 && periodProblem(from, to) === null
   return useQuery({
-    queryKey: [AGREEMENT_CHECK_KEY, participantId, JSON.stringify({ blocks, from, to })],
+    queryKey: [AGREEMENT_CHECK_KEY, participantId, JSON.stringify({ blocks, from, to, agreementId })],
     enabled: ready,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     retry: retryWhenBusy,
     retryDelay: busyDelay,
-    queryFn: ({ signal }) => postAgreementCheck(participantId as string, { blocks: [...blocks], periodFrom: from, periodTo: to }, signal),
+    queryFn: ({ signal }) => postAgreementCheck(participantId as string, { blocks: [...blocks], periodFrom: from, periodTo: to, ...(agreementId !== undefined && { agreementId }) }, signal),
+  })
+}
+
+/**
+ * The check of a SAVED revision (draft or approved) against the participant's other active agreements: the participant page's combined warning. No blocks are sent; the server reads the stored
+ * revision. Under the same `agreement-check` key root, so a write that moves money marks it stale. A failure leaves the warning out.
+ */
+export function useStoredAgreementCheck(participantId: string | undefined, draftId: string | undefined, agreementId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: [AGREEMENT_CHECK_KEY, participantId, 'stored', draftId, agreementId],
+    enabled: !!participantId && !!draftId && !!agreementId && enabled,
+    staleTime: 30_000,
+    retry: retryWhenBusy,
+    retryDelay: busyDelay,
+    queryFn: ({ signal }) => postAgreementCheck(participantId as string, { draftId, agreementId }, signal),
   })
 }

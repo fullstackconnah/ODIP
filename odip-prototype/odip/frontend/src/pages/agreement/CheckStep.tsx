@@ -8,6 +8,7 @@ import { formatHours } from '@/lib/planBlocks'
 import { NO_FIGURE, asSentence, categoryLabel, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
 import { formatCurrency } from '@/lib/utils'
 import { AgreementBudgetBreakdown } from '../budgets/components/AgreementBudgetBreakdown'
+import { CombinedWarning } from './CombinedWarning'
 import { CostByPeriod } from './CostByPeriod'
 import { PlanNotices } from './PlanNotices'
 import type { useAgreementPricing } from './useAgreementPricing'
@@ -60,6 +61,9 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
             {nothing ? (
               <p className="text-[13px] text-[var(--color-muted-foreground)]">Nothing is priced yet, so there is nothing to compare.</p>
             ) : budgetView ? <AgreementBudgetBreakdown view={budgetView} /> : null}
+            {!nothing && pricing.combined && (
+              <CombinedWarning check={pricing.combined} title="Together with the other agreements, this plans more than the money available" countedLead="Counted with" />
+            )}
           </section>
 
           <section aria-labelledby="check-cost" className="flex flex-col gap-2">

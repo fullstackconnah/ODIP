@@ -9,6 +9,8 @@ import { agreementBudgetView } from './agreementBudgetView'
 
 type Args = {
   participantId: string
+  /** The agreement on screen, so the check leaves its own cost out of the others': null is a new agreement. */
+  agreementId?: string | null
   shifts: readonly Shift[]
   state: AgreementState
   zone: PlanPriceZone
@@ -28,7 +30,7 @@ type Args = {
  * quotes one after the other so they never pass the organisation's limit of two in flight), and the answer is read back in shifts. A shift with something missing is left out of the quote and
  * counted. Nothing here decides whether anything can be saved: that is the engine's refusals, listed in `refused`.
  */
-export function useAgreementPricing({ participantId, shifts, state, zone, mm, from, to, canQuote, stored, onRecordBudget }: Args) {
+export function useAgreementPricing({ participantId, agreementId, shifts, state, zone, mm, from, to, canQuote, stored, onRecordBudget }: Args) {
   const settings = usePlanPricingSettings(canQuote).data
   const groups = useMemo(() => groupShifts(shifts), [shifts])
   const { quoted, leftOut } = useMemo(() => {
@@ -42,7 +44,7 @@ export function useAgreementPricing({ participantId, shifts, state, zone, mm, fr
   const settling = JSON.stringify(settled) !== JSON.stringify(quoted)
   const budget = usePlanBudget(settled, from, to, canQuote && settled.length > 0)
   // The agreement against the participant's real pools (phase 2b), asked of the same debounced blocks and only once the budget's own quotes have finished.
-  const check = useAgreementCheck(participantId, settled, from, to, canQuote && !budget.isFetching && !budget.isError)
+  const check = useAgreementCheck(participantId, settled, from, to, canQuote && !budget.isFetching && !budget.isError, agreementId)
   // Dates that cannot be priced over are asked of nobody, and with the query off nothing on screen may be the answer for the dates there were before.
   const dates = periodProblem(from, to)
   const live = dates === null && quoted.length > 0 ? budget.data : undefined
@@ -63,7 +65,7 @@ export function useAgreementPricing({ participantId, shifts, state, zone, mm, fr
   const budgetFailed = canQuote && dates === null && settled.length > 0 && budget.isError
   const issues: PlanIssue[] = answer?.period.issues ?? []
   return {
-    settings, groups, answer, status, from, to, settled, settling, quoteReady, budgetFailed, budgetFetching: budget.isFetching, fromStore: !canQuote && !!stored, budgetView, issues, refused: refusals(issues), dates, leftOut,
+    settings, groups, answer, status, from, to, settled, settling, quoteReady, budgetFailed, budgetFetching: budget.isFetching, fromStore: !canQuote && !!stored, budgetView, combined: check.data, issues, refused: refusals(issues), dates, leftOut,
     refreshing: settling || (budget.isFetching && !!answer),
     error: budget.error,
     retry: () => { void budget.refetch() },

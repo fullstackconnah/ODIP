@@ -5,9 +5,14 @@ import { AGREEMENTS_ENDING_KEY, AGREEMENTS_KEY } from './service-agreement-draft
 import { CHUNK, runInChunks, type ChunkRun } from '../../lib/runInChunks'
 import type { AgreementApproveResult, AgreementBulkRequest, AgreementBulkResult, AgreementDraftRef, AgreementList, PriceList } from '../types'
 
-/** One row per participant with an agreement revision (Agreements page). Filtering is the page's. */
+export const seriesKey = (r: { participantId: string; agreementId: string }) => `${r.participantId}:${r.agreementId}`
+
+/** One row per agreement of each participant (Agreements page), so a participant can have several. Filtering is the page's. */
 export function useAgreements() {
-  return useQuery({ queryKey: AGREEMENTS_KEY, queryFn: () => apiGet<AgreementList>('/service-agreements') })
+  return useQuery({
+    queryKey: AGREEMENTS_KEY,
+    queryFn: () => apiGet<AgreementList>('/service-agreements').then(list => ({ ...list, rows: list.rows.map(r => ({ ...r, key: seriesKey(r) })) })),
+  })
 }
 
 /** A chunk approves up to 25 revisions in series, so it can run close to the proxies' minute. */
@@ -53,8 +58,9 @@ export function usePriceLists(enabled: boolean) {
 export function useBulkAgreements(onProgress?: (done: number) => void) {
   const queryClient = useQueryClient()
   return useMutation<ChunkRun<AgreementBulkResult>, never, AgreementBulkRequest>({
-    mutationFn: ({ participantIds, ...rest }) => runInChunks(participantIds, CHUNK,
-      chunk => apiPost<AgreementBulkResult[]>('/service-agreements/bulk', { ...rest, participantIds: chunk }, { timeout: BATCH_TIMEOUT_MS }), onProgress),
+    mutationFn: ({ items, ...rest }) => runInChunks(items, CHUNK,
+      chunk => apiPost<AgreementBulkResult[]>('/service-agreements/bulk', { ...rest, items: chunk }, { timeout: BATCH_TIMEOUT_MS })
+        .then(results => results.map(r => ({ ...r, key: seriesKey(r) }))), onProgress),
     onSettled: () => Promise.all([
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
