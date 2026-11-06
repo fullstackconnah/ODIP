@@ -171,7 +171,7 @@ public class MedicationOutcomeRacePostgresTests(PostgresFixture pg) : IClassFixt
         var before = await recorded.MedicationAdministrations.AsNoTracking().SingleAsync(a => a.Id == doseId);
         Assert.NotNull(before.PrnOutcomeAt);
         // A client holding the copy from before the outcome sends no outcome fields at all.
-        var stale = new UpdateAdministrationDto { Status = MedicationAdministrationStatus.Administered, AdministeredAt = Original, Notes = "Corrected note" };
+        var stale = new UpdateAdministrationDto { AmendmentReason = MedicationAmendmentReason.WrongTime, Status = MedicationAdministrationStatus.Administered, AdministeredAt = Original, Notes = "Corrected note" };
         await using var amend = Request(tenantId);
         Assert.IsType<OkObjectResult>((await new MedicationsController(amend, Tenant(tenantId)).UpdateAdministration(doseId, stale, CancellationToken.None)).Result);
         await using var verify = Request(tenantId);
@@ -201,6 +201,7 @@ public class MedicationOutcomeRacePostgresTests(PostgresFixture pg) : IClassFixt
 
     private static UpdateAdministrationDto Amend(string outcome, DateTime at) => new()
     {
+        AmendmentReason = MedicationAmendmentReason.WrongTime,
         Status = MedicationAdministrationStatus.Administered, AdministeredAt = Original,
         PrnOutcome = outcome, PrnOutcomeAt = at,
     };

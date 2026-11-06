@@ -44,6 +44,12 @@ describe('AuditHistoryTab', () => {
     expect(screen.queryByText('Yesterday')).not.toBeInTheDocument()
   })
 
+  it('shows the empty state, not a crash, when the response has no entries list (PT-3)', () => {
+    mockUseAuditHistory.mockReturnValue({ data: {}, isLoading: false, isError: false })
+    render(<AuditHistoryTab entityType="Trip" entityId="t1" />)
+    expect(screen.getByText('No history recorded yet.')).toBeInTheDocument()
+  })
+
   it('says the history could not load, in the house voice, and retries', () => {
     const refetch = vi.fn()
     mockUseAuditHistory.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })

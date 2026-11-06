@@ -448,6 +448,10 @@ export type MedicationCompetencyMode = typeof MEDICATION_COMPETENCY_MODES[number
 export const MEDICATION_ADMINISTRATION_STATUSES = ['Administered', 'Refused', 'Withheld', 'Missed', 'WrongMedication'] as const
 export type MedicationAdministrationStatus = typeof MEDICATION_ADMINISTRATION_STATUSES[number]
 
+// Why a coordinator amended a recorded administration. Mirrors the C# MedicationAmendmentReason; the order is the picker order.
+export const MEDICATION_AMENDMENT_REASONS = ['WrongTime', 'WrongDose', 'WrongPerson', 'EnteredInError', 'Other'] as const
+export type MedicationAmendmentReason = typeof MEDICATION_AMENDMENT_REASONS[number]
+
 // ── Medication Frequency ──────────────────────────────────
 export const MEDICATION_FREQUENCIES = ['Daily', 'SpecificDays', 'EveryNDays'] as const
 export type MedicationFrequency = typeof MEDICATION_FREQUENCIES[number]

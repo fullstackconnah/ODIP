@@ -85,6 +85,12 @@ describe('CompatibilityPage: the table', () => {
     expect(screen.getByRole('radio', { name: 'Table' })).toBeChecked()
   })
 
+  it('keeps the window scroll on the Table view', async () => {
+    renderPage('/rostering/compatibility?view=table')
+    await screen.findByRole('grid')
+    expect(document.querySelector('[data-fit-screen]')).toBeNull()
+  })
+
   it('moves between the board and the table with the toggle', async () => {
     const user = userEvent.setup()
     renderPage('/rostering/compatibility')
@@ -288,5 +294,14 @@ describe('CompatibilityPage: the participant board', () => {
     expect(screen.queryByRole('button', { name: /^Options for/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Add to/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '+ Mark No' })).not.toBeInTheDocument()
+  })
+
+  it('fits the screen on By participant: the list scrolls under a pinned search', async () => {
+    renderPage('/rostering/compatibility')
+    const nav = await screen.findByRole('navigation', { name: 'Participants' })
+    expect(document.querySelector('[data-fit-screen]')).not.toBeNull()
+    const scroller = nav.querySelector('ul') as HTMLElement
+    expect(scroller.className).toContain('lg:overflow-y-auto')
+    expect(scroller).not.toContainElement(within(nav).getByRole('textbox', { name: 'Search participants' }))
   })
 })

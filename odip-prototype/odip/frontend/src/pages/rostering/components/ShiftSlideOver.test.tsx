@@ -299,10 +299,13 @@ describe('ShiftSlideOver service location picker', () => {
     render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [], serviceLocationId: null }) }} {...props} />)
 
     const picker = screen.getByLabelText('Service location')
-    expect(within(picker).getByRole('option', { name: 'None' })).toBeInTheDocument()
-    expect(within(picker).getByRole('option', { name: 'Southside day centre' })).toBeInTheDocument()
-    expect(within(picker).queryByRole('option', { name: /Old hub/ })).not.toBeInTheDocument()
-    await user.selectOptions(picker, 'place-1')
+    expect(picker.tagName).toBe('INPUT') // the house picker, not a native select
+    await user.click(picker)
+    const listbox = screen.getByRole('listbox')
+    expect(within(listbox).getByRole('option', { name: 'None' })).toBeInTheDocument()
+    expect(within(listbox).getByRole('option', { name: 'Southside day centre' })).toBeInTheDocument()
+    expect(within(listbox).queryByRole('option', { name: /Old hub/ })).not.toBeInTheDocument()
+    await user.click(within(listbox).getByRole('option', { name: 'Southside day centre' }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(mockUpdateMutateAsync.mock.calls[0][0].data.serviceLocationId).toBe('place-1')
@@ -312,8 +315,7 @@ describe('ShiftSlideOver service location picker', () => {
     mockUseServiceLocations.mockReturnValue({ data: [makePlace({ id: 'place-2', name: 'Old hub', isActive: false })] })
     render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [], serviceLocationId: 'place-2' }) }} {...props} />)
 
-    expect(screen.getByLabelText('Service location')).toHaveValue('place-2')
-    expect(screen.getByRole('option', { name: 'Old hub (archived)' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Service location')).toHaveValue('Old hub (archived)')
   })
 
   it('sends null when None is chosen, and points at Settings when there are no places', async () => {
