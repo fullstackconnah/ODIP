@@ -104,10 +104,10 @@ export function useParticipantSection(tab: ParticipantTabKey, rows: readonly Sub
     navigate({ search: next.toString(), hash: '' }, { replace: true })
   }
   const setSection = (id: string) => {
-    if (id !== section && rows.some(r => r.id === id)) write(p => { if (id === rows[0].id) p.delete('section'); else p.set('section', id) })
+    if (id !== section && rows.some(r => r.id === id)) write(p => { p.delete('add'); if (id === rows[0].id) p.delete('section'); else p.set('section', id) })
   }
   const selectTab = (next: ParticipantTabKey) => {
-    if (next !== tab) write(p => { p.delete('section'); if (next === 'overview') p.delete('tab'); else p.set('tab', next) })
+    if (next !== tab) write(p => { p.delete('section'); p.delete('add'); if (next === 'overview') p.delete('tab'); else p.set('tab', next) })
   }
   return { section, setSection, selectTab }
 }

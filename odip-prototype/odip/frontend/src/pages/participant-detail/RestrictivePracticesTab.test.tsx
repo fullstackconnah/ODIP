@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import RestrictivePracticesTab from './RestrictivePracticesTab'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import type { MedicationListDto } from '@/api/types/medications'
@@ -111,7 +112,7 @@ afterEach(() => {
 
 describe('RestrictivePracticesTab', () => {
   it('renders an empty state when there are no register entries', () => {
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getByText('No restrictive practices recorded')).toBeInTheDocument()
   })
 
@@ -121,7 +122,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText('Seclusion')).toBeInTheDocument()
     expect(screen.getByText('Seclusion room used during acute crisis periods only.')).toBeInTheDocument()
@@ -138,7 +139,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     // amber-100 / amber-800 are exactly --color-warning-container / --color-on-warning-container.
     const warning = ['bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]']
@@ -158,7 +159,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText(/review overdue/i)).toBeInTheDocument()
   })
@@ -171,7 +172,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText(/review due/i)).toBeInTheDocument()
     expect(screen.queryByText(/review overdue/i)).not.toBeInTheDocument()
@@ -181,7 +182,7 @@ describe('RestrictivePracticesTab', () => {
     setUserRole('ReadOnly')
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
@@ -192,7 +193,7 @@ describe('RestrictivePracticesTab', () => {
     setUserRole('SupportWorker')
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add entries/i })).not.toBeInTheDocument()
@@ -205,7 +206,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(screen.getByLabelText(/description/i)).toHaveValue('Original description')
@@ -224,7 +225,7 @@ describe('RestrictivePracticesTab', () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = screen.getByRole('alertdialog')
@@ -239,7 +240,7 @@ describe('RestrictivePracticesTab', () => {
     const message = "Someone else just changed this entry, so it wasn't deleted. Check their change, then delete it again if you still want to."
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch } as never)
     mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [message] } } })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
@@ -257,7 +258,7 @@ describe('RestrictivePracticesTab', () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch: vi.fn() } as never)
     mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 500, data: { success: false, errors: ['Server exploded.'] } } })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
@@ -278,7 +279,7 @@ describe('RestrictivePracticesTab', () => {
   ])('shows the authorisation badge on the row: %s', (_label, overrides, badge, explanation) => {
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(overrides)], isLoading: false })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText(badge)).toBeInTheDocument()
     expect(screen.queryByText(badge === 'Authorised' ? 'Not authorised' : 'Authorised')).not.toBeInTheDocument()
@@ -295,7 +296,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText('Not authorised')).toBeInTheDocument()
     expect(screen.getByText('Not yet in force')).toBeInTheDocument()
@@ -311,7 +312,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByText('Inactive (1)'))
 
     expect(screen.getByText('Authorised by Dr Lee')).toBeInTheDocument()
@@ -327,7 +328,7 @@ describe('RestrictivePracticesTab', () => {
       isLoading: false,
     })
 
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByText('Inactive (1)')).toBeInTheDocument()
     expect(screen.queryByText('Retired entry')).not.toBeInTheDocument()
@@ -354,14 +355,14 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('hides the Add entries action for a ReadOnly user', () => {
     setUserRole('ReadOnly')
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByRole('button', { name: /add entries/i })).not.toBeInTheDocument()
   })
 
   it('opens the setup step offering every restrictive practice type, including Chemical restraint', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     expect(screen.getByRole('dialog', { name: /add entries/i })).toBeInTheDocument()
@@ -373,7 +374,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('defaults to a single empty row so a one-off entry stays as fast as the old single-entry form', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     expect(screen.getByLabelText(/number of entries/i)).toHaveValue(1)
@@ -387,7 +388,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('rejects an invalid row count before generating rows', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await user.clear(screen.getByLabelText(/number of entries/i))
@@ -400,7 +401,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('generates an editable table with the requested number of rows, all editable at once', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await user.click(screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i }))
@@ -418,7 +419,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('adds another row via the Add row control', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '1')
     await user.click(screen.getByRole('button', { name: /add row/i }))
@@ -429,7 +430,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('removes a row via its remove control, but disables removing the last remaining row', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '2')
     await user.click(screen.getByRole('button', { name: 'Remove row 2' }))
@@ -440,7 +441,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('requires a description on every row before saving, surfaced per row', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '1')
     await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
@@ -452,7 +453,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   it('creates a single entry end to end through Add entries (the only create path)', async () => {
     const user = userEvent.setup()
     mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '1')
     await user.type(screen.getByLabelText('Description, row 1'), 'Environmental restriction — locked doors overnight.')
@@ -473,7 +474,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   it('saves every row sharing the picked type in a single bulk request, then closes', async () => {
     const user = userEvent.setup()
     mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '2')
     await user.type(screen.getByLabelText('Description, row 1'), 'First entry')
@@ -493,7 +494,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   it('does not show a Linked medication column when the batch type is not Chemical restraint', async () => {
     const user = userEvent.setup()
     mockUseParticipantMedications.mockReturnValue({ data: [makeMedication()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '1')
 
@@ -503,7 +504,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   it('shows a Linked medication column populated from participant medications when Chemical restraint is picked', async () => {
     const user = userEvent.setup()
     mockUseParticipantMedications.mockReturnValue({ data: [makeMedication({ name: 'Risperidone', strength: '1mg' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await selectBulkType(user, /^chemical restraint/i)
@@ -517,7 +518,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   it('shows the no-active-medications hint when Chemical restraint is picked and the participant has none on record', async () => {
     const user = userEvent.setup()
     mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await selectBulkType(user, /^chemical restraint/i)
@@ -530,7 +531,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
     const user = userEvent.setup()
     mockUseParticipantMedications.mockReturnValue({ data: [makeMedication({ id: 'med-9', name: 'Risperidone', strength: '1mg' })], isLoading: false })
     mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await selectBulkType(user, /^chemical restraint/i)
@@ -553,7 +554,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
   it('leaves relatedMedicationId null for a Chemical restraint row with no medication selected', async () => {
     const user = userEvent.setup()
     mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
     await selectBulkType(user, /^chemical restraint/i)
@@ -577,7 +578,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
     mockBulkCreateMutateAsync.mockRejectedValue({
       response: { data: { errors: ['Row 2: Description is required'] } },
     })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '2')
     await user.type(screen.getByLabelText('Description, row 1'), 'First entry')
@@ -597,7 +598,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
     mockBulkCreateMutateAsync.mockRejectedValue({
       response: { data: { errors: ['Participant not found'] } },
     })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '1')
     await user.type(screen.getByLabelText('Description, row 1'), 'First entry')
@@ -608,7 +609,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
   it('goes back to the setup step via Back', async () => {
     const user = userEvent.setup()
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await openBulkRows(user, '1')
     await user.click(screen.getByRole('button', { name: /back/i }))
@@ -625,7 +626,7 @@ describe('RestrictivePracticesTab — long list (T10)', () => {
       data: Array.from({ length: 23 }, (_, i) => makePractice({ id: `p${i}` })),
       isLoading: false,
     })
-    const { container } = render(<RestrictivePracticesTab participantId="participant-1" />)
+    const { container } = render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
     await user.click(screen.getByRole('button', { name: 'Show all 23' }))
     const rows = container.querySelectorAll('[data-show-row]')
@@ -640,7 +641,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('opens ticked, with who and when, for an authorised record', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(box()).toBeChecked()
@@ -651,7 +652,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('opens unticked, with no authorisation fields, for an unauthorised record', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(box()).not.toBeChecked()
@@ -662,7 +663,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('shows the NDIS Commission reference on the row and saves an edit to it, trimmed', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ commissionReference: 'NDIS-42' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getByText('Commission ref NDIS-42')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
@@ -678,7 +679,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('unticking and saving sends null for both', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.click(box())
@@ -691,7 +692,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('ticked with a field emptied shows the field error and does not save', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.clear(screen.getByLabelText(/^authorised by/i))
@@ -704,7 +705,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('ticking an unauthorised record then filling both saves them', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.click(box())
@@ -719,7 +720,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ isActive: false, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByText('Inactive (1)'))
     await user.click(screen.getByRole('button', { name: 'Edit' }))
@@ -734,7 +735,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisationDate: '2026-03-01' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(box()).toBeChecked()
@@ -748,7 +749,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('opens ticked for a name-only record, shows the name, and blocks the save asking for the date', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee' })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(box()).toBeChecked()
@@ -763,7 +764,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
     mockUpdateMutateAsync.mockRejectedValueOnce({ response: { data: { errors: ['Authorised by is too long'] } } })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.click(box())
@@ -780,7 +781,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('sends the version the entry was opened with', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.type(screen.getByLabelText(/description/i), ' More.')
@@ -792,7 +793,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('keeps sending the opened version when the list refetches behind the open form', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
-    const { rerender } = render(<RestrictivePracticesTab participantId="participant-1" />)
+    const { rerender } = render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ updatedAt: '2026-02-02T00:00:00Z' })], isLoading: false })
@@ -810,7 +811,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     mockUpdateMutateAsync.mockRejectedValueOnce({
       response: { status: 409, data: { success: false, errors: ['Someone else just changed this entry, so your changes weren\'t saved. Close it and open it again to see theirs.'] } },
     })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.type(screen.getByLabelText(/description/i), ' My change.')
@@ -827,7 +828,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     const serverError = { response: { status: 500, data: { success: false, errors: ['Something went wrong on our side.'] } } }
 
     async function openAndSave(user: ReturnType<typeof userEvent.setup>) {
-      render(<RestrictivePracticesTab participantId="participant-1" />)
+      render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getByRole('button', { name: 'Edit' }))
       await user.type(screen.getByLabelText(/description/i), ' More.')
       await user.click(screen.getByRole('button', { name: /save entry/i }))
@@ -889,7 +890,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
       ],
       isLoading: false,
     })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getByText('Report to NDIS Commission')).toBeInTheDocument()
     expect(screen.getByText('Report to NDIS Commission').querySelector('svg')).not.toBeNull()
     expect(screen.getByText('No report needed')).toBeInTheDocument()
@@ -899,7 +900,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
   it('sends the reporting answer when an unauthorised entry is saved', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.click(screen.getByRole('radio', { name: 'Yes' }))
     await user.click(screen.getByRole('button', { name: /save entry/i }))
@@ -909,7 +910,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
   it('locks type and medicine on a linked entry and warns before deactivating it', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(screen.getByText('Set by the linked medicine, so it stays a chemical restraint.')).toBeInTheDocument()
     expect(screen.getByText('To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry.')).toBeInTheDocument()
@@ -923,7 +924,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     const user = userEvent.setup()
     const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
     mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     scrollIntoView.mockClear()
     await user.click(screen.getByRole('checkbox', { name: /^active/i }))
@@ -937,7 +938,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
   it('does not show the removed reporting hint', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(screen.queryByText('Saved on the register entry.')).not.toBeInTheDocument()
   })
@@ -945,7 +946,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
   it('explains why a linked entry cannot be deleted and offers to open it', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText("This entry can't be deleted")).toBeInTheDocument()
@@ -957,7 +958,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
   it('says an inactive linked entry is kept as the record, with only Close', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [linked({ isActive: false })], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: /^Inactive/ }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = screen.getByRole('alertdialog')
@@ -974,7 +975,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false, refetch: vi.fn() } as never)
     mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: {} } })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.click(screen.getByRole('button', { name: /save entry/i }))
     expect(await screen.findByText(/This entry was changed while you had it open/)).toBeInTheDocument()
@@ -988,7 +989,7 @@ describe('RestrictivePracticesTab use kind, authorisation span and plan line', (
   function renderWith(p: Partial<RestrictivePracticeDto>, role = 'Coordinator') {
     setUserRole(role)
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(p)], isLoading: false })
-    return render(<RestrictivePracticesTab participantId="participant-1" />)
+    return render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
   }
 
   it('leads the meta line with the use kind', () => {
@@ -1068,7 +1069,7 @@ describe('RestrictivePracticesTab edit modal: use kind, end date and plan dates'
   async function openEdit(p: Partial<RestrictivePracticeDto>) {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(p)], isLoading: false })
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     return user
   }
@@ -1157,7 +1158,7 @@ describe('RestrictivePracticesTab edit modal: use kind, end date and plan dates'
 // RP register PR 1: the bulk dialog asks how the batch is used and, for an authorised batch, each row's end date.
 describe('Add entries: use kind and authorisation end date', () => {
   async function openSetup(user: ReturnType<typeof userEvent.setup>) {
-    render(<RestrictivePracticesTab participantId="participant-1" />)
+    render(<RestrictivePracticesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
   }
 
@@ -1216,5 +1217,38 @@ describe('Add entries: use kind and authorisation end date', () => {
     await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
     expect(await screen.findByText("The end date can't be before the authorisation date.")).toBeInTheDocument()
     expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
+  })
+})
+
+function Where() {
+  const { pathname, search } = useLocation()
+  return <p data-testid="where">{pathname + search}</p>
+}
+
+describe('Quick add from the Overview (?add=1)', () => {
+  const url = '/p?tab=health&section=restrictive-practices&add=1'
+  const renderAt = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><RestrictivePracticesTab participantId="participant-1" /><Where /></MemoryRouter>)
+
+  it('opens the add once, removes the param with replace, and returns focus to the section Add button on close', async () => {
+    const user = userEvent.setup()
+    renderAt(url)
+    expect(await screen.findByRole('dialog', { name: /Add entries/i })).toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('/p?tab=health&section=restrictive-practices')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Add entries/i })[0]).toHaveFocus()
+  })
+
+  it('does not reopen after the param is gone (refresh, Back)', async () => {
+    renderAt('/p?tab=health&section=restrictive-practices')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('a role without the write gate opens nothing and still drops the param', async () => {
+    setUserRole('ReadOnly')
+    renderAt(url)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })

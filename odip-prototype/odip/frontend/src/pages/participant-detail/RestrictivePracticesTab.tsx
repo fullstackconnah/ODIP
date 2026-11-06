@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
+import { useQuickAdd } from '@/hooks/useQuickAdd'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
@@ -284,6 +285,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const [showInactive, setShowInactive] = useState(false)
 
   const [adding, setAdding] = useState(false)
+  const addRef = useRef<HTMLButtonElement>(null)
+  useQuickAdd(() => setAdding(true), { enabled: canWriteRestrictivePractices && !!participantId, focusRef: addRef })
   const [deleteBlocked, setDeleteBlocked] = useState<RestrictivePracticeDto | null>(null)
 
   const activePractices = useMemo(() => practices.filter(p => p.isActive), [practices])
@@ -425,7 +428,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         <h2 className="font-semibold text-[var(--color-foreground)]">Restrictive Practices Register</h2>
         {canWriteRestrictivePractices && participantId && (
           <div className="flex items-center gap-2">
-            <Button onClick={() => setAdding(true)}>
+            <Button ref={addRef} onClick={() => setAdding(true)}>
               <Plus className="w-4 h-4" /> Add entries
             </Button>
           </div>
