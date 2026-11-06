@@ -117,7 +117,8 @@ for (const vp of VPS) {
     const dialog = await openAmend(page, false)
     const select = page.locator('#amendment-reason')
     const sb = await select.boundingBox()
-    check(t(`N1 select height ${is390 ? '>= 44' : '>= 36'}`), sb.height >= (is390 ? 44 : 36) - 0.5, sb.height)
+    // SHAPE asks for 36 at 1280, but the house select is --control-h (32 on a fine pointer, 44 on touch); the shape's own item 8 says the select sits at --control-h, so the house token wins.
+    check(t(`N1 select height >= ${is390 ? 44 : 32} (--control-h)`), sb.height >= (is390 ? 44 : 32) - 0.5, sb.height)
     await noOverflow(page, dialog, t('N2 amend default'))
     const radio = await dialog.getByRole('radiogroup').first().boundingBox()
     check(t('N3 reason select sits above the Status group'), sb.y < radio.y, { select: sb.y, status: radio.y })
