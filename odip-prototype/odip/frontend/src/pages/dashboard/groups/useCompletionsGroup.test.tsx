@@ -88,6 +88,15 @@ describe('Shift completions group — clean rows approve in one tap', () => {
     expect(screen.queryByRole('button', { name: APPROVE })).not.toBeInTheDocument()
     expect(isClean(withoutCount as never)).toBe(false)
   })
+
+  it("a shift waiting on the worker's details is not clean: it gets a Needs details flag and no one-tap Approve", async () => {
+    apiGet.mockResolvedValue(page([item({ missingDetails: ['notes'] })]))
+    renderGroup(() => useCompletionsGroup(true))
+
+    expect(await screen.findByText('Needs details')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: APPROVE })).not.toBeInTheDocument()
+    expect(isClean(item({ missingDetails: ['notes'] }) as never)).toBe(false)
+  })
 })
 
 describe('Shift completions group — Return needs a reason', () => {

@@ -361,5 +361,9 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   travelKilometresOutOfRange: 'SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE',
   /** 409 on the staff travel edit: the shift is on a claim that still counts. */
   travelOnClaim: 'SHIFT_TRAVEL_ON_CLAIM',
+  /** 409 on approve and in a batch result: the shift was finished "details later" and still lacks details. */
+  detailsMissing: 'SHIFT_DETAILS_MISSING',
+  /** 400 on the finish-details save: the end can only move earlier than the tap. */
+  actualEndAfterTap: 'SHIFT_ACTUAL_END_AFTER_TAP',
 } as const
 export type ShiftPackageErrorCode = typeof SHIFT_PACKAGE_ERROR_CODES[keyof typeof SHIFT_PACKAGE_ERROR_CODES]
