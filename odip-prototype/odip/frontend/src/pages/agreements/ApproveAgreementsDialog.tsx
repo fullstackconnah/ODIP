@@ -28,13 +28,15 @@ interface Props {
   /** Confirm: the error was a 403, so a retry can only be refused again and Approve is off (Cancel stays). */
   refused?: boolean
   results: AgreementApproveResult[]
+  /** Which agreement a draft is, for the link and the name when the participant has several. */
+  agreementOf?: (draftId: string) => { agreementId: string; title: string } | undefined
   stopped: ApproveStopped | null
   onConfirm: () => void
   onClose: () => void
 }
 
 /** Confirm, run and report for the bulk Approve. While requests are in flight nothing closes it (no X, Escape and the backdrop do nothing) so the person cannot lose the answers. */
-export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, progress, error, refused, results, stopped, onConfirm, onClose }: Props) {
+export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, progress, error, refused, results, agreementOf, stopped, onConfirm, onClose }: Props) {
   const running = phase === 'running'
   const listed = groupResults(results)
   const heading = resultHeading(results, stopped?.total ?? results.length)
@@ -92,11 +94,11 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, 
                 const why = notMovedToActive(r) ? notMovedWords(r.activation?.reason) : r.outcome !== 'Failed' && r.reasons[0]
                 return (
                   <li key={r.draftId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
-                    <span className="min-w-0 break-words font-medium">{r.participantName || 'Unknown participant'}</span>
+                    <span className="min-w-0 break-words font-medium">{agreementOf?.(r.draftId)?.title ?? (r.participantName || 'Unknown participant')}</span>
                     <span className="flex flex-wrap items-center gap-2">
                       <StatusBadge tone={badge.tone} label={badge.label} />
                       {r.outcome === 'NeedsReview' && (
-                        <Link className="text-[var(--color-primary)] underline underline-offset-2" to={`/participants/${r.participantId}/agreement-draft`}>Open it</Link>
+                        <Link className="text-[var(--color-primary)] underline underline-offset-2" to={`/participants/${r.participantId}/agreement-draft${agreementOf?.(r.draftId) ? `?agreement=${agreementOf(r.draftId)!.agreementId}` : ''}`}>Open it</Link>
                       )}
                     </span>
                     {why && <span className="basis-full text-[var(--color-muted-foreground)]">{why}</span>}

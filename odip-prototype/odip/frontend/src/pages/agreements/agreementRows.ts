@@ -1,5 +1,6 @@
 import type { AgreementBulkAction, AgreementDraftRef, AgreementRow, PriceList } from '@/api/types'
 import { endingBadgeWords } from '@/lib/agreementEnding'
+import { agreementLabel, isPlainAgreement } from '@/lib/agreementKind'
 import { formatDateRange } from '@/lib/dateRange'
 import type { Tone } from '@/lib/tone'
 import { formatCurrency } from '@/lib/utils'
@@ -27,6 +28,16 @@ export function filterRows(rows: readonly AgreementRow[], { show, list, q }: Row
     && (!term || r.participantName.toLowerCase().includes(term)))
 }
 
+/** The rows that say which agreement they are: the participant has several, or it is not the plain everyday one. A participant with one plain agreement looks as it always did. */
+export function namedRowKeys(rows: readonly AgreementRow[]): Set<string> {
+  const count = new Map<string, number>()
+  for (const r of rows) count.set(r.participantId, (count.get(r.participantId) ?? 0) + 1)
+  return new Set(rows.filter(r => (count.get(r.participantId) ?? 0) > 1 || !isPlainAgreement(r)).map(r => r.key))
+}
+
+/** "Participant · Agreement" for a named row, else just the participant. */
+export const rowTitle = (r: AgreementRow, named: ReadonlySet<string>) => (named.has(r.key) ? `${r.participantName} · ${agreementLabel(r)}` : r.participantName)
+
 /** The price lists the rows are on, newest first. */
 export function listOptions(rows: readonly AgreementRow[]): PriceList[] {
   const byVersion = new Map<string, PriceList>()
@@ -46,7 +57,7 @@ export function statusBadge(r: AgreementRow): { tone: Tone; label: string } {
 
 /** The ticked rows that have a draft waiting, as the approve request names them. */
 export function approveTargets(rows: readonly AgreementRow[], selected: ReadonlySet<string>): AgreementDraftRef[] {
-  return rows.filter(r => selected.has(r.participantId) && r.waiting).map(r => ({ participantId: r.participantId, draftId: r.waiting!.draftId }))
+  return rows.filter(r => selected.has(r.key) && r.waiting).map(r => ({ participantId: r.participantId, draftId: r.waiting!.draftId }))
 }
 
 export interface TermView { range: string; total: number; from: string | null; draftLine: string | null }

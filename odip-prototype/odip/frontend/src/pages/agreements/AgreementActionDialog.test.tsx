@@ -11,17 +11,17 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const row = (name: string, end = '2026-12-31', over: Partial<AgreementRow> = {}): AgreementRow => ({
-  participantId: name, participantName: name, status: 'Active', endingState: 'None', hasWaitingDraft: false,
+  participantId: name, participantName: name, key: `${name}:a-1`, agreementId: 'a-1', agreementKind: 'Core', agreementName: null, status: 'Active', endingState: 'None', hasWaitingDraft: false,
   current: { draftId: `d-${name}`, version: 1, agreementStartDate: '2026-01-01', agreementEndDate: end, total: 1000 }, waiting: null,
   daysLeft: null, termStart: '2026-01-01', priceList: { version: '2025-26', start: '2025-07-01' }, newerPriceList: null, ...over,
 })
 const lists = (data: { version: string; start: string }[] | undefined, isError = false) => ({ data, isError, refetch: vi.fn() })
-const made = { participantId: 'Ana', name: 'Ana', outcome: 'Created', reason: null, sourceDraftId: 'a', newDraftId: 'b', before: null, after: null, hasIssues: false }
+const made = { participantId: 'Ana', key: 'Ana:a-1', agreementId: 'a-1', name: 'Ana', outcome: 'Created', reason: null, sourceDraftId: 'a', newDraftId: 'b', before: null, after: null, hasIssues: false }
 
 function open(action: 'renew' | 'reprice' | 'extend', selected: AgreementRow[], props: Partial<Parameters<typeof AgreementActionDialog>[0]> = {}) {
   const onDone = vi.fn()
   const onClose = vi.fn()
-  render(<AgreementActionDialog action={action} selected={selected} onClose={onClose} onDone={onDone} onShowDrafts={vi.fn()} {...props} />)
+  render(<AgreementActionDialog action={action} selected={selected} named={new Set()} onClose={onClose} onDone={onDone} onShowDrafts={vi.fn()} {...props} />)
   return { onDone, onClose }
 }
 
@@ -36,7 +36,7 @@ describe('AgreementActionDialog', () => {
     const { onDone } = open('renew', [row('Ana'), row('Ben')])
     expect(screen.getByRole('heading', { name: 'Renew 2 agreements' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Make 2 drafts' }))
-    expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'renew', participantIds: ['Ana', 'Ben'] }))
+    expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'renew', items: [{ participantId: 'Ana', agreementId: 'a-1' }, { participantId: 'Ben', agreementId: 'a-1' }] }))
     await waitFor(() => expect(onDone).toHaveBeenCalledWith({ action: 'renew', label: '', results: [made], stopped: null }))
   })
 
@@ -46,7 +46,7 @@ describe('AgreementActionDialog', () => {
     expect(screen.getByText(/started [A-Za-z]+ 1 Jul 2026, before today/)).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText(/Price list/), '2025-26')
     await userEvent.click(screen.getByRole('button', { name: 'Make 1 draft' }))
-    expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'reprice', participantIds: ['Ana'], priceList: '2025-26' }))
+    expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'reprice', items: [{ participantId: 'Ana', agreementId: 'a-1' }], priceList: '2025-26' }))
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ label: '2025-26' })))
   })
 
@@ -71,7 +71,7 @@ describe('AgreementActionDialog', () => {
     await userEvent.type(date, '2027-06-30')
     expect(make).toBeEnabled()
     await userEvent.click(make)
-    expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'extend', participantIds: ['Ana', 'Ben'], endDate: '2027-06-30' }))
+    expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'extend', items: [{ participantId: 'Ana', agreementId: 'a-1' }, { participantId: 'Ben', agreementId: 'a-1' }], endDate: '2027-06-30' }))
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ label: '2027-06-30' })))
   })
 

@@ -12,16 +12,22 @@ import { extractErrorMessage } from '@/lib/utils'
 import { formatServiceDate, plural } from '@/lib/format'
 import { CHUNK } from '@/lib/runInChunks'
 import { addDays, isPricingDate } from '@/lib/planQuote'
-import { bulkSkipCount, bulkSkipNotes, latestEnd } from './agreementRows'
+import { bulkSkipCount, bulkSkipNotes, latestEnd, rowTitle } from './agreementRows'
 
 /** A run that stopped partway: what the earlier requests answered, and how many items were never sent. `noReply`: the failed request got no answer, so some of its drafts may exist. */
 export interface BulkStopped { done: number; total: number; notSent: number; noReply: boolean }
-export interface BulkRun { action: AgreementBulkAction; label: string; results: AgreementBulkResult[]; stopped: BulkStopped | null }
+export interface BulkRun {
+  action: AgreementBulkAction; label: string; results: AgreementBulkResult[]; stopped: BulkStopped | null
+  /** "Participant · Agreement" by row key, for the rows that name their agreement. */
+  titles?: Record<string, string>
+}
 
 interface Props {
   action: AgreementBulkAction
   /** The ticked rows, in the order they are sent. */
   selected: readonly AgreementRow[]
+  /** The keys of the rows that name their agreement (agreementRows.namedRowKeys). */
+  named: ReadonlySet<string>
   onClose: () => void
   /** The run finished (or stopped after some answers): the page shows the review. */
   onDone: (run: BulkRun) => void
@@ -44,7 +50,7 @@ const failureWords = (error: unknown) => {
 }
 
 /** Renew, Reprice or Extend for the ticked agreements: the question, the run, and what went wrong. Mounted per action, so each opening starts clean. While requests are in flight nothing closes it. */
-export function AgreementActionDialog({ action, selected, onClose, onDone, onShowDrafts }: Props) {
+export function AgreementActionDialog({ action, selected, named, onClose, onDone, onShowDrafts }: Props) {
   const count = selected.length
   const [phase, setPhase] = useState<'ask' | 'running'>('ask')
   const [progress, setProgress] = useState(0)
@@ -69,7 +75,7 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
   const run = async () => {
     setPhase('running'); setProgress(0); setFailure(null)
     const result = await bulk.mutateAsync({
-      action, participantIds: selected.map(r => r.participantId),
+      action, items: selected.map(r => ({ participantId: r.participantId, agreementId: r.agreementId })),
       ...(action === 'extend' && { endDate }), ...(action === 'reprice' && { priceList: list!.version }),
     })
     if (result.stopped && result.results.length === 0) {
@@ -79,7 +85,7 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
       return
     }
     onDone({
-      action, label: action === 'extend' ? endDate : action === 'reprice' ? list!.version : '', results: result.results,
+      action, label: action === 'extend' ? endDate : action === 'reprice' ? list!.version : '', results: result.results, titles: Object.fromEntries(selected.filter(r => named.has(r.key)).map(r => [r.key, rowTitle(r, named)])),
       stopped: result.stopped ? { done: result.results.length, total: count, notSent: result.stopped.notSent, noReply: noReply(result.stopped.error) } : null,
     })
   }

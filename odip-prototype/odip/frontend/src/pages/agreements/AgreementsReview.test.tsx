@@ -12,7 +12,7 @@ vi.mock('@/api/hooks', () => ({ useApproveAgreements: () => ({ mutateAsync: mock
 vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 
 const made = (id: string, name: string, over: Partial<AgreementBulkResult> = {}): AgreementBulkResult => ({
-  participantId: id, name, outcome: 'Created', reason: null, sourceDraftId: `s-${id}`, newDraftId: `n-${id}`,
+  participantId: id, key: `${id}:a-1`, agreementId: 'a-1', name, outcome: 'Created', reason: null, sourceDraftId: `s-${id}`, newDraftId: `n-${id}`,
   before: { start: '2026-01-01', end: '2026-12-31', total: 1000 }, after: { start: '2027-01-01', end: '2027-12-31', total: 1250.5 }, hasIssues: false, ...over,
 })
 const results: AgreementBulkResult[] = [
