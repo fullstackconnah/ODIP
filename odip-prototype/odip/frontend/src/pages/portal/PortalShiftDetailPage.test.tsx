@@ -1090,6 +1090,43 @@ describe('PortalShiftDetailPage: End shift takes the end at the tap (finish late
     expect(finishMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { detailsLater: true, endTappedAt: '2026-08-17T07:00:00Z' } })
   })
 
+  it('D3a: online End shift sends exactly one finish with detailsLater and no endTappedAt', async () => {
+    show(inProgress())
+    tapEnd()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    const data = finishMutateAsync.mock.calls[0][0].data
+    expect(data).toEqual({ detailsLater: true })
+    expect(data).not.toHaveProperty('endTappedAt')
+  })
+
+  it('D3b: a re-tap after a failed finish reuses the saved tap and sends it as endTappedAt', async () => {
+    vi.setSystemTime(new Date('2026-08-17T07:00:00Z'))
+    finishMutateAsync.mockRejectedValueOnce(new Error('Network Error'))
+    const first = show(inProgress())
+    tapEnd()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    const draft = JSON.parse(sessionStorage.getItem('odip-shift-end-draft:shift-1')!)
+    expect(draft.tappedAt).toBe('2026-08-17T07:00:00.000Z')
+    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ ...draft, open: false }))   // Back to shift
+    first.unmount()
+    vi.setSystemTime(new Date('2026-08-17T07:05:00Z'))
+    show(inProgress())
+    tapEnd()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(2))
+    expect(finishMutateAsync.mock.calls[1][0]).toEqual({ id: 'shift-1', data: { detailsLater: true, endTappedAt: '2026-08-17T07:00:00.000Z' } })
+  })
+
+  it('D1/D3c: a running break ends at the tap even when a dose is due, and no finish is sent', async () => {
+    const brk = { id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 0, editedAt: null, createdByUserId: 'u', withParticipant: false }
+    show(inProgress({
+      breaks: [brk] as never,
+      finishBlockers: [{ code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: '2026-08-17T12:00:00' }] as never,
+    }))
+    tapEnd()
+    await waitFor(() => expect(endBreakMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', breakId: 'b1' }))
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+  })
+
   it('a dose due online holds the end back: nothing is sent, the tap is kept in the draft', async () => {
     show(inProgress({ finishBlockers: [{ code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: '2026-08-17T12:00:00' }] as never }))
     tapEnd()

@@ -42,7 +42,7 @@ const add = (name, pass, detail) => checks.push({ name, pass, detail })
 
 const browser = await chromium.launch({ headless: true })
 // One signed-in session; `register` is read by the stub on every request, so a state with an empty register is a fresh session.
-async function session(vp, { register = [...ACTIVE], scheme = 'light', participant = true } = {}) {
+async function session(vp, { register = [...ACTIVE], scheme = 'light', participant = true, failRegister = false } = {}) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: vp.width, height: vp.height }, hasTouch: !!vp.mobile, isMobile: !!vp.mobile, reducedMotion: 'reduce', colorScheme: scheme })
   const page = await context.newPage()
   const cdp = vp.mobile ? await context.newCDPSession(page) : null
@@ -55,6 +55,7 @@ async function session(vp, { register = [...ACTIVE], scheme = 'light', participa
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: who.users }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: who.login }))
   await page.route(new RegExp(`/api/v1/participants/${PID}/restrictive-practices(\\?.*)?$`), (r) => {
+    if (failRegister) return r.fulfill({ status: 500, json: { success: false, data: null, message: 'boom', errors: [] } })
     const all = /includeInactive=true/i.test(r.request().url())
     return r.fulfill({ json: envelope(all ? [...register, INACTIVE] : register) })
   })
@@ -170,6 +171,20 @@ async function rowChecks(page, state) {
   await crop(page, 'none-picked-390')
   const full = await fullPage(page, path.join(OUT_DIR, 'full-page-390-touch.png'), { touch: true })
   checks.push(...full.checks)
+  await context.close()
+}
+
+// The register query fails (D1/D2): the error and its Try again sit over an empty list, and "None of these" stays usable.
+for (const vp of [{ name: '1280', width: 1280, height: 800 }, { name: '390', width: 390, height: 844, mobile: true }]) {
+  const { context, page } = await session(vp, { failRegister: true })
+  await page.getByRole('alert').filter({ hasText: "Couldn't load this participant's register" }).waitFor({ timeout: 60_000 })
+  const none = page.getByRole('radio', { name: /None of these/ })
+  add(`${vp.name} register error: Try again is offered`, await page.getByRole('button', { name: 'Try again' }).isVisible(), null)
+  add(`${vp.name} register error: "None of these" is enabled`, await none.isEnabled(), null)
+  if (vp.mobile) await noOverflow(page, '390 register error')
+  const state = `rp-register-error-${vp.name}`
+  const r = await cropElement(page, fieldset(page), path.join(OUT_DIR, `${state}.png`), { pad: 16, hideChrome: true, natural: true, during: (clip) => overlapCheck(fieldset(page), clip, `${state}.png`) })
+  checks.push(checkCropHolds(r), r.measured)
   await context.close()
 }
 

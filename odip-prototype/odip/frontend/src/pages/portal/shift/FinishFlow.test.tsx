@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FinishFlow } from './FinishFlow'
@@ -184,14 +184,31 @@ describe('FinishFlow: the details page after End shift', () => {
     expect(h.finish.mock.invocationCallOrder[0]).toBeLessThan(h.save.mock.invocationCallOrder[0])
   })
 
-  it('endTap: a tap older than 25 minutes is not sent (the server clock is the end)', async () => {
+  it('endTap: a tap older than 25 minutes takes a new tap, sends nothing, and says so; the next press sends the new tap (D2)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-08-17T07:40:30Z'))
     draft({ tappedAt: TAP })
     renderFlow(shift({ status: 'InProgress' }, { actualEnd: null }))
     submit()
+    expect(barAlert()).toHaveTextContent('More than 25 minutes have passed, so your end time is now 5:40 pm. Use Change if you finished earlier.')
+    expect(screen.getByRole('heading', { name: 'Ended 5:40 pm' })).toBeInTheDocument()
+    expect(h.finish).not.toHaveBeenCalled()
+    expect(h.save).not.toHaveBeenCalled()
+    expect(loadEndDraft('s1')?.tappedAt).toBe('2026-08-17T07:40:30.000Z')
+    vi.setSystemTime(new Date('2026-08-17T07:41:30Z'))
+    submit()
     await waitFor(() => expect(h.finish).toHaveBeenCalled())
-    expect(h.finish.mock.calls[0][0].data).toEqual({ detailsLater: true })
+    expect(h.finish.mock.calls[0][0].data).toEqual({ detailsLater: true, endTappedAt: '2026-08-17T07:40:30.000Z' })
+  })
+
+  it('S-1: an incomplete page says what is still to add in the bar; a complete page says nothing', () => {
+    draft({ kilometres: '', anythingToReport: null })
+    renderFlow()
+    expect(screen.getByText(/Still to add/)).toHaveTextContent('Still to add: kilometres and anything to report')
+    cleanup()
+    draft()
+    renderFlow()
+    expect(screen.queryByText(/Still to add/)).not.toBeInTheDocument()
   })
 
   it('a server refusal is listed above the bar and the entries are kept', async () => {

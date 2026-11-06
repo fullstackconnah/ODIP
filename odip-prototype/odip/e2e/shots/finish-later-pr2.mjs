@@ -1,6 +1,6 @@
 // Finish later PR2 shots: End shift takes the end at the tap, and the worker adds the details on one page (or later).
 // States (file names carry the state and the breakpoint): b-online-incomplete, b-dose-due, b-travel-not-asked, b-all-complete, b-change-reason-required,
-// b-offline-ended, b-save-error, c-detail-needs-details, e-home-needs-details, b-dark-incomplete, b-handover-limit. Numeric checks N1 to N7. Exit 1 on any failure.
+// b-offline-ended, b-save-error, c-detail-needs-details, e-home-needs-details, b-dark-incomplete, b-handover-limit, b-tap-stale. Numeric checks N1 to N7. Exit 1 on any failure.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/finish-later-pr2.mjs <outdir>
 // Sign-in is stubbed with page.route; the worker's shift is the mock API's, patched in flight. The clock is pinned (NOW) and the theme is pinned in the
 // user prefs, so every run paints the same. The shift started 4 hours before NOW and is rostered to end at NOW: End shift taps on time.
@@ -66,7 +66,7 @@ async function route(page, w) {
     const s = wall(at(-240), tz), e = wall(at(0), tz)
     const ended = w.status === 'PendingReview'
     Object.assign(d, {
-      id: SHIFT_ID, timeZoneId: tz, status: w.status, serviceDate: s.date, startTime: `${s.date}T${s.time}`, endTime: `${e.date}T${e.time}`, endsNextDay: e.date !== s.date, serviceLocation: null, travelAsked: w.travelAsked,
+      id: SHIFT_ID, timeZoneId: tz, status: w.status, serviceDate: s.date, startTime: s.time, endTime: e.time, endsNextDay: e.date !== s.date, serviceLocation: null, travelAsked: w.travelAsked,
       breaks: [], prn: [], shiftRoutines: [], canRecordDoses: true, missingDetails: ended ? w.missing : [],
       medicationsDue: w.dose ? [DOSE] : [], finishBlockers: w.dose && !ended ? [{ code: 'DOSE_OUTCOME_MISSING', message: 'Paracetamol 500mg was due at 8:00 am.', medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: DOSE.scheduledAt }] : [],
       completion: {
@@ -297,6 +297,27 @@ try {
       await route(page, world())
       await endShift(page)
       await crop(page, page.locator('#finish'), 'b-dark-incomplete', vp)
+      await context.close()
+    }
+
+    // b-tap-stale: the tap is 40 minutes old, so Submit takes a new one, sends nothing and says so; the Ended line shows the new time.
+    {
+      const draft = { open: true, touched: false, tappedAt: at(-40).toISOString() }
+      const { context, page } = await open(browser, vp, { draft })
+      let sends = 0
+      page.on('request', (r) => { if (r.method() !== 'GET' && /\/finish/.test(r.url())) sends++ })
+      await route(page, world())
+      await gotoShift(page)
+      await page.getByRole('heading', { level: 2, name: /^Ended / }).waitFor({ state: 'visible', timeout: 60_000 })
+      await bar(page).getByRole('button', { name: 'Submit shift' }).click()
+      const notice = page.getByText(/More than 25 minutes have passed/)
+      await notice.waitFor({ state: 'visible', timeout: 30_000 })
+      await page.waitForTimeout(400)
+      const nowClock = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hour: 'numeric', minute: '2-digit' }).format(NOW).replace(/\s?([AP])M$/i, (_, c) => ` ${c.toLowerCase()}m`)
+      check(t('b-tap-stale: nothing was sent on the stale press'), sends === 0, sends)
+      check(t('b-tap-stale: the notice names the new time'), (await notice.innerText()).includes(`now ${nowClock}.`), nowClock)
+      check(t('b-tap-stale: the Ended line shows the new time'), (await page.getByRole('heading', { level: 2, name: `Ended ${nowClock}` }).count()) === 1, nowClock)
+      await crop(page, page.locator('#finish'), 'b-tap-stale', vp)
       await context.close()
     }
 

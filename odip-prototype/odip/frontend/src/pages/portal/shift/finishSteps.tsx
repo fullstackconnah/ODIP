@@ -93,7 +93,9 @@ export function EndedCard({ shift, endIso, tappedIso, draft, set, editStart, edi
 }) {
   const tz = shift.timeZoneId
   const c = shift.completion
-  const rostered = { start: shift.startTime, end: shift.endTime }
+  // The wire sends bare times ("09:00:00"); clockLabel reads a date and time, as the page's own Rostered label does.
+  const day = shift.serviceDate.slice(0, 10)
+  const rostered = { start: `${day}T${shift.startTime}`, end: `${day}T${shift.endTime}` }
   const say = (local: string) => clockLabel(`${local}:00`)
   const moved = Date.parse(endIso) < Date.parse(tappedIso)
   const asking = asks.start !== null || asks.finish !== null

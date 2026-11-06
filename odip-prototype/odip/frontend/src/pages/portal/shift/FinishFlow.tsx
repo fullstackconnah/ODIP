@@ -10,13 +10,14 @@ import { Callout } from '@/components/Callout'
 import { apiErrorMessages, apiErrorStatus, finishBlockersFromError, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import type { ShiftIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { clockLabel, offlineDueDoses, timeBounds, timesError, type DetailKey, type TimesField } from './checklist'
+import { clockLabel, detailLabel, offlineDueDoses, timeBounds, timesError, type DetailKey, type TimesField } from './checklist'
 import { clearEndDraft, endDraftFromServer, loadEndDraft, saveEndDraft, timeQuestions, type EndDraft } from './endDraft'
 import { buildDetails, effectiveEnd, missingNow, tapIsFresh, tappedEnd, timesInput } from './finishDetails'
 import { BreaksFold, DosesStep, EndedCard, HandoverStep, ReportStep, TravelCard, type Refusal } from './finishSteps'
 import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
 import { joinList, plural } from '@/lib/format'
+import { formatWithTimeZone } from '@/lib/utils'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
 
@@ -154,6 +155,14 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
     setNetworkError(false)
     setError(null)
     if (!gate()) return
+    const sendsEnd = shift.status === 'InProgress' && !waitingKind(records, shift.id, 'finish')
+    if (sendsEnd && !tapIsFresh(d.tappedAt)) {
+      // The old tap is too old for the server: take a new one, show it, and send on the next press, so what is shown is what is saved.
+      const now = new Date().toISOString()
+      setD(prev => ({ ...prev, tappedAt: now }))
+      setError({ message: `More than 25 minutes have passed, so your end time is now ${formatWithTimeZone(now, shift.timeZoneId, { hour: 'numeric', minute: '2-digit' })}. Use Change if you finished earlier.` })
+      return
+    }
     if (!later && !complete) {
       const key = missing[0]
       setError({ message: `${prompt(key, first)}, or tap Add details later.`, focus: DETAIL_FOCUS[key] })
@@ -161,11 +170,8 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
     }
     setSubmitting(true)
     try {
-      // The page sends End shift at the tap; here only when a dose held it back, so the end is still that tap (omitted when too old for the server).
-      if (shift.status === 'InProgress' && !waitingKind(records, shift.id, 'finish')) {
-        const fresh = tapIsFresh(d.tappedAt)
-        await finish.mutateAsync({ id: shift.id, data: { detailsLater: true, ...(fresh && { endTappedAt: d.tappedAt }) } })
-      }
+      // The page sends End shift at the tap; here only when a dose held it back, so the end is still that tap (a stale tap was renewed above).
+      if (sendsEnd) await finish.mutateAsync({ id: shift.id, data: { detailsLater: true, endTappedAt: d.tappedAt } })
       if (d.touched) {
         const saved = await save.mutateAsync({ id: shift.id, data: buildDetails(shift, d, noteCount) })
         if (saved === undefined) {   // queued offline: keep the entries, they are sent when the connection is back
@@ -210,6 +216,8 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
     navigate('/incidents/new', { state: prefill })
   }
 
+  // One notice slot: a bar error first; the dose callout and the sync row already speak when a dose or an unsent change is waiting.
+  const stillToAdd = !complete && !dosesBlock && records.length === 0
   const barError = (error && !INLINE_FIELD.test(error.field ?? '')) || networkError
   return (
     <div id="finish" ref={topRef} tabIndex={-1} className="space-y-4 outline-none">
@@ -252,6 +260,8 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
         <p role="alert" className="text-sm text-[var(--color-destructive)]">
           {error ? error.message : "Couldn't save. Check your connection. Your entries are kept: try again."}
         </p>
+      ) : stillToAdd ? (
+        <p className="text-sm text-[var(--color-muted-foreground)]">Still to add: {joinList(missing.map(k => detailLabel(k, first)))}</p>
       ) : undefined}>
         {!complete && <Button size="lg" variant="secondary" onClick={() => void send(true)} disabled={busy}>Add details later</Button>}
         <Button size="lg" className="flex-1 lg:flex-none" onClick={() => void send(false)} disabled={busy}>

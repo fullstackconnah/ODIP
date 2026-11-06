@@ -242,11 +242,11 @@ export default function PortalShiftDetailPage() {
     saveEndDraft(id, { ...(prev ?? EMPTY_END_DRAFT), open: true, tappedAt })
     openFinish()
     const doseDue = online ? shift.finishBlockers.some(b => b.code === 'DOSE_OUTCOME_MISSING') : offlineDueDoses(shift).length > 0
-    if (doseDue) return
     setEnding(true)
     setActionError(null)
     try {
-      if (running) await endBreak.mutateAsync({ id, breakId: running.id })
+      if (running) await endBreak.mutateAsync({ id, breakId: running.id })   // the break ends at the tap even when a dose holds the finish back
+      if (doseDue) return
       await finishShift.mutateAsync({ id, data: { detailsLater: true, ...(reuse && { endTappedAt: tappedAt }) } })
     } catch (err) {
       const fresh = shiftDetailFromError(err)

@@ -44,6 +44,11 @@ describe('EndedCard: the tap is the heading, off-roster asks why (W2)', () => {
     expect(box).toHaveValue('Waited for the taxi')
   })
 
+  it('D5: the server sends the rostered times as bare TimeOnly strings, and they read as clock times', () => {
+    render(<Card endIso="2026-08-17T07:04:00Z" />)
+    expect(screen.getByText('Rostered 9:00 am to 5:00 pm')).toBeInTheDocument()
+  })
+
   it('asks about a finish 8 minutes early the same way', () => {
     render(<Card endIso="2026-08-17T06:52:00Z" tapped="2026-08-17T06:52:00Z" />)
     expect(screen.getByLabelText('Why are you finishing 8 minutes early? (optional)')).toBeInTheDocument()
