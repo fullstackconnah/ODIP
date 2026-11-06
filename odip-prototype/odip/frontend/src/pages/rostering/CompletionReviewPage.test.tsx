@@ -386,7 +386,7 @@ describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
     ['AtLocation', { locationDistanceMetres: 40, locationAccuracyMetres: null }, 'At location (40 m).'],
     ['NotAtLocation', { locationDistanceMetres: 850, locationReason: 'Parked round the corner' }, 'Not at location (850 m away): Parked round the corner'],
     ['NotAtLocation', { locationDistanceMetres: 850, locationReason: null }, 'Not at location (850 m away). No reason given.'],
-    ['Unavailable', { locationReason: 'Started offline' }, 'Location not available: Started offline'],
+    ['Unavailable', { locationReason: 'Started offline: Phone GPS broken' }, 'Started offline: Phone GPS broken'],
     ['Unavailable', { locationReason: null }, 'Location not available. No reason given.'],
   ] as const)('says where the shift started in the review dialog: %s %j', async (locationCheck, extra, line) => {
     const user = userEvent.setup()
