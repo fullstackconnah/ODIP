@@ -6,10 +6,10 @@ import { RestrictivePracticeStep } from './RestrictivePracticeStep'
 import type { IncidentFormData } from '../incidentFormSchema'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 
-const { mockActive, mockAll, mockState } = vi.hoisted(() => ({ mockActive: { current: [] as unknown[] }, mockAll: { current: [] as unknown[] }, mockState: { current: { isLoading: false, isError: false } } }))
+const { mockActive, mockAll, mockState, mockRefetch } = vi.hoisted(() => ({ mockRefetch: vi.fn(), mockActive: { current: [] as unknown[] }, mockAll: { current: [] as unknown[] }, mockState: { current: { isLoading: false, isError: false, isRefetching: false } } }))
 
 vi.mock('@/api/hooks', () => ({
-  useRestrictivePractices: (_participantId: string | undefined, includeInactive?: boolean) => ({ data: includeInactive ? mockAll.current : mockActive.current, ...mockState.current }),
+  useRestrictivePractices: (_participantId: string | undefined, includeInactive?: boolean) => ({ data: includeInactive ? mockAll.current : mockActive.current, refetch: mockRefetch, ...mockState.current }),
   useParticipantMedications: () => ({ data: [], isLoading: false }),
   useBulkCreateRestrictivePractices: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -40,7 +40,7 @@ const values = () => JSON.parse(screen.getByTestId('values').textContent ?? '{}'
 const typeDropdown = () => screen.queryByLabelText(/Restrictive Practice Type/i)
 const noneRadio = () => screen.getByRole('radio', { name: /None of these/i })
 
-beforeEach(() => { mockState.current = { isLoading: false, isError: false }; mockActive.current = [SECLUSION, HOLD_B, HOLD]; mockAll.current = [SECLUSION, HOLD_B, HOLD, RETIRED] })
+beforeEach(() => { mockRefetch.mockClear(); mockState.current = { isLoading: false, isError: false, isRefetching: false }; mockActive.current = [SECLUSION, HOLD_B, HOLD]; mockAll.current = [SECLUSION, HOLD_B, HOLD, RETIRED] })
 
 describe('RestrictivePracticeStep register list', () => {
   it('lists every active entry of every kind, kind first, sorted by kind then description, with "None of these" last and no type dropdown', () => {
@@ -122,6 +122,28 @@ describe('RestrictivePracticeStep register list', () => {
     expect(noneRadio()).not.toBeChecked()
     await userEvent.setup().click(noneRadio())
     expect(screen.getByLabelText(/Describe the restrictive practice that was used/)).toBeInTheDocument()
+  })
+
+  it('a failed background refetch over a populated register keeps the list and shows no error', () => {
+    mockState.current = { isLoading: false, isError: true, isRefetching: false }
+    render(<Harness />)
+
+    expect(screen.queryByText(/Couldn't load this participant's register/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Seclusion/)).toBeInTheDocument()
+  })
+
+  it('the register error has a Try again that refetches once; while refetching it is disabled and reads Trying again', async () => {
+    mockState.current = { isLoading: false, isError: true, isRefetching: false }
+    mockActive.current = []
+    const { unmount } = render(<Harness />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(mockRefetch).toHaveBeenCalledTimes(1)
+    unmount()
+
+    mockState.current = { isLoading: false, isError: true, isRefetching: true }
+    render(<Harness />)
+    expect(screen.getByRole('button', { name: 'Trying again…' })).toHaveAttribute('aria-disabled', 'true')
+    expect(noneRadio()).toBeEnabled()
   })
 
   it('the inactive disclosure lists every inactive entry with its kind', async () => {
