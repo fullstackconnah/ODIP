@@ -80,10 +80,20 @@ describe('Sign out with unsent changes', () => {
     expect(mockEndSession).toHaveBeenCalledTimes(1)
   })
 
-  it('with 0 unsent signs out at once, no dialog', () => {
+  it('with 0 unsent asks "Sign out?" first; Stay signed in keeps the session, Sign out ends it', () => {
     renderLayout()
     fireEvent.click(signOutButton())
+    expect(mockEndSession).not.toHaveBeenCalled()
     expect(screen.queryByRole('alertdialog', { name: 'Sign out and delete unsent changes?' })).toBeNull()
+    const dialog = screen.getByRole('alertdialog', { name: 'Sign out?' })
+    expect(within(dialog).getByText(/You’ll need to sign in again to use Bunya Support./)).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stay signed in' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(mockEndSession).not.toHaveBeenCalled()
+
+    fireEvent.click(signOutButton())
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Sign out' }))
     expect(mockEndSession).toHaveBeenCalledTimes(1)
   })
 })
