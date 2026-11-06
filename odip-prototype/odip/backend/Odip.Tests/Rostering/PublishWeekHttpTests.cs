@@ -12,7 +12,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Api.Middleware;
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -34,10 +37,24 @@ public class PublishWeekHttpTests
         await using var app = await StartAsync();
         var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(30) };
 
+        Guid shiftId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OdipDbContext>();
+            var worker = new User { Id = Guid.NewGuid(), FirstName = "Sam", LastName = "Wilson", Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com", Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true, WorkerScreeningNumber = "WSC-1", WorkerScreeningExpiryDate = new DateOnly(2035, 1, 1) };
+            var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Mia", LastName = "Chen", IsActive = true };
+            var shift = new Shift { Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = worker.Id, ServiceDate = new DateOnly(2026, 11, 2), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft };
+            db.AddRange(worker, participant, shift);
+            await db.SaveChangesAsync();
+            shiftId = shift.Id;
+        }
+
         var noBody = await client.PostAsync("/api/v1/rostering/weeks/2026-11-02/publish", null);
         var emptyIds = await client.PostAsync("/api/v1/rostering/weeks/2026-11-02/publish", Json("{\"shiftIds\":[]}"));
 
         Assert.Equal(HttpStatusCode.OK, noBody.StatusCode);   // a 400/415 here is the body being required
+        using (var scope = app.Services.CreateScope())   // and it meant the whole week: the draft is published
+            Assert.Equal(ShiftStatus.Published, (await scope.ServiceProvider.GetRequiredService<OdipDbContext>().Shifts.AsNoTracking().SingleAsync(s => s.Id == shiftId)).Status);
         Assert.Equal(HttpStatusCode.BadRequest, emptyIds.StatusCode);
         Assert.Contains("Choose at least one shift", await emptyIds.Content.ReadAsStringAsync());
     }
