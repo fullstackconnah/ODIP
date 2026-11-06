@@ -6,14 +6,14 @@ import { FinishFlow } from './FinishFlow'
 import { EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import type { PortalShiftDetailDto } from '@/api/types'
 
-const h = vi.hoisted(() => ({ finish: vi.fn(), save: vi.fn(), notes: { value: [] as unknown[] } }))
+const h = vi.hoisted(() => ({ finish: vi.fn(), save: vi.fn(), notes: { value: [] as unknown[] }, records: [] as { shiftId: string; kind: string; status: string }[] }))
 
 vi.mock('@/api/hooks', () => ({
   useFinishShift: () => ({ mutateAsync: h.finish, isPending: false }),
   useSaveFinishDetails: () => ({ mutateAsync: h.save, isPending: false }),
   useShiftNotes: () => ({ data: h.notes.value }),
 }))
-vi.mock('@/api/hooks/portal', () => ({ useQueueRecords: () => [] }))
+vi.mock('@/api/hooks/portal', () => ({ useQueueRecords: () => h.records }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ id: 'user-1' }) }))
 
 // Brisbane is UTC+10. Rostered 09:00 to 17:00; started 09:05:40; tapped End shift at 17:00:30 (07:00:30Z).
@@ -54,7 +54,7 @@ const barAlert = () => within(screen.getByRole('toolbar', { name: 'Shift actions
 const later = () => fireEvent.click(screen.getByRole('button', { name: 'Add details later' }))
 
 describe('FinishFlow: the details page after End shift', () => {
-  beforeEach(() => { sessionStorage.clear(); h.finish.mockReset().mockResolvedValue({}); h.save.mockReset().mockResolvedValue({}); h.notes.value = [] })
+  beforeEach(() => { sessionStorage.clear(); h.finish.mockReset().mockResolvedValue({}); h.save.mockReset().mockResolvedValue({}); h.notes.value = []; h.records = [] })
   afterEach(() => { vi.useRealTimers() })
 
   it('Submit with everything answered sends one PUT with the answers and closes complete', async () => {
@@ -199,6 +199,22 @@ describe('FinishFlow: the details page after End shift', () => {
     submit()
     await waitFor(() => expect(h.finish).toHaveBeenCalled())
     expect(h.finish.mock.calls[0][0].data).toEqual({ detailsLater: true, endTappedAt: '2026-08-17T07:40:30.000Z' })
+  })
+
+  it('endTap: with a changed finish time the stale-tap notice asks to check it instead of naming a time that is not used (DD1)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-17T07:40:30Z'))
+    draft({ tappedAt: TAP, endOverride: '2026-08-17T16:50', adjustmentReason: 'Left early' })
+    renderFlow(shift({ status: 'InProgress' }, { actualEnd: null }))
+    submit()
+    expect(barAlert()).toHaveTextContent(/^Your tap was renewed. Check your finish time.$/)
+  })
+
+  it('S-1: a queued record from another shift leaves Still to add showing (DD2)', () => {
+    draft({ kilometres: '', anythingToReport: null })
+    h.records = [{ shiftId: 's2', kind: 'note', status: 'waiting' }]
+    renderFlow()
+    expect(screen.getByText(/Still to add/)).toBeInTheDocument()
   })
 
   it('S-1: an incomplete page says what is still to add in the bar; a complete page says nothing', () => {
