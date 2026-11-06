@@ -400,7 +400,7 @@ public class PortalController : ControllerBase
             ? await _db.ServiceLocations.AsNoTracking().FirstOrDefaultAsync(l => l.Id == placeId && l.TenantId == shift.TenantId, ct)
             : null;
         var check = LocationCheck.Evaluate(place, dto.Latitude, dto.Longitude, dto.AccuracyMetres, dto.GeolocationDeclined, queued: dto.StartedAt is not null);
-        var typedReason = check.Status is LocationCheckStatus.Unavailable or LocationCheckStatus.NotAtLocation ? LocationCheck.CleanReason(dto.LocationReason) : null;
+        var typedReason = check.Status is (LocationCheckStatus.Unavailable or LocationCheckStatus.NotAtLocation) && dto.StartedAt is null ? LocationCheck.CleanReason(dto.LocationReason) : null;
 
         var completion = new ShiftCompletion
         {
@@ -459,7 +459,8 @@ public class PortalController : ControllerBase
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("This shift isn't in progress.", ShiftErrorCodes.ShiftNotInProgress));
 
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
-        if (completion is null || completion.LocationCheck is not (LocationCheckStatus.NotAtLocation or LocationCheckStatus.Unavailable))
+        if (completion is null || completion.LocationCheck is not (LocationCheckStatus.NotAtLocation or LocationCheckStatus.Unavailable)
+            || completion.LocationReason == LocationCheck.StartedOfflineReason)   // the server's own reason for a queued Start is not the worker's to replace or clear
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("There's nothing to explain for this start.", ShiftErrorCodes.ShiftLocationReasonNotNeeded));
 
         completion.LocationReason = LocationCheck.CleanReason(dto.Reason);

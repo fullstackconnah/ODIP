@@ -693,6 +693,30 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Fact]
+    public async Task StartShift_QueuedTapWithATypedReason_KeepsTheServersStartedOffline()
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+
+        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3), LocationReason = "Whatever I like" }, CancellationToken.None);
+
+        Assert.Equal("Started offline", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Theory]
+    [InlineData("Whatever I like")]
+    [InlineData("")]
+    public async Task LocationReason_AfterAQueuedStart_CannotReplaceOrBlankStartedOffline(string reason)
+    {
+        var (db, controller, shift) = SeedPlacedShift();
+        await controller.StartShift(shift.Id, new StartShiftDto { StartedAt = DateTime.UtcNow.AddMinutes(-3) }, CancellationToken.None);
+
+        var result = await controller.SaveLocationReason(shift.Id, new LocationReasonDto { Reason = reason }, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Started offline", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).LocationReason);
+    }
+
+    [Fact]
     public async Task StartShift_OversizeReasonAndAccuracy_StillStartsTruncatedAndClamped()
     {
         var (db, controller, shift) = SeedPlacedShift();
