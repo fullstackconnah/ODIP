@@ -1,12 +1,19 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Catalogue;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
+using static Odip.Tests.Rostering.AgreementBulkServiceTests;
 using static Odip.Tests.Rostering.ApprovalTestSupport;
 
 namespace Odip.Tests.Rostering;
@@ -42,12 +49,12 @@ public class MultipleAgreementsTests
         Assert.Equal(ApprovalStatus.Approved, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, draft.Id, true, Admin, CancellationToken.None)).Status);
 
     /// <summary>F7: A (the participant's first agreement, weekdays) approved at v1 with its roster made, then B (Saturdays) saved as its own agreement and approved at v2.</summary>
-    private static async Task<(Fixture F, ServiceAgreementDraft A, ServiceAgreementDraft B)> TwoApprovedAsync()
+    private static async Task<(Fixture F, ServiceAgreementDraft A, ServiceAgreementDraft B)> TwoApprovedAsync(bool populateA = true)
     {
         var f = await SetUpWithCatalogueAsync();
         var a = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
         await ApproveAsync(f, a);
-        await PopulateAllAsync(f.Service, f.ParticipantId, a.Id);
+        if (populateA) await PopulateAllAsync(f.Service, f.ParticipantId, a.Id);
         var b = await AddRevisionAsync(f, 2, new[] { SaturdayBlock() }, agreementId: Guid.NewGuid());
         await ApproveAsync(f, b);
         return (f, a, b);
@@ -176,10 +183,146 @@ public class MultipleAgreementsTests
     [Fact]
     public async Task ApproveB_LeavesAsFutureShifts()
     {
-        var (f, a, _) = await TwoApprovedAsync();
+        var (f, a) = await ApprovedAWithRosterAsync();
         await using var owner = f;
         var patternIds = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == a.Id).Select(p => p.Id).ToListAsync();
-        Assert.True(await f.Db.Shifts.CountAsync(s => patternIds.Contains(s.ShiftPatternId!.Value)) > 0);
+        var before = await f.Db.Shifts.CountAsync(s => patternIds.Contains(s.ShiftPatternId!.Value));
+        Assert.True(before > 0);
+
+        await ApproveAsync(f, await AddRevisionAsync(f, 2, new[] { SaturdayBlock() }, agreementId: Guid.NewGuid()));
+
+        Assert.Equal(before, await f.Db.Shifts.CountAsync(s => patternIds.Contains(s.ShiftPatternId!.Value)));
+    }
+
+    /// <summary>S2 (M2 alone): approving B version 2 over its own version 1 reports and removes only B-agreement shifts, none of A, whose roster is made.</summary>
+    [Fact]
+    public async Task ApproveB_OldShiftsIgnoreAgreementA()
+    {
+        var (f, a) = await ApprovedAWithRosterAsync();
+        await using var owner = f;
+        var agreementB = Guid.NewGuid();
+        await ApproveAsync(f, await AddRevisionAsync(f, 1, new[] { SaturdayBlock() }, agreementId: agreementB));
+        var aShifts = await f.Db.Shifts.CountAsync();
+        var b2 = await AddRevisionAsync(f, 2, new[] { SaturdayBlock() }, agreementId: agreementB);
+
+        var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, b2.Id, true, Admin, CancellationToken.None);
+
+        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        Assert.True(aShifts > 0);
+        Assert.Equal((0, 0, 0), (outcome.OldShifts!.Open, outcome.OldShifts.Assigned, outcome.OldShifts.Removed));
+        Assert.Equal(aShifts, await f.Db.Shifts.CountAsync());
+    }
+
+    /// <summary>S1: B being at version 2 does not make A's waiting version 1 "superseded".</summary>
+    [Fact]
+    public async Task PreviewA_NotSupersededByBsNewerVersion()
+    {
+        await using var f = await SetUpWithCatalogueAsync();
+        var a = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
+        await AddRevisionAsync(f, 2, new[] { SaturdayBlock() }, agreementId: Guid.NewGuid());
+
+        var preview = await f.Service.PreviewAsync(TenantA, f.ParticipantId, a.Id, Admin, CancellationToken.None);
+
+        Assert.Equal(ApprovalStatus.Previewed, preview.Status);
+        Assert.Equal(1, preview.NewestVersion);
+        Assert.DoesNotContain("Superseded", preview.ReasonCodes ?? []);
+        await ApproveAsync(f, a);
+    }
+
+    /// <summary>S4: B's approval is not "a newer revision approved" for A's roster.</summary>
+    [Fact]
+    public async Task PopulateA_NotRefusedByBsApproval()
+    {
+        var (f, a, _) = await TwoApprovedAsync(populateA: false);
+        await using var owner = f;
+
+        var totals = await PopulateAllAsync(f.Service, f.ParticipantId, a.Id);
+
+        Assert.True(totals.Created > 0);
+    }
+
+    /// <summary>S6: renewing A copies A's own newest approved revision, not the participant's highest, and keeps A's kind and name.</summary>
+    [Fact]
+    public async Task Renewal_StaysInItsAgreement_CopiesKindAndName()
+    {
+        var (f, a, b) = await TwoApprovedAsync(populateA: false);
+        await using var owner = f;
+        (a.AgreementKind, a.AgreementName, b.AgreementKind, b.AgreementName) = (AgreementKind.Core, "Day support", AgreementKind.Trip, "Beach trip");
+        f.Db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, PlanStart = PlanStart, PlanEnd = PlanEnd });
+        await f.Db.SaveChangesAsync();
+
+        var outcome = await new AgreementRenewalService(f.Db).RenewAsync(TenantA, f.ParticipantId, a.Id, Admin, "coordinator-1", CancellationToken.None);
+
+        var renewed = await f.Db.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks).SingleAsync(d => d.Id == outcome.Draft!.Id);
+        Assert.Equal((a.AgreementId, 2, AgreementKind.Core, "Day support"), (renewed.AgreementId, renewed.Version, renewed.AgreementKind, renewed.AgreementName));
+        Assert.Equal(a.Blocks.Select(x => x.BlockKey), renewed.Blocks.OrderBy(x => x.Position).Select(x => x.BlockKey));
+    }
+
+    /// <summary>S7: bulk answers once per agreement; B's waiting revision skips B only.</summary>
+    [Fact]
+    public async Task Bulk_OneRowPerAgreement_SkipsOnlyTheWaitingOne()
+    {
+        var (f, a, b) = await TwoApprovedAsync(populateA: false);
+        await using var owner = f;
+        await AddPlanAsync(f, f.ParticipantId, PlanStart, PlanEnd);
+        await AddRevisionAsync(f, 3, new[] { SaturdayBlock() }, agreementId: b.AgreementId);   // B has a draft waiting
+
+        var items = await RunAsync(f, "renew", new[] { f.ParticipantId });
+
+        Assert.Equal(2, items.Count);
+        var itemA = items.Single(i => i.AgreementId == a.AgreementId);
+        var itemB = items.Single(i => i.AgreementId == b.AgreementId);
+        Assert.Equal("Created", itemA.Outcome);
+        Assert.Equal(a.AgreementId, (await f.Db.ServiceAgreementDrafts.AsNoTracking().SingleAsync(d => d.Id == itemA.NewDraftId)).AgreementId);
+        Assert.Equal(("Skipped", AgreementBulkService.WaitingWords), (itemB.Outcome, itemB.Reason));
+    }
+
+    /// <summary>S7: the Agreements list has a row per agreement, each showing its own revisions.</summary>
+    [Fact]
+    public async Task AgreementsList_TwoRowsForTwoAgreements()
+    {
+        var (f, a, b) = await TwoApprovedAsync(populateA: false);
+        await using var owner = f;
+
+        var ok = Assert.IsType<OkObjectResult>((await AgreementListTests.Controller(f.Db, f).List(CancellationToken.None)).Result);
+        var rows = Assert.IsType<ApiResponse<AgreementListDto>>(ok.Value).Data!.Rows;
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(a.Id, rows.Single(r => r.AgreementId == a.AgreementId).Current!.DraftId);
+        Assert.Equal(b.Id, rows.Single(r => r.AgreementId == b.AgreementId).Current!.DraftId);
+    }
+
+    /// <summary>S8: the drafts list gives each agreement's newest revision in full and its older ones as summaries, the most recently changed agreement first.</summary>
+    [Fact]
+    public async Task List_NewestOfEachAgreementInFull_OrderedByLastChange()
+    {
+        await using var f = await SetUpWithCatalogueAsync();
+        var (idA, idB) = (f.ParticipantId, Guid.NewGuid());
+        var a1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: idA);
+        var a2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, agreementId: idA);
+        var b1 = await AddRevisionAsync(f, 1, new[] { SaturdayBlock() }, agreementId: idB);
+        var t0 = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        (a1.CreatedAt, a2.CreatedAt, b1.CreatedAt) = (t0, t0.AddHours(1), t0.AddHours(2));
+        await f.Db.SaveChangesAsync();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(TenantA);
+        var controller = new ServiceAgreementDraftsController(f.Db, tenant.Object, new ServiceAgreementDraftService(f.Db), approval: f.Service);
+
+        var list = Assert.IsType<ApiResponse<List<ServiceAgreementDraftDto>>>(Assert.IsType<OkObjectResult>((await controller.List(f.ParticipantId, CancellationToken.None)).Result).Value).Data!;
+
+        Assert.Equal(new[] { b1.Id, a2.Id, a1.Id }, list.Select(d => d.Id));
+        Assert.Equal(new[] { false, false, true }, list.Select(d => d.IsSummary));
+        Assert.All(list.Take(2), d => Assert.NotEmpty(d.Blocks));
+    }
+
+    /// <summary>A approved at version 1 with its roster made (no B yet).</summary>
+    private static async Task<(Fixture F, ServiceAgreementDraft A)> ApprovedAWithRosterAsync()
+    {
+        var f = await SetUpWithCatalogueAsync();
+        var a = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
+        await ApproveAsync(f, a);
+        await PopulateAllAsync(f.Service, f.ParticipantId, a.Id);
+        return (f, a);
     }
 
     [Fact]
@@ -233,5 +376,18 @@ public class MultipleAgreementsTests
         broken.Lines.Clear();
         await f.Db.SaveChangesAsync();
         Assert.False(await ready());
+    }
+
+    /// <summary>S9: signing evidence for A is not "superseded" by B's higher version. (The template is not approved for signing here, so the call ends at that later refusal.)</summary>
+    [Fact]
+    public async Task SigningA_NotSupersededByB()
+    {
+        await using var f = await SetUpWithCatalogueAsync();
+        var a = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, agreementId: f.ParticipantId);
+        await AddRevisionAsync(f, 2, new[] { SaturdayBlock() }, agreementId: Guid.NewGuid());
+
+        var (_, error) = await new ElectronicSigningEvidenceService(f.Db).CreateSnapshotAsync(TenantA, f.ParticipantId, new() { DraftId = a.Id, DraftVersion = 1 }, CancellationToken.None);
+
+        Assert.NotEqual(ElectronicSigningEvidenceService.SupersededDraftError, error);
     }
 }

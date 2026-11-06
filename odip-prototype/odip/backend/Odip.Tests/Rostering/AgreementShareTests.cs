@@ -672,4 +672,38 @@ public class AgreementShareTests
 
         Assert.Empty(await w.F.Db.ServiceAgreementDraftApprovals.ToListAsync());
     }
+
+    // ── Several agreements: a link belongs to its own agreement ────────────────────
+
+    private static Task<ServiceAgreementDraft> AgreementRevisionAsync(World w, int version, Guid agreementId) =>
+        AddRevisionAsync(w.F, version, new[] { WeekdayBlock() }, agreementId: agreementId);
+
+    /// <summary>S4: approving B (another agreement, version 2) does not revoke the link sent for A.</summary>
+    [Fact]
+    public async Task ApproveB_KeepsAsLiveLink()
+    {
+        var w = await NewAsync();
+        var a = await AgreementRevisionAsync(w, 1, w.F.ParticipantId);
+        Assert.Equal(AgreementSendStatus.Done, (await w.SendAsync(a)).Status);
+        var b = await AgreementRevisionAsync(w, 2, Guid.NewGuid());
+
+        Assert.Equal(ApprovalStatus.Approved, (await w.F.Service.ApproveAsync(TenantA, w.F.ParticipantId, b.Id, false, Admin, CancellationToken.None)).Status);
+
+        Assert.Null((await w.F.Db.ServiceAgreementShares.SingleAsync(s => s.DraftId == a.Id)).RevokedAt);
+    }
+
+    /// <summary>S5: B's higher version does not make A stale or unsendable, and sending B revokes none of A's links.</summary>
+    [Fact]
+    public async Task SendB_KeepsAsLiveLink_AndSendA_NotStale()
+    {
+        var w = await NewAsync();
+        var a = await AgreementRevisionAsync(w, 1, w.F.ParticipantId);
+        Assert.Equal(AgreementSendStatus.Done, (await w.SendAsync(a)).Status);
+        var b = await AgreementRevisionAsync(w, 2, Guid.NewGuid());
+
+        Assert.Equal(AgreementSendStatus.Done, (await w.SendAsync(a)).Status);
+        Assert.Equal(AgreementSendStatus.Done, (await w.SendAsync(b)).Status);
+
+        Assert.All(await w.F.Db.ServiceAgreementShares.Where(s => s.DraftId == a.Id).ToListAsync(), s => Assert.Null(s.RevokedAt));
+    }
 }
