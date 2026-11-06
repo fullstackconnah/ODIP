@@ -1470,7 +1470,7 @@ public class RosteringController : ControllerBase
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
                 row.TimeZoneId, isOutlier, row.Threshold, row.ReturnCount,
                 extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual, row.TimesAdjusted,
-                extras[row.CompletionId].IncidentCount,
+                extras[row.CompletionId].IncidentCount, extras[row.CompletionId].MissingDetails,
                 ShiftCompletionMapper.IsOffRoster(row.VarianceMinutesStart, row.VarianceMinutesEnd, row.ActualEnd), row.ExtraTime);
         }).ToList();
 

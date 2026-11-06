@@ -118,7 +118,22 @@ public class PortalController : ControllerBase
             .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
-        var shiftDtos = shifts.Where(s => Participant.ServicesBegun(s.Participant!)).Select(ToSummaryDto).ToList();
+        // Finish later: a shift still waiting on its worker's details stays in the list whatever its date, until the details are in or it is approved or returned.
+        var outOfWindow = await _db.Shifts
+            .Include(s => s.Participant)
+            .Where(Shift.VisibleToWorker)
+            .Where(s => s.UserId == staffId.Value && s.Status == ShiftStatus.PendingReview && (s.ServiceDate < start || s.ServiceDate > end) && s.Participant != null
+                && _db.ShiftCompletions.Any(c => c.ShiftId == s.Id && c.IsActive && c.DetailsRequired))
+            .ToListAsync(ct);
+        var pendingShiftIds = shifts.Concat(outOfWindow).Where(s => s.Status == ShiftStatus.PendingReview).Select(s => s.Id).ToList();
+        var completionByShift = await _db.ShiftCompletions.AsNoTracking()
+            .Where(c => pendingShiftIds.Contains(c.ShiftId) && c.IsActive).Select(c => new { c.ShiftId, c.Id }).ToDictionaryAsync(c => c.ShiftId, c => c.Id, ct);
+        var missingByCompletion = await ShiftCompletionMapper.MissingDetailsAsync(_db, completionByShift.Values.ToList(), ct);
+        IReadOnlyList<string> MissingFor(Shift s) => completionByShift.TryGetValue(s.Id, out var cid) ? missingByCompletion[cid] : Array.Empty<string>();
+        var shiftDtos = shifts.Concat(outOfWindow.Where(s => MissingFor(s).Count > 0))
+            .Where(s => Participant.ServicesBegun(s.Participant!))
+            .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
+            .Select(s => ToSummaryDto(s, MissingFor(s))).ToList();
 
         // Trip staffing is optional per the brief — included here since it's a single cheap
         // query against the already-resolved staffId, scoped the same way the shifts are.
@@ -259,6 +274,7 @@ public class PortalController : ControllerBase
             access.Code,
             sensitiveWithheldReason,
             travelAsked,
+            completionDto?.MissingDetails ?? Array.Empty<string>(),
             serviceLocation);
     }
 
@@ -722,6 +738,11 @@ public class PortalController : ControllerBase
         await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
+
+    /// <summary>The answers a "details later" finish left out, added after the shift (finish-later). STUB: replaced in the build step.</summary>
+    [HttpPut("shifts/{id:guid}/finish-details")]
+    public Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishDetails(Guid id, [FromBody] FinishDetailsDto dto, CancellationToken ct) =>
+        Task.FromResult<ActionResult<ApiResponse<PortalShiftDetailDto>>>(StatusCode(501));
 
     // ══════════════════════════════════════════════════════════════
     // RECORD A DOSE FROM THE PACKAGE (shift package, D2/D3)
@@ -1614,9 +1635,9 @@ public class PortalController : ControllerBase
 
     private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
+    private static PortalShiftSummaryDto ToSummaryDto(Shift s, IReadOnlyList<string> missingDetails) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,
-        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location);
+        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location, missingDetails);
 
     // These duplicate LeaveController's own ToDto overloads rather than sharing them — matches
     // the codebase's existing precedent of small per-controller mapping/validation helpers (e.g.
