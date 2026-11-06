@@ -38,8 +38,8 @@ beforeEach(() => {
     seen.push(config)
     if (config.method === 'post') {
       if (failFirst) return Promise.reject(Object.assign(new Error('busy'), { config, isAxiosError: true, response: { status: 429, data: {}, config } }))
-      const body = JSON.parse(config.data) as { participantIds: string[] }
-      return { data: { success: true, data: body.participantIds.map(id => made(id, Number(id.slice(1)))) }, status: 200, statusText: 'OK', headers: {}, config } as AxiosResponse
+      const body = JSON.parse(config.data) as { items: { participantId: string }[] }
+      return { data: { success: true, data: body.items.map(({ participantId: id }) => made(id, Number(id.slice(1)))) }, status: 200, statusText: 'OK', headers: {}, config } as AxiosResponse
     }
     const data = config.url === '/service-agreements/price-lists'
       ? [{ version: '2026-27', start: '2026-07-01' }, { version: '2025-26', start: '2025-07-01' }]
@@ -56,7 +56,7 @@ const renderPage = () => render(
   </QueryClientProvider>,
 )
 const posts = () => seen.filter(c => c.method === 'post')
-const bodyOf = (c: InternalAxiosRequestConfig) => JSON.parse(c.data) as { action: string; participantIds: string[]; priceList?: string }
+const bodyOf = (c: InternalAxiosRequestConfig) => JSON.parse(c.data) as { action: string; items: { participantId: string; agreementId: string }[]; priceList?: string }
 const tickFirst = async (user: ReturnType<typeof userEvent.setup>) => {
   await screen.findByText('Person 01')
   await user.click(within(screen.getByText('Person 01').closest('tr')!).getByRole('checkbox'))
@@ -72,7 +72,7 @@ describe('AgreementsPage bulk actions (real hook)', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Make 60 drafts' }))
 
     expect(await screen.findByRole('heading', { name: 'Renewal drafts' })).toBeInTheDocument()
-    expect(posts().map(c => bodyOf(c).participantIds.length)).toEqual([25, 25, 10])
+    expect(posts().map(c => bodyOf(c).items.length)).toEqual([25, 25, 10])
     expect(posts().every(c => c.url === '/service-agreements/bulk' && bodyOf(c).action === 'renew')).toBe(true)
     expect(screen.getByText('Drafts made (60)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '60 drafts made' })).toBeInTheDocument()
@@ -88,7 +88,7 @@ describe('AgreementsPage bulk actions (real hook)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Make 1 draft' }))
 
     expect(await screen.findByRole('heading', { name: 'Reprice drafts (2026-27)' })).toBeInTheDocument()
-    expect(bodyOf(posts()[0])).toEqual({ action: 'reprice', participantIds: ['p1'], priceList: '2026-27' })
+    expect(bodyOf(posts()[0])).toEqual({ action: 'reprice', items: [{ participantId: 'p1', agreementId: 'a-1' }], priceList: '2026-27' })
   })
 
   it('keeps the dialog open with the reason when the first request is refused', async () => {

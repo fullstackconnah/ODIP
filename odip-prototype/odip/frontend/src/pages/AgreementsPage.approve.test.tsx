@@ -62,7 +62,7 @@ describe('AgreementsPage approve (real hook)', () => {
     const items = dialog.getAllByRole('listitem')
     expect(items).toHaveLength(2)                                   // the approved one is counted, not listed
     expect(within(items[0]).getByText('Ben Ng')).toBeInTheDocument()   // needs review comes first
-    expect(within(items[0]).getByRole('link', { name: 'Open it' })).toHaveAttribute('href', '/participants/p2/agreement-draft')
+    expect(within(items[0]).getByRole('link', { name: 'Open it' })).toHaveAttribute('href', '/participants/p2/agreement-draft?agreement=a-1')
     expect(within(items[1]).getByText('Cy Roe')).toBeInTheDocument()
     expect(within(items[1]).getByText('Roster busy: try again')).toBeInTheDocument()
     await waitFor(() => expect(reads()).toBe(2))                    // the invalidation refetched the list

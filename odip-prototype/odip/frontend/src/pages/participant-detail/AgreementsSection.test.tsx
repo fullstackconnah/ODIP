@@ -190,8 +190,7 @@ describe('AgreementsSection: several agreements', () => {
     listState = { data: [trip(2, '2026-09-01', '2027-03-31', { approval: undefined }), version(3, '2026-07-01', '2027-06-30')] }
     renderSection()
     expect(action(2, 'Edit')).toHaveAttribute('href', '/participants/p-1/agreement-draft?agreement=a-2')
-    await userEvent.click(within(row(2)).getByRole('button', { name: /more|actions|version 2/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /Delete draft/ }))
+    await userEvent.click(action(2, 'Delete draft')!)
     expect(screen.getByText('Delete draft version 2 of Trip to Cairns?')).toBeInTheDocument()
   })
 
@@ -201,7 +200,7 @@ describe('AgreementsSection: several agreements', () => {
     renderSection()
     expect(checkArgs).toHaveBeenCalledWith('p-1', 'd-3', 'a-1', true)
     expect(screen.getByText('Together, these agreements plan more than the money available')).toBeInTheDocument()
-    expect(screen.getByText(/Counted: Everyday support (version 3), Trip to Cairns (version 1). Nothing is blocked./)).toBeInTheDocument()
+    expect(screen.getByText('Counted: Everyday support (version 3), Trip to Cairns (version 1). Nothing is blocked.')).toBeInTheDocument()
   })
 
   it('asks nothing with one agreement', () => {

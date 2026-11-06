@@ -85,7 +85,7 @@ export function AgreementActionDialog({ action, selected, named, onClose, onDone
       return
     }
     onDone({
-      action, label: action === 'extend' ? endDate : action === 'reprice' ? list!.version : '', results: result.results, titles: Object.fromEntries(selected.filter(r => named.has(r.key)).map(r => [r.key, rowTitle(r, named)])),
+      action, label: action === 'extend' ? endDate : action === 'reprice' ? list!.version : '', results: result.results, ...(named.size > 0 && { titles: Object.fromEntries(selected.filter(r => named.has(r.key)).map(r => [r.key, rowTitle(r, named)])) }),
       stopped: result.stopped ? { done: result.results.length, total: count, notSent: result.stopped.notSent, noReply: noReply(result.stopped.error) } : null,
     })
   }

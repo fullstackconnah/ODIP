@@ -170,7 +170,7 @@ export function AgreementsSection({ participantId }: { participantId: string }) 
     </div>
   )
 
-  const addAgreement = canDraft && phase === 'ready' ? <Button variant="secondary" size="sm" to={`${draftPage(participantId)}?agreement=new`}>Add agreement</Button> : undefined
+  const addAgreement = canDraft && phase === 'ready' && groups.length > 0 ? <Button variant="secondary" size="sm" to={`${draftPage(participantId)}?agreement=new`}>Add agreement</Button> : undefined
   // One plain agreement has no block heading, so its New revision (when it has ended) sits beside Add agreement.
   const reviseOnly = canDraft && plain && ended(groups[0]) ? <Button variant="ghost" size="sm" to={link(groups[0])}>New revision</Button> : undefined
 
