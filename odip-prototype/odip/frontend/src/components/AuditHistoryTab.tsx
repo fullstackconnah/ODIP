@@ -100,7 +100,7 @@ export default function AuditHistoryTab({ entityType, entityId }: Props) {
 
   if (isError) return <PageState kind="error" noun="history" onRetry={() => refetch()} />;
 
-  if (!data || data.entries.length === 0) {
+  if (!data?.entries?.length) {
     return (
       <div className="py-6 text-center text-sm text-[var(--color-muted-foreground)]">
         No history recorded yet.

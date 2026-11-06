@@ -2995,6 +2995,15 @@ const routes = [
     if (searchParams.get('needsAttention') === 'true') list = list.filter((i) => i.isOverdue24h || (i.status !== 'Resolved' && i.status !== 'Closed'))
     return paged(list)
   }],
+  // GET /audit/{entityType}/{entityId}: the History tab's shape (AuditController), a few synthetic entries, newest first.
+  ['audit/:id/:id', () => { // matchRoute knows only :id, so the entity type is a second :id
+    const entries = [
+      { id: 'au-3', action: 'Updated', changedAt: '2026-07-12T09:30:00Z', changedByName: 'Callum Radford', changes: [{ field: 'Phone', old: '0400 000 111', new: '0400 000 222' }] },
+      { id: 'au-2', action: 'Updated', changedAt: '2026-07-10T02:15:00Z', changedByName: 'Dev Admin', changes: [{ field: 'Preferred name', old: null, new: 'Sam' }] },
+      { id: 'au-1', action: 'Created', changedAt: '2026-07-01T00:00:00Z', changedByName: null, changes: [] },
+    ]
+    return respond(200, { entries, total: entries.length, page: 1, pageSize: 20, totalPages: 1 }) // the controller returns the bare object, not the ApiResponse envelope
+  }],
   // IC7: newest first, the first row is the report itself. The server reads these from the audit trail and returns no other detail.
   ['incidents/:id/status-history', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]
