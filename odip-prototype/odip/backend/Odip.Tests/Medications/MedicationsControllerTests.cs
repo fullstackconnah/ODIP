@@ -637,7 +637,7 @@ public class MedicationsControllerTests
         db.SaveChanges();
 
         var controller = new MedicationsController(db, tenant);
-        var dto = new UpdateAdministrationDto { Status = MedicationAdministrationStatus.WrongMedication, Reason = "Wrong pack", Notes = null };
+        var dto = new UpdateAdministrationDto { AmendmentReason = MedicationAmendmentReason.WrongTime, Status = MedicationAdministrationStatus.WrongMedication, Reason = "Wrong pack", Notes = null };
 
         var result = await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
 
@@ -1265,7 +1265,7 @@ public class MedicationsControllerTests
         var incident = SeedIncidentForAdministration(db, admin.Id);
 
         var controller = new MedicationsController(db, tenant);
-        var dto = new UpdateAdministrationDto { Status = MedicationAdministrationStatus.Missed, Reason = "Still not available" };
+        var dto = new UpdateAdministrationDto { AmendmentReason = MedicationAmendmentReason.WrongTime, Status = MedicationAdministrationStatus.Missed, Reason = "Still not available" };
         var result = await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<AdministrationDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);

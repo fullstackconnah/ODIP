@@ -1579,6 +1579,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.PrnOutcome).HasMaxLength(1000);
             entity.Property(e => e.Notes).HasMaxLength(1000);
             entity.Property(e => e.RecordedWithoutCompetency).HasDefaultValue(false);
+            entity.Property(e => e.AmendmentNote).HasMaxLength(500);
+            entity.Property(e => e.AmendedByName).HasMaxLength(200);
 
             // Restrict: the MAR is a compliance record — its parent medication/participant
             // must not silently cascade it away.

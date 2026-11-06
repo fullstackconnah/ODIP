@@ -341,9 +341,7 @@ public class MedicationsController : ControllerBase
 
     // The amend path is a COORDINATOR CORRECTION and deliberately sits outside the Medication Competency gate and outside the supersede
     // rule (decision recorded with the Warn/Enforce rollout): it is the only way to change an Administered record, and the only way to
-    // change a record after it has been superseded.
-    // TODO(amendment-reason): require and store a reason for every amendment (who changed what, and why) so a correction is explainable
-    // beyond the audit row; not built yet, tracked for a later round.
+    // change a record after it has been superseded. It needs a reason (a code, plus a note for Other), stored with who amended and when.
     [HttpPut("medications/administrations/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AdministrationDto>>> UpdateAdministration(
@@ -360,12 +358,25 @@ public class MedicationsController : ControllerBase
         if (_db.Entry(admin).State == EntityState.Detached)
             return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
+        // JsonStringEnumConverter also accepts a bare integer, so an undefined code can reach here.
+        if (dto.AmendmentReason is null)
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Choose a reason for this correction."));
+        if (!Enum.IsDefined(dto.AmendmentReason.Value))
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Choose a correction reason from the list."));
+        if (dto.AmendmentReason == MedicationAmendmentReason.Other && string.IsNullOrWhiteSpace(dto.AmendmentNote))
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Add a note saying why this record is being corrected."));
+
         if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld, missed or the wrong medication was given."));
 
         if (dto.Status == MedicationAdministrationStatus.WrongMedication && string.IsNullOrWhiteSpace(dto.Notes))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A note describing what was given instead is required when recording a wrong medication administration."));
 
+        var now = DateTime.UtcNow;
+        admin.AmendmentReason = dto.AmendmentReason;
+        admin.AmendmentNote = string.IsNullOrWhiteSpace(dto.AmendmentNote) ? null : dto.AmendmentNote.Trim();
+        admin.AmendedByName = GetRecordedByName();
+        admin.AmendedAt = now;
         admin.Status = dto.Status;
         admin.AdministeredAt = dto.AdministeredAt;
         // Preserve the originally-recorded zone unless the caller supplies a new one — an amend
@@ -382,7 +393,7 @@ public class MedicationsController : ControllerBase
         admin.PrnOutcome = dto.PrnOutcome ?? admin.PrnOutcome;
         admin.PrnOutcomeAt = dto.PrnOutcomeAt ?? admin.PrnOutcomeAt;
         admin.Notes = dto.Notes;
-        admin.UpdatedAt = DateTime.UtcNow;
+        admin.UpdatedAt = now;
 
         await _db.SaveChangesAsync(ct);
 
