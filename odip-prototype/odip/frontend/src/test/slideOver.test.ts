@@ -68,7 +68,7 @@ describe('useDialogBehavior', () => {
    * A dialog answers Escape through the hook, so a stacked dialog closes alone. These are the Escape handlers still written by hand,
    * and why each may stay: the list is a ratchet: no new one may appear, and a file that moved onto the hook leaves it.
    *   Dropdown, SearchableSelect: an open list closing itself (they call preventDefault, which the hook respects).
-   *   TenantSwitcher, UserSwitcher: header popovers, not dialogs.
+   *   useMenuKeys (TenantSwitcher, UserSwitcher): the header menus' Escape, a popover that returns focus to its trigger, not a dialog.
    *   NotificationBell, WhatsNewButton: the bell's and the What's new button's desktop panels, header popovers like the switchers (below lg they are a SlideOver on the hook).
    *   QuickGroup: a dashboard row's inline form closing itself (in the page's flow, not a layer; it calls preventDefault).
    *   ReferralSourcesSection: the Settings name box closing itself (an inline form in the page flow, not a layer, like QuickGroup).
@@ -79,8 +79,7 @@ describe('useDialogBehavior', () => {
   const KNOWN_ESCAPE_HANDLERS: Record<string, number> = {
     'components/Dropdown.tsx': 2,
     'components/SearchableSelect.tsx': 1,
-    'components/layout/TenantSwitcher.tsx': 1,
-    'components/layout/UserSwitcher.tsx': 1,
+    'components/layout/useMenuKeys.ts': 1,
     'components/layout/NotificationBell.tsx': 1,
     'components/layout/RailFlyout.tsx': 1,
     'components/layout/RailTooltip.tsx': 1,
