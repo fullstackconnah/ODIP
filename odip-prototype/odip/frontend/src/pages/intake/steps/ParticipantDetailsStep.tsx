@@ -9,10 +9,12 @@
  * check here; the underlying zod refine (`livingArrangementRefine`) still enforces
  * the same required-ness regardless of what's visually hidden.
  */
-import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
-import { Controller } from 'react-hook-form'
+import type { Control, FieldErrors, UseFormRegister, UseFormSetValue } from 'react-hook-form'
+import { Controller, useController } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
+import { AddressField } from '@/components/AddressField'
+import type { AddressFieldProps } from '@/components/AddressField'
 import { TextAreaField } from '@/components/TextAreaField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
@@ -22,9 +24,33 @@ import type { ParticipantFormData } from '@/lib/participantSchema'
 import { formGrid, span } from '@/lib/formGrid'
 import { ADDRESS_STATE_ITEMS } from '../intakeOptions'
 
-export function ParticipantDetailsStep({ control, register, errors, livingArrangementValue }: {
+/**
+ * The street box, with the address lookup. A component of its own because FormField hands its id and aria props to its direct child, and a bare
+ * Controller would swallow them (the label would point at nothing). A pick sets the other address fields as a typed value would: dirty and validated.
+ */
+function AddressStreet({ control, setValue, ...aria }: { control: Control<ParticipantFormData>; setValue: UseFormSetValue<ParticipantFormData> } & Omit<AddressFieldProps, 'value' | 'onChange' | 'onPick'>) {
+  const { field } = useController({ control, name: 'addressStreet' })
+  return (
+    <AddressField
+      {...aria}
+      value={field.value ?? ''}
+      onChange={field.onChange}
+      onBlur={field.onBlur}
+      placeholder="e.g. 12 Example Street"
+      onPick={(a) => {
+        const filled = { shouldDirty: true, shouldValidate: true }
+        setValue('addressSuburb', a.suburb, filled)
+        setValue('addressState', a.state, filled)
+        setValue('addressPostcode', a.postcode, filled)
+      }}
+    />
+  )
+}
+
+export function ParticipantDetailsStep({ control, register, setValue, errors, livingArrangementValue }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
+  setValue: UseFormSetValue<ParticipantFormData>
   errors: FieldErrors<ParticipantFormData>
   livingArrangementValue: string | undefined
 }) {
@@ -61,7 +87,7 @@ export function ParticipantDetailsStep({ control, register, errors, livingArrang
       <Card title="Address">
         <div className={formGrid}>
           <FormField label="Street" className={span.long}>
-            <input id="addressStreet" {...register('addressStreet')} placeholder="e.g. 12 Example Street" />
+            <AddressStreet id="addressStreet" control={control} setValue={setValue} />
           </FormField>
 
           <FormField label="Suburb" className={span.medium}>

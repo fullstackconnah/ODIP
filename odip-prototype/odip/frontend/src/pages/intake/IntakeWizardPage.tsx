@@ -487,7 +487,7 @@ export default function IntakeWizardPage() {
               label={isReviewStep ? 'Review' : currentStep.label}
             />
         {!isReviewStep && currentStep.key === 'participantDetails' && (
-          <ParticipantDetailsStep control={control} register={register} errors={errors} livingArrangementValue={livingArrangementValue} />
+          <ParticipantDetailsStep control={control} register={register} setValue={setValue} errors={errors} livingArrangementValue={livingArrangementValue} />
         )}
 
         {!isReviewStep && currentStep.key === 'ndisFunding' && (

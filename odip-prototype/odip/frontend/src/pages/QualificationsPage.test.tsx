@@ -225,6 +225,18 @@ describe('QualificationsPage: Previous and Next', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Dana Expired' })).toBeInTheDocument()
   })
 
+  it('on a direct ?staff= load scrolls the selected row into view once, and Next adds only its own scroll', () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    renderList('/?staff=s2')
+    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById('qual-staff-s2'))
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Next/ }))
+    expect(scroll).toHaveBeenCalledTimes(2) // Next's own, not a second mount scroll
+  })
+
   it('does not wrap: at the last person Next is disabled and reads "Next"', () => {
     renderList('/?staff=s5')
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()

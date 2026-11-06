@@ -82,7 +82,7 @@ export function RestrictivePracticeStep({
   // INC-04/INC-05: the involved participant's ACTIVE register entries — useRestrictivePractices
   // defaults to active-only, exactly the set both the determination and the linked-entry picker
   // need. Disabled (participantId undefined) until a participant is chosen.
-  const { data: activePractices = [], isLoading, isError } = useRestrictivePractices(involvedParticipantId || undefined)
+  const { data: activePractices = [], isLoading, isError, isRefetching, refetch } = useRestrictivePractices(involvedParticipantId || undefined)
   // IN-4's "show inactive/retired practices" disclosure — a second query, only fetched once the
   // toggle is actually on, requesting the full (active + inactive) set.
   const { data: allPractices = [] } = useRestrictivePractices(showInactive ? (involvedParticipantId || undefined) : undefined, true)
@@ -210,10 +210,16 @@ export function RestrictivePracticeStep({
             <p className="text-sm text-[var(--color-muted-foreground)]">
               Select the involved participant on the Basics step to see the restrictive practices on their register.
             </p>
-          ) : isError ? (
-            <p role="alert" className="text-sm text-[var(--color-destructive)]">
-              Couldn't load this participant's register. You can still choose None of these and describe the practice.
-            </p>
+          ) : isError && registerEntries.length === 0 ? (
+            // A failed background refetch keeps the old list (React Query keeps its data), so the error shows only over an empty one.
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p role="alert" className="text-sm text-[var(--color-destructive)]">
+                Couldn't load this participant's register. You can still choose None of these and describe the practice.
+              </p>
+              <Button type="button" variant="secondary" size="sm" onClick={() => void refetch()} aria-disabled={isRefetching} aria-busy={isRefetching || undefined} className="min-h-[var(--tap-min)] aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+                {isRefetching ? 'Trying again…' : 'Try again'}
+              </Button>
+            </div>
           ) : noRegisterEntries && (
             <p className="text-sm text-[var(--color-muted-foreground)]">
               No active practices are on this participant's register.

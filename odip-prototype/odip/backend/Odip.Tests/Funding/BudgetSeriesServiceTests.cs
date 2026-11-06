@@ -17,6 +17,7 @@ namespace Odip.Tests.Funding;
 /// the service's seam: every Monday the agreement covers is one $100 line of Core (category 4), or $200 for a revision starting 1 Dec, so the expected line can be counted by hand. The plan is
 /// 1 Jul 2026 to 30 Jun 2027 (Core $2,500 a quarter and Increased Social and Community Participation, category 9, $500 a quarter); today is 4 Oct 2026.
 /// </summary>
+[Collection(Odip.Tests.Catalogue.CatalogueGeneration.Name)]   // its quote-cache key carries the static CatalogueImportService.Generation, which a parallel import test moves (CI 2026-11-06)
 public class BudgetSeriesServiceTests
 {
     private static readonly DateOnly PlanStart = D(2026, 7, 1);

@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ParticipantAddressLivingSection } from './ParticipantAddressLivingSection'
+import { resetAddressLookup } from '@/lib/addressLookupState'
 import { MM_LEVEL_HINT, MM_LEVEL_LABELS, type ParticipantDetailDto } from '@/api/types/participants'
 
-const { mockPatchMutateAsync } = vi.hoisted(() => ({ mockPatchMutateAsync: vi.fn() }))
+const { mockPatchMutateAsync, apiPost, apiGet } = vi.hoisted(() => ({ mockPatchMutateAsync: vi.fn(), apiPost: vi.fn(), apiGet: vi.fn() }))
+
+vi.mock('@/api/client', () => ({ apiPost, apiGet }))
 
 vi.mock('@/api/hooks', () => ({
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
@@ -30,6 +33,9 @@ function makeParticipant(overrides: Partial<ParticipantDetailDto> = {}): Partici
 
 beforeEach(() => {
   mockPatchMutateAsync.mockReset()
+  resetAddressLookup()
+  apiPost.mockReset().mockResolvedValue([])
+  apiGet.mockReset()
   setUserRole('Coordinator')
 })
 
@@ -173,5 +179,31 @@ describe('ParticipantAddressLivingSection — MM level (remoteness)', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose a level from 1 to 7.')
+  })
+})
+
+describe('ParticipantAddressLivingSection — address lookup', () => {
+  it('a picked suggestion fills street, suburb, state and postcode, and they save together', async () => {
+    const user = userEvent.setup()
+    apiPost.mockResolvedValue([{ placeId: 'p1', mainText: '12 Example Street', secondaryText: 'Brisbane City QLD' }])
+    apiGet.mockResolvedValue({ street: '12 Example Street', suburb: 'Brisbane City', state: 'QLD', postcode: '4000', formattedAddress: '12 Example Street, Brisbane City QLD 4000' })
+    mockPatchMutateAsync.mockResolvedValue(undefined)
+    render(<ParticipantAddressLivingSection p={makeParticipant()} participantId="participant-1" canEdit />)
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.type(screen.getByLabelText('Street'), '12 Exam')
+    await user.click(await screen.findByRole('option', { name: /12 Example Street/ }))
+
+    expect(screen.getByLabelText('Street')).toHaveValue('12 Example Street')
+    expect(screen.getByLabelText('Suburb')).toHaveValue('Brisbane City')
+    expect(screen.getByLabelText('State')).toHaveValue('QLD')
+    expect(screen.getByLabelText('Postcode')).toHaveValue('4000')
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockPatchMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        address: expect.objectContaining({ addressStreet: '12 Example Street', addressSuburb: 'Brisbane City', addressState: 'QLD', addressPostcode: '4000' }),
+      }),
+    }))
   })
 })
