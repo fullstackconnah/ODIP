@@ -160,9 +160,10 @@ async function locList(vp) {
 // LOC-1c: the shift slide-over's Service location field is the house SearchableSelect.
 async function locSelect(vp) {
   const { context, page } = await openPage(vp)
-  await page.goto(`${BASE_URL}/rostering`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.locator('#roster-week-heading').waitFor({ state: 'visible', timeout: 60_000 })
-  await page.getByRole('button', { name: /^New shift$/ }).first().click()
+  await page.goto(`${BASE_URL}/staff/s-0001?tab=week`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  const add = page.getByRole('button', { name: 'Add shift' }).first()
+  await add.waitFor({ state: 'visible', timeout: 60_000 })
+  await add.click()
   const dialog = page.getByRole('dialog')
   await dialog.waitFor({ state: 'visible', timeout: 30_000 })
   const picker = dialog.getByLabel('Service location')
@@ -185,18 +186,20 @@ async function auditHistory(vp) {
   const { context, page } = await openPage(vp)
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
+  const audit = []
+  page.on('response', (r) => { if (r.url().includes('/api/v1/audit/')) audit.push(`${r.status()} ${new URL(r.url()).pathname}`) })
   await page.goto(`${BASE_URL}/participants/p-0001?tab=records`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   const tab = page.getByRole('tab', { name: 'History', exact: true })
   await tab.waitFor({ state: 'visible', timeout: 60_000 })
   await tab.click()
-  await page.getByText(/events? recorded/).waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+  await page.getByText(/events? recorded|No history recorded yet/).waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
   await page.waitForTimeout(500)
   const m = await page.evaluate(() => {
     const t = document.querySelector('main')?.innerText ?? ''
-    return { entries: (t.match(/\bby (Callum Radford|Dev Admin|System)\b/g) ?? []).length, boundary: /something went wrong|unexpected error|application error/i.test(t), text: t.replace(/s+/g, ' ').slice(0, 160), recorded: (t.match(/\d+ events? recorded/) ?? [''])[0] }
+    return { entries: (t.match(/\bby (Callum Radford|Dev Admin|System)\b/g) ?? []).length, boundary: /something went wrong|unexpected error|application error/i.test(t), tail: t.replace(/s+/g, ' ').slice(-300), recorded: (t.match(/\d+ events? recorded/) ?? [''])[0] }
   })
-  check(`${vp.name}: Records > History renders at least one entry (${m.recorded})`, m.entries >= 1, m)
-  check(`${vp.name}: no error boundary text, no page errors`, !m.boundary && errors.length === 0, { boundary: m.boundary, errors })
+  check(`${vp.name}: Records > History renders at least one entry (${m.recorded})`, m.entries >= 1, { ...m, audit })
+  check(`${vp.name}: no error boundary text, no page errors`, !m.boundary && errors.length === 0, { boundary: m.boundary, errors, audit })
   await noHScroll(page, `${vp.name} history`)
   await crop(page, page.locator('main').first(), `audit-history-${vp.name}`, vp)
   await context.close()
