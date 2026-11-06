@@ -40,6 +40,15 @@ public class WhatsNewSeedTests
     }
 
     [Fact]
+    public void FinishLater_IsForStaffAndWorkers_AndNotImportant()
+    {
+        var item = WhatsNewSeed.All.Single(i => i.Key == "2026-11-finish-later");
+        Assert.Equal("End a shift now, add the details later", item.Title);
+        Assert.True(item.Roles.HasFlag(WhatsNewAudience.SupportWorker));
+        Assert.False(item.Important);
+    }
+
+    [Fact]
     public void Copy_NeverSaysOdip()
     {
         foreach (var i in WhatsNewSeed.All)
