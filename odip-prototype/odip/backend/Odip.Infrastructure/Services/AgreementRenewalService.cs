@@ -43,7 +43,7 @@ public sealed class AgreementRenewalService
             .FirstOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (source is null) return new RenewalOutcome(null, new[] { "Agreement not found." }, NotFound: true);
 
-        var revisions = await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId)
+        var revisions = await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == source.AgreementId)
             .Select(x => new { x.Version, x.AgreementStartDate, x.AgreementEndDate, x.OriginalAgreementEndDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id) })
             .ToListAsync(ct);
         var approved = revisions.Where(r => r.Approved).MaxBy(r => r.Version);
@@ -96,6 +96,7 @@ public sealed class AgreementRenewalService
     {
         PlanStartDate = planStart, PlanEndDate = planEnd, AgreementStartDate = start, AgreementEndDate = end, IsOngoing = source.IsOngoing && planEnd.DayNumber - start.DayNumber + 1 <= PlanPricingEngine.MaxPeriodDays, State = source.State,
         Representative = source.Representative, Blocks = blocks, BaseVersion = source.Version,
+        AgreementId = source.AgreementId,   // kind and name stay null: the save copies them from the base revision
     };
 
     /// <summary>

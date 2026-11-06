@@ -51,15 +51,21 @@ public class ServiceAgreementDraftsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
     {
-        // The newest revision in full (a plan is started from it) and the older ones as summaries: every save adds a revision of tens of kilobytes (blocks, answer, lines), so a long onboarding
-        // made a multi-megabyte response on every page load. GET {id} has an older revision's details. The two collections of the newest are loaded as separate queries, not a cross product.
-        var newest = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
-            .Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
-        if (newest is null) return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok([]));
+        // The newest revision of EACH agreement in full (a plan is started from it) and the older ones as summaries: every save adds a revision of tens of kilobytes (blocks, answer, lines), so a long
+        // onboarding made a multi-megabyte response on every page load. GET {id} has an older revision's details. The two collections of the newest are loaded as separate queries, not a cross product.
+        // The list stays flat; the agreements come most recently changed first (the page opens on the first), each agreement's revisions newest first.
+        var heads = await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.ParticipantId == participantId)
+            .Select(x => new { x.Id, x.AgreementId, x.Version, x.CreatedAt }).ToListAsync(ct);
+        if (heads.Count == 0) return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok([]));
+        var newestOf = heads.GroupBy(x => x.AgreementId).Select(g => g.OrderByDescending(x => x.Version).First()).ToList();
+        var newestIds = newestOf.Select(x => x.Id).ToList();
+        var order = newestOf.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.AgreementId).Select((x, i) => (x.AgreementId, i)).ToDictionary(x => x.AgreementId, x => x.i);
+        var newestFull = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
+            .Where(x => x.ParticipantId == participantId && newestIds.Contains(x.Id)).ToListAsync(ct);
 
         // The older ones: their lines (for what they add up to) but no blocks and no stored answer in the response; the block counts come from one grouped query.
         var older = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines)
-            .Where(x => x.ParticipantId == participantId && x.Version < newest.Version).OrderByDescending(x => x.Version).ToListAsync(ct);
+            .Where(x => x.ParticipantId == participantId && !newestIds.Contains(x.Id)).ToListAsync(ct);
         var olderIds = older.Select(x => x.Id).ToList();
         var blockCounts = olderIds.Count == 0 ? new Dictionary<Guid, int>()
             : await _db.ServiceAgreementDraftBlocks.AsNoTracking().Where(x => olderIds.Contains(x.DraftId)).GroupBy(x => x.DraftId).Select(g => new { Id = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Id, x => x.Count, ct);
@@ -67,8 +73,14 @@ public class ServiceAgreementDraftsController : ControllerBase
         // Who approved which revision, for all of the participant's revisions at once: a row for each approved one, and there are few of those.
         var approvals = await _db.ServiceAgreementDraftApprovals.AsNoTracking().Where(x => x.ParticipantId == participantId).ToDictionaryAsync(x => x.DraftId, ct);
 
-        var listed = new List<ServiceAgreementDraftDto> { ToDto(newest) with { Approval = ApprovalOf(approvals.GetValueOrDefault(newest.Id)) } };
-        listed.AddRange(older.Select(x => ToSummary(x, blockCounts.GetValueOrDefault(x.Id)) with { Approval = ApprovalOf(approvals.GetValueOrDefault(x.Id)) }));
+        var listed = new List<ServiceAgreementDraftDto>();
+        foreach (var agreementId in order.OrderBy(x => x.Value).Select(x => x.Key))
+        {
+            var full = newestFull.First(x => x.AgreementId == agreementId);
+            listed.Add(ToDto(full) with { Approval = ApprovalOf(approvals.GetValueOrDefault(full.Id)) });
+            listed.AddRange(older.Where(x => x.AgreementId == agreementId).OrderByDescending(x => x.Version)
+                .Select(x => ToSummary(x, blockCounts.GetValueOrDefault(x.Id)) with { Approval = ApprovalOf(approvals.GetValueOrDefault(x.Id)) }));
+        }
         return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(listed));
     }
 
@@ -109,6 +121,8 @@ public class ServiceAgreementDraftsController : ControllerBase
         var result = await _service.SaveAsync(tenantId, participantId, dto, actor, ct);
         if (result.Draft is null)
         {
+            if (result.AgreementChoiceRequired)
+                return Conflict(new ApiResponse<ServiceAgreementDraftDto> { Success = false, Errors = result.Errors.ToList(), Code = "agreement-choice-required" });
             if (result.ConflictVersion is int newest)
                 return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = newest }, Errors = result.Errors.ToList(), Code = "draft-version-conflict" });
             return result.NotFound
@@ -421,7 +435,7 @@ public class ServiceAgreementDraftsController : ControllerBase
     /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>
     private static ServiceAgreementDraftDto Header(ServiceAgreementDraft draft, int blockCount) => new()
     {
-        Id = draft.Id, ParticipantId = draft.ParticipantId, Version = draft.Version, State = draft.State,
+        Id = draft.Id, ParticipantId = draft.ParticipantId, AgreementId = draft.AgreementId, AgreementKind = draft.AgreementKind, AgreementName = draft.AgreementName, Version = draft.Version, State = draft.State,
         Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
         PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,

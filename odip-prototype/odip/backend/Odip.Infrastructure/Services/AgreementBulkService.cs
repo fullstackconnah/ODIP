@@ -13,7 +13,10 @@ namespace Odip.Infrastructure.Services;
 public sealed record TermFigures(DateOnly Start, DateOnly End, decimal Total);
 
 /// <summary>One participant's answer: Created (a draft revision was saved), Skipped (nothing to do, nothing saved), Failed, or Busy (the time budget ran out before this one).</summary>
-public sealed record BulkItem(Guid ParticipantId, string Name, string Outcome, string? Reason, Guid? SourceDraftId, Guid? NewDraftId, TermFigures? Before, TermFigures? After, bool HasIssues);
+public sealed record BulkItem(Guid ParticipantId, string Name, string Outcome, string? Reason, Guid? SourceDraftId, Guid? NewDraftId, TermFigures? Before, TermFigures? After, bool HasIssues, Guid AgreementId = default);
+
+/// <summary>One agreement of one participant: what a bulk action runs on.</summary>
+public sealed record AgreementSeriesRef(Guid ParticipantId, Guid AgreementId);
 
 /// <summary>
 /// Agreements PR B: renew, reprice or extend many agreements. Each item runs on its own, in series, and only ever saves a Draft revision through the one save path (<see cref="ServiceAgreementDraftService.SaveAsync"/>
@@ -47,28 +50,41 @@ public sealed class AgreementBulkService
         _log = log;
     }
 
-    public async Task<List<BulkItem>> RunAsync(Guid tenantId, string action, IReadOnlyList<Guid> participantIds, DateOnly? endDate, PriceListRef? priceList, ApprovalCaller caller, string actor, CancellationToken ct)
+    /// <summary>Every agreement of each participant (a participant with none still answers once, as "Not approved yet"). The older request shape.</summary>
+    public async Task<List<BulkItem>> RunAsync(Guid tenantId, string action, IReadOnlyList<Guid> participantIds, DateOnly? endDate, PriceListRef? priceList, ApprovalCaller caller, string actor, CancellationToken ct) =>
+        await RunAsync(tenantId, action, await ExpandAsync(tenantId, participantIds, ct), endDate, priceList, caller, actor, ct);
+
+    public async Task<List<AgreementSeriesRef>> ExpandAsync(Guid tenantId, IReadOnlyList<Guid> participantIds, CancellationToken ct)
+    {
+        var ids = participantIds.ToList();
+        var held = (await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => d.TenantId == tenantId && ids.Contains(d.ParticipantId)).Select(d => new { d.ParticipantId, d.AgreementId }).Distinct().ToListAsync(ct))
+            .ToLookup(x => x.ParticipantId, x => x.AgreementId);
+        return ids.SelectMany(pid => held.Contains(pid) ? held[pid].OrderBy(a => a).Select(a => new AgreementSeriesRef(pid, a)) : [new AgreementSeriesRef(pid, Guid.Empty)]).ToList();
+    }
+
+    /// <summary>One answer per agreement, in the order sent. Each agreement is renewed, repriced or extended on its own: another agreement of the participant waiting never skips it.</summary>
+    public async Task<List<BulkItem>> RunAsync(Guid tenantId, string action, IReadOnlyList<AgreementSeriesRef> series, DateOnly? endDate, PriceListRef? priceList, ApprovalCaller caller, string actor, CancellationToken ct)
     {
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
-        var ids = participantIds.ToList();
+        var ids = series.Select(s => s.ParticipantId).Distinct().ToList();
         var names = await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && p.IsActive && ids.Contains(p.Id))
             .Select(p => new Participant { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName })
             .ToDictionaryAsync(p => p.Id, p => p.FullName, ct);
-        var revisions = await AgreementRevisions.LatestAsync(_db, tenantId, ids, ct);
+        var revisions = await AgreementRevisions.LatestPerAgreementAsync(_db, tenantId, ids, ct);
         var lists = action == "reprice" ? await AgreementPriceLists.ListAsync(_db, ct) : [];
 
         var results = new List<BulkItem>();
         var deadline = _clock.GetUtcNow() + Budget;
-        foreach (var pid in ids)
+        foreach (var (pid, agreementId) in series)
         {
             var name = names.GetValueOrDefault(pid, "");
             BulkItem Item(string outcome, string? reason = null, Guid? source = null, Guid? created = null, TermFigures? before = null, TermFigures? after = null, bool issues = false) =>
-                new(pid, name, outcome, reason, source, created, before, after, issues);
+                new(pid, name, outcome, reason, source, created, before, after, issues, agreementId);
             try
             {
                 if (_clock.GetUtcNow() >= deadline) results.Add(Item("Busy", BudgetWords));
                 else if (!names.ContainsKey(pid)) results.Add(Item("Failed", "Not found"));
-                else if (!revisions.TryGetValue(pid, out var set) || set.Current is not { } current) results.Add(Item("Skipped", "Not approved yet"));
+                else if (!revisions.TryGetValue((pid, agreementId), out var set) || set.Current is not { } current) results.Add(Item("Skipped", "Not approved yet"));
                 else if (set.Waiting is not null) results.Add(Item("Skipped", WaitingWords, current.DraftId));
                 else results.Add(await OneAsync(tenantId, pid, action, set, current, endDate, priceList, lists, today, caller, actor, Item, ct));
             }

@@ -1823,12 +1823,13 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.State).HasMaxLength(3).IsRequired();
             entity.Property(e => e.ServiceTypesJson).HasMaxLength(4000).IsRequired();
             entity.Property(e => e.Representative).HasMaxLength(500);
+            entity.Property(e => e.AgreementName).HasMaxLength(80);
             entity.Property(e => e.ParticipantNameSnapshot).HasMaxLength(300).IsRequired();
             entity.Property(e => e.NdisNumberSnapshot).HasMaxLength(100);
             entity.Property(e => e.CreatedBy).HasMaxLength(200).IsRequired();
             entity.Property(e => e.PricingJson).HasColumnType("jsonb");
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Version }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.AgreementId, e.Version }).IsUnique().HasDatabaseName(ServiceAgreementDraft.VersionIndexName);
         });
         modelBuilder.Entity<ServiceAgreementDraftBlock>(entity =>
         {
