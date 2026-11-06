@@ -62,6 +62,10 @@ function seriesSummary(points, { planStart, planEnd, today, current, limit }) {
     summary.expectedEndDate = lastExpected.date
   }
   if (!current) summary.leftAtEnd = cents(limit - used)
+  // LimitReachedOn: the first point at or over the limit, else (current plan, pace over the limit) the day an even spend at the pace reaches it.
+  const over = points.find((p) => p.used !== undefined && p.used >= limit && limit > 0)
+  if (over) summary.limitReachedOn = over.date
+  else if (summary.pace !== undefined && summary.pace > limit) summary.limitReachedOn = isoOf(Math.min(total, Math.ceil((limit * elapsed) / used)) - 1 + dayOf(planStart))
   return summary
 }
 
