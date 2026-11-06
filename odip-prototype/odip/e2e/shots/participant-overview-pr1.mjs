@@ -98,12 +98,14 @@ function runChecks(tag, m, { width, count, withCard }) {
   }
 }
 
+const state = async (fn) => { try { await fn() } catch (e) { check('state crashed', false, String(e.message).slice(0, 300)) } }
+
 const browser = await chromium.launch({ headless: true })
 try {
   const shot = async (page, loc, name, opts = {}) => { const r = await cropElement(page, loc, path.join(OUT_DIR, name), opts); checks.push(checkCropHolds(r)); return r }
 
   // 1280 Coordinator, light: on-track (p-0002) and no plan (p-0001).
-  {
+  await state(async () => {
     const { context, page } = await open(browser, { role: 'Coordinator', width: 1280 })
     await go(page, 'p-0002')
     await cardOf(page).waitFor({ state: 'visible', timeout: 30_000 })
@@ -117,17 +119,17 @@ try {
     check('2 1280 no-plan: the budget tile offers "Record the plan budget" with the Plus badge', m.tiles.some((t) => t.name === 'Record the plan budget' && t.plusW != null), m.tiles.map((t) => t.name))
     await shot(page, bandOf(page), 'overview-1280-coordinator-no-plan.png', { also: cardOf(page) })
     await context.close()
-  }
+  })
   // 1280 Coordinator, dark.
-  {
+  await state(async () => {
     const { context, page } = await open(browser, { role: 'Coordinator', width: 1280, scheme: 'dark' })
     await go(page, 'p-0002')
     await cardOf(page).waitFor({ state: 'visible', timeout: 30_000 })
     await shot(page, bandOf(page), 'overview-1280-coordinator-dark.png', { also: cardOf(page) })
     await context.close()
-  }
+  })
   // 1280 chart error (the mock answers 500), and 1280 ReadOnly (no band, no chart).
-  {
+  await state(async () => {
     const { context, page } = await open(browser, { role: 'Coordinator', width: 1280, failing: true })
     await go(page, 'p-0002')
     await page.getByText("The budget chart couldn't load.").waitFor({ state: 'visible', timeout: 30_000 })
@@ -136,17 +138,17 @@ try {
     check('6 chart error: band to card gap = --section-gap', m.card && near(m.card.top - m.band.bottom, m.tokens.sectionGap, 1), m.card && m.card.top - m.band.bottom)
     await shot(page, bandOf(page), 'overview-1280-chart-error.png', { also: cardOf(page) })
     await context.close()
-  }
-  {
+  })
+  await state(async () => {
     const { context, page, requests } = await open(browser, { role: 'ReadOnly', width: 1280 })
     await go(page, 'p-0002')
     check('readonly: no Quick add band', (await bandOf(page).count()) === 0, null)
     check('11 readonly: zero requests to /funding/ledger/series and no chart card', requests.length === 0 && (await cardOf(page).count()) === 0, requests.length)
-    await shot(page, page.getByRole('tabpanel').first(), 'overview-1280-readonly.png')
+    await shot(page, page.locator('main').first(), 'overview-1280-readonly.png')
     await context.close()
-  }
+  })
   // 390 touch: Coordinator (7 tiles, the 7th spans both) and Support Worker (2 tiles side by side, no chart request).
-  {
+  await state(async () => {
     const { context, page } = await open(browser, { role: 'Coordinator', width: 390, height: 844, mobile: true })
     await go(page, 'p-0002')
     await cardOf(page).waitFor({ state: 'visible', timeout: 30_000 })
@@ -158,8 +160,8 @@ try {
     await shot(page, bandOf(page), 'overview-390-coordinator.png', { also: cardOf(page), touch: true })
     checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'overview-390-fullpage.png'), { touch: true })).checks)
     await context.close()
-  }
-  {
+  })
+  await state(async () => {
     const { context, page, requests } = await open(browser, { role: 'SupportWorker', width: 390, height: 844, mobile: true })
     await go(page, 'p-0002')
     const m = await page.evaluate(measureBand)
@@ -168,9 +170,9 @@ try {
     check('11 support-worker: zero requests to /funding/ledger/series and no chart card', requests.length === 0 && (await cardOf(page).count()) === 0, requests.length)
     await shot(page, bandOf(page), 'overview-390-support-worker.png', { touch: true })
     await context.close()
-  }
+  })
   // 390 touch: Add a note from Quick add opens the dialog on Notes; ?add=1 is gone from the URL.
-  {
+  await state(async () => {
     const { context, page } = await open(browser, { role: 'Coordinator', width: 390, height: 844, mobile: true })
     await go(page, 'p-0002')
     await page.getByRole('link', { name: 'Add a note' }).click()
@@ -179,7 +181,7 @@ try {
     check('add=1 stripped from the URL after the dialog opened', !page.url().includes('add=1'), page.url())
     await shot(page, dialog, 'overview-390-note-dialog-from-quick-add.png', { touch: true })
     await context.close()
-  }
+  })
 } finally { await browser.close() }
 
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1
