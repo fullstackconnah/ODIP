@@ -419,7 +419,7 @@ public class DraftBlocksTests
             await beforeThrow();
             throw new DbUpdateException("duplicate key value violates unique constraint", new Npgsql.PostgresException(
                 messageText: "duplicate key value violates unique constraint", severity: "ERROR", invariantSeverity: "ERROR",
-                sqlState: Npgsql.PostgresErrorCodes.UniqueViolation, tableName: "ServiceAgreementDrafts", constraintName: "IX_ServiceAgreementDrafts_TenantId_ParticipantId_Version"));
+                sqlState: Npgsql.PostgresErrorCodes.UniqueViolation, tableName: "ServiceAgreementDrafts", constraintName: ServiceAgreementDraft.VersionIndexName));
         }
     }
 

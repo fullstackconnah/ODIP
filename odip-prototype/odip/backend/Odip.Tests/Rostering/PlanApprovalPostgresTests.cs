@@ -168,8 +168,8 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
 
         // 4. The approval is one row for each revision, and a revision with patterns or an approval cannot be deleted from under them.
         string Approval(Guid draft) =>
-            $"INSERT INTO \"ServiceAgreementDraftApprovals\" (\"Id\",\"TenantId\",\"DraftId\",\"ParticipantId\",\"DraftVersion\",\"ApprovedAt\",\"ApprovedByName\",\"PatternsCreated\",\"PatternsEnded\",\"ShiftsCreated\") " +
-            $"VALUES ('{Guid.NewGuid()}','{tenantId}','{draft}','{participantId}',1,now(),'Alex Admin',4,0,0)";
+            $"INSERT INTO \"ServiceAgreementDraftApprovals\" (\"Id\",\"TenantId\",\"DraftId\",\"ParticipantId\",\"AgreementId\",\"DraftVersion\",\"ApprovedAt\",\"ApprovedByName\",\"PatternsCreated\",\"PatternsEnded\",\"ShiftsCreated\") " +
+            $"VALUES ('{Guid.NewGuid()}','{tenantId}','{draft}','{participantId}','{participantId}',1,now(),'Alex Admin',4,0,0)";
         await ExecuteAsync(connectionString, Approval(draftId));
         Assert.Equal(PostgresErrorCodes.UniqueViolation, await SqlStateAsync(connectionString, Approval(draftId)));
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, await SqlStateAsync(connectionString, Approval(Guid.NewGuid())));

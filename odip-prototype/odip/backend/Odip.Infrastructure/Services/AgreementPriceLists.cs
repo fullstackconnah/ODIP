@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
@@ -9,8 +10,9 @@ namespace Odip.Infrastructure.Services;
 /// <summary>A catalogue version and the day it starts (the earliest <c>EffectiveFrom</c> of its rows).</summary>
 public sealed record PriceListRef(string Version, DateOnly Start);
 
-/// <summary>What the Agreements list knows of one participant's revisions: the newest approved one (current), the unapproved one after it (waiting), the term's start and each one's price list.</summary>
-public sealed record AgreementRevisionSet(AgreementRevisionRefDto? Current, AgreementRevisionRefDto? Waiting, DateOnly? TermStart, string? CurrentList, string? WaitingList);
+/// <summary>What the Agreements list knows of one agreement's revisions: the newest approved one (current), the unapproved one after it (waiting), the term's start and each one's price list, and the agreement's kind and name as its newest revision has them.</summary>
+public sealed record AgreementRevisionSet(AgreementRevisionRefDto? Current, AgreementRevisionRefDto? Waiting, DateOnly? TermStart, string? CurrentList, string? WaitingList,
+    Guid AgreementId = default, AgreementKind AgreementKind = AgreementKind.Core, string? AgreementName = null);
 
 /// <summary>The derived price list of an agreement (nothing is stored) and the one sum every screen uses for a line.</summary>
 public static class AgreementPriceLists
@@ -46,21 +48,25 @@ public static class AgreementPriceLists
     public static decimal PricedTotal(PlanQuote quote) => quote.Lines.Where(l => l.IsPriced).Sum(l => l.Total);
 }
 
-/// <summary>The one reading of "current" and "waiting" for the Agreements list and the bulk actions, so they never disagree about which revision is which.</summary>
+/// <summary>The one reading of "current" and "waiting" for the Agreements list and the bulk actions, so they never disagree about which revision is which. Revisions count inside an agreement, so each agreement has its own.</summary>
 public static class AgreementRevisions
 {
-    public static async Task<Dictionary<Guid, AgreementRevisionSet>> LatestAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct)
+    /// <summary>For a reader that holds one agreement per participant: the participant's first agreement's set.</summary>
+    public static async Task<Dictionary<Guid, AgreementRevisionSet>> LatestAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
+        (await LatestPerAgreementAsync(db, tenantId, participantIds, ct)).GroupBy(x => x.Key.ParticipantId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.Key.AgreementId).First().Value);
+
+    public static async Task<Dictionary<(Guid ParticipantId, Guid AgreementId), AgreementRevisionSet>> LatestPerAgreementAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct)
     {
-        var result = new Dictionary<Guid, AgreementRevisionSet>();
+        var result = new Dictionary<(Guid ParticipantId, Guid AgreementId), AgreementRevisionSet>();
         if (participantIds.Count == 0) return result;
         var ids = participantIds.ToList();
         var revisions = await db.ServiceAgreementDrafts.AsNoTracking()
             .Where(d => d.TenantId == tenantId && ids.Contains(d.ParticipantId))
-            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
+            .Select(d => new { d.ParticipantId, d.AgreementId, d.AgreementKind, d.AgreementName, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
             .ToListAsync(ct);
 
         // Current = the approved revision with the highest version; waiting = the newest revision when it is unapproved.
-        var picked = revisions.GroupBy(r => r.ParticipantId).ToDictionary(g => g.Key, g =>
+        var picked = revisions.GroupBy(r => (r.ParticipantId, r.AgreementId)).ToDictionary(g => g.Key, g =>
         {
             var newest = g.MaxBy(r => r.Version)!;
             return (Current: g.Where(r => r.Approved).MaxBy(r => r.Version)?.Id, Waiting: newest.Approved ? (Guid?)null : newest.Id);
@@ -73,7 +79,7 @@ public static class AgreementRevisions
             Total: g.Sum(l => AgreementPriceLists.LineTotal(l.Total, l.Hours, l.UnitPrice)),
             List: AgreementPriceLists.VersionOf(g.Select(l => (l.CatalogueVersion, l.CatalogueEffectiveFrom)))));
 
-        foreach (var one in revisions.GroupBy(r => r.ParticipantId))
+        foreach (var one in revisions.GroupBy(r => (r.ParticipantId, r.AgreementId)))
         {
             var (currentId, waitingId) = picked[one.Key];
             AgreementRevisionRefDto? Make(Guid? id)
@@ -90,7 +96,8 @@ public static class AgreementRevisions
             var current = Make(currentId);
             // The term starts at the earliest approved revision ending on the current end (a mid-term change covers only its last weeks): one step, not the renewal's walk-back.
             DateOnly? termStart = current is null ? null : one.Where(r => r.Approved && r.AgreementEndDate == current.AgreementEndDate).Min(r => r.AgreementStartDate);
-            result[one.Key] = new AgreementRevisionSet(current, Make(waitingId), termStart, ListOf(currentId), ListOf(waitingId));
+            var newest = one.MaxBy(r => r.Version)!;
+            result[one.Key] = new AgreementRevisionSet(current, Make(waitingId), termStart, ListOf(currentId), ListOf(waitingId), one.Key.AgreementId, newest.AgreementKind, newest.AgreementName);
         }
         return result;
     }

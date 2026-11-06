@@ -2,7 +2,7 @@ import type { BudgetSeries, BudgetSeriesPoint, BudgetSeriesScope } from '@/api/t
 import { money, unpricedShiftSentence } from './budgetLedger'
 import { formatDayMonth } from './dateRange'
 import { plural } from './format'
-import { writtenDay } from './fundingPlan'
+import { writtenDay, writtenSpan } from './fundingPlan'
 
 // How the budget graph reads (Funding tab): its one sentence, its footnotes, its ticks and its readout. The server works every figure out; nothing here adds anything up. These only decide
 // how a figure is written and which words go with it. Pure, so the chart and its tests say the same thing.
@@ -10,10 +10,16 @@ import { writtenDay } from './fundingPlan'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 
 /** A date in a sentence: "4 Oct" inside today's year, "30 Jun 2027" across a year boundary (the paceSentence rule). */
-const sentenceDay = (iso: string, today: string) => (iso.slice(0, 4) === today.slice(0, 4) ? formatDayMonth(iso) : writtenDay(iso))
+export const sentenceDay = (iso: string, today: string) => (iso.slice(0, 4) === today.slice(0, 4) ? formatDayMonth(iso) : writtenDay(iso))
 
 /** Whether the expected line is drawn for this scope: an agreement was priced, and it reaches this scope's money. */
 export const expectedDrawn = (series: BudgetSeries, scope: BudgetSeriesScope) => series.expected.status === 'Ok' && scope.points.some(p => p.expected !== undefined)
+
+/** The day the budget is (or at this rate will be) reached, and whether that is still ahead. A reach today counts as reached once used is at the limit; a pace forecast landing on today is still ahead. */
+export function limitReach(series: BudgetSeries, scope: BudgetSeriesScope): { on: string; ahead: boolean } | undefined {
+  const on = scope.summary.limitReachedOn
+  return on === undefined ? undefined : { on, ahead: series.planIsCurrent && (on > series.today || scope.summary.used < scope.limit) }
+}
 
 /** The card's focal line, for the scope on screen. */
 export function budgetTrackSentence(series: BudgetSeries, scope: BudgetSeriesScope): string {
@@ -26,7 +32,8 @@ export function budgetTrackSentence(series: BudgetSeries, scope: BudgetSeriesSco
     const left = s.leftAtEnd ?? 0
     const after = left >= 0 ? `${money(left)} was left unused.` : `It finished ${money(-left)} over the budget.`
     const expected = agreement ? ` The agreement expected ${money(s.expectedEnd!)}.` : ''
-    return `${scope.name}: used ${money(s.used)} of ${money(scope.limit)} over the plan, which ended on ${day(planEnd)}. ${after}${expected}`
+    const reached = s.limitReachedOn ? ` It reached the budget on ${day(s.limitReachedOn)}.` : ''
+    return `${scope.name}: used ${money(s.used)} of ${money(scope.limit)} over the plan, which ended on ${day(planEnd)}. ${after}${reached}${expected}`
   }
 
   const booked = s.bookedEnd !== undefined ? ` Booked shifts take it to ${money(s.bookedEnd)}.` : ''
@@ -34,14 +41,25 @@ export function budgetTrackSentence(series: BudgetSeries, scope: BudgetSeriesSco
 
   const gap = Math.abs(s.aheadOfEven) < 0.005 ? 'in step with an even spread' : `${money(Math.abs(s.aheadOfEven))} ${s.aheadOfEven > 0 ? 'more' : 'less'} than an even spread`
   let sentence = `${scope.name}: used ${money(s.used)} of ${money(scope.limit)} so far, ${gap} by ${day(series.today)}.`
+  const reach = limitReach(series, scope)
+  if (reach && !reach.ahead) sentence += ` It reached the budget on ${day(reach.on)}.`
   if (s.pace !== undefined) {
     const end = s.paceGapAtEnd ?? 0
     const against = Math.abs(end) < 0.005 ? 'in line with the budget' : `${money(Math.abs(end))} ${end > 0 ? 'over' : 'under'} the budget`
-    sentence += ` At this rate it reaches ${money(s.pace)} by ${day(planEnd)}, ${against}.`
+    sentence += ` At this rate it reaches ${money(s.pace)} by ${day(planEnd)}, ${against}${reach?.ahead ? `, and reaches the budget on ${day(reach.on)}` : ''}.`
   }
   sentence += booked
   if (agreement) sentence += ` The agreement expects ${money(s.expectedEnd!)} by ${day(s.expectedEndDate ?? planEnd)}.`
   return sentence
+}
+
+/** The screen-reader table's caption: what it covers, the limit, when the plan ends, and when the budget is or will be reached. */
+export function budgetTrackCaption(series: BudgetSeries, scope: BudgetSeriesScope): string {
+  const start = series.planStart ?? scope.points[0].date
+  const end = series.planEnd ?? scope.points[scope.points.length - 1].date
+  const reach = limitReach(series, scope)
+  const reached = !reach ? '' : reach.ahead ? ` At this rate it reaches the budget on ${sentenceDay(reach.on, series.today)}.` : ` It reached the budget on ${sentenceDay(reach.on, series.today)}.`
+  return `Weekly figures for ${scope.name}, ${writtenSpan(start, end)}. Budget ${money(scope.limit)}. Plan ${series.planIsCurrent ? 'ends' : 'ended'} ${writtenDay(end)}.${reached}`
 }
 
 export interface BudgetTrackFootnote {
@@ -118,8 +136,8 @@ export interface ReadoutRow {
   value: string
 }
 
-/** The readout's rows for stop `index`: the budget, used (or used and booked, after today), and expected, plus "Agreement revised 1 Dec" on the stop a revision falls in. */
-export function readoutRows(stops: BudgetSeriesPoint[], index: number, series: BudgetSeries): { rows: ReadoutRow[]; note?: string } {
+/** The readout's rows for stop `index`: the budget, used (or used and booked, after today), and expected, plus "Agreement revised 1 Dec" on the stop a revision falls in and, from the week the budget is reached, "Over the budget from 14 Mar at this rate". */
+export function readoutRows(stops: BudgetSeriesPoint[], index: number, series: BudgetSeries, scope?: BudgetSeriesScope): { rows: ReadoutRow[]; note?: string; over?: string } {
   const point = stops[index]
   const rows: ReadoutRow[] = [{ series: 'budget', label: 'Budget, spread evenly', value: money(point.budget) }]
   const afterToday = !series.planIsCurrent ? false : point.date > series.today
@@ -128,7 +146,9 @@ export function readoutRows(stops: BudgetSeriesPoint[], index: number, series: B
   if (series.expected.status === 'Ok') rows.push({ series: 'expected', label: 'Expected', value: point.expected === undefined ? 'Not covered' : money(point.expected) })
   const previous = stops[index - 1]?.date ?? ''
   const change = series.expected.status === 'Ok' ? series.expected.revisionChanges.find(d => d > previous && d <= point.date) : undefined
-  return { rows, note: change ? `Agreement revised ${formatDayMonth(change)}` : undefined }
+  const reach = scope && limitReach(series, scope)
+  const over = reach && point.date >= reach.on ? (reach.ahead ? `Over the budget from ${sentenceDay(reach.on, series.today)} at this rate` : `Over the budget since ${sentenceDay(reach.on, series.today)}`) : undefined
+  return { rows, note: change ? `Agreement revised ${formatDayMonth(change)}` : undefined, over }
 }
 
 /** What the polite live region says on each keyboard step: the readout in one line. */

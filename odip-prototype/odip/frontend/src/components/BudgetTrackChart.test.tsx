@@ -48,16 +48,82 @@ describe('BudgetTrackChart', () => {
     expect(screen.getByText(`The whole plan: used`, { exact: false })).toHaveAttribute('id', plot().getAttribute('aria-describedby')!)
   })
 
-  it('the legend has 4 items normally, 3 with no agreement, 2 when ended with no agreement', () => {
+  it('the legend has 6 items normally (limit first, at this rate before expected), 5 with no agreement, 3 when ended with no agreement', () => {
     const { unmount } = render(<BudgetTrackChart series={series} width={900} />)
-    expect(document.querySelectorAll('[data-legend]')).toHaveLength(4)
+    expect([...document.querySelectorAll('[data-legend]')].map(l => l.getAttribute('data-legend'))).toEqual(['limit', 'budget', 'used', 'booked', 'pace', 'expected'])
     unmount()
     const none = expectedOk({ status: 'NoAgreement' })
     const second = render(<BudgetTrackChart series={budgetSeries({ expected: none })} width={900} />)
-    expect([...document.querySelectorAll('[data-legend]')].map(l => l.getAttribute('data-legend'))).toEqual(['budget', 'used', 'booked'])
+    expect([...document.querySelectorAll('[data-legend]')].map(l => l.getAttribute('data-legend'))).toEqual(['limit', 'budget', 'used', 'booked', 'pace'])
     second.unmount()
     render(<BudgetTrackChart series={budgetSeries({ expected: none }, { today: '2027-08-01' })} width={900} />)
-    expect(document.querySelectorAll('[data-legend]')).toHaveLength(2)
+    expect([...document.querySelectorAll('[data-legend]')].map(l => l.getAttribute('data-legend'))).toEqual(['limit', 'budget', 'used'])
+  })
+
+  describe('the limit, pace and renewal marks', () => {
+    const withSummary = (over: Record<string, unknown>, options = {}) => {
+      const s = budgetSeries({}, options)
+      s.scopes[0] = { ...s.scopes[0], summary: { ...s.scopes[0].summary, ...over } }
+      return s
+    }
+    const mark = (name: string) => document.querySelector(`[data-mark="${name}"]`)
+    const labels = () => [...document.querySelectorAll('svg text')].map(t => t.textContent!.replace(/[\u00a0\u2060]/g, ' '))
+
+    it('every Ok chart draws the budget limit across the plan with its label, and a renewal line at the plan end with its label', () => {
+      render(<BudgetTrackChart series={series} width={900} />)
+      const limit = mark('limit')!
+      expect(limit.getAttribute('y1')).toBe(limit.getAttribute('y2'))
+      expect(labels()).toContain('Budget $12,000')
+      const renew = mark('renew')!
+      expect(renew.getAttribute('x1')).toBe(renew.getAttribute('x2'))
+      expect(labels()).toContain('Plan ends 30 Jun 2027')
+    })
+
+    it('an ended plan says "Ended 30 Jun" and has no pace line', () => {
+      render(<BudgetTrackChart series={budgetSeries({}, { today: '2027-08-01' })} width={900} />)
+      expect(labels()).toContain('Ended 30 Jun')
+      expect(mark('pace')).toBeNull()
+      expect(mark('renew')).not.toBeNull()
+    })
+
+    it('the pace line runs to the plan end at the pace while no reach is ahead, and is gone before the pace exists', () => {
+      const { unmount } = render(<BudgetTrackChart series={series} width={900} />)
+      expect(mark('pace')).not.toBeNull()
+      expect(mark('pace')!.getAttribute('x2')).toBe(mark('renew')!.getAttribute('x1'))
+      expect(document.querySelector('[data-dot="reach"]')).toBeNull()
+      unmount()
+      render(<BudgetTrackChart series={withSummary({ pace: undefined, paceGapAtEnd: undefined })} width={900} />)
+      expect(mark('pace')).toBeNull()
+      expect(document.querySelector('[data-legend="pace"]')).toBeNull()
+    })
+
+    it('a reach ahead ends the pace line on the limit at a labelled dot', () => {
+      render(<BudgetTrackChart series={withSummary({ pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2026-12-14' })} width={900} />)
+      const dot = document.querySelector('[data-dot="reach"]')!
+      expect(mark('pace')!.getAttribute('x2')).toBe(dot.getAttribute('cx'))
+      expect(mark('pace')!.getAttribute('y2')).toBe(dot.getAttribute('cy'))
+      expect(dot.getAttribute('cy')).toBe(mark('limit')!.getAttribute('y1'))
+      expect(labels()).toContain('Reaches budget 14 Dec')
+    })
+
+    it('a reach already past is labelled "Reached budget 3 Sep" and the pace line still runs to the plan end', () => {
+      render(<BudgetTrackChart series={withSummary({ pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2026-09-03', used: 12000 })} width={900} />)
+      expect(labels()).toContain('Reached budget 3 Sep')
+      expect(mark('pace')!.getAttribute('x2')).toBe(mark('renew')!.getAttribute('x1'))
+    })
+
+    it('the table caption names the limit and the plan end, and the reach', () => {
+      render(<BudgetTrackChart series={withSummary({ pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2026-12-14' })} width={900} />)
+      expect(document.querySelector('caption')!.textContent!.replace(/[\u00a0\u2060]/g, ' ')).toMatch(/Budget \$12,000\. Plan ends 30 Jun 2027\. At this rate it reaches the budget on 14 Dec\.$/)
+    })
+
+    it('the readout adds "Over the budget from 14 Dec at this rate" on a week at or after the reach, and not before', () => {
+      render(<BudgetTrackChart series={withSummary({ pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2026-12-14' })} width={900} />)
+      act(() => plot().focus())
+      expect(readout()!.textContent).not.toContain('Over the budget')
+      fireEvent.keyDown(plot(), { key: 'End' })
+      expect(readout()!.textContent).toContain('Over the budget from 14 Dec at this rate')
+    })
   })
 
   it('an ended plan has no today marker and no booked path', () => {
@@ -121,7 +187,7 @@ describe('BudgetTrackChart', () => {
     const table = document.querySelector<HTMLTableElement>('[data-table]')!
     expect(table.parentElement).toHaveClass('sr-only')
     expect(table.tBodies[0].rows).toHaveLength(stopsOf().length)
-    expect(table.caption!.textContent).toBe(`Weekly figures for The whole plan, ${writtenSpan('2026-07-01', '2027-06-30')}`)
+    expect(table.caption!.textContent).toContain(`Weekly figures for The whole plan, ${writtenSpan('2026-07-01', '2027-06-30')}. Budget `)
     expect(within(table).getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Week to', 'Budget, spread evenly', 'Used', 'Used and booked', 'Expected'])
     const lastRow = table.tBodies[0].rows[stopsOf().length - 1]
     expect(lastRow.cells[2]).toHaveTextContent('none')

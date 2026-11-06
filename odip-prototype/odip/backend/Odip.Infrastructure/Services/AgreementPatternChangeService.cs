@@ -45,7 +45,7 @@ public sealed class AgreementPatternChangeService
         if (source is null || pattern is null) return new PatternChangeOutcome(null, new[] { "Pattern not found." }, NotFound: true);
 
         // Only the newest revision is changed: a newer one waiting for approval would be deleted by the save (it has done nothing yet), and an approved one that starts later would be skipped.
-        var newest = await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == participantId).MaxAsync(x => x.Version, ct);
+        var newest = await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == source.AgreementId).MaxAsync(x => x.Version, ct);
         if (newest != source.Version)
             return new PatternChangeOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"This agreement has a newer revision, v{newest}. Open the agreement and make the change there.") }, ConflictVersion: newest);
 
@@ -78,7 +78,7 @@ public sealed class AgreementPatternChangeService
         var saved = await _drafts.SaveAsync(tenantId, participantId, new CreateServiceAgreementDraftDto
         {
             PlanStartDate = source.PlanStartDate, PlanEndDate = source.PlanEndDate, AgreementStartDate = from, AgreementEndDate = end, IsOngoing = source.IsOngoing, State = source.State,
-            Representative = source.Representative, Blocks = changed, BaseVersion = source.Version,
+            Representative = source.Representative, Blocks = changed, BaseVersion = source.Version, AgreementId = source.AgreementId,
         }, actor, ct);
         if (saved.Draft is not { } draft) return new PatternChangeOutcome(null, saved.Errors, saved.NotFound, saved.ConflictVersion);
         return Answer(draft.Id, draft.Version, from, end, oldTotal, draft.Lines.Sum(l => l.Total ?? 0m), DraftJson.ReadQuote(draft.PricingJson)?.NeedsReview ?? false);

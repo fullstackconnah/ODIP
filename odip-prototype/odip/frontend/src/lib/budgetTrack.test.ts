@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { budgetSeries, expectedOk, seriesScope } from '@/test/fixtures/budgetSeries'
 import { money, unpricedShiftSentence } from './budgetLedger'
-import { writtenDay } from './fundingPlan'
-import { budgetTrackFootnotes, budgetTrackSentence, chartHeight, compactAud, liveLine, readoutHeader, readoutRows, xTicks, yTicks } from './budgetTrack'
+import { writtenDay, writtenSpan } from './fundingPlan'
+import { budgetTrackCaption, budgetTrackFootnotes, budgetTrackSentence, chartHeight, compactAud, liveLine, readoutHeader, readoutRows, xTicks, yTicks, limitReach } from './budgetTrack'
 
 // The budget graph's words (Funding tab). Every figure is the fixture's, standing in for the server's: these only decide how it is written.
 
@@ -61,6 +61,70 @@ describe('budgetTrackSentence', () => {
     const sentence = budgetTrackSentence(series, plan)
     expect(sentence).toContain(`by ${writtenDay('2027-06-30')}`)
     expect(sentence).toContain('by 4 Oct.')
+  })
+})
+
+// The limit-reached clauses. The dates are calendar strings, so the same words come out in every zone; 31 Dec / 1 Jan sit either side of midnight.
+// writtenDay keeps a date together with no-break spaces; the words are compared with plain ones.
+const plain = (t: string) => t.replace(/[\u00a0\u2060]/g, ' ')
+const overPace = (over: Record<string, unknown>) => ({ ...plan, summary: { ...plan.summary, pace: 16000, paceGapAtEnd: 4000, ...over } })
+
+describe('the limit-reached clauses', () => {
+  it('a reach ahead ends the pace clause with ", and reaches the budget on 14 Dec."', () => {
+    const scope = overPace({ limitReachedOn: '2026-12-14' })
+    expect(plain(budgetTrackSentence(series, scope))).toContain('At this rate it reaches $16,000 by 30 Jun 2027, $4,000 over the budget, and reaches the budget on 14 Dec. Booked shifts')
+  })
+
+  it('a reach already past follows the used clause: " It reached the budget on 3 Sep."', () => {
+    const scope = overPace({ limitReachedOn: '2026-09-03', used: 12000 })
+    expect(plain(budgetTrackSentence(series, scope))).toContain('by 4 Oct. It reached the budget on 3 Sep. At this rate it reaches $16,000 by 30 Jun 2027, $4,000 over the budget. Booked')
+    expect(plain(budgetTrackSentence(series, scope))).not.toContain('and reaches the budget')
+  })
+
+  it('a reach today is past; one at midnight either side of the new year keeps its own day', () => {
+    expect(plain(budgetTrackSentence(series, overPace({ limitReachedOn: '2026-10-04', used: 12000 })))).toContain('It reached the budget on 4 Oct.')
+    const newYear = budgetSeries({}, { today: '2026-12-31' })
+    expect(plain(budgetTrackSentence(newYear, { ...newYear.scopes[0], summary: { ...newYear.scopes[0].summary, limitReachedOn: '2026-12-31', used: 12000 } }))).toContain('It reached the budget on 31 Dec.')
+    expect(plain(budgetTrackSentence(newYear, { ...newYear.scopes[0], summary: { ...newYear.scopes[0].summary, pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2027-01-01' } }))).toContain('and reaches the budget on 1 Jan 2027.')
+  })
+
+  it('a pace forecast landing on today, with used just under the limit, is still ahead', () => {
+    const scope = overPace({ limitReachedOn: '2026-10-04', used: 11999 })
+    expect(plain(budgetTrackSentence(series, scope))).toContain('and reaches the budget on 4 Oct.')
+    expect(plain(budgetTrackSentence(series, scope))).not.toContain('It reached the budget')
+    expect(limitReach(series, scope)).toEqual({ on: '2026-10-04', ahead: true })
+  })
+
+  it('an ended plan that reached it says so after the over clause', () => {
+    const ended = budgetSeries({}, { today: '2027-08-01' })
+    const scope = { ...ended.scopes[0], summary: { ...ended.scopes[0].summary, used: 12300, leftAtEnd: -300, limitReachedOn: '2027-02-03' } }
+    expect(plain(budgetTrackSentence({ ...ended, expected: expectedOk({ status: 'NoAgreement' }) }, scope))).toBe(
+      'The whole plan: used $12,300 of $12,000 over the plan, which ended on 30 Jun. It finished $300 over the budget. It reached the budget on 3 Feb.',
+    )
+  })
+
+  it('no reach, no clause', () => {
+    expect(plain(budgetTrackSentence(series, plan))).not.toContain('the budget on')
+  })
+
+  it('the caption names the limit and the plan end, and the reach when there is one', () => {
+    expect(plain(budgetTrackCaption(series, plan))).toBe(plain(`Weekly figures for The whole plan, ${writtenSpan(plan.points[0].date, series.planEnd!)}. Budget $12,000. Plan ends 30 Jun 2027.`))
+    expect(plain(budgetTrackCaption(series, overPace({ limitReachedOn: '2026-12-14' })))).toMatch(/Plan ends 30 Jun 2027. At this rate it reaches the budget on 14 Dec.$/)
+    expect(plain(budgetTrackCaption(series, overPace({ limitReachedOn: '2026-09-03', used: 12000 })))).toMatch(/Plan ends 30 Jun 2027. It reached the budget on 3 Sep.$/)
+    const ended = budgetSeries({}, { today: '2027-08-01' })
+    expect(plain(budgetTrackCaption(ended, ended.scopes[0]))).toContain('Plan ended 30 Jun 2027.')
+  })
+
+  it('the readout adds one muted line from the reach week on', () => {
+    const scope = overPace({ limitReachedOn: '2026-12-14' })
+    const stops = scope.points.filter(p => !p.isEdge)
+    const at = (date: string) => stops.findIndex(p => p.date >= date)
+    expect(readoutRows(stops, at('2026-12-08'), series, scope).over).toBeUndefined()
+    expect(readoutRows(stops, at('2026-12-15'), series, scope).over).toBe('Over the budget from 14 Dec at this rate')
+    const past = overPace({ limitReachedOn: '2026-09-03', used: 12000 })
+    expect(readoutRows(stops, at('2026-09-08'), series, past).over).toBe('Over the budget since 3 Sep')
+    expect(readoutRows(stops, at('2026-09-01'), series, past).over).toBeUndefined()
+    expect(readoutRows(stops, 0, series, plan).over).toBeUndefined()
   })
 })
 

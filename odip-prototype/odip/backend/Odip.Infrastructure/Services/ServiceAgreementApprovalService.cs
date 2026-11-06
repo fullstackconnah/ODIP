@@ -173,7 +173,7 @@ public sealed class ServiceAgreementApprovalService
     {
         var today = await ProviderTodayAsync(tenantId, ct);
         var versions = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
-            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion >= draft.Version).Select(a => a.DraftVersion).ToListAsync(ct);
+            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.AgreementId == draft.AgreementId && a.DraftVersion >= draft.Version).Select(a => a.DraftVersion).ToListAsync(ct);
         string? refusal = null;
         if (!versions.Contains(draft.Version)) refusal = NotApprovedMessage;
         else if (versions.Any(v => v > draft.Version)) refusal = NewerApprovedMessage;
@@ -340,7 +340,7 @@ public sealed class ServiceAgreementApprovalService
 
         var approval = new ServiceAgreementDraftApproval
         {
-            Id = Guid.NewGuid(), TenantId = draft.TenantId, DraftId = draft.Id, ParticipantId = draft.ParticipantId, DraftVersion = draft.Version,
+            Id = Guid.NewGuid(), TenantId = draft.TenantId, DraftId = draft.Id, ParticipantId = draft.ParticipantId, AgreementId = draft.AgreementId, DraftVersion = draft.Version,
             ApprovedAt = _clock.GetUtcNow().UtcDateTime, ApprovedByUserId = caller.UserId, ApprovedByName = caller.Name,
             PatternsCreated = plan.NewPatterns.Count, PatternsEnded = plan.ToEnd.Count,
             AgreedByName = agreed?.Name, AgreedByPersonId = agreed?.PersonId, AgreedHow = agreed?.How,
@@ -369,7 +369,7 @@ public sealed class ServiceAgreementApprovalService
 
         _db.ServiceAgreementDraftApprovals.Add(approval);
         // An approved plan is no longer one to be agreed to: the emailed links for this revision and the older ones stop working in the save that approves it, and a failed approval leaves them live.
-        await AgreementShareService.RevokeLiveAsync(_db, tenantId, draft.ParticipantId, draft.Version, approval.ApprovedAt, ct);
+        await AgreementShareService.RevokeLiveAsync(_db, tenantId, draft.ParticipantId, draft.AgreementId, draft.Version, approval.ApprovedAt, ct);
         await _db.SaveChangesAsync(ct);
         // The board lock began the transaction and the participant's joined it: committing it commits both.
         await board.CommitAsync(ct);
@@ -430,7 +430,7 @@ public sealed class ServiceAgreementApprovalService
         plan.Today = today;
 
         plan.Existing = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstOrDefaultAsync(a => a.DraftId == draft.Id, ct);
-        plan.NewestVersion = await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == draft.ParticipantId).MaxAsync(x => (int?)x.Version, ct) ?? draft.Version;
+        plan.NewestVersion = await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == draft.ParticipantId && x.AgreementId == draft.AgreementId).MaxAsync(x => (int?)x.Version, ct) ?? draft.Version;
         if (plan.Existing is not null)
         {
             plan.Reasons.Add(new ApprovalReasonDto { Code = "AlreadyApproved", Message = string.Create(CultureInfo.InvariantCulture, $"This revision was approved for rostering by {plan.Existing.ApprovedByName} on {plan.Existing.ApprovedAt:yyyy-MM-dd}.") });
@@ -511,7 +511,7 @@ public sealed class ServiceAgreementApprovalService
     private async Task ReadRosterAsync(Guid tenantId, ServiceAgreementDraft draft, Plan plan, CancellationToken ct, bool approving)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
-            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
+            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.AgreementId == draft.AgreementId && a.DraftVersion < draft.Version)
             .Select(a => new { a.DraftId, a.DraftVersion }).ToListAsync(ct);
         if (earlier.Count > 0)
         {
@@ -681,7 +681,7 @@ public sealed class ServiceAgreementApprovalService
     private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct, IReadOnlySet<Guid>? carried = null)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
-            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
+            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.AgreementId == draft.AgreementId && a.DraftVersion < draft.Version)
             .Select(a => new { a.DraftId, a.DraftVersion }).ToListAsync(ct);
         if (earlier.Count == 0) return (new OldShiftsRemainingDto(), new List<Shift>());
 
@@ -835,7 +835,7 @@ public sealed class ServiceAgreementApprovalService
             if (approval is null) return new EndEarlyOutcome(EndEarlyStatus.Refused, Error: "Only an approved agreement can be ended early. Delete a draft instead.");
 
             var newer = await _db.ServiceAgreementDrafts.AsNoTracking()
-                .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version > draft.Version)
+                .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == draft.AgreementId && x.Version > draft.Version)
                 .Select(x => new { x.Version, x.AgreementStartDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id) })
                 .OrderBy(x => x.Version).ToListAsync(ct);
             if (newer.FirstOrDefault(x => x.Approved && x.AgreementStartDate <= draft.AgreementEndDate) is { } takesOver)
@@ -866,8 +866,8 @@ public sealed class ServiceAgreementApprovalService
             foreach (var pattern in patterns)
                 if (pattern.EffectiveTo is null || pattern.EffectiveTo > lastDay) pattern.EffectiveTo = lastDay;
             _db.Shifts.RemoveRange(removable);
-            _db.AuditLogs.Add(AgreementAudit.Row(draftId, AuditAction.Updated, $"Ended early: last day {Day(lastDay)}", caller, _clock.GetUtcNow()));
-            await AgreementShareService.RevokeLiveAsync(_db, tenantId, participantId, draft.Version, _clock.GetUtcNow().UtcDateTime, ct, onlyDraftId: draftId);
+            _db.AuditLogs.Add(AgreementAudit.Row(draftId, draft.AgreementId, AuditAction.Updated, $"Ended early: last day {Day(lastDay)}", caller, _clock.GetUtcNow()));
+            await AgreementShareService.RevokeLiveAsync(_db, tenantId, participantId, draft.AgreementId, draft.Version, _clock.GetUtcNow().UtcDateTime, ct, onlyDraftId: draftId);
             await _db.SaveChangesAsync(ct);
             await board.CommitAsync(ct);
 

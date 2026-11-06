@@ -78,11 +78,11 @@ public class BudgetSeriesServiceTests
     }
 
     /// <summary>A saved agreement revision; approved unless said otherwise, with one block unless typed by hand.</summary>
-    private static ServiceAgreementDraft Revision(Arrangement a, int version, DateOnly start, DateOnly end, bool approved = true, bool handTyped = false)
+    private static ServiceAgreementDraft Revision(Arrangement a, int version, DateOnly start, DateOnly end, bool approved = true, bool handTyped = false, Guid agreementId = default)
     {
         var draft = new ServiceAgreementDraft
         {
-            Id = Guid.NewGuid(), TenantId = a.Person.TenantId, ParticipantId = a.Person.Id, Version = version, PlanStartDate = PlanStart, PlanEndDate = PlanEnd,
+            Id = Guid.NewGuid(), TenantId = a.Person.TenantId, ParticipantId = a.Person.Id, AgreementId = agreementId, Version = version, PlanStartDate = PlanStart, PlanEndDate = PlanEnd,
             AgreementStartDate = start, AgreementEndDate = end, State = "NSW", ParticipantNameSnapshot = "Sophie Brown",
         };
         if (!handTyped)
@@ -249,6 +249,23 @@ public class BudgetSeriesServiceTests
         Assert.Equal(0m, series.Scopes[2].Summary.ExpectedEnd);
         Assert.Equal(2, a.Quotes);
         Assert.Equal(1, a.Entries);
+    }
+
+    /// <summary>S3 (PLAN-AMEND D-4): a trip starting mid-plan beside day support for the whole plan does not end the day support at the trip's start.</summary>
+    [Fact]
+    public async Task Series_TwoOverlappingAgreements_RevisionChangesSameAgreementOnly()
+    {
+        using var a = Arrange();
+        YearPlan(a);
+        Revision(a, 1, PlanStart, PlanEnd);
+        Revision(a, 1, D(2026, 12, 1), D(2027, 6, 30), agreementId: Guid.NewGuid());
+
+        var series = (await a.GetAsync())!;
+
+        Assert.Equal(BudgetExpectedStatus.Ok, series.Expected.Status);
+        Assert.Empty(series.Expected.RevisionChanges);
+        Assert.Null(series.Expected.StartsOn);
+        Assert.Null(series.Expected.EndsOn);
     }
 
     [Fact]

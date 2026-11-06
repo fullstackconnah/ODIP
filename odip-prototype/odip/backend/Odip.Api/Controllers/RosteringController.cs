@@ -2288,7 +2288,7 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// For the board's notice (spec 2026-10-15; lead decision L10): every participant whose newest agreement revision waits for an approval for rostering, with a board row or not.
     /// A participant still in onboarding has no row, and theirs is the agreement nobody can otherwise see.
-    /// - Newest: no newer revision of theirs in the same organisation (the shape ParticipantReadinessGate already runs on Npgsql).
+    /// - Newest: no newer revision of the same agreement in the same organisation (the shape ParticipantReadinessGate already runs on Npgsql).
     /// - Waits: not approved; made from blocks (blocks and a stored answer: the approval service's HandTyped rule); not ended on the provider's calendar.
     /// - Archived participants (neither active nor a draft) are left out (L11).
     /// One query, read only. The query filters keep it to the caller's organisation, and each revision is matched to its own participant's organisation, because a SuperAdmin's context sees all of them.
@@ -2298,17 +2298,18 @@ public class RosteringController : ControllerBase
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var waiting = await _db.ServiceAgreementDrafts.AsNoTracking()
             .Where(d => d.AgreementEndDate >= today && d.Blocks.Any() && d.PricingJson != null
-                && !_db.ServiceAgreementDrafts.Any(newer => newer.ParticipantId == d.ParticipantId && newer.TenantId == d.TenantId && newer.Version > d.Version)
+                && !_db.ServiceAgreementDrafts.Any(newer => newer.ParticipantId == d.ParticipantId && newer.TenantId == d.TenantId && newer.AgreementId == d.AgreementId && newer.Version > d.Version)
                 && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id && a.TenantId == d.TenantId))
-            .Join(_db.Participants.AsNoTracking().Where(p => p.IsActive || p.IsDraft), d => d.ParticipantId, p => p.Id, (d, p) => new { d.Id, d.Version, d.TenantId, d.PricingJson, Participant = p })
+            .Join(_db.Participants.AsNoTracking().Where(p => p.IsActive || p.IsDraft), d => d.ParticipantId, p => p.Id, (d, p) => new { d.Id, d.Version, d.TenantId, d.PricingJson, d.AgreementId, d.AgreementKind, d.AgreementName, Participant = p })
             .Where(x => x.Participant.TenantId == x.TenantId)
             .ToListAsync(ct);
         return waiting
             .Where(x => DraftJson.ReadQuote(x.PricingJson) is not null)   // the approval service's own HandTyped test: a stored answer it can read
-            .OrderBy(x => x.Participant.LastName).ThenBy(x => x.Participant.FirstName)
+            .OrderBy(x => x.Participant.LastName).ThenBy(x => x.Participant.FirstName).ThenBy(x => x.AgreementId)
             .Select(x => new PendingAgreementDto
             {
                 ParticipantId = x.Participant.Id, DisplayName = x.Participant.FullName, DraftId = x.Id, Version = x.Version,
+                AgreementId = x.AgreementId, AgreementKind = x.AgreementKind, AgreementName = x.AgreementName,
                 CanReceiveServices = Participant.CanReceiveServices(x.Participant),
             })
             .ToList();

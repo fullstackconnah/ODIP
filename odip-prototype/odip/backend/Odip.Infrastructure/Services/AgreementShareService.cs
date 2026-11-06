@@ -121,7 +121,7 @@ public sealed class AgreementShareService
         if (!await ServiceAgreementApprovalService.MayApproveAsync(_pricing, tenantId, caller, ct))
             return new(AgreementSendStatus.NotAnApprover, Message: ServiceAgreementApprovalService.NotAnApproverMessage);
 
-        var newest = await _db.ServiceAgreementDrafts.IgnoreQueryFilters([TenantFilter.Name]).Where(x => x.TenantId == tenantId && x.ParticipantId == participantId).MaxAsync(x => x.Version, ct);
+        var newest = await _db.ServiceAgreementDrafts.IgnoreQueryFilters([TenantFilter.Name]).Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == draft.AgreementId).MaxAsync(x => x.Version, ct);
         if (request.ExpectedVersion != draft.Version)
             return new(AgreementSendStatus.Stale, Message: $"Version {newest} was saved after the version this page showed. Reload and check it before sending.");
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
@@ -166,7 +166,7 @@ public sealed class AgreementShareService
 
         // A link that went out replaces the ones sent for older versions; one that did not go leaves them working.
         share.SendError = outcome.ErrorCode;
-        if (outcome.Sent) await RevokeLiveAsync(_db, tenantId, participantId, draft.Version - 1, now, ct);
+        if (outcome.Sent) await RevokeLiveAsync(_db, tenantId, participantId, draft.AgreementId, draft.Version - 1, now, ct);
         await _db.SaveChangesAsync(ct);
         return new(AgreementSendStatus.Done, Error: outcome.ErrorCode);
     }
@@ -178,12 +178,12 @@ public sealed class AgreementShareService
         email is { Length: <= 254 } && !email.Any(char.IsWhiteSpace) && MailAddress.TryCreate(email, out var a) && a.Address == email && email.Contains('@');
 
     /// <summary>
-    /// Marks the live, delivered links of the participant's revisions up to <paramref name="upToVersion"/> revoked (tracked: the caller's SaveChanges writes them, so an approval
+    /// Marks the live, delivered links of the agreement's revisions up to <paramref name="upToVersion"/> revoked (tracked: the caller's SaveChanges writes them, so an approval
     /// revokes in the very save that approves). With <paramref name="onlyDraftId"/> only that revision's links.
     /// </summary>
-    internal static async Task RevokeLiveAsync(OdipDbContext db, Guid tenantId, Guid participantId, int upToVersion, DateTime now, CancellationToken ct, Guid? onlyDraftId = null)
+    internal static async Task RevokeLiveAsync(OdipDbContext db, Guid tenantId, Guid participantId, Guid agreementId, int upToVersion, DateTime now, CancellationToken ct, Guid? onlyDraftId = null)
     {
-        var drafts = db.ServiceAgreementDrafts.IgnoreQueryFilters([TenantFilter.Name]).Where(d => d.TenantId == tenantId && d.ParticipantId == participantId);
+        var drafts = db.ServiceAgreementDrafts.IgnoreQueryFilters([TenantFilter.Name]).Where(d => d.TenantId == tenantId && d.ParticipantId == participantId && d.AgreementId == agreementId);
         var ids = onlyDraftId is { } one ? [one] : await drafts.Where(d => d.Version <= upToVersion).Select(d => d.Id).ToListAsync(ct);
         if (ids.Count == 0) return;
         var live = await db.ServiceAgreementShares.IgnoreQueryFilters([TenantFilter.Name])

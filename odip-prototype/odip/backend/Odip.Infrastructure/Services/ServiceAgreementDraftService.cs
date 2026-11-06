@@ -14,8 +14,10 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>The outcome of saving a draft revision: the saved draft, or every reason it was refused. <see cref="NotFound"/> means the participant is not the caller's.</summary>
-public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList<string> Errors, bool NotFound = false, int? ConflictVersion = null)
+public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList<string> Errors, bool NotFound = false, int? ConflictVersion = null, bool AgreementChoiceRequired = false)
 {
+    /// <summary>The participant has several agreements and the save named none: versions are per agreement, so equal numbers would pass the base check. Nothing is written.</summary>
+    public static DraftSaveResult ChooseAgreement() => new(null, new[] { "Reload to choose which agreement to edit." }, AgreementChoiceRequired: true);
     public static DraftSaveResult Saved(ServiceAgreementDraft draft) => new(draft, Array.Empty<string>());
     public static DraftSaveResult Refused(params string[] errors) => new(null, errors);
     public static DraftSaveResult Refused(IReadOnlyList<string> errors) => new(null, errors);
@@ -24,6 +26,9 @@ public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList
         new[] { string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Version {newestVersion} was saved after the version this plan started from. Load version {newestVersion} to see what changed, then make your changes again.") },
         ConflictVersion: newestVersion);
 }
+
+/// <summary>The agreement a save writes into: its id, and the kind and name the new revision takes.</summary>
+internal sealed record AgreementSlot(Guid Id, AgreementKind Kind, string? Name);
 
 public enum DraftDeleteStatus { Deleted, NotFound, Refused }
 
@@ -86,19 +91,22 @@ public sealed class ServiceAgreementDraftService
         if (blocks.Count == 0 && request.Lines.Count == 0)
             return DraftSaveResult.Refused("Add at least one support block.");
 
+        var (slot, refusal) = await ResolveAgreementAsync(tenantId, participantId, request, ct);
+        if (slot is null) return refusal!;
+
         // The version this plan started from is checked before the work of pricing it, and again once it is priced and has its number (a save can land while the engine is working):
-        // a second coordinator's save must not quietly become the newest version over the first one's work.
+        // a second coordinator's save must not quietly become the newest version over the first one's work. Versions count inside the agreement.
         // A save that leaves it out counts as starting from nothing, so it is refused once any revision exists (it would otherwise replace a colleague's unapproved draft unseen).
-        if (await NewestVersionAsync(participantId, ct) is var newest && newest != (request.BaseVersion ?? 0))
+        if (await NewestVersionAsync(tenantId, participantId, slot.Id, ct) is var newest && newest != (request.BaseVersion ?? 0))
             return DraftSaveResult.Conflicted(newest);
 
         var draft = blocks.Count > 0
-            ? await BuildFromBlocksAsync(tenantId, participant, request, blocks, actor, ct)
-            : await BuildFromLinesAsync(tenantId, participant, request, actor, ct);
+            ? await BuildFromBlocksAsync(tenantId, participant, request, blocks, slot, actor, ct)
+            : await BuildFromLinesAsync(tenantId, participant, request, slot, actor, ct);
         if (draft.Draft is null) return draft;
         if (draft.Draft.Version - 1 != (request.BaseVersion ?? 0)) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
         // A save that keeps the end an End early set (the base is the newest revision, so it is the one that was ended) keeps the signed end too (M1, S3); a changed end is a new term.
-        if (await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version == request.BaseVersion).Select(x => new { x.AgreementEndDate, x.OriginalAgreementEndDate }).FirstOrDefaultAsync(ct) is { OriginalAgreementEndDate: not null } baseRev
+        if (await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == slot.Id && x.Version == request.BaseVersion).Select(x => new { x.AgreementEndDate, x.OriginalAgreementEndDate }).FirstOrDefaultAsync(ct) is { OriginalAgreementEndDate: not null } baseRev
             && baseRev.AgreementEndDate == draft.Draft.AgreementEndDate)
             draft.Draft.OriginalAgreementEndDate = baseRev.OriginalAgreementEndDate;
 
@@ -106,7 +114,7 @@ public sealed class ServiceAgreementDraftService
         _db.ServiceAgreementDrafts.Add(draft.Draft);
         for (var attempt = 1; ; attempt++)
         {
-            _db.ServiceAgreementDrafts.RemoveRange(await ReplacedRevisionsAsync(tenantId, participantId, draft.Draft.Version, ct));
+            _db.ServiceAgreementDrafts.RemoveRange(await ReplacedRevisionsAsync(tenantId, participantId, slot.Id, draft.Draft.Version, ct));
             try
             {
                 await _db.SaveChangesAsync(ct);
@@ -117,13 +125,13 @@ public sealed class ServiceAgreementDraftService
                 // Another save took this version number between the reading of the newest and this insert: the unique index on tenant, participant and version refused ours (it was a 500).
                 // Nothing of ours is kept; the caller is told which version is newest now.
                 _db.ChangeTracker.Clear();
-                return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
+                return DraftSaveResult.Conflicted(await NewestVersionAsync(tenantId, participantId, slot.Id, ct));
             }
             catch (DbUpdateConcurrencyException)
             {
                 // A revision this save meant to replace is gone: another save for the participant landed first and replaced it too, so a delete found no row. Theirs is the newest now, and nothing of ours is kept.
                 _db.ChangeTracker.Clear();
-                return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
+                return DraftSaveResult.Conflicted(await NewestVersionAsync(tenantId, participantId, slot.Id, ct));
             }
             catch (DbUpdateException ex) when (attempt == 1 && IsForeignKeyViolation(ex))
             {
@@ -139,13 +147,13 @@ public sealed class ServiceAgreementDraftService
     /// these. Their blocks and lines are loaded with them, so they are deleted with the revision whichever provider is under it (PostgreSQL cascades, EF InMemory does not). Scoped to the
     /// tenant and the participant here, because the query filter lets a SuperAdmin see every tenant.
     /// </summary>
-    private Task<List<ServiceAgreementDraft>> ReplacedRevisionsAsync(Guid tenantId, Guid participantId, int version, CancellationToken ct) =>
-        UnusedRevisions(tenantId, participantId).Where(x => x.Version < version).ToListAsync(ct);
+    private Task<List<ServiceAgreementDraft>> ReplacedRevisionsAsync(Guid tenantId, Guid participantId, Guid agreementId, int version, CancellationToken ct) =>
+        UnusedRevisions(tenantId, participantId, agreementId).Where(x => x.Version < version).ToListAsync(ct);
 
     /// <summary>The participant's revisions nothing points at: no approval, no roster pattern, no signing snapshot and no emailed link (a save must not kill a live link or erase the send history). A save replaces the older ones; Delete refuses a revision that is not one of these.</summary>
-    private IQueryable<ServiceAgreementDraft> UnusedRevisions(Guid tenantId, Guid participantId) =>
+    private IQueryable<ServiceAgreementDraft> UnusedRevisions(Guid tenantId, Guid participantId, Guid agreementId) =>
         _db.ServiceAgreementDrafts.Include(x => x.Blocks).Include(x => x.Lines).AsSplitQuery()
-            .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId
+            .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == agreementId
                 && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id)
                 && !_db.ShiftPatterns.Any(p => p.SourceDraftId == x.Id)
                 && !_db.ServiceAgreementShares.Any(h => h.DraftId == x.Id)
@@ -169,7 +177,7 @@ public sealed class ServiceAgreementDraftService
         if (await _db.ElectronicSigningSnapshots.AnyAsync(s => s.DraftId == draftId && s.DraftVersion == draft.Version, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, SigningStaysInHistory);
 
         _db.ServiceAgreementDrafts.Remove(draft);          // its blocks and lines are tracked with it and go too
-        _db.AuditLogs.Add(AgreementAudit.Row(draftId, AuditAction.Deleted, $"Draft version {draft.Version} deleted", caller, _clock.GetUtcNow()));
+        _db.AuditLogs.Add(AgreementAudit.Row(draftId, draft.AgreementId, AuditAction.Deleted, $"Draft version {draft.Version} deleted", caller, _clock.GetUtcNow()));
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -214,17 +222,56 @@ public sealed class ServiceAgreementDraftService
         return null;
     }
 
-    private async Task<int> NewestVersionAsync(Guid participantId, CancellationToken ct) =>
-        await _db.ServiceAgreementDrafts.Where(x => x.ParticipantId == participantId).MaxAsync(x => (int?)x.Version, ct) ?? 0;
+    private async Task<int> NewestVersionAsync(Guid tenantId, Guid participantId, Guid agreementId, CancellationToken ct) =>
+        await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == agreementId).MaxAsync(x => (int?)x.Version, ct) ?? 0;
+
+    internal const int MaxAgreementNameLength = 80;
+
+    /// <summary>
+    /// Which agreement a save writes into (L9, D-2, D-13), and the kind and name its revision takes. A named agreement must be this participant's (404 otherwise, the same words whether it is
+    /// unknown or another's); a new one needs <c>NewAgreement</c>; a save that names none goes to the participant's only agreement, to a first one with the participant's own id when there is
+    /// none, and is refused with 409 when there are several. The first agreement's fixed id is what makes two first saves collide on the unique index instead of leaving two agreements.
+    /// </summary>
+    private async Task<(AgreementSlot? Slot, DraftSaveResult? Refusal)> ResolveAgreementAsync(Guid tenantId, Guid participantId, CreateServiceAgreementDraftDto request, CancellationToken ct)
+    {
+        if (request.AgreementKind is { } sent && !Enum.IsDefined(sent)) return (null, DraftSaveResult.Refused("Choose an agreement type from the list."));
+        if (HasControlCharacter(request.AgreementName)) return (null, DraftSaveResult.Refused(ControlCharacterRefusal("The agreement name")));
+        var name = request.AgreementName?.Trim();
+        if (name is { Length: > MaxAgreementNameLength }) return (null, DraftSaveResult.Refused($"Keep the agreement name to {MaxAgreementNameLength} characters."));
+        if (name == string.Empty) name = null;   // a blank name clears it: the label falls back to the kind
+
+        var existing = await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId).Select(x => x.AgreementId).Distinct().ToListAsync(ct);
+        if (request.NewAgreement)
+        {
+            if (request.AgreementId is not null || (request.BaseVersion ?? 0) > 0) return (null, DraftSaveResult.Refused("Start a new agreement from nothing, or revise an existing one, not both."));
+            if (request.AgreementKind is not { } kind) return (null, DraftSaveResult.Refused("Choose the agreement type."));
+            return (new AgreementSlot(existing.Count == 0 ? participantId : Guid.NewGuid(), kind, name), null);
+        }
+
+        Guid id;
+        if (request.AgreementId is { } named)
+        {
+            if (!existing.Contains(named)) return (null, new DraftSaveResult(null, new[] { "Agreement not found." }, NotFound: true));
+            id = named;
+        }
+        else if (existing.Count == 0) id = participantId;
+        else if (existing.Count == 1) id = existing[0];
+        else return (null, DraftSaveResult.ChooseAgreement());
+
+        // The revision is saved on top of the agreement's newest (a different base is a 409 next), so its kind and name are what a field left out keeps.
+        var newest = await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.AgreementId == id)
+            .OrderByDescending(x => x.Version).Select(x => new { x.AgreementKind, x.AgreementName }).FirstOrDefaultAsync(ct);
+        return (new AgreementSlot(id, request.AgreementKind ?? newest?.AgreementKind ?? AgreementKind.Core, request.AgreementName is null ? newest?.AgreementName : name), null);
+    }
 
     /// <summary>A unique violation on the draft version index: the one insert in a save that another save can beat.</summary>
     private static bool IsVersionRace(DbUpdateException ex) =>
         ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation } pg
-        && (pg.ConstraintName ?? string.Empty).Contains("ServiceAgreementDrafts_TenantId_ParticipantId_Version", StringComparison.Ordinal);
+        && (pg.ConstraintName ?? string.Empty).Contains(ServiceAgreementDraft.VersionIndexName, StringComparison.Ordinal);
 
     // ── From blocks (the plan builder) ────────────────────────────────────────────
 
-    private async Task<DraftSaveResult> BuildFromBlocksAsync(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, List<DraftBlockDto> blocks, string actor, CancellationToken ct)
+    private async Task<DraftSaveResult> BuildFromBlocksAsync(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, List<DraftBlockDto> blocks, AgreementSlot slot, string actor, CancellationToken ct)
     {
         var problems = new List<string>();
         var from = request.AgreementStartDate;
@@ -253,7 +300,7 @@ public sealed class ServiceAgreementDraftService
         var refusals = quote.Issues.Where(i => SaveRefusals.Contains(i.Reason)).Select(i => i.Message).Distinct().ToList();
         if (refusals.Count > 0) return DraftSaveResult.Refused(refusals);
 
-        var draft = NewDraft(tenantId, participant, request, actor);
+        var draft = NewDraft(tenantId, participant, request, slot, actor);
         draft.ServiceTypesJson = JsonSerializer.Serialize(planBlocks.Select(b => SupportTypeLabel(b.SupportType)).Distinct().ToList());
         draft.PricingJson = DraftJson.Write(quote);
 
@@ -328,7 +375,7 @@ public sealed class ServiceAgreementDraftService
 
     // ── From hand-typed lines (before the builder) ────────────────────────────────
 
-    private async Task<DraftSaveResult> BuildFromLinesAsync(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, string actor, CancellationToken ct)
+    private async Task<DraftSaveResult> BuildFromLinesAsync(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, AgreementSlot slot, string actor, CancellationToken ct)
     {
         if (FreeTextProblem(request) is { } problem) return DraftSaveResult.Refused(problem);
         var effectiveDate = request.AgreementStartDate;
@@ -356,7 +403,7 @@ public sealed class ServiceAgreementDraftService
             lines.Add(new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = requested.ServiceType.Trim(), Hours = requested.Hours, ItemCode = item.ItemNumber, UnitPrice = price, CatalogueVersion = item.CatalogueVersion, CatalogueEffectiveFrom = item.EffectiveFrom, CatalogueEffectiveTo = item.EffectiveTo });
         }
 
-        var draft = NewDraft(tenantId, participant, request, actor);
+        var draft = NewDraft(tenantId, participant, request, slot, actor);
         draft.ServiceTypesJson = JsonSerializer.Serialize(request.ServiceTypes);
         foreach (var line in lines) { line.DraftId = draft.Id; draft.Lines.Add(line); }
         return DraftSaveResult.Saved(await WithNextVersionAsync(draft, ct));
@@ -365,9 +412,9 @@ public sealed class ServiceAgreementDraftService
     // ── Shared ────────────────────────────────────────────────────────────────────
 
     /// <summary>Every save is a new row with its own <c>CreatedAt</c>: onboarding's "service needs" confirmation goes stale when a revision is created after it (ParticipantInquiriesController).</summary>
-    private ServiceAgreementDraft NewDraft(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, string actor) => new()
+    private ServiceAgreementDraft NewDraft(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, AgreementSlot slot, string actor) => new()
     {
-        Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, PlanStartDate = request.PlanStartDate, PlanEndDate = request.PlanEndDate,
+        Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, AgreementId = slot.Id, AgreementKind = slot.Kind, AgreementName = slot.Name, PlanStartDate = request.PlanStartDate, PlanEndDate = request.PlanEndDate,
         AgreementStartDate = request.AgreementStartDate, AgreementEndDate = request.AgreementEndDate, IsOngoing = request.IsOngoing, State = request.State, Representative = request.Representative?.Trim(),
         ParticipantNameSnapshot = participant.FullName, NdisNumberSnapshot = participant.NdisNumber, DateOfBirthSnapshot = participant.DateOfBirth, CreatedBy = actor,
         CreatedAt = _clock.GetUtcNow().UtcDateTime,
@@ -375,7 +422,7 @@ public sealed class ServiceAgreementDraftService
 
     private async Task<ServiceAgreementDraft> WithNextVersionAsync(ServiceAgreementDraft draft, CancellationToken ct)
     {
-        draft.Version = (await _db.ServiceAgreementDrafts.Where(x => x.ParticipantId == draft.ParticipantId).MaxAsync(x => (int?)x.Version, ct) ?? 0) + 1;
+        draft.Version = (await _db.ServiceAgreementDrafts.Where(x => x.TenantId == draft.TenantId && x.ParticipantId == draft.ParticipantId && x.AgreementId == draft.AgreementId).MaxAsync(x => (int?)x.Version, ct) ?? 0) + 1;
         return draft;
     }
 
