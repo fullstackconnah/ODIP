@@ -216,7 +216,7 @@ try {
     if (await waiting.count()) await waiting.click().catch(() => {})
     await page.waitForTimeout(500)
     // The mock's board has no waiting agreements, so the panel is not reachable here (PendingAgreementNotice.test covers the two-agreement copy); the board itself is captured.
-    await snap('pending-two', page.locator('main'))
+    await snap('pending-two', page.locator('h1').first())
     await open('/participants/p-0004')
     await snap('ending-two', page.getByText(/Agreement ends in/).first().locator('xpath=ancestor::*[self::ul or self::div][1]'))
 
