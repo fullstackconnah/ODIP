@@ -86,7 +86,7 @@ async function route(page, w) {
   await page.route(`**/api/v1/portal/shifts/${SHIFT_ID}/notes`, (r) => r.fulfill({ json: envelope([]) }))
   await page.route(`**/api/v1/portal/shifts/${SHIFT_ID}/finish`, (r) => { w.status = 'PendingReview'; r.fulfill({ json: envelope(detail()) }) })
   await page.route(`**/api/v1/portal/shifts/${SHIFT_ID}/finish-details`, (r) => w.saveFails
-    ? r.fulfill({ status: 500, json: { success: false, data: null, message: 'Server error', errors: [] } })
+    ? r.fulfill({ status: 422, json: { success: false, data: null, message: 'Kilometres are not accepted for this shift.', errors: ['Kilometres are not accepted for this shift.'] } })   // a 5xx would be queued as transient, not refused
     : r.fulfill({ json: envelope(detail()) }))
 }
 const gotoShift = async (page, hash = '') => {
