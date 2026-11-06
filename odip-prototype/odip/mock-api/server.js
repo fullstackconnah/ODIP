@@ -2563,8 +2563,9 @@ const agreementShares = {}
 const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, startedWeeks, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
 
 function draftDto(participantId, version, body, quoteResult, lines) {
+  const agreementId = body.agreementId || participantId
   return {
-    id: `draft-${participantId}-v${version}`, participantId, version, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27',
+    id: `draft-${participantId}${agreementId === participantId ? '' : `-${agreementId}`}-v${version}`, participantId, agreementId, agreementKind: body.agreementKind || 'Core', agreementName: (body.agreementName || '').trim() || null, version, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27',
     templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3', state: body.state, planStartDate: body.planStartDate, planEndDate: body.planEndDate,
     agreementStartDate: body.agreementStartDate, agreementEndDate: body.isOngoing ? body.planEndDate : body.agreementEndDate, ...(body.isOngoing ? { isOngoing: true } : {}), ...(body.representative ? { representative: body.representative } : {}),
     blocks: (body.blocks || []).map((entry) => ({ block: entry.block, requirements: { workerGender: 'NoPreference', driver: false, skills: [], ...(entry.requirements || {}) } })),
@@ -2605,10 +2606,21 @@ function saveDraft(participantId, body) {
   const blocks = (body.blocks || []).map((entry) => entry.block)
   const drafts = serviceAgreementDrafts[participantId] || (serviceAgreementDrafts[participantId] = [])
   if (blocks.length === 0) return respond(400, failEnvelope(null, ['Add at least one support block.']))
+  // Several agreements: a new one names its type; a save names the agreement it revises, or (with one agreement) goes into it.
+  const ids = [...new Set(drafts.map((d) => d.agreementId))]
+  const agreementId = body.newAgreement ? `${participantId}-ag${ids.length + 1}` : body.agreementId || (ids.length >= 2 ? null : ids[0] || participantId)
+  if (!agreementId) return respond(409, failEnvelope(null, ['Reload to choose which agreement to edit.']))
+  if (!body.newAgreement && drafts.length > 0 && !ids.includes(agreementId)) return respond(404, failEnvelope(null, ['Agreement not found.']))
+  const series = drafts.filter((d) => d.agreementId === agreementId)
+  const kind = body.agreementKind || (series[0] && series[0].agreementKind)
+  const kinds = ['Core', 'NightSupport', 'ShortTermAccommodation', 'Trip', 'Other']
+  if (body.newAgreement && !body.agreementKind) return respond(400, failEnvelope(null, ['Choose the agreement type.']))
+  if (kind && !kinds.includes(kind)) return respond(400, failEnvelope(null, ['Choose an agreement type from the list.']))
+  if ((body.agreementName || '').trim().length > 80) return respond(400, failEnvelope(null, ['Keep the agreement name to 80 characters.']))
   if (!body.agreementStartDate || !body.agreementEndDate || body.agreementEndDate < body.agreementStartDate) return respond(400, failEnvelope(null, ['End dates must not precede start dates.']))
   // The version this plan started from: a save from an older one would silently replace the newer, so it is refused with the newer version's number. Left out it means 0, as on the server.
-  if ((Number.isInteger(body.baseVersion) ? body.baseVersion : 0) !== drafts.length) {
-    return respond(409, failEnvelope({ currentVersion: drafts.length }, [`Version ${drafts.length} was saved after the version this plan started from. Load version ${drafts.length} to see what changed, then make your changes again.`], 'draft-version-conflict'))
+  if ((Number.isInteger(body.baseVersion) ? body.baseVersion : 0) !== series.length) {
+    return respond(409, failEnvelope({ currentVersion: series.length }, [`Version ${series.length} was saved after the version this plan started from. Load version ${series.length} to see what changed, then make your changes again.`], 'draft-version-conflict'))
   }
   const problems = []
   blocks.forEach((block, index) => {
@@ -2621,7 +2633,7 @@ function saveDraft(participantId, body) {
   if (refusals.length > 0) return respond(400, failEnvelope(null, [...new Set(refusals)]))
   const lines = planPricing.groupLines(result._lines, blocks)
   delete result._lines
-  const draft = draftDto(participantId, drafts.length + 1, body, result, lines)
+  const draft = draftDto(participantId, series.length + 1, { ...body, agreementId, agreementKind: kind || 'Core', agreementName: 'agreementName' in body ? body.agreementName : series[0] && series[0].agreementName }, result, lines)
   drafts.unshift(draft)
   return draft
 }
@@ -2643,7 +2655,7 @@ function agreementsEnding() {
     if (renewal && daysLeft >= 0) continue
     const words = daysLeft < 0 ? `Agreement ended ${approved.agreementEndDate}: shifts stop after it` : daysLeft === 0 ? 'Agreement ends today' : daysLeft === 1 ? 'Agreement ends in 1 day' : `Agreement ends in ${daysLeft} days`
     rows.push({
-      participantId: person.id, participantName: person.fullName, draftId: approved.id, version: approved.version, agreementEndDate: approved.agreementEndDate, daysLeft,
+      participantId: person.id, participantName: person.fullName, agreementId: approved.agreementId, agreementKind: approved.agreementKind, agreementName: approved.agreementName, draftId: approved.id, version: approved.version, agreementEndDate: approved.agreementEndDate, daysLeft,
       renewalVersion: renewal ? renewal.version : null, status: renewal ? `${words}. Renewal v${renewal.version} is waiting for approval` : words,
     })
   }
@@ -2667,11 +2679,14 @@ function agreementsList() {
     const status = kind === 4 ? 'NotApproved' : waiting ? 'DraftWaiting' : kind === 1 ? 'Ending' : 'Active'
     const daysLeft = kind === 1 || kind === 2 ? daysBetween(today, end) : null
     return {
-      participantId: 'ag-p-' + id, participantName: name + ' Ng', status, endingState: kind === 1 ? 'Ending' : kind === 2 ? 'Ended' : 'None', hasWaitingDraft: waiting !== null,
+      participantId: 'ag-p-' + id, agreementId: 'ag-a-' + id, agreementKind: 'Core', agreementName: null, participantName: name + ' Ng', status, endingState: kind === 1 ? 'Ending' : kind === 2 ? 'Ended' : 'None', hasWaitingDraft: waiting !== null,
       current, waiting, daysLeft, termStart: current ? start : null,
       priceList: agreementPriceLists[kind === 5 ? 1 : 0], newerPriceList: kind === 5 && current ? agreementPriceLists[0] : null,
     }
   })
+  // The second row of a participant who holds two agreements: the list then names each one.
+  const head = rows[0]
+  rows.push({ ...head, agreementId: head.participantId + '-trip', agreementKind: 'Trip', agreementName: 'Trip to Cairns', status: 'Active', endingState: 'None', hasWaitingDraft: false, waiting: null, daysLeft: null, current: { ...head.current, draftId: 'cur-trip' } })
   return { canApprove: true, rows }
 }
 
@@ -2718,10 +2733,17 @@ function agreementsList() {
 // Phase 2b adds the places a warning shows: it reads the participants (names, how their money is managed) and prices an agreement with the same engine as the plan builder's quote.
 const funding = fundingModule.create({
   respond, people: participants,
+  draftOf: (participantId, draftId) => (serviceAgreementDrafts[participantId] || []).find((d) => d.id === draftId) || null,
+  // The other agreements' newest approved revisions (or newest, when none is approved), for the combined warning.
+  othersOf: (participantId, agreementId) => [...new Set((serviceAgreementDrafts[participantId] || []).map((d) => d.agreementId))].filter((id) => id !== agreementId).map((id) => {
+    const series = (serviceAgreementDrafts[participantId] || []).filter((d) => d.agreementId === id)
+    const d = series.find((x) => x.approval) || series[0]
+    return { agreementId: id, agreementKind: d.agreementKind, agreementName: d.agreementName, version: d.version, blocks: d.blocks.map((entry) => entry.block), start: d.agreementStartDate, end: d.agreementEndDate }
+  }),
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
   // Agreement PR 2, rule 12 of ParticipantAlertsService: the agreement ending soon (Warning) or ended (Critical), from the ending list's rule, opening the agreement page.
   agreementAlertsOf: (id) => agreementsEnding().filter((row) => row.participantId === id).map((row) => ({
-    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft`,
+    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft?agreement=${row.agreementId}`,
   })),
 })
 // Intake booking: the booking fields on the enquiry feed, its writes and GET intake-visits. See intakeBooking.js.
@@ -2779,7 +2801,7 @@ const routes = [
     const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
     return found || respond(404, failEnvelope(null, ['Draft not found.']))
   }],
-  ['participants/:id/service-agreement-drafts', (id) => (serviceAgreementDrafts[id] || []).map((draft, index) => (index === 0 ? draft : summaryOf(draft)))],
+  ['participants/:id/service-agreement-drafts', (id) => (serviceAgreementDrafts[id] || []).map((draft, index, all) => (all.findIndex((d) => d.agreementId === draft.agreementId) === index ? draft : summaryOf(draft)))],
   // What approving would do, nothing done (phase D): the reasons, the counts, the old version's shifts that stay, the hand-made patterns that overlap.
   ['participants/:id/service-agreement-drafts/:id/approval-preview', (participantId, draftId) => {
     const result = planApproval.preview(approvalStore, participantId, draftId)
@@ -3191,15 +3213,16 @@ const postRoutes = [
   }],
   // Bulk renew, reprice or extend: a mix of Created (one with findings), Skipped and Failed, in order; "busy" in the ids is the 429 of a save running elsewhere.
   ['service-agreements/bulk', (body) => {
-    const ids = (body && body.participantIds) || []
+    const items = (body && body.items) || []
+    const ids = items.map((item) => item.participantId)
     if (ids.length < 1 || ids.length > 25) return respond(400, failEnvelope(null, ['Select between 1 and 25 agreements.']))
     if (ids.includes('busy')) return respond(429, failEnvelope(null, ['Another save is running for your organisation.']))
-    const rows = new Map(agreementsList().rows.map((r) => [r.participantId, r]))
+    const rows = new Map(agreementsList().rows.map((r) => [`${r.participantId}:${r.agreementId}`, r]))
     const action = body.action
-    return ids.map((id, i) => {
-      const row = rows.get(id)
+    return items.map(({ participantId: id, agreementId }, i) => {
+      const row = rows.get(`${id}:${agreementId}`)
       const name = row ? row.participantName : 'Demo Ng'
-      const base = { participantId: id, name, sourceDraftId: null, newDraftId: null, before: null, after: null, hasIssues: false, reason: null }
+      const base = { participantId: id, agreementId, name, sourceDraftId: null, newDraftId: null, before: null, after: null, hasIssues: false, reason: null }
       if (i % 11 === 9) return { ...base, outcome: 'Skipped', reason: 'Has a draft waiting' }
       if (i % 11 === 10) return { ...base, outcome: 'Failed', reason: 'The plan ends before the new term' }
       const start = (row && row.current && row.current.agreementStartDate) || '2026-01-01'
