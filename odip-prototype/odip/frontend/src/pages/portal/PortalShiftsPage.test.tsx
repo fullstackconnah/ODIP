@@ -31,6 +31,7 @@ function makeShiftsResponse(overrides: Partial<PortalShiftsResponseDto> = {}): P
     shifts: [
       {
         id: 'shift-1',
+        missingDetails: [],
         participantId: 'participant-1',
         participantName: 'Mia Chen',
         serviceDate: '2026-08-17',

@@ -405,6 +405,7 @@ describe('StaffDetailPage — Completions tab', () => {
             timesAdjusted: false,
             offRoster: false,
             incidentCount: 0,
+            missingDetails: [],
           },
         ],
       }),

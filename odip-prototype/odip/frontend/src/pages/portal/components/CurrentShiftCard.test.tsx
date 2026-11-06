@@ -7,7 +7,7 @@ import type { PortalShiftSummaryDto } from '@/api/types'
 vi.mock('@/api/hooks', () => ({ usePortalShiftDetail: () => ({ data: undefined }) }))
 
 const SHIFT: PortalShiftSummaryDto = {
-  id: 'shift-1', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
+  id: 'shift-1', missingDetails: [], participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
   durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0,
 }
 

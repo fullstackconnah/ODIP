@@ -1291,7 +1291,7 @@ public class PortalControllerTests
         var shift = Names<PortalShiftSummaryDto>();
 
         Assert.Equal(Sorted("Id", "TripInstanceId", "TripCode", "TripName", "AssignmentStart", "AssignmentEnd", "IsDriver", "Status", "Destination", "Role"), trip);
-        Assert.Equal(Sorted("Id", "ParticipantId", "ParticipantName", "ServiceDate", "StartTime", "EndTime", "EndsNextDay", "DurationHours", "Ratio", "NightType", "Status", "Notes", "ReturnCount", "Location"), shift);
+        Assert.Equal(Sorted("Id", "ParticipantId", "ParticipantName", "ServiceDate", "StartTime", "EndTime", "EndsNextDay", "DurationHours", "Ratio", "NightType", "Status", "Notes", "ReturnCount", "Location", "MissingDetails"), shift);
         // A later Address-like field on either list DTO trips this.
         var addressLike = new System.Text.RegularExpressions.Regex("address|street|suburb|postcode|state", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         Assert.DoesNotContain(trip.Concat(shift), addressLike.IsMatch);
