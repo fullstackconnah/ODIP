@@ -183,6 +183,8 @@ describe('BodyDiagram — recording injuries', () => {
     const table = screen.getByRole('table')
     const removeButtons = within(table).getAllByRole('button', { name: /^Remove: / })
     expect(removeButtons).toHaveLength(3)
+    // Touch: the button itself reaches the 44px floor (--tap-min is 0px on a mouse, so 1280 is unchanged).
+    for (const b of removeButtons) expect(b).toHaveClass('min-h-[var(--tap-min)]')
 
     // Every row has one, so its name says which injury it removes.
     await userEvent.setup().click(within(table).getByRole('button', { name: 'Remove: Left hand, Abrasion' }))
