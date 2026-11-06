@@ -1375,7 +1375,7 @@ describe('editor: the rolled-over amount of each period', () => {
 
     await user.type(rolled(1), '-5')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    const error = within(coreCard()).getByText("A rolled-over amount can't be less than $0.00.")
+    const error = within(coreCard()).getByText("A rolled-over amount can’t be less than $0.00.")
     const button = within(coreCard()).getAllByRole('button', { name: 'Use worked-out amount' })[0]
 
     expect(error.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

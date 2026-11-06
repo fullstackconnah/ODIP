@@ -164,7 +164,7 @@ for (const vp of VPS) {
       const pb = p.getBoundingClientRect(), bb = b ? b.getBoundingClientRect() : null
       return { text: p.textContent, above: !!b && !!(p.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) && pb.bottom <= bb.top + 1, described: el.getAttribute('aria-describedby') === p.id }
     })
-    check(t('error: the exact negative copy sits beside the box'), err.text === "A rolled-over amount can't be less than $0.00.", err.text)
+    check(t('error: the exact negative copy sits beside the box'), err.text === "A rolled-over amount can’t be less than $0.00.", err.text)
     check(t('error: above the use-worked-out button, and described by the box'), err.above && err.described, err)
     await crop(page, pool, `editor-rollover-error-${tag}.png`, vp)
     // The whole dialog: the viewport grows to the height of the dialog's scroller (the page behind it is long and not the subject), then the dialog alone is shot.

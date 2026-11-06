@@ -222,6 +222,15 @@ describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
     expect(document.querySelector('.group\\/shell')?.className).not.toContain('h-dvh')
   })
 
+  it('a fit-screen page under the view-as banner subtracts the banner height, so the pinned footer stays on screen', () => {
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
+    renderAt('/trips')
+    const cls = document.getElementById('main')?.className ?? ''
+    expect(cls).toContain('lg:has-[[data-fit-screen]]:h-[calc(100dvh-3rem-2.5rem-var(--safe-top))]')
+    expect(cls).not.toContain('h-[calc(100dvh-3rem-var(--safe-top))]')
+    sessionStorage.clear()
+  })
+
   it('gives the sidebar nav and the mobile bottom nav distinct aria-labels', () => {
     renderAt('/trips')
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
