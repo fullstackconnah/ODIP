@@ -558,6 +558,9 @@ public class AgreementCheckTests
         Assert.False(core.Over);
         Assert.False(check.CombinedOver);
         Assert.Equal(0m, core.CombinedOverBy);
+        // Only November is touched: the draft's two Mondays plus A's two (2 and 9 Nov); A's October is not part of it.
+        Assert.Equal(TwoBlocks, core.AgreementCost);
+        Assert.Equal(2 * TwoBlocks, core.CombinedCost);
     }
 
     [Fact]
