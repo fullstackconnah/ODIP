@@ -5,8 +5,10 @@ import { useForm, useWatch } from 'react-hook-form'
 import { useCreateIncident, useTrips, useStaff, useParticipants, useRestrictivePractices } from '@/api/hooks'
 import { apiPost } from '@/api/client'
 import { Info } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '@/components/Card'
+import { Dropdown } from '@/components/Dropdown'
+import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { BackButton } from '@/components/BackButton'
 import type { IncidentType, IncidentSeverity } from '@/api/types/enums'
@@ -50,6 +52,7 @@ import {
   basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema,
   STEP_BASICS_FIELDS, STEP_RESTRICTIVE_PRACTICE_FIELDS, STEP_DETAILS_FIELDS, STEP_WITNESSES_FIELDS,
 } from './incidents/incidentFormSchema'
+import { COMMON_INCIDENTS, applyCommonIncident, commonIncidentStatus, type CommonIncidentApplied } from './incidents/commonIncidents'
 import { BasicsStep } from './incidents/steps/BasicsStep'
 import { RestrictivePracticeStep } from './incidents/steps/RestrictivePracticeStep'
 import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
@@ -112,6 +115,12 @@ function extractIncidentErrorMessage(err: unknown): string {
   return extractErrorMessage(err, 'Failed to create incident report. Please check your input and try again.')
 }
 
+const COMMON_INCIDENT_ITEMS = COMMON_INCIDENTS.map((e) => ({
+  value: e.key,
+  label: e.title,
+  description: e.incidentType ? INCIDENT_TYPE_LABELS[e.incidentType] : 'Fill in the form yourself',
+}))
+
 export default function IncidentCreatePage() {
   return <IncidentWizardForm />
 }
@@ -167,6 +176,7 @@ function IncidentWizardForm() {
   const rpUseVaried = useWatch({ control, name: 'rpUseVaried' })
   const incidentDateTime = useWatch({ control, name: 'incidentDateTime' })
   const description = useWatch({ control, name: 'description' })
+  const pickedPrompts = useWatch({ control, name: 'pickedPrompts' })
   const witnesses = useWatch({ control, name: 'witnesses' })
   // UX-01: reportedByStaffId/involvedStaffId are SearchableSelect, which isn't
   // a native input register() can bind to, so it's tracked the same way: watched here, written
@@ -335,6 +345,37 @@ function IncidentWizardForm() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
+  // The page owns the pick: Basics unmounts on Next and Back, and the Details step is not mounted while the prompts are placed.
+  const [commonKey, setCommonKey] = useState('')
+  const [commonStatus, setCommonStatus] = useState('')
+  const appliedCommonRef = useRef<CommonIncidentApplied>({ title: null, incidentType: null })
+  function pickCommonIncident(key: string) {
+    const entry = COMMON_INCIDENTS.find((e) => e.key === key)
+    if (!entry) return
+    setCommonKey(key)
+    const v = getValues()
+    const result = applyCommonIncident({
+      title: v.title ?? '', incidentType: v.incidentType ?? '', description: v.description ?? '', pickedPrompts: v.pickedPrompts ?? '',
+      injuriesCount: v.injuries?.length ?? 0,
+      rpData: !!(v.restrictivePracticeType || v.restrictivePracticeId || v.unapprovedRestrictivePracticeDetails?.trim()),
+    }, appliedCommonRef.current, entry)
+    appliedCommonRef.current = result.applied
+    const { title, incidentType, ...unmounted } = result.set
+    if (title !== undefined) setValue('title', title, { shouldDirty: true, shouldValidate: true })
+    if (incidentType !== undefined) setValue('incidentType', incidentType, { shouldDirty: true, shouldValidate: true })
+    // The Details step is not mounted here; the value is kept and shows when it is.
+    for (const [name, value] of Object.entries(unmounted)) setValue(name as 'description' | 'pickedPrompts', value, { shouldDirty: true })
+    setCommonStatus(commonIncidentStatus(key, result.filled, result.kept))
+  }
+  const commonIncidentPicker = (
+    <>
+      <FormField label="Common incident" hint="Optional. Fills in the title, type and description prompts. You still choose the severity." keepHint>
+        <Dropdown variant="form" label="Choose one to fill in the form faster" value={commonKey} onChange={pickCommonIncident} items={COMMON_INCIDENT_ITEMS} autoFocus />
+      </FormField>
+      <p role="status" className="text-xs text-[var(--color-muted-foreground)] [&:not(:empty)]:mt-1">{commonStatus}</p>
+    </>
+  )
+
   // A support worker's own name comes from the sign-in profile, so it is right before /staff returns.
   const staffName = (staffId: string | null | undefined) =>
     (staffId && staffId === lockedReporterId ? fullName : null) ?? staff.find((s) => s.id === staffId)?.fullName ?? '—'
@@ -496,6 +537,7 @@ function IncidentWizardForm() {
             trips={trips}
             staff={staff}
             incidentServiceTypes={INCIDENT_SERVICE_TYPES}
+            commonIncident={commonIncidentPicker}
           />
         )}
 
@@ -526,6 +568,7 @@ function IncidentWizardForm() {
             incidentType={incidentType}
             wereEmergencyServicesCalled={wereEmergencyCalled}
             emergencyServices={emergencyServices}
+            descriptionHint={pickedPrompts?.trim() ? "Write under each prompt. Delete any that don't fit." : undefined}
           />
         )}
 

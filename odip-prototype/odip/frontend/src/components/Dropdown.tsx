@@ -41,6 +41,8 @@ type DropdownProps = {
   tabIndex?: number
   /** Form variant: a long chosen label stays on one line, cut with an ellipsis and left-aligned (default: it wraps). */
   truncateLabel?: boolean
+  /** Form variant: take focus when mounted (the first field a step wants touched). */
+  autoFocus?: boolean
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
   /** Panel height cap in px (default 320). A tall list passes a larger cap; the room on screen then limits it, and an overflowing list is trimmed to end on half a row so the cut says it scrolls. */
@@ -75,6 +77,7 @@ export function Dropdown({
   triggerClassName,
   tabIndex,
   truncateLabel,
+  autoFocus,
   disabled = false,
   loading = false,
   maxPanelHeight,
@@ -94,6 +97,7 @@ export function Dropdown({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const onBlurRef = useRef(onBlur)
+  useEffect(() => { if (autoFocus) triggerRef.current?.focus() }, [autoFocus])
   useEffect(() => { onBlurRef.current = onBlur })
   const [searchQuery, setSearchQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
