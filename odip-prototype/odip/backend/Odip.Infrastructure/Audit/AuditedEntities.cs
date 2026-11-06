@@ -142,6 +142,14 @@ public static class AuditedEntities
         typeof(ComplianceItem),
     };
 
+    /// <summary>Properties written whenever the named trigger property changed in the same save, even if their own value did not: a repeat medication
+    /// amendment (same reason and note) must still record its reason in its own audit entry. Every amend sets AmendedAt; no other write does.</summary>
+    public static readonly Dictionary<(Type Entity, string Property), string> RecordedWith = new()
+    {
+        [(typeof(MedicationAdministration), "AmendmentReason")] = "AmendedAt",
+        [(typeof(MedicationAdministration), "AmendmentNote")] = "AmendedAt",
+    };
+
     private static readonly HashSet<string> ExcludedProperties = new()
     {
         "CreatedAt", "UpdatedAt",
