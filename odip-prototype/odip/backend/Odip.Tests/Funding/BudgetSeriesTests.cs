@@ -208,4 +208,63 @@ public class BudgetSeriesTests
         Assert.Equal(0m, At(line, Today).UsedAndBooked);
         Assert.All(line.Points.Where(p => p.Date > Today), p => Assert.Equal(0m, p.UsedAndBooked));
     }
+
+    // LimitReachedOn: the first day used reached the limit, else (current plan, pace over the limit) the day an even pace does; never after the plan end.
+    private static readonly DateOnly Oct1 = D(2026, 10, 1);   // 92 whole days elapsed, so pace shows
+
+    [Fact]
+    public void LimitReachedOn_UsedAtOrOverTheLimit_IsTheFirstDayTheRunningTotalReachedIt()
+    {
+        var over = Build(used: [new(D(2026, 8, 1), 6000m), new(D(2026, 9, 1), 4000m), new(D(2026, 9, 20), 500m)]);
+        Assert.Equal(D(2026, 9, 1), over.Summary.LimitReachedOn);   // exactly at the limit counts
+        var ended = Build(today: D(2027, 8, 1), current: false, used: [new(D(2026, 8, 1), 9000m), new(D(2027, 2, 3), 1500m)]);
+        Assert.Equal(D(2027, 2, 3), ended.Summary.LimitReachedOn);
+    }
+
+    [Fact]
+    public void LimitReachedOn_UsedItemDatedAfterToday_IsHeldToToday()
+    {
+        // A pending line dated ahead counts at the today point, so the limit is reached today.
+        Assert.Equal(Today, Build(used: [new(D(2026, 8, 1), 6000m), new(D(2026, 12, 1), 4000m)]).Summary.LimitReachedOn);
+    }
+
+    [Fact]
+    public void LimitReachedOn_PaceOverTheLimit_IsTheFirstDayAnEvenPaceReachesIt()
+    {
+        var line = Build(today: Oct1, used: [new(D(2026, 8, 1), 3000m)]);
+        Assert.Equal(11902.17m, line.Summary.Pace);
+        Assert.Equal(Start.AddDays(306), line.Summary.LimitReachedOn);   // ceil(10000 x 92 / 3000) = 307 days from the start, inclusive
+    }
+
+    [Fact]
+    public void LimitReachedOn_PaceLandingJustOverTheLimitAtPlanEnd_IsPlanEnd()
+    {
+        var line = Build(today: Oct1, used: [new(D(2026, 8, 1), 2521m)]);
+        Assert.Equal(10001.79m, line.Summary.Pace);
+        Assert.Equal(End, line.Summary.LimitReachedOn);
+    }
+
+    [Fact]
+    public void LimitReachedOn_PaceAtOrUnderTheLimit_IsAbsent()
+    {
+        var under = Build(today: Oct1, used: [new(D(2026, 8, 1), 2520m)]);
+        Assert.Equal(9997.83m, under.Summary.Pace);
+        Assert.Null(under.Summary.LimitReachedOn);
+        Assert.Null(Build(today: Oct1, used: [new(D(2026, 8, 1), 1000m)]).Summary.LimitReachedOn);
+    }
+
+    [Fact]
+    public void LimitReachedOn_NoPace_BeforeAQuarterOfThePlan_IsAbsent()
+    {
+        var line = Build(today: D(2026, 9, 30), used: [new(D(2026, 8, 1), 9000m)]);
+        Assert.Null(line.Summary.Pace);
+        Assert.Null(line.Summary.LimitReachedOn);
+    }
+
+    [Fact]
+    public void LimitReachedOn_AnEndedPlanThatNeverReachedTheLimit_IsAbsent()
+    {
+        Assert.Null(Build(today: D(2027, 8, 1), current: false, used: [new(D(2026, 8, 1), 9999.99m)]).Summary.LimitReachedOn);
+        Assert.Null(Build(today: D(2027, 8, 1), current: false).Summary.LimitReachedOn);
+    }
 }

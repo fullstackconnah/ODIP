@@ -29,7 +29,7 @@ public sealed record BudgetSeriesInput
 public sealed record BudgetSeriesPoint(DateOnly Date, decimal Budget, decimal? Used, decimal? UsedAndBooked, decimal? Expected, bool IsEdge);
 
 public sealed record BudgetSeriesSummary(
-    decimal Used, decimal EvenToDate, decimal AheadOfEven, decimal? Pace, decimal? PaceGapAtEnd, decimal? BookedEnd, decimal? ExpectedEnd, DateOnly? ExpectedEndDate, decimal? LeftAtEnd);
+    decimal Used, decimal EvenToDate, decimal AheadOfEven, decimal? Pace, decimal? PaceGapAtEnd, decimal? BookedEnd, decimal? ExpectedEnd, DateOnly? ExpectedEndDate, decimal? LeftAtEnd, DateOnly? LimitReachedOn);
 
 public sealed record BudgetSeriesLine(IReadOnlyList<BudgetSeriesPoint> Points, BudgetSeriesSummary Summary);
 
@@ -100,7 +100,28 @@ public static class BudgetSeries
             BookedEnd: current && totalBooked > 0m ? totalUsed + totalBooked : null,
             ExpectedEnd: lastExpected?.Expected,
             ExpectedEndDate: runs.Count > 0 ? runs[^1].End : null,
-            LeftAtEnd: current ? null : input.Limit - totalUsed));
+            LeftAtEnd: current ? null : input.Limit - totalUsed,
+            LimitReachedOn: LimitReachedOn(input, asOf, totalUsed, elapsed, planDays, pace)));
+    }
+
+    /// <summary>
+    /// The day the limit is, or at the current pace will be, reached; null when it is not. Used first: the day the running total reached the limit (a line dated after today counts at today, as it does in the
+    /// graph). Otherwise a current plan whose pace is over the limit: the first day an even spend (used / whole days elapsed, as <see cref="BudgetLedgerCalculator.PaceOf"/>) reaches it, never after the plan end.
+    /// </summary>
+    private static DateOnly? LimitReachedOn(BudgetSeriesInput input, DateOnly asOf, decimal totalUsed, int elapsed, int planDays, decimal? pace)
+    {
+        if (totalUsed > 0m && totalUsed >= input.Limit)
+        {
+            var running = 0m;
+            foreach (var item in input.Used.OrderBy(i => i.Date))
+            {
+                running += item.Amount;
+                if (running >= input.Limit) return item.Date < asOf ? item.Date : asOf;
+            }
+        }
+        if (pace is null || pace <= input.Limit || totalUsed <= 0m) return null;
+        var days = Math.Min(planDays, (int)Math.Ceiling(input.Limit * elapsed / totalUsed));   // days from the plan start, both ends included
+        return input.PlanStart.AddDays(Math.Max(days, 1) - 1);
     }
 
     /// <summary>The covered days as runs in date order: segments that overlap or touch are one run.</summary>

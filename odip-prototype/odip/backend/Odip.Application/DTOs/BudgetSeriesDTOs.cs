@@ -79,6 +79,8 @@ public record BudgetSeriesSummaryDto
     public DateOnly? ExpectedEndDate { get; init; }
     /// <summary>An ended plan only: the limit minus what was used (negative is over).</summary>
     public decimal? LeftAtEnd { get; init; }
+    /// <summary>The first day used reached the limit, or the day an even spend at the pace so far will (never after the plan end); null when neither.</summary>
+    public DateOnly? LimitReachedOn { get; init; }
 }
 
 public record BudgetExpectedDto
