@@ -183,6 +183,13 @@ describe('TierBoard', () => {
       expect(screen.getByRole('button', { name: 'Add to Backup' })).toHaveClass('sm:justify-start')
     })
 
+    it('sets compact tier headings a weight below the card title (CT-4)', async () => {
+      renderCompact()
+      await screen.findByText('Knows the routine')
+      expect(screen.getByText('Backup')).toHaveClass('font-medium')
+      expect(screen.getByText('Backup')).not.toHaveClass('font-semibold')
+    })
+
     it('keeps No read-only: no menu on a No chip, no + Mark No, and no Mark No on a ranked chip', async () => {
       const user = userEvent.setup()
       renderCompact()

@@ -156,7 +156,7 @@ export function TierBoard({ participantId, participantName, compact = false, onM
           return (
             <section key={level} aria-labelledby={`tier-${level}`} className="flex min-w-0 flex-col gap-2">
               <h3 className="flex items-baseline justify-between gap-2">
-                <span id={`tier-${level}`} className="text-sm font-semibold">{name}</span>
+                <span id={`tier-${level}`} className={`text-sm ${compact ? 'font-medium' : 'font-semibold'}`}>{name}</span>
                 <span data-count className="text-sm tabular-nums text-muted-foreground">{tier.length}</span>
               </h3>
               {tier.length === 0 ? (
