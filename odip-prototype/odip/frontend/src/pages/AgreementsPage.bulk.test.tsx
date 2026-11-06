@@ -13,13 +13,13 @@ vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 const originalAdapter = apiClient.defaults.adapter
 
 const row = (n: number): AgreementRow => ({
-  participantId: `p${n}`, participantName: `Person ${String(n).padStart(2, '0')}`, status: 'Active', endingState: 'None', hasWaitingDraft: false,
+  participantId: `p${n}`, key: `p${n}:a-1`, agreementId: 'a-1', agreementKind: 'Core', agreementName: null, participantName: `Person ${String(n).padStart(2, '0')}`, status: 'Active', endingState: 'None', hasWaitingDraft: false,
   current: { draftId: `c${n}`, version: 1, agreementStartDate: '2026-01-01', agreementEndDate: '2026-12-31', total: 1000 }, waiting: null,
   daysLeft: null, termStart: '2026-01-01', priceList: { version: '2025-26', start: '2025-07-01' }, newerPriceList: null,
 })
 const rows = Array.from({ length: 60 }, (_, i) => row(i + 1))
 const made = (id: string, n: number): AgreementBulkResult => ({
-  participantId: id, name: `Person ${String(n).padStart(2, '0')}`, outcome: 'Created', reason: null, sourceDraftId: `c${n}`, newDraftId: `n${n}`,
+  participantId: id, key: `${id}:a-1`, agreementId: 'a-1', name: `Person ${String(n).padStart(2, '0')}`, outcome: 'Created', reason: null, sourceDraftId: `c${n}`, newDraftId: `n${n}`,
   before: { start: '2026-01-01', end: '2026-12-31', total: 1000 }, after: { start: '2027-01-01', end: '2027-12-31', total: 1200 }, hasIssues: false,
 })
 

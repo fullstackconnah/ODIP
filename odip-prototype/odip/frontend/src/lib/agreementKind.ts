@@ -16,7 +16,7 @@ interface Labelled { agreementKind: AgreementKind; agreementName?: string | null
 export const agreementLabel = (d: Labelled) => d.agreementName?.trim() || KIND_LABEL[d.agreementKind]
 
 /** The unnamed everyday agreement every participant had before several were allowed: shown with no label. */
-export const isPlainAgreement = (d: Labelled) => !d.agreementName?.trim() && d.agreementKind === 'Core'
+export const isPlainAgreement = (d: Omit<Labelled, 'agreementKind'> & { agreementKind: AgreementKind | '' }) => !d.agreementName?.trim() && d.agreementKind === 'Core'
 
 /** The server's 400 texts about the type and the name go under their fields; everything else stays in the failure callout. */
 export function splitAgreementFieldErrors(messages: string[]) {

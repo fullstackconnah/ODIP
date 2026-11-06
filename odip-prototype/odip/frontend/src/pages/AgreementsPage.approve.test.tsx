@@ -13,7 +13,7 @@ vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 const originalAdapter = apiClient.defaults.adapter
 
 const draftRow = (name: string, n: number): AgreementRow => ({
-  participantId: `p${n}`, participantName: name, status: 'DraftWaiting', endingState: 'None', hasWaitingDraft: true,
+  participantId: `p${n}`, participantName: name, key: `p${n}:a-1`, agreementId: 'a-1', agreementKind: 'Core', agreementName: null, status: 'DraftWaiting', endingState: 'None', hasWaitingDraft: true,
   current: null, waiting: { draftId: `d${n}`, version: 1, agreementStartDate: '2027-01-01', agreementEndDate: '2027-12-31', total: 1000 },
   daysLeft: null, termStart: null, priceList: { version: '2025-26', start: '2025-07-01' }, newerPriceList: null,
 })

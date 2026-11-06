@@ -381,7 +381,7 @@ describe('ParticipantRow: a participant whose services have started but who is s
 
 describe('ParticipantRow: an agreement waiting for approval, and the Enforce row (spec 2026-10-15, decision A)', () => {
   const words = "Agreement v2 not approved: its shifts appear once it's approved for rostering"
-  const waiting: PendingAgreementDto = { participantId: 'participant-1', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }
+  const waiting: PendingAgreementDto = { participantId: 'participant-1', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true, agreementId: 'a-2', agreementKind: 'Core' }
   const renderWith = (pendingAgreement?: PendingAgreementDto, overrides: Parameters<typeof makeParticipantRow>[0] = {}) => render(
     <MemoryRouter>
       <ParticipantRow row={makeParticipantRow({ fullName: 'Daniel Osei', ...overrides })} days={WEEK_DAYS} canWrite pendingAgreement={pendingAgreement}

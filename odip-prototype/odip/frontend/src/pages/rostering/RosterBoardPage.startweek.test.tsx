@@ -91,7 +91,7 @@ beforeEach(() => {
 
 describe('the Publish banner', () => {
   it('a started week with drafts: the sticky bar after the board counts the drafts and holds Publish week, the one primary, once', () => {
-    showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }] }))
+    showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true, agreementId: 'a-2', agreementKind: 'Core' }] }))
     renderPage()
 
     const title = screen.getByText('3 shifts not visible to staff yet')
@@ -683,7 +683,7 @@ describe('picking several drafts to publish (R3)', () => {
 
   it('Publish week is hidden while selecting, the agreements button is not in the bar, and Select all and Clear work', async () => {
     const user = userEvent.setup()
-    showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }] }))
+    showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true, agreementId: 'a-2', agreementKind: 'Core' }] }))
     renderPage()
     await enter(user)
 

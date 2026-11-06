@@ -10,7 +10,7 @@ const line = (over: Partial<ServiceAgreementDraftLineDto>): ServiceAgreementDraf
   blockId: 'weekdays', band: 'Daytime', unit: 'H', total: 8829.6, occurrences: 30, flags: 'None', ...over,
 })
 const revision = (version: number, from: string, to: string, lines: ServiceAgreementDraftLineDto[]) => ({
-  id: `d-${version}`, participantId: 'p-1', version, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: from, agreementEndDate: to,
+  id: `d-${version}`, participantId: 'p-1', agreementId: 'a-1', agreementKind: 'Core', agreementName: null, version, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: from, agreementEndDate: to,
   blocks: [], lines, isSummary: false, blockCount: 1, lineCount: lines.length, total: 0, caveats: [],
 }) as ServiceAgreementDraftDto
 

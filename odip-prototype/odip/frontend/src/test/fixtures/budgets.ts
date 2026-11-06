@@ -66,7 +66,7 @@ export function agreementPeriod(overrides: Partial<AgreementCheckPeriod> = {}): 
 export function agreementPool(overrides: Partial<AgreementCheckPool> = {}): AgreementCheckPool {
   const periods = overrides.periods ?? [agreementPeriod()]
   return {
-    poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'PlanManaged', agreementCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), over: periods.some(p => p.overBy > 0), overBy: periods.reduce((sum, p) => sum + p.overBy, 0),
+    poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'PlanManaged', agreementCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), combinedCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), combinedOverBy: 0, over: periods.some(p => p.overBy > 0), overBy: periods.reduce((sum, p) => sum + p.overBy, 0),
     alreadyOverBy: periods.reduce((sum, p) => sum + (p.overBy > 0 && p.remaining < 0 ? -p.remaining : 0), 0), periods, ...overrides,
   }
 }
@@ -76,7 +76,7 @@ export function agreementCheck(overrides: Partial<AgreementCheck> = {}): Agreeme
   const pools = overrides.pools ?? [agreementPool()]
   return {
     hasBudget: true, planId: 'plan-1', planStart: '2026-07-01', planEnd: '2027-06-30', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2026-12-20',
-    agreementCost: pools.reduce((sum, p) => sum + p.agreementCost, 0), pools, notInARecordedPool: 0, outsideThePlan: 0, ...overrides,
+    agreementCost: pools.reduce((sum, p) => sum + p.agreementCost, 0), pools, notInARecordedPool: 0, outsideThePlan: 0, otherAgreements: [], combinedOver: false, ...overrides,
   }
 }
 
@@ -87,5 +87,5 @@ export function otherFundedCheck(overrides: Partial<AgreementCheck> = {}): Agree
 
 /** No plan is running: no budget recorded (or the plan ended: say so with noBudgetReason and planEnd). The server answers with the day and the reason, nothing else. */
 export function noBudgetCheck(overrides: Partial<AgreementCheck> = {}): AgreementCheck {
-  return { hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2026-12-20', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0, ...overrides }
+  return { hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2026-12-20', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0, otherAgreements: [], combinedOver: false, ...overrides }
 }
