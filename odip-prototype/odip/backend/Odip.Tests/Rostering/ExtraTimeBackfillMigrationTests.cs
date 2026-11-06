@@ -115,8 +115,8 @@ public class ExtraTimeBackfillMigrationTests : IClassFixture<PostgresFixture>
                     "VALUES (@s,@t,@p,'2026-11-03','09:00','15:00',false,0,0,5,0,now(),now())", ("s", shift), ("t", tenant), ("p", Guid.NewGuid()));
                 await ExecAsync(conn,
                     "INSERT INTO \"ShiftCompletions\" (\"Id\",\"TenantId\",\"ShiftId\",\"ActualStart\",\"StartedAt\",\"TimeZoneId\",\"SubmittedByUserId\",\"IsActive\",\"GeolocationDeclined\",\"NothingToHandOver\",\"NothingToNoteConfirmed\"," +
-                    "\"SentFromOffline\",\"StartWasManual\",\"CreatedAt\",\"UpdatedAt\") " +
-                    "VALUES (@c,@t,@s,now(),now(),'Australia/Sydney',@u,true,false,false,false,@o,false,now(),now())",
+                    "\"SentFromOffline\",\"StartWasManual\",\"VarianceMinutesStart\",\"VarianceMinutesEnd\",\"CreatedAt\",\"UpdatedAt\") " +
+                    "VALUES (@c,@t,@s,now(),now(),'Australia/Sydney',@u,true,false,false,false,@o,false,0,0,now(),now())",
                     ("c", completion), ("t", tenant), ("s", shift), ("u", Guid.NewGuid()), ("o", sentFromOffline));
             }
         }
