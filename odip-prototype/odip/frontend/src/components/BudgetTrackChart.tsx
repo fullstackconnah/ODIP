@@ -207,7 +207,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
   const limitLabel = limitCands.find(c => !onLine(c.box, drawn) && !taken.some(t => hit(t, c.box))) ?? limitCands[0]
   const reachText = reach ? `${reach.ahead ? 'Reaches' : 'Reached'} budget ${sentenceDay(reach.on, series.today)}` : ''
   const reachX = reach ? Math.min(Math.max(x(reach.on), M.left + textW(reachText) / 2), W - M.right - textW(reachText) / 2) : 0
-  const reachCands = [limitY - 8, limitY + 16].map(by => ({ y: by, box: [reachX - textW(reachText) / 2, reachX + textW(reachText) / 2, by - 12, by + 3] as Box }))
+  const reachCands = [limitY - 10, limitY + 18].map(by => ({ y: by, box: [reachX - textW(reachText) / 2, reachX + textW(reachText) / 2, by - 12, by + 3] as Box }))
   const reachLabel = reachCands.find(c => !onLine(c.box, drawn) && ![...taken, limitLabel.box].some(t => hit(t, c.box))) ?? reachCands[0]
 
   const options = series.scopes.map(s => ({ key: s.scopeKey, label: s.scopeKey === 'plan' ? 'Whole plan' : s.name }))
