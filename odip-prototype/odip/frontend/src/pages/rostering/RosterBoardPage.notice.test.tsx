@@ -29,9 +29,9 @@ vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 
 const DANIEL = makeParticipantRow({ participantId: 'p-1', fullName: 'Daniel Osei' })
 const GRACE = makeParticipantRow({ participantId: 'p-2', fullName: 'Grace Palmer-Hughes', shifts: [makeShift({ id: 'g-1', participantId: 'p-2', participantName: 'Grace Palmer-Hughes', serviceDate: '2026-08-18' })] })
-const DANIEL_WAITS: PendingAgreementDto = { participantId: 'p-1', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }
+const DANIEL_WAITS: PendingAgreementDto = { participantId: 'p-1', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true, agreementId: 'a-2', agreementKind: 'Core' }
 // Still in onboarding: no row on the board (live, 2026-10-15).
-const KIM_WAITS: PendingAgreementDto = { participantId: 'p-9', displayName: 'Kim Tran', draftId: 'd-9', version: 1, canReceiveServices: false }
+const KIM_WAITS: PendingAgreementDto = { participantId: 'p-9', displayName: 'Kim Tran', draftId: 'd-9', version: 1, canReceiveServices: false, agreementId: 'a-9', agreementKind: 'Core' }
 const showBoard = (board: RosterBoardDto) => h.board.mockReturnValue({ data: board, isLoading: false, isError: false, refetch: vi.fn() })
 
 function renderPage(entry = '/rostering?date=2026-08-17') {

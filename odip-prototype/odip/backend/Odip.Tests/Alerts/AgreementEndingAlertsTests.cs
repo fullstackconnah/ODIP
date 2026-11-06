@@ -18,7 +18,7 @@ namespace Odip.Tests.Alerts;
 public class AgreementEndingAlertsTests
 {
     private static async Task ApprovedEndingAsync(Fixture f, DateOnly end) =>
-        await MarkApprovedAsync(f.Db, await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: end.AddDays(-27), end: end));
+        await MarkApprovedAsync(f.Db, await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: end.AddDays(-27), end: end, agreementId: f.ParticipantId));
 
     /// <summary>The agreement alerts of the fixture's participant, asked as the participant page asks (one participant, archived ones included).</summary>
     private static async Task<List<ParticipantAlertDto>> AgreementAlertsAsync(Fixture f) =>
@@ -33,7 +33,26 @@ public class AgreementEndingAlertsTests
 
         var alert = Assert.Single(await AgreementAlertsAsync(f));
 
-        Assert.Equal(("agreement-ending-soon", AlertSeverity.Warning, "Agreement ends in 20 days", $"/participants/{f.ParticipantId}/agreement-draft"), (alert.Type, alert.Severity, alert.Message, alert.LinkTo));
+        Assert.Equal(("agreement-ending-soon", AlertSeverity.Warning, "Agreement ends in 20 days", $"/participants/{f.ParticipantId}/agreement-draft?agreement={f.ParticipantId}"), (alert.Type, alert.Severity, alert.Message, alert.LinkTo));
+    }
+
+    [Fact]
+    public async Task With_several_agreements_each_alert_names_its_agreement_and_opens_it()
+    {
+        await using var f = await SetUpAsync();
+        await ApprovedEndingAsync(f, Today.AddDays(20));
+        var tripId = Guid.NewGuid();
+        var trip = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: Today.AddDays(-7), end: Today.AddDays(10), agreementId: tripId);
+        trip.AgreementKind = AgreementKind.Trip;
+        trip.AgreementName = "Trip to Cairns";
+        await f.Db.SaveChangesAsync();
+        await MarkApprovedAsync(f.Db, trip);
+
+        var alerts = await AgreementAlertsAsync(f);
+
+        Assert.Equal(2, alerts.Count);
+        Assert.Contains(alerts, a => a.Message == "Everyday support: Agreement ends in 20 days" && a.LinkTo == $"/participants/{f.ParticipantId}/agreement-draft?agreement={f.ParticipantId}");
+        Assert.Contains(alerts, a => a.Message == "Trip to Cairns: Agreement ends in 10 days" && a.LinkTo == $"/participants/{f.ParticipantId}/agreement-draft?agreement={tripId}");
     }
 
     [Fact]
@@ -73,7 +92,7 @@ public class AgreementEndingAlertsTests
         var body = Assert.IsType<ApiResponse<List<ParticipantAlertsDto>>>(Assert.IsType<OkObjectResult>(response.Result).Value);
         var mine = Assert.Single(body.Data!, p => p.ParticipantId == f.ParticipantId);
         var ended = Assert.Single(mine.Alerts, a => a.Type == "agreement-ended");
-        Assert.Equal(("Agreement ended 2026-10-07: shifts stop after it", $"/participants/{f.ParticipantId}/agreement-draft", 1), (ended.Message, ended.LinkTo, mine.CriticalCount));
+        Assert.Equal(("Agreement ended 2026-10-07: shifts stop after it", $"/participants/{f.ParticipantId}/agreement-draft?agreement={f.ParticipantId}", 1), (ended.Message, ended.LinkTo, mine.CriticalCount));
     }
 
     /// <summary>Fix round 1 (CR-B S2): an ended agreement stays Critical while the participant is active and not renewed (nothing can be rostered), and clears when a renewal is approved or the participant is archived.</summary>
@@ -82,7 +101,7 @@ public class AgreementEndingAlertsTests
     {
         await using var renewed = await SetUpAsync();
         await ApprovedEndingAsync(renewed, Today.AddDays(-3));
-        var renewal = await AddRevisionAsync(renewed, 2, new[] { WeekdayBlock() }, start: Today.AddDays(-2), end: Today.AddDays(40));
+        var renewal = await AddRevisionAsync(renewed, 2, new[] { WeekdayBlock() }, start: Today.AddDays(-2), end: Today.AddDays(40), agreementId: renewed.ParticipantId);
         Assert.Equal("agreement-ended", Assert.Single(await AgreementAlertsAsync(renewed)).Type);           // still Critical while the renewal only waits
         await MarkApprovedAsync(renewed.Db, renewal);
         Assert.Equal("agreement-ending-soon", Assert.Single(await AgreementAlertsAsync(renewed)).Type);    // the renewal is the agreement now, ending in 40 days

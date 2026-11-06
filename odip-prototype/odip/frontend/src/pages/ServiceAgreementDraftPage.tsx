@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { Loader2, X } from 'lucide-react'
+import { FileText, Loader2, X } from 'lucide-react'
 import {
   useAgreementSharing, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useAgreementsEnding, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
 } from '@/api/hooks'
-import type { AgreementState, ApprovalActivationDto, CreateServiceAgreementDraftDto } from '@/api/types'
+import type { AgreementState, ApprovalActivationDto, CreateServiceAgreementDraftDto, ServiceAgreementDraftDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
+import { EmptyState } from '@/components/EmptyState'
+import { agreementLabel, isPlainAgreement, splitAgreementFieldErrors } from '@/lib/agreementKind'
 import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type WizardStepDef } from '@/components/wizard'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { agreementIssues, type AgreementIssue } from '@/lib/agreementIssues'
@@ -51,7 +53,7 @@ const STEPS: WizardStepDef<Details>[] = [
   { key: 'save', label: 'Save', fields: [] },
 ]
 
-const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', agreementStartDate: '', agreementEndDate: '', ongoing: false, representative: '', planOverride: null }
+const EMPTY_DETAILS: Details = { agreementKind: '', agreementName: '', state: 'NSW', zone: 'National', agreementStartDate: '', agreementEndDate: '', ongoing: false, representative: '', planOverride: null }
 const snapshotOf = (details: Details, shifts: readonly Shift[]) => JSON.stringify({ details, shifts })
 
 /** The problems with the dates, each said next to the box that has it and once more for the Check and Save steps. */
@@ -83,7 +85,7 @@ export default function ServiceAgreementDraftPage() {
 function DraftPage() {
   const { id: participantId } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const fromOnboarding = searchParams.get('from') === 'onboarding'
   // The Agreements tab's New revision (D11): open the week step on a running approved agreement, as Start a new revision does.
   const reviseRequested = searchParams.get('revise') === '1'
@@ -91,6 +93,13 @@ function DraftPage() {
   const backHref = fromOnboarding ? `/onboarding/${participantId}` : `/participants/${participantId}`
   const participant = useParticipant(participantId)
   const drafts = useServiceAgreementDrafts(participantId)
+  // Every link carries the agreement it is for (`?agreement=<id>`, or `new`); a link without one is an old bookmark and shows the most recently changed agreement.
+  const agreementParam = searchParams.get('agreement')
+  const isNew = agreementParam === 'new' || (agreementParam === null && drafts.data?.length === 0)
+  const agreementId = isNew ? null : agreementParam ?? drafts.data?.[0]?.agreementId ?? null
+  const mine = (data: ServiceAgreementDraftDto[] | undefined) => data?.filter(entry => entry.agreementId === agreementId)
+  const series = useMemo(() => mine(drafts.data), [drafts.data, agreementId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const agreementCount = new Set(drafts.data?.map(entry => entry.agreementId)).size
   const create = useCreateServiceAgreementDraft()
   const download = useDownloadServiceAgreementDraftPdf()
   const { canManageParticipantLifecycle: canEdit, canManageFunding, isSuperAdmin, isAdmin, isCoordinator, hasOrganisation } = usePermissions()
@@ -108,6 +117,8 @@ function DraftPage() {
   const [weekEmpty, setWeekEmpty] = useState(false)
   const [baseline, setBaseline] = useState<string | null>(null)
   const [failure, setFailure] = useState<SaveFailure | null>(null)
+  // The server's refusals about the type and the name, shown under those fields.
+  const [fieldErrors, setFieldErrors] = useState<{ kind?: string; name?: string }>({})
   const [saved, setSaved] = useState(false)
   // The version of the newest save this working copy started from (0 when there was none), sent with a save: if somebody else has saved since, the server says so (409) instead of
   // replacing their work, and `conflict` is the version they made.
@@ -153,16 +164,16 @@ function DraftPage() {
   }, [recordingBudget, step])
 
   const loaded = drafts.data !== undefined && (!canEdit || !plans.isLoading)
-  const newest = drafts.data?.[0]
+  const newest = series?.[0]
   // What is on screen is the save this working copy was loaded from or last saved as, not whatever has been read since: the PDF and the approval are of that one.
-  const onScreen = drafts.data?.find(entry => entry.version === baseVersion)
+  const onScreen = series?.find(entry => entry.version === baseVersion)
   // A renewal is the revision that starts the day after an approved one ends (D4): its Check step sets it beside that one, whose lines the list leaves out, so they are read.
   const renewedFrom = onScreen && !onScreen.isSummary
-    ? drafts.data?.find(entry => !!entry.approval && entry.version < onScreen.version && addDays(entry.agreementEndDate, 1) === onScreen.agreementStartDate)
+    ? series?.find(entry => !!entry.approval && entry.version < onScreen.version && addDays(entry.agreementEndDate, 1) === onScreen.agreementStartDate)
     : undefined
   const renewedLines = useServiceAgreementDraft(participantId, renewedFrom?.id, !!renewedFrom)
   // A pattern change is saved as a revision that covers only the weeks from the change and keeps the end: the term starts at the earliest approved revision ending on the same day (as the server sizes the renewal).
-  const termStart = renewedFrom ? drafts.data?.filter(entry => !!entry.approval && entry.agreementEndDate === renewedFrom.agreementEndDate).map(entry => entry.agreementStartDate).sort()[0] : undefined
+  const termStart = renewedFrom ? series?.filter(entry => !!entry.approval && entry.agreementEndDate === renewedFrom.agreementEndDate).map(entry => entry.agreementStartDate).sort()[0] : undefined
   if (loaded && baseline === null && participant.data) {
     setBaseVersion(newest?.version ?? 0)
     // A save with a block that can no longer be read is not loaded: an empty shift would look like a schedule nobody made, and saving over it would lose it for good.
@@ -170,6 +181,7 @@ function DraftPage() {
       const loadedPlan = { start: newest.planStartDate, end: newest.planEndDate }
       const derived = recorded ?? { start: newest.agreementStartDate, end: newest.agreementEndDate }
       const next: Details = {
+        agreementKind: newest.agreementKind, agreementName: newest.agreementName ?? '',
         state: newest.state, zone: newest.blocks[0].block.location.zone, mm: newest.blocks[0].block.location.mm, agreementStartDate: newest.agreementStartDate, agreementEndDate: newest.agreementEndDate, ongoing: !!newest.isOngoing,
         representative: newest.representative ?? '', planOverride: loadedPlan.start === derived.start && loadedPlan.end === derived.end ? null : loadedPlan,
       }
@@ -184,7 +196,8 @@ function DraftPage() {
       const fromParticipant = participant.data.addressState as AgreementState | null
       // A NEW agreement only: its zone starts from the participant's MM level, which the coordinator can still change.
       const mm = participant.data.mmLevel ?? undefined
-      const start: Details = { ...EMPTY_DETAILS, state: fromParticipant && STATES.includes(fromParticipant) ? fromParticipant : EMPTY_DETAILS.state, zone: mm === undefined ? EMPTY_DETAILS.zone : zoneOfMm(mm), mm, agreementStartDate: recorded?.start ?? '', agreementEndDate: recorded?.end ?? '' }
+      // An old link to a participant with no agreement yet starts everyday support; the Add agreement link asks for the type.
+      const start: Details = { ...EMPTY_DETAILS, agreementKind: agreementParam === 'new' ? '' : 'Core', state: fromParticipant && STATES.includes(fromParticipant) ? fromParticipant : EMPTY_DETAILS.state, zone: mm === undefined ? EMPTY_DETAILS.zone : zoneOfMm(mm), mm, agreementStartDate: recorded?.start ?? '', agreementEndDate: recorded?.end ?? '' }
       setDetails(start)
       setBaseline(snapshotOf(start, []))
     }
@@ -219,16 +232,17 @@ function DraftPage() {
   const limits = useMemo(() => engineLimits(shifts), [shifts])
 
   const pricing = useAgreementPricing({
-    participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
+    participantId: participantId ?? '', agreementId: isNew ? null : agreementId, shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
     canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
     const list: AgreementIssue[] = []
     const dateText = [dates.start, dates.end, dates.plan].filter((text): text is string => !!text)
     if (dateText.length > 0) list.push({ key: 'dates', tone: 'fix', title: dateText.join(' '), shiftIds: [], step: 'agreement' })
+    if (!details.agreementKind) list.push({ key: 'kind', tone: 'fix', title: 'Choose the agreement type.', shiftIds: [], step: 'agreement' })
     if (shifts.length === 0) list.push({ key: 'no-shifts', tone: 'fix', title: 'Add at least one shift to the week.', shiftIds: [], step: 'week' })
     return [...list, ...agreementIssues({ shifts, groups: pricing.groups, quoteIssues: pricing.issues, limits, to: end, settings: pricing.settings })]
-  }, [dates.start, dates.end, dates.plan, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
+  }, [dates.start, dates.end, dates.plan, details.agreementKind, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
   const blocking = issues.filter(issue => issue.tone === 'fix')
   const flagged = useMemo(() => new Set(issues.filter(issue => issue.step === 'week').flatMap(issue => issue.shiftIds)), [issues])
 
@@ -253,6 +267,10 @@ function DraftPage() {
       : <PageState kind="error" noun="service agreement" onRetry={() => { void participant.refetch(); void drafts.refetch() }} />
   }
   if (!participantId || !participant.data) return <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
+  // A link for an agreement this participant does not have (deleted, or another participant's): say so, never fall back to a different one.
+  if (!isNew && !drafts.isFetching && drafts.data && series?.length === 0) {
+    return <EmptyState size="inline" icon={FileText} title="This agreement isn't on this participant's record" description="It may have been deleted, or the link is for another participant." action={{ label: `Back to ${participant.data.fullName}`, to: `/participants/${participantId}` }} />
+  }
 
   // What the last save said is about the schedule and the details as they were when it was pressed: any change lets go of the failure it met (the notice that a newer save exists is not
   // about what was typed, and stays until it is answered or closed).
@@ -288,17 +306,33 @@ function DraftPage() {
   const save = () => {
     if (create.isPending || loadingNewest || readOnly || blocking.length > 0) return
     setFailure(null)
+    setFieldErrors({})
     setSaved(false)
     const blocks = pricing.groups.map(group => ({ block: stampLocation(normaliseBlock(group.entry.block), details.state, details.zone, details.mm), requirements: group.entry.requirements }))
     const data: CreateServiceAgreementDraftDto = {
       planStartDate: plan.start, planEndDate: plan.end, agreementStartDate: details.agreementStartDate, agreementEndDate: end, isOngoing: details.ongoing || undefined,
       state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, baseVersion, blocks,
+      agreementKind: details.agreementKind || undefined, agreementName: details.agreementName, ...(agreementParam === 'new' ? { newAgreement: true } : isNew ? {} : { agreementId: agreementId ?? undefined }),
     }
     create.mutate({ participantId, data }, {
-      onSuccess: result => { setBaseline(snapshotOf(details, shifts)); setSaved(true); setBaseVersion(result?.version ?? baseVersion); setConflict(null) },
+      onSuccess: async result => {
+        setBaseline(snapshotOf(details, shifts)); setSaved(true); setBaseVersion(result?.version ?? baseVersion); setConflict(null)
+        // A first save makes the agreement: the address follows it, so a reload (or Back) shows this agreement and the next save is a revision of it.
+        if (isNew && result?.agreementId) {
+          await drafts.refetch() // the new agreement is on the list before the address names it
+          setSearchParams(current => { const next = new URLSearchParams(current); next.set('agreement', result.agreementId); return next }, { replace: true })
+        }
+      },
       onError: error => {
         const newer = conflictVersionOf(error)
-        if (newer === null) { setFailure(describeSaveError(error)); return }
+        if (newer === null) {
+          const failed = describeSaveError(error)
+          const { kind, name, rest } = splitAgreementFieldErrors(failed.messages)
+          setFieldErrors({ kind, name })
+          setFailure(kind || name ? (rest.length > 0 ? { ...failed, messages: rest } : null) : failed)
+          if (kind || name) setStep('agreement')
+          return
+        }
         // Somebody else saved a newer one: nothing on screen is touched, and theirs is read so that it is there to load.
         setConflict(newer)
         void drafts.refetch()
@@ -331,7 +365,7 @@ function DraftPage() {
   // The approval or its preview was refused because a newer save has replaced this agreement: read the agreement again, and if there is a newer one, offer it.
   const superseded = () => {
     void drafts.refetch().then(read => {
-      const latest = read.isError ? undefined : read.data?.[0]
+      const latest = read.isError ? undefined : mine(read.data)?.[0]
       if (latest && latest.version > baseVersion) { setApproving(false); setConflict(latest.version) }
     })
   }
@@ -344,7 +378,7 @@ function DraftPage() {
     setLoadingNewest(true)
     try {
       const read = await drafts.refetch()
-      const latest = read.isError ? undefined : read.data?.[0]
+      const latest = read.isError ? undefined : mine(read.data)?.[0]
       if (!latest || latest.version !== conflict) {
         if (latest && conflict !== null && latest.version > conflict) {
           setConflict(latest.version)
@@ -395,7 +429,7 @@ function DraftPage() {
   }
   const stepIndex = STEPS.findIndex(entry => entry.key === step)
   const current = STEPS[stepIndex]
-  const total = <RunningTotal status={pricing.status} answer={pricing.answer} refreshing={pricing.refreshing} error={pricing.error} onRetry={pricing.retry} budgetView={pricing.budgetView} leftOut={pricing.leftOut} />
+  const total = <RunningTotal status={pricing.status} answer={pricing.answer} refreshing={pricing.refreshing} error={pricing.error} onRetry={pricing.retry} budgetView={pricing.budgetView} leftOut={pricing.leftOut} several={agreementCount >= 2} />
 
   return <div className="flex max-w-6xl flex-col gap-[var(--section-gap)] animate-fade-in">
     <ConfirmDialog
@@ -435,7 +469,7 @@ function DraftPage() {
     {unsavedChangesDialog}
     <div className="flex items-start gap-4">
       <BackButton to={backHref} label={fromOnboarding ? 'onboarding' : 'participant'} variant="icon" className="mt-1" />
-      <div className="flex-1"><PageHeader title="Service agreement" subtitle={participant.data.fullName} /></div>
+      <div className="flex-1"><PageHeader title="Service agreement" subtitle={isNew ? `${participant.data.fullName} · New agreement` : newest && !(agreementCount === 1 && isPlainAgreement(newest)) ? `${participant.data.fullName} · ${agreementLabel(newest)}` : participant.data.fullName} /></div>
     </div>
 
     {locked && newest && (
@@ -508,7 +542,7 @@ function DraftPage() {
               </Callout>
               <AgreementStep
                 details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`} recordBudget={recordBudget} endedOn={endedPlan?.planEnd} planLineRef={planLineRef}
-                errors={attempted ? { start: dates.start, end: dates.end } : {}}
+                errors={{ ...(attempted ? { start: dates.start, end: dates.end, kind: details.agreementKind ? undefined : 'Choose the agreement type.' } : {}), ...(fieldErrors.kind && { kind: fieldErrors.kind }), ...(fieldErrors.name && { name: fieldErrors.name }) }}
               />
             </div>
           )}
@@ -535,7 +569,7 @@ function DraftPage() {
           {step === 'save' && (
             <SaveStep
               readOnly={!canEdit} locked={locked} hasSaved={!!onScreen} dirty={dirty} notices={notices} saved={saved ? 'Saved.' : null} blocking={blocking} onGoToCheck={() => go('check')}
-              history={approvalHistory(drafts.data ?? [])}
+              history={approvalHistory(series ?? [])}
               onDownload={() => { if (onScreen) download.mutate({ participantId, id: onScreen.id }) }}
               downloading={download.isPending} downloadFailed={download.isError}
               populate={populatable && onScreen?.approval ? {

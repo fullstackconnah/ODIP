@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { ServiceAgreementDraftDto } from '@/api/types'
 import { localIsoDate } from '@/lib/dateOnly'
 import { restoreZone, setZone } from '@/test/timeZone'
-import { versionRows } from './agreementVersions'
+import { versionRows, warningTarget, type VersionRow } from './agreementVersions'
 
 afterEach(restoreZone)
 
@@ -80,5 +80,23 @@ describe('versionRows: the status of each version, from the date', () => {
     const drafts = [version(1, '2026-07-01', '2026-10-11')]
     if (setZone('Australia/Sydney')) expect(versionRows(drafts, localIsoDate(instant))[0].status).toBe('Ended')
     if (setZone('UTC')) expect(versionRows(drafts, localIsoDate(instant))[0].status).toBe('Approved')
+  })
+})
+
+describe('warningTarget', () => {
+  const row = (id: string, status: VersionRow['status'], start: string, end: string) => ({ id, status, start, end }) as VersionRow
+
+  it('needs two agreements with a running approved revision', () => {
+    expect(warningTarget([{ agreementId: 'a', rows: [row('d1', 'Approved', '2026-01-01', '2027-01-01')] }])).toBeNull()
+    expect(warningTarget([{ agreementId: 'a', rows: [row('d1', 'Approved', '2026-01-01', '2027-01-01')] }, { agreementId: 'b', rows: [row('d2', 'Ended', '2025-01-01', '2025-06-01')] }])).toBeNull()
+  })
+
+  it('picks the agreement whose approved revision ends last, then the earlier start', () => {
+    const groups = [
+      { agreementId: 'a', rows: [row('d1', 'Draft', '2026-02-01', '2028-01-01'), row('d0', 'Approved', '2026-01-01', '2027-06-30')] },
+      { agreementId: 'b', rows: [row('d2', 'Approved', '2026-03-01', '2027-12-31')] },
+    ]
+    expect(warningTarget(groups)).toEqual({ draftId: 'd2', agreementId: 'b' })
+    expect(warningTarget([{ agreementId: 'a', rows: [row('d1', 'Approved', '2026-05-01', '2027-06-30')] }, { agreementId: 'b', rows: [row('d2', 'Approved', '2026-03-01', '2027-06-30')] }])).toEqual({ draftId: 'd2', agreementId: 'b' })
   })
 })

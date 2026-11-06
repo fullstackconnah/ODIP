@@ -301,6 +301,8 @@ export function describeSaveError(error: unknown): SaveFailure {
   if (status === 429) return { title: 'The server is busy', messages: ['Too many requests just now. Wait a moment and save again. Nothing you entered is lost.'] }
   if (status === 403) return { title: 'You cannot save this draft', messages: ['Only Admins and Coordinators can save agreement drafts.'] }
   if (status === 413) return { title: 'The plan is too large to save', messages: ['Save fewer blocks, or split the agreement.'] }
+  // A save that named no agreement while the participant has several (a stale tab or an old link): nothing was saved.
+  if (status === 409) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['Reload to choose which agreement to edit.'] }
   if (status === 400 || status === 404) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['The server refused the draft.'] }
   return { title: 'The draft was not saved', messages: ['The server could not price and save this draft. Check your connection and try again; nothing you entered is lost.'] }
 }

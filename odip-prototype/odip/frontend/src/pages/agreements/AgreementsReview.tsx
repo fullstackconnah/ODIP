@@ -43,7 +43,7 @@ interface Props {
 
 /** What a bulk run made, as the same table read twice: the old term beside the new one, in dates and money. Nothing is ticked at first: approving is money. */
 export function AgreementsReview({ run, canApprove, onBack }: Props) {
-  const { action, label, results, stopped } = run
+  const { action, label, results, stopped, titles } = run
   const made = useMemo(() => results.filter(r => r.outcome === 'Created' && r.newDraftId), [results])
   const skipped = useMemo(() => results.filter(r => r.outcome === 'Skipped'), [results])
   const failed = useMemo(() => results.filter(r => r.outcome === 'Failed' || r.outcome === 'Busy'), [results])
@@ -62,9 +62,9 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
   const approve = useApproveAgreements(onProgress)
 
   // A row can be approved while it has no findings and has not been answered, or the roster was busy (pressing Approve again retries only those).
-  const open = (r: AgreementBulkResult) => !r.hasIssues && (!outcomes[r.participantId] || outcomes[r.participantId] === 'Busy')
-  const ready = made.filter(r => selected.has(r.participantId) && open(r))
-  const needReview = made.filter(r => selected.has(r.participantId) && !open(r) && outcomes[r.participantId] !== 'Approved').length
+  const open = (r: AgreementBulkResult) => !r.hasIssues && (!outcomes[r.key] || outcomes[r.key] === 'Busy')
+  const ready = made.filter(r => selected.has(r.key) && open(r))
+  const needReview = made.filter(r => selected.has(r.key) && !open(r) && outcomes[r.key] !== 'Approved').length
   const leftOut = needReview > 0 ? needReview === 1 ? '1 needs review and is left out: open it to finish.' : `${needReview} need review and are left out: open them to finish.` : undefined
 
   const confirm = async () => {
@@ -78,9 +78,11 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
       setDialog(d => ({ ...d, phase: 'confirm', error, refused: status === 403 }))
       return
     }
-    const answered = Object.fromEntries(result.results.map(r => [r.participantId, r.outcome]))
+    // The answers name a draft, not a row: the row is the agreement that draft was made for.
+    const keyOf = (draftId: string) => made.find(m => m.newDraftId === draftId)?.key ?? draftId
+    const answered = Object.fromEntries(result.results.map(r => [keyOf(r.draftId), r.outcome]))
     setOutcomes(o => ({ ...o, ...answered }))
-    setNotMoved(m => ({ ...m, ...Object.fromEntries(result.results.map(r => [r.participantId, notMovedToActive(r) ? notMovedWords(r.activation?.reason) : ''])) }))
+    setNotMoved(m => ({ ...m, ...Object.fromEntries(result.results.map(r => [keyOf(r.draftId), notMovedToActive(r) ? notMovedWords(r.activation?.reason) : ''])) }))
     // Only a busy roster keeps its tick, so the next Approve retries those; everything else answered is done with.
     setSelected(new Set([...selected].filter(id => !answered[id] || answered[id] === 'Busy')))
     const s = summarise(result.results, result.stopped?.notSent ?? 0, !!result.stopped && noReply(result.stopped.error))
@@ -96,18 +98,20 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
     { n: failed.length, words: 'failed', id: 'bulk-failed' },
   ].filter(p => p.n > 0)
 
+  const title = (r: AgreementBulkResult) => titles?.[r.key] ?? r.name
+  const draftHref = (r: AgreementBulkResult) => `/participants/${r.participantId}/agreement-draft?agreement=${r.agreementId}`
   const link = (r: AgreementBulkResult): ReactNode => (
-    <Link to={`/participants/${r.participantId}/agreement-draft`} aria-label={`${r.name}, open draft`} className="font-medium text-[var(--color-primary)] hover:underline">{r.name}</Link>
+    <Link to={draftHref(r)} aria-label={`${title(r)}, open draft`} className="font-medium text-[var(--color-primary)] hover:underline">{title(r)}</Link>
   )
   const check = (r: AgreementBulkResult): ReactNode => {
-    const o = outcomes[r.participantId]
+    const o = outcomes[r.key]
     if (o) {
       const badge = OUTCOME_BADGE[o]
       return (
         <span className="flex flex-wrap items-center gap-x-2">
           <StatusBadge tone={badge.tone} label={badge.label} />
-          {o === 'NeedsReview' && <Link to={`/participants/${r.participantId}/agreement-draft`} className="text-[var(--color-primary)] underline underline-offset-2">Open it</Link>}
-          {notMoved[r.participantId] && <span className="basis-full text-[var(--color-muted-foreground)]">{notMoved[r.participantId]}</span>}
+          {o === 'NeedsReview' && <Link to={draftHref(r)} className="text-[var(--color-primary)] underline underline-offset-2">Open it</Link>}
+          {notMoved[r.key] && <span className="basis-full text-[var(--color-muted-foreground)]">{notMoved[r.key]}</span>}
         </span>
       )
     }
@@ -129,7 +133,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
       : [participant, dated('last', 'Last term', r => range(r.before)), col('lastTotal', 'Last total', r => money(r.before?.total), true),
         dated('new', 'New term', r => range(r.after)), col('newTotal', 'New total', r => money(r.after?.total), true), change, checkColumn]
   const reasonColumns = (danger: boolean): Column<AgreementBulkResult>[] => [
-    { key: 'name', header: 'Participant', mobile: 'primary', render: r => <Link to={`/participants/${r.participantId}/agreement-draft`} className="font-medium text-[var(--color-primary)] hover:underline">{r.name}</Link> },
+    { key: 'name', header: 'Participant', mobile: 'primary', render: r => <Link to={draftHref(r)} className="font-medium text-[var(--color-primary)] hover:underline">{title(r)}</Link> },
     {
       key: 'reason', header: 'Reason', mobile: 'meta', wrap: true,
       render: r => danger
@@ -181,17 +185,17 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
         <div className="flex flex-col gap-3">
           <AgreementsBulkBar
             selected={selected.size} approvable={ready.length} canApprove={canApprove} shown={made.length}
-            allShownSelected={made.every(r => selected.has(r.participantId))}
-            onToggleShown={() => setSelected(made.every(r => selected.has(r.participantId)) ? new Set() : new Set(made.slice(0, MAX_SELECTED + 1).map(r => r.participantId)))}
+            allShownSelected={made.every(r => selected.has(r.key))}
+            onToggleShown={() => setSelected(made.every(r => selected.has(r.key)) ? new Set() : new Set(made.slice(0, MAX_SELECTED + 1).map(r => r.key)))}
             onClear={() => setSelected(new Set())}
             onApprove={() => setDialog({ open: true, phase: 'confirm', progress: 0, error: null, refused: false })}
             note={leftOut ? `${needReview} ${needReview === 1 ? 'needs' : 'need'} review and ${needReview === 1 ? 'is' : 'are'} left out` : undefined}
           />
-          <DataTable data={made} columns={columns} keyField="participantId" sortable={false} selectable={canApprove} selectedRows={selected} onSelectionChange={setSelected} />
+          <DataTable data={made} columns={columns} keyField="key" sortable={false} selectable={canApprove} selectedRows={selected} onSelectionChange={setSelected} />
         </div>
       ))}
-      {skipped.length > 0 && group('bulk-skipped', `Skipped (${skipped.length})`, <DataTable data={skipped} columns={reasonColumns(false)} keyField="participantId" sortable={false} />)}
-      {failed.length > 0 && group('bulk-failed', `Failed (${failed.length})`, <DataTable data={failed} columns={reasonColumns(true)} keyField="participantId" sortable={false} />)}
+      {skipped.length > 0 && group('bulk-skipped', `Skipped (${skipped.length})`, <DataTable data={skipped} columns={reasonColumns(false)} keyField="key" sortable={false} />)}
+      {failed.length > 0 && group('bulk-failed', `Failed (${failed.length})`, <DataTable data={failed} columns={reasonColumns(true)} keyField="key" sortable={false} />)}
       {results.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">{'No drafts were made.'}</p>}
 
       <ApproveAgreementsDialog

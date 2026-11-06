@@ -44,6 +44,16 @@ public static class AgreementEnding
         return rows.OrderBy(r => r.AgreementEndDate).ThenBy(r => r.ParticipantId).ThenBy(r => r.AgreementId).ToList();
     }
 
+    /// <summary>What an agreement is called where more than one is listed: its name, else its type in the words the screens use (frontend lib/agreementKind.ts KIND_LABEL).</summary>
+    public static string Label(AgreementEndingRow row) => !string.IsNullOrWhiteSpace(row.AgreementName) ? row.AgreementName.Trim() : row.AgreementKind switch
+    {
+        AgreementKind.NightSupport => "Night support",
+        AgreementKind.ShortTermAccommodation => "Short-term accommodation",
+        AgreementKind.Trip => "Trip",
+        AgreementKind.Other => "Other",
+        _ => "Everyday support",
+    };
+
     /// <summary>The words the alert and the Agreements ending list share (the agreement page says the same as a sentence). No full stop, like every other alert message.</summary>
     public static string Describe(AgreementEndingRow row)
     {

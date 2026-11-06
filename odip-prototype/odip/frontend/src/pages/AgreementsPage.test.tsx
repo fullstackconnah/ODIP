@@ -16,7 +16,7 @@ vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: mockNarrow }))
 
 const rev = (n: number, start: string, end: string, total = 1000): AgreementRevisionRef => ({ draftId: `d${n}`, version: n, agreementStartDate: start, agreementEndDate: end, total })
 const row = (name: string, over: Partial<AgreementRow> = {}): AgreementRow => ({
-  participantId: name, participantName: name, status: 'Active', endingState: 'None', hasWaitingDraft: false, current: rev(1, '2026-01-01', '2026-12-31'),
+  participantId: name, participantName: name, key: `${name}:a-1`, agreementId: 'a-1', agreementKind: 'Core', agreementName: null, status: 'Active', endingState: 'None', hasWaitingDraft: false, current: rev(1, '2026-01-01', '2026-12-31'),
   waiting: null, daysLeft: null, termStart: '2026-01-01', priceList: { version: '2025-26', start: '2025-07-01' }, newerPriceList: null, ...over,
 })
 const rows = [

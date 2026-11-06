@@ -4,7 +4,7 @@ import { approveTargets, bulkSkipCount, bulkSkipNotes, filterRows, latestEnd, li
 
 const rev = (n: number, start: string, end: string, total = 1000): AgreementRevisionRef => ({ draftId: `d${n}`, version: n, agreementStartDate: start, agreementEndDate: end, total })
 const row = (over: Partial<AgreementRow> & { participantName: string }): AgreementRow => ({
-  participantId: over.participantName, status: 'Active', endingState: 'None', hasWaitingDraft: false, current: rev(1, '2026-01-01', '2026-12-31'),
+  participantId: over.participantName, key: `${over.participantName}:a-1`, agreementId: 'a-1', agreementKind: 'Core', agreementName: null, status: 'Active', endingState: 'None', hasWaitingDraft: false, current: rev(1, '2026-01-01', '2026-12-31'),
   waiting: null, daysLeft: null, termStart: '2026-01-01', priceList: { version: '2025-26', start: '2025-07-01' }, newerPriceList: null, ...over,
 })
 
@@ -50,7 +50,7 @@ describe('statusBadge', () => {
 
 describe('approveTargets', () => {
   it('takes only ticked rows that have a draft waiting', () =>
-    expect(approveTargets(rows, new Set(['Ana Lee', 'Dee Ray', 'Eve Fox']))).toEqual([{ participantId: 'Dee Ray', draftId: 'd2' }, { participantId: 'Eve Fox', draftId: 'd1' }]))
+    expect(approveTargets(rows, new Set(['Ana Lee:a-1', 'Dee Ray:a-1', 'Eve Fox:a-1']))).toEqual([{ participantId: 'Dee Ray', draftId: 'd2' }, { participantId: 'Eve Fox', draftId: 'd1' }]))
 })
 
 describe('termView', () => {

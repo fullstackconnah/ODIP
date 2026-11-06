@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { PendingAgreementsPanel } from './PendingAgreementNotice'
 import type { PendingAgreementDto } from '@/api/types'
 
-const person = (n: number, canReceiveServices = true): PendingAgreementDto => ({ participantId: `p-${n}`, displayName: `Person ${n}`, draftId: `d-${n}`, version: n, canReceiveServices })
+const person = (n: number, canReceiveServices = true): PendingAgreementDto => ({ participantId: `p-${n}`, displayName: `Person ${n}`, draftId: `d-${n}`, version: n, canReceiveServices, agreementId: `a-${n}`, agreementKind: 'Core' })
 const renderPanel = (waiting: PendingAgreementDto[]) => render(<MemoryRouter><PendingAgreementsPanel waiting={waiting} onClose={vi.fn()} /></MemoryRouter>)
 const START = "Start a participant's services before their agreement's shifts can be rostered."
 
@@ -28,11 +28,21 @@ describe('PendingAgreementsPanel (roster declutter: the status line disclosure; 
     expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Person 2 v2 (not active yet)')
     expect(screen.getByRole('dialog')).toHaveTextContent(START)
     // Still a link to their agreement: that is where it is approved.
-    expect(screen.getByRole('link', { name: 'Person 2 v2: open the service agreement' })).toHaveAttribute('href', '/participants/p-2/agreement-draft')
+    expect(screen.getByRole('link', { name: 'Person 2 v2: open the service agreement' })).toHaveAttribute('href', '/participants/p-2/agreement-draft?agreement=a-2')
   })
 
   it("links each name to that participant's agreement, its accessible name starting with the visible words", () => {
     renderPanel([person(1)])
-    expect(screen.getByRole('link', { name: 'Person 1 v1: open the service agreement' })).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(screen.getByRole('link', { name: 'Person 1 v1: open the service agreement' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?agreement=a-1')
+  })
+
+  it("names each agreement when a participant has two waiting, one line for the participant", () => {
+    renderPanel([
+      { ...person(1), agreementId: "a-1", version: 2 },
+      { ...person(1), draftId: "d-9", agreementId: "a-9", agreementKind: "Trip", agreementName: "Trip to Cairns", version: 1 },
+    ])
+    expect(screen.getAllByRole("listitem")).toHaveLength(1)
+    expect(screen.getByRole("listitem")).toHaveTextContent("Person 1: 2 agreements are waiting for approval: Everyday support, version 2, Trip to Cairns, version 1")
+    expect(screen.getByRole("link", { name: "Trip to Cairns, version 1" })).toHaveAttribute("href", "/participants/p-1/agreement-draft?agreement=a-9")
   })
 })

@@ -16,6 +16,8 @@ type RunningTotalProps = {
   error?: unknown
   onRetry: () => void
   budgetView: AgreementBudgetBreakdownView | null
+  /** The participant has more than one agreement: the budget is shared, so no verdict is given for this one alone. */
+  several?: boolean
   /** Shifts left out of the figures because something is missing from them. */
   leftOut: number
 }
@@ -36,12 +38,12 @@ const mark = (text: string, over?: boolean) => (over ? <span className={`inline-
  * The agreement's one running total, in the wizard's footer beside Back and Next: what a week costs, what the agreement costs and where that leaves the budget. It is the only place
  * the figures are stated outside the Check step. A figure being replaced keeps showing, marked "updating", so it does not flicker.
  */
-export function RunningTotal({ status, answer, refreshing, error, onRetry, budgetView, leftOut }: RunningTotalProps) {
+export function RunningTotal({ status, answer, refreshing, error, onRetry, budgetView, leftOut, several }: RunningTotalProps) {
   const period = answer?.period
   const weekly = answer?.weekly ?? null
   const nothing = status === 'ready' && !!period && pricedNothing(period)
   const failure = status === 'error' ? describeQuoteError(error) : null
-  const budget = status === 'ready' && !nothing ? budgetWords(budgetView) : null
+  const budget = status === 'ready' && !nothing && !several ? budgetWords(budgetView) : null
   const agreement = nothing || !period ? NO_FIGURE : formatCurrency(period.totals.amount)
   const week = weekly && !pricedNothing(weekly) ? formatCurrency(weekly.totals.amount) : null
 

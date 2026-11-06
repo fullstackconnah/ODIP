@@ -16,11 +16,12 @@ import { formatServiceDate } from '@/lib/format'
 import { plural } from '@/lib/format'
 import { queryPhase } from '@/lib/queryPhase'
 import { formatCurrency } from '@/lib/utils'
+import { agreementLabel } from '@/lib/agreementKind'
 import { AgreementActionDialog, type BulkRun } from './agreements/AgreementActionDialog'
 import { AgreementsReview } from './agreements/AgreementsReview'
 import { AgreementsBulkBar } from './agreements/AgreementsBulkBar'
 import { ApproveAgreementsDialog, type ApprovePhase, type ApproveStopped } from './agreements/ApproveAgreementsDialog'
-import { MAX_SELECTED, approveTargets, filterRows, listOptions, parseShow, statusBadge, termView, type Show } from './agreements/agreementRows'
+import { MAX_SELECTED, approveTargets, filterRows, listOptions, namedRowKeys, parseShow, rowTitle, statusBadge, termView, type Show } from './agreements/agreementRows'
 import { NOT_AN_APPROVER_WORDS, NO_REPLY_WORDS, TOO_MANY_WORDS, summarise } from './agreements/outcomeWords'
 
 const SHOW_OPTIONS: { key: Show; label: string }[] = [
@@ -38,8 +39,16 @@ const EMPTY_WORDS: Record<Exclude<Show, 'all'>, string> = {
   'new-price-list': 'Every agreement is on the newest price list.',
 }
 
-const columns: Column<AgreementRow>[] = [
-  { key: 'participantName', header: 'Participant', mobile: 'primary' },
+const columnsFor = (named: ReadonlySet<string>): Column<AgreementRow>[] => [
+  {
+    key: 'participantName', header: 'Participant', mobile: 'primary',
+    render: row => (
+      <span className="block min-w-0">
+        <span className="block break-words">{row.participantName}</span>
+        {named.has(row.key) && <span className="block break-words text-[13px] text-[var(--color-muted-foreground)]">{agreementLabel(row)}</span>}
+      </span>
+    ),
+  },
   {
     key: 'status', header: 'Status', mobile: 'status', minWidth: '9.5rem',
     render: row => { const b = statusBadge(row); return <StatusBadge tone={b.tone} label={b.label} /> },
@@ -115,11 +124,13 @@ export default function AgreementsPage() {
   const canApprove = query.data?.canApprove ?? false
   const shown = useMemo(() => filterRows(rows, { show, list, q }), [rows, show, list, q])
   const lists = useMemo(() => listOptions(rows), [rows])
+  const named = useMemo(() => namedRowKeys(rows), [rows])
+  const columns = useMemo(() => columnsFor(named), [named])
 
   const [picked, setSelected] = useState<Set<string>>(new Set())
   // A filter that hides a ticked row drops it from the selection: Approve only ever acts on what is on screen.
   const selected = useMemo(() => {
-    const visible = new Set(shown.map(r => r.participantId))
+    const visible = new Set(shown.map(r => r.key))
     return new Set([...picked].filter(id => visible.has(id)))
   }, [picked, shown])
 
@@ -128,6 +139,7 @@ export default function AgreementsPage() {
   const [dialog, setDialog] = useState<{ open: boolean; phase: ApprovePhase; progress: number; error: string | null; refused: boolean; results: AgreementApproveResult[]; stopped: ApproveStopped | null }>(
     { open: false, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })
   const [count, setCount] = useState(0)
+  const labels = useRef(new Map<string, { agreementId: string; title: string }>())
   const [action, setAction] = useState<AgreementBulkAction | null>(null)
   const [review, setReview] = useState<BulkRun | null>(null)
   const onProgress = useCallback((done: number) => setDialog(d => ({ ...d, progress: done })), [])
@@ -140,12 +152,15 @@ export default function AgreementsPage() {
     const sent = targets
     setCount(sent.length)
     setDialog(d => ({ ...d, phase: 'running', progress: 0, error: null, refused: false }))
+    // Taken now: once the list refetches, an approved draft is no longer waiting and the rows can't name it.
+    labels.current = new Map(rows.flatMap(r => (r.waiting && selected.has(r.key) ? [[r.waiting.draftId, { agreementId: r.agreementId, title: rowTitle(r, named) }] as const] : [])))
     const run = await approve.mutateAsync(sent)
     if (run.stopped && run.results.length === 0) {
       setDialog(d => ({ ...d, phase: 'confirm', error: failureWords(run.stopped!.error), refused: statusOf(run.stopped!.error) === 403 }))
       return
     }
-    const done = new Set(run.results.filter(r => r.outcome === 'Approved').map(r => r.participantId))
+    const keyOfDraft = new Map(rows.flatMap(r => (r.waiting ? [[r.waiting.draftId, r.key] as const] : [])))
+    const done = new Set(run.results.filter(r => r.outcome === 'Approved').flatMap(r => keyOfDraft.get(r.draftId) ?? []))
     setSelected(new Set([...selected].filter(id => !done.has(id))))
     const noReply = !!run.stopped && hasNoReply(run.stopped.error)
     const s = summarise(run.results, run.stopped?.notSent ?? 0, noReply)
@@ -155,7 +170,7 @@ export default function AgreementsPage() {
       stopped: run.stopped ? { done: run.results.length, total: sent.length, notSent: run.stopped.notSent, noReply } : null,
     }))
   }
-  const chosen = useMemo(() => shown.filter(r => selected.has(r.participantId)), [shown, selected])
+  const chosen = useMemo(() => shown.filter(r => selected.has(r.key)), [shown, selected])
   // Back from the review: the list again, on the drafts it just made.
   const showDrafts = () => { setAction(null); setReview(null); setSelected(new Set()); setParam('show', 'draft') }
   const stripRef = useRef<HTMLDivElement>(null)
@@ -176,7 +191,7 @@ export default function AgreementsPage() {
     window.setTimeout(() => noticesRef.current?.focus(), 0)
   }
 
-  const allShownSelected = shown.length > 0 && shown.every(r => selected.has(r.participantId))
+  const allShownSelected = shown.length > 0 && shown.every(r => selected.has(r.key))
   const filtered = show !== 'all' || !!list || !!q.trim()
   // Only the filters that are set: a person is never told to pick what is already picked.
   const advice = [q.trim() && 'clear the search', show !== 'all' && 'choose All under Show', list && 'choose Any price list'].filter(Boolean)
@@ -212,7 +227,7 @@ export default function AgreementsPage() {
           {phase === 'ready' && (
             <AgreementsBulkBar
               selected={selected.size} approvable={targets.length} canApprove={canApprove} shown={shown.length} allShownSelected={allShownSelected}
-              onToggleShown={() => setSelected(allShownSelected ? new Set() : new Set(shown.slice(0, MAX_SELECTED + 1).map(r => r.participantId)))}
+              onToggleShown={() => setSelected(allShownSelected ? new Set() : new Set(shown.slice(0, MAX_SELECTED + 1).map(r => r.key)))}
               onClear={() => setSelected(new Set())} onAction={setAction}
               onApprove={() => setDialog({ open: true, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })}
             />
@@ -222,11 +237,11 @@ export default function AgreementsPage() {
             <EmptyState icon={CalendarClock} size="inline" title={emptyWords} />
           ) : (
             <DataTable
-              data={shown} columns={columns} keyField="participantId" sortable={false}
+              data={shown} columns={columns} keyField="key" sortable={false}
               loading={phase === 'loading'}
               error={phase === 'error'} onRetry={() => query.refetch()}
               selectable selectedRows={selected} onSelectionChange={setSelected}
-              onRowClick={row => navigate(`/participants/${row.participantId}/agreement-draft`)}
+              onRowClick={row => navigate(`/participants/${row.participantId}/agreement-draft?agreement=${row.agreementId}`)}
             />
           )}
         </div>
@@ -239,7 +254,7 @@ export default function AgreementsPage() {
 
       {action && (
         <AgreementActionDialog
-          key={action} action={action} selected={chosen} onClose={() => setAction(null)} onShowDrafts={showDrafts}
+          key={action} action={action} selected={chosen} named={named} onClose={() => setAction(null)} onShowDrafts={showDrafts}
           onDone={run => { setAction(null); setSelected(new Set()); setReview(run) }}
         />
       )}
@@ -247,7 +262,7 @@ export default function AgreementsPage() {
 
       <ApproveAgreementsDialog
         open={dialog.open} phase={dialog.phase} count={dialog.phase === 'confirm' ? targets.length : count} skipped={skipped} progress={dialog.progress}
-        error={dialog.error} refused={dialog.refused} results={dialog.results} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
+        error={dialog.error} refused={dialog.refused} results={dialog.results} agreementOf={draftId => labels.current.get(draftId)} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
       />
     </div>
   )

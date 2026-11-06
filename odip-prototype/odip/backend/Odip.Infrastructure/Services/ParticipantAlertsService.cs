@@ -339,13 +339,18 @@ public class ParticipantAlertsService
         var agreementEndings = new List<AgreementEndingRow>();
         foreach (var tenantGroup in participants.Where(p => p.IsActive).GroupBy(p => p.TenantId))
             agreementEndings.AddRange(await AgreementEnding.FindAsync(_db, tenantGroup.Select(p => p.Id).ToList(), todayByTenant[tenantGroup.Key], ct));
+        // A participant with several agreements gets each alert named for its agreement; with one there is nothing to tell apart.
+        var endingIds = agreementEndings.Select(e => e.ParticipantId).Distinct().ToList();
+        var several = (await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => endingIds.Contains(d.ParticipantId)).Select(d => new { d.ParticipantId, d.AgreementId }).Distinct().ToListAsync(ct))
+            .GroupBy(x => x.ParticipantId).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
         foreach (var ending in agreementEndings)
         {
             var ended = ending.DaysLeft < 0;
-            // One alert for each ending agreement; a participant's first agreement (the participant's own id, or none recorded) keeps the plain link, any other names itself.
-            var named = ending.AgreementId != default && ending.AgreementId != ending.ParticipantId ? $"?agreement={ending.AgreementId}" : "";
+            // One alert for each ending agreement, always linking to that agreement: the page's no-param default is the most recently changed one.
+            var named = ending.AgreementId != default ? $"?agreement={ending.AgreementId}" : "";
+            var words = AgreementEnding.Describe(ending);
             Add(ending.ParticipantId, ended ? "agreement-ended" : "agreement-ending-soon", ended ? AlertSeverity.Critical : AlertSeverity.Warning,
-                AgreementEnding.Describe(ending), "details", $"/participants/{ending.ParticipantId}/agreement-draft{named}");
+                several.Contains(ending.ParticipantId) ? $"{AgreementEnding.Label(ending)}: {words}" : words, "details", $"/participants/{ending.ParticipantId}/agreement-draft{named}");
         }
 
         // ── Rules 8 to 11: the participant's budget (phase 2b) ──

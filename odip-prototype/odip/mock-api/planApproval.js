@@ -154,7 +154,7 @@ function oldShifts(store, draft) {
 
 function plan(store, participant, draft) {
   const today = providerToday()
-  const newest = Math.max(...(store.drafts[draft.participantId] || []).map((d) => d.version))
+  const newest = Math.max(...(store.drafts[draft.participantId] || []).filter((d) => d.agreementId === draft.agreementId).map((d) => d.version))
   const result = { reasons: [], newPatterns: [], toEnd: [], overlapping: [], from: later(today, draft.agreementStartDate), ready: false }
   if (draft.approval) { result.reasons.push({ code: 'AlreadyApproved', message: `This revision was approved for rostering by ${draft.approval.approvedByName} on ${draft.approval.approvedAt.slice(0, 10)}.` }); return result }
   if (draft.version < newest) { result.superseded = newest; result.reasons.push({ code: 'Superseded', message: SUPERSEDED }); return result }

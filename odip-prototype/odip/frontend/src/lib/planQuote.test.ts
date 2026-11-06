@@ -310,6 +310,8 @@ describe('when a request fails', () => {
       title: 'The draft was not saved', messages: ["Block 'b1': choose at least one day.", "Block 'b2': workers must be between 1 and 10."],
     })
     expect(describeSaveError(axiosError(429)).title).toBe('The server is busy')
+    expect(describeSaveError(axiosError(409, { errors: ['Reload to choose which agreement to edit.'] })).messages).toEqual(['Reload to choose which agreement to edit.'])
+    expect(describeSaveError(axiosError(409)).messages).toEqual(['Reload to choose which agreement to edit.'])
     expect(describeSaveError(axiosError(403)).messages[0]).toContain('Admins and Coordinators')
     expect(describeSaveError(axiosError(413)).title).toBe('The plan is too large to save')
     expect(describeSaveError(axiosError(404, { errors: ['Participant not found.'] })).messages).toEqual(['Participant not found.'])

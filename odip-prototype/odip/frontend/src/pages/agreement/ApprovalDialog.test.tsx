@@ -21,7 +21,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const draft = (): ServiceAgreementDraftDto => ({
-  id: 'd-2', participantId: 'p-1', version: 2, state: 'NSW',
+  id: 'd-2', participantId: 'p-1', agreementId: 'a-1', agreementKind: 'Core', agreementName: null, version: 2, state: 'NSW',
   planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-11-02', agreementEndDate: '2027-03-31',
   blocks: [draftBlock(mondayWednesday('b1')), draftBlock(mondayWednesday('b2', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }))],
   lines: [], isSummary: false, blockCount: 2, lineCount: 0, total: 0, caveats: [],
@@ -621,5 +621,36 @@ describe('ApprovalDialog: who agreed and how (optional)', () => {
     setUp({ contacts })
 
     expect(screen.queryByRole('combobox', { name: 'Agreed by' })).not.toBeInTheDocument()
+  })
+})
+
+describe('ApprovalDialog: patterns that overlap another agreement', () => {
+  const other = { code: "OtherAgreementOverlap", message: "2 of the new weekly patterns overlap in time another agreement's patterns for this participant. Approval is not held up by it." }
+  const line = "2 new shift patterns overlap the times of another agreement's patterns. Check the roster for the same worker booked twice."
+
+  it("says so as an information line when approval is allowed, and not as a reason", () => {
+    ready(preview({ reasons: [other], otherAgreementOverlaps: 2 }))
+    setUp()
+
+    expect(screen.getByText(line)).toBeInTheDocument()
+    expect(screen.queryByText(other.message)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled()
+  })
+
+  it("keeps the lone Superseded view when it comes with the overlap, and still says the overlap", () => {
+    const superseded = { code: "Superseded", message: "A newer revision of this agreement draft exists. Approve the latest revision instead." }
+    ready(preview({ canApprove: false, reasons: [superseded, other], otherAgreementOverlaps: 2 }))
+    setUp()
+
+    expect(screen.queryByText(/Fix each item/)).not.toBeInTheDocument()
+    expect(screen.getByText(superseded.message)).toBeInTheDocument()
+    expect(screen.getByText(line)).toBeInTheDocument()
+    expect(screen.queryByText(other.message)).not.toBeInTheDocument()
+  })
+
+  it("says nothing when no pattern overlaps", () => {
+    setUp()
+
+    expect(screen.queryByText(/another agreement/)).not.toBeInTheDocument()
   })
 })

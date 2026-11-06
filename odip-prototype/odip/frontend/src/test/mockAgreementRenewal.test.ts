@@ -46,7 +46,7 @@ describe.skipIf(!existsSync(SERVER))('the mock answers agreement renewal as the 
     const server = readFileSync(SERVER, 'utf-8')
     const funding = readFileSync(FUNDING, 'utf-8')
 
-    expect(server).toContain("type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status")
+    expect(server).toContain("type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: agreementAlertMessage(id, row)")
     expect(funding).toContain('alertsDto(p, ledgerOf(p.id), agreementAlertsOf(p.id))')
     expect(funding).toContain('alertsDto(person, ledgerOf(id), agreementAlertsOf(id))')
   })

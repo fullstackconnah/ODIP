@@ -170,10 +170,21 @@ function build(body, participantId, existing) {
   }
 }
 
+// The participant's other agreements, counted beside this one: each pool's combined figure adds what they cost to the pool's, and goes over by what the money left after this agreement does not cover. Information only.
+function withOthers(check, others) {
+  const otherCost = others.reduce((sum, o) => sum + o.cost, 0)
+  const pools = (check.pools || []).map((pool, i) => {
+    const left = Math.max(0, pool.periods.reduce((sum, p) => sum + Math.max(0, p.remaining - p.agreementCost), 0))
+    const extra = i === 0 ? otherCost : 0
+    return { ...pool, combinedCost: Math.round((pool.agreementCost + extra) * 100) / 100, combinedOverBy: Math.max(0, Math.round((pool.overBy + extra - left) * 100) / 100) }
+  })
+  return { ...check, pools, otherAgreements: others, combinedOver: pools.some((p) => p.combinedOverBy > 0) && !(check.pools || []).some((p) => p.over) }
+}
+
 /**
  * Routes in the mock's own shape: [pattern, handler(...pathIds, body|searchParams)]. `respond` and `failEnvelope` come from server.js, so the dispatcher's status handling is reused.
  */
-function create({ respond, people = [], priceLines = () => [], agreementAlertsOf = () => [] }) {
+function create({ respond, people = [], priceLines = () => [], agreementAlertsOf = () => [], draftOf = () => null, othersOf = () => [] }) {
   const answer = (result) => (result.status ? respond(result.status, result.body) : result)
   const todayIso = () => new Date().toISOString().slice(0, 10)
   const ledgerOf = (id) => ledgerFor(plansOf, id, todayIso(), settings.approachingPercent)
@@ -217,11 +228,14 @@ function create({ respond, people = [], priceLines = () => [], agreementAlertsOf
     ['participants/:id/funding/agreement-check', (id, body) => {
       const person = people.find((p) => p.id === id)
       if (!person) return respond(404, fail(['Participant not found.']))
+      // A saved revision by id (the participant page asks about the agreement it shows): its blocks and period stand in for the body's.
+      const saved = body.draftId ? draftOf(id, body.draftId) : null
+      if (saved) body = { ...body, blocks: saved.blocks.map((entry) => entry.block), periodFrom: saved.agreementStartDate, periodTo: saved.agreementEndDate, agreementId: saved.agreementId }
       if (!Array.isArray(body.blocks) || !body.periodFrom || !body.periodTo) return respond(400, fail(['Send the draft\'s blocks with the agreement\'s first and last day, or the id of a saved draft.']))
       if (body.periodFrom > body.periodTo) return respond(400, fail(['The agreement period ends before it starts.']))
       const ledger = ledgerOf(id)
       const lines = ledger.planId && ledger.planIsCurrent ? priceLines(body.blocks, body.periodFrom, body.periodTo) : []
-      return agreementCheckOf(ledger, person.planType, lines, body.periodFrom, body.periodTo, todayIso())
+      return withOthers(agreementCheckOf(ledger, person.planType, lines, body.periodFrom, body.periodTo, todayIso()), othersOf(id, body.agreementId).map((o) => ({ ...o, cost: Math.round(priceLines(o.blocks, o.start, o.end).reduce((sum, l) => sum + (l.isPriced ? l.total : 0), 0) * 100) / 100, blocks: undefined, start: undefined, end: undefined })))
     }],
     ['participants/:id/funding/plans', (id, body) => {
       const errors = validate(body)
