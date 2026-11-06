@@ -327,6 +327,8 @@ export interface BudgetSeriesSummary {
   expectedEndDate?: string
   /** An ended plan only: the limit minus what was used (negative is over). */
   leftAtEnd?: number
+  /** The first day used reached the limit, or the day an even spend at the pace so far will (never after the plan end). Absent when neither. */
+  limitReachedOn?: string
 }
 
 export interface BudgetSeriesScope {

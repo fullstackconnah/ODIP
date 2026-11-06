@@ -84,7 +84,7 @@ public sealed class BudgetSeriesService
                 Summary = new BudgetSeriesSummaryDto
                 {
                     Used = line.Summary.Used, EvenToDate = line.Summary.EvenToDate, AheadOfEven = line.Summary.AheadOfEven, Pace = line.Summary.Pace, PaceGapAtEnd = line.Summary.PaceGapAtEnd,
-                    BookedEnd = line.Summary.BookedEnd, ExpectedEnd = line.Summary.ExpectedEnd, ExpectedEndDate = line.Summary.ExpectedEndDate, LeftAtEnd = line.Summary.LeftAtEnd,
+                    BookedEnd = line.Summary.BookedEnd, ExpectedEnd = line.Summary.ExpectedEnd, ExpectedEndDate = line.Summary.ExpectedEndDate, LeftAtEnd = line.Summary.LeftAtEnd, LimitReachedOn = line.Summary.LimitReachedOn,
                 },
                 UnpricedShiftCount = unpriced.Count,
                 UnpricedShiftReasons = unpriced.SelectMany(i => i.NotPricedKinds).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(),

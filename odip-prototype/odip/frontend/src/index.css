@@ -470,8 +470,11 @@
  * The budget graph (Funding tab). Strokes are classes, never presentation attributes, so forced colours can re-point them; pattern and width carry each series' identity there.
  * The readout fades in over 100ms like the rail tooltip; the crosshair and dots follow the pointer with no transition.
  */
-.bt-budget, .bt-used, .bt-booked, .bt-expected, .bt-grid, .bt-today, .bt-cross { fill: none; vector-effect: non-scaling-stroke; }
+.bt-budget, .bt-limit, .bt-used, .bt-booked, .bt-pace, .bt-expected, .bt-renew, .bt-grid, .bt-today, .bt-cross { fill: none; vector-effect: non-scaling-stroke; }
 .bt-budget { stroke: var(--color-chart-budget); stroke-width: 1.5px; }
+.bt-limit { stroke: var(--color-chart-budget); stroke-width: 1.5px; stroke-dasharray: 8 4; }
+.bt-pace { stroke: var(--color-chart-actual); stroke-width: 1.5px; stroke-dasharray: 2 4; stroke-linecap: butt; }
+.bt-renew { stroke: var(--color-muted-foreground); stroke-width: 1px; }
 .bt-used { stroke: var(--color-chart-actual); stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; }
 .bt-booked { stroke: var(--color-chart-actual); stroke-width: 2px; stroke-dasharray: 6 4; stroke-linejoin: round; }
 .bt-expected { stroke: var(--color-chart-expected); stroke-width: 2.5px; stroke-dasharray: 0 5; stroke-linecap: round; }
@@ -481,7 +484,7 @@
 .bt-tick { stroke: var(--color-chart-expected); stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .bt-dot { stroke: var(--color-card); stroke-width: 2px; }
 .bt-dot[data-dot='budget'] { fill: var(--color-chart-budget); }
-.bt-dot[data-dot='used'], .bt-dot[data-dot='booked'] { fill: var(--color-chart-actual); }
+.bt-dot[data-dot='used'], .bt-dot[data-dot='booked'], .bt-dot[data-dot='reach'] { fill: var(--color-chart-actual); }
 .bt-dot[data-dot='expected'] { fill: var(--color-chart-expected); }
 .bt-plot { outline: 2px solid transparent; touch-action: pan-y; }
 .bt-plot:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
@@ -578,8 +581,8 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   /* The tab list is overflow-x-auto and clips anything outside a tab, so tabs draw the outline inside. */
   [role="tab"]:focus-visible { outline-offset: -4px; }
   /* The budget graph (Funding tab): series drawn in system colours; the dash patterns carry the difference. */
-  .bt-budget, .bt-grid, .bt-today { stroke: GrayText; }
-  .bt-used, .bt-booked, .bt-expected, .bt-tick { stroke: CanvasText; }
+  .bt-budget, .bt-limit, .bt-renew, .bt-grid, .bt-today { stroke: GrayText; }
+  .bt-used, .bt-booked, .bt-pace, .bt-expected, .bt-tick { stroke: CanvasText; }
   .bt-cross { stroke: Highlight; }
   .bt-dot[data-dot] { fill: Highlight; stroke: Canvas; }
   .bt-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
