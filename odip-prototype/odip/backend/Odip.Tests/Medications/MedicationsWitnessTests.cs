@@ -307,6 +307,7 @@ public class MedicationsWitnessTests
 
         var dto = new UpdateAdministrationDto
         {
+            AmendmentReason = MedicationAmendmentReason.WrongTime,
             Status = MedicationAdministrationStatus.Administered, AdministeredAt = admin.AdministeredAt,
             WitnessName = typedName, Notes = "Typo fixed",
         };
@@ -340,6 +341,7 @@ public class MedicationsWitnessTests
 
         var dto = new UpdateAdministrationDto
         {
+            AmendmentReason = MedicationAmendmentReason.WrongTime,
             Status = MedicationAdministrationStatus.Administered, AdministeredAt = admin.AdministeredAt,
             WitnessName = "Corrected Name",
         };
@@ -369,7 +371,7 @@ public class MedicationsWitnessTests
         db.SaveChanges();
         var controller = new MedicationsController(db, tenant.Object);
 
-        var dto = new UpdateAdministrationDto { Status = MedicationAdministrationStatus.Refused, Reason = "Participant declined", WitnessName = sentName };
+        var dto = new UpdateAdministrationDto { AmendmentReason = MedicationAmendmentReason.WrongTime, Status = MedicationAdministrationStatus.Refused, Reason = "Participant declined", WitnessName = sentName };
         await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
 
         var saved = await db.MedicationAdministrations.SingleAsync();

@@ -46,6 +46,10 @@
         "notes": null,
         "createdAt": "2026-01-03T01:00:00Z",
         "recordedWithoutCompetency": false,
+        "amendmentReason": null,
+        "amendmentNote": null,
+        "amendedByName": null,
+        "amendedAt": null,
         "supersededByAdministrationId": null,
         "incidentId": null
       },
@@ -116,6 +120,10 @@
         "notes": null,
         "createdAt": "2026-01-03T01:30:00Z",
         "recordedWithoutCompetency": false,
+        "amendmentReason": null,
+        "amendmentNote": null,
+        "amendedByName": null,
+        "amendedAt": null,
         "supersededByAdministrationId": null,
         "incidentId": null
       },
@@ -166,6 +174,10 @@
         "notes": null,
         "createdAt": "2026-01-03T01:00:00Z",
         "recordedWithoutCompetency": false,
+        "amendmentReason": null,
+        "amendmentNote": null,
+        "amendedByName": null,
+        "amendedAt": null,
         "supersededByAdministrationId": null,
         "incidentId": "00000000-0000-0000-0000-000000000301"
       },

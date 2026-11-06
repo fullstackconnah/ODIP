@@ -259,6 +259,7 @@ public class MedicationsAdministeredByTests
 
         var dto = new UpdateAdministrationDto
         {
+            AmendmentReason = MedicationAmendmentReason.WrongTime,
             Status = MedicationAdministrationStatus.Administered,
             AdministeredAt = admin.AdministeredAt,
             AdministeredAtTimeZone = "Pacific/Auckland",
@@ -290,6 +291,7 @@ public class MedicationsAdministeredByTests
 
         var dto = new UpdateAdministrationDto
         {
+            AmendmentReason = MedicationAmendmentReason.WrongTime,
             Status = MedicationAdministrationStatus.Administered,
             AdministeredAt = admin.AdministeredAt,
             AdministeredAtTimeZone = null,

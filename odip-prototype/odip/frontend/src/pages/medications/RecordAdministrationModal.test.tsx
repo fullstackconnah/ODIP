@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
@@ -224,6 +224,7 @@ describe('RecordAdministrationModal amending a high-risk dose', () => {
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed({ witnessName: null })} />)
 
     await user.type(screen.getByLabelText(/^notes/i), 'Typo fixed')
+    await user.selectOptions(screen.getByLabelText(/reason for correction/i), 'WrongTime')
     await user.click(screen.getByRole('button', { name: /save amendment/i }))
 
     expect(screen.queryByText(/second worker must witness/i)).not.toBeInTheDocument()
@@ -238,6 +239,7 @@ describe('RecordAdministrationModal amending a high-risk dose', () => {
     mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed()} />)
 
+    await user.selectOptions(screen.getByLabelText(/reason for correction/i), 'WrongTime')
     await user.click(screen.getByRole('button', { name: /save amendment/i }))
 
     expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
@@ -254,7 +256,8 @@ describe('RecordAdministrationModal amending a high-risk dose', () => {
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: 'Old Typed Name' })} />)
 
     await user.click(screen.getByRole('radio', { name: /^refused$/i }))
-    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.type(screen.getByLabelText(/^reason \*$/i), 'Participant declined')
+    await user.selectOptions(screen.getByLabelText(/reason for correction/i), 'WrongTime')
     await user.click(screen.getByRole('button', { name: /save amendment/i }))
 
     expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
@@ -362,6 +365,7 @@ describe('RecordAdministrationModal client-local timestamp', () => {
     const existing = makeAdministration({ administeredAt: '2026-08-01T01:00:00Z', administeredAtTimeZone: 'Pacific/Auckland' })
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing} />)
 
+    await user.selectOptions(screen.getByLabelText(/reason for correction/i), 'WrongTime')
     await user.click(screen.getByRole('button', { name: /save amendment/i }))
 
     expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
@@ -616,6 +620,80 @@ describe('RecordAdministrationModal backdrop dismiss', () => {
 
     await userEvent.setup().type(screen.getByLabelText(/^notes/i), 'Some notes')
     await clickBackdrop()
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('RecordAdministrationModal amendment reason', () => {
+  const existing = () => makeAdministration()
+  const reasonSelect = () => screen.getByLabelText(/reason for correction/i)
+
+  it('shows the picker first in amend mode, with the options in order, and never in record mode', () => {
+    const { unmount } = renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing()} />)
+
+    expect(within(reasonSelect()).getAllByRole('option').map(o => o.textContent)).toEqual([
+      'Wrong time', 'Wrong dose', 'Recorded for the wrong person', 'Entered in error', 'Other',
+    ])
+    expect(reasonSelect()).toHaveValue('')
+    unmount()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} />)
+    expect(screen.queryByLabelText(/reason for correction/i)).not.toBeInTheDocument()
+  })
+
+  it('refuses a save with no reason, focuses the picker and sends nothing', async () => {
+    const user = userEvent.setup()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing()} />)
+
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(screen.getByText('Required — choose why this record is being corrected')).toBeInTheDocument()
+    expect(reasonSelect()).toHaveFocus()
+    expect(mockAmendMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('needs a note for Other, sends the trimmed note, and clears the error when the reason changes', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing()} />)
+
+    await user.selectOptions(reasonSelect(), 'Other')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+    expect(screen.getByText('Required — say what was wrong')).toBeInTheDocument()
+    expect(screen.getByLabelText(/correction note/i)).toHaveFocus()
+    expect(mockAmendMutateAsync).not.toHaveBeenCalled()
+
+    await user.selectOptions(reasonSelect(), 'WrongDose')
+    expect(screen.queryByText('Required — say what was wrong')).not.toBeInTheDocument()
+
+    await user.selectOptions(reasonSelect(), 'Other')
+    await user.type(screen.getByLabelText(/correction note/i), ' x ')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ amendmentReason: 'Other', amendmentNote: 'x' }),
+    }))
+  })
+
+  it('sends a reason with no note key when the note is empty', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing()} />)
+
+    await user.selectOptions(reasonSelect(), 'WrongTime')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    const data = mockAmendMutateAsync.mock.calls[0][0].data
+    expect(data.amendmentReason).toBe('WrongTime')
+    expect(data.amendmentNote).toBeUndefined()
+  })
+
+  it('marks the form dirty once a reason is chosen, so a backdrop click does not close it', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={false} existingAdministration={existing()} onClose={onClose} />)
+
+    await user.selectOptions(reasonSelect(), 'WrongTime')
+    await user.click(screen.getByRole('dialog').parentElement!)
 
     expect(onClose).not.toHaveBeenCalled()
   })

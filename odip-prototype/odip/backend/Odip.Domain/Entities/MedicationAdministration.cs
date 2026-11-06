@@ -128,6 +128,13 @@ public class MedicationAdministration : ITenantEntity
     /// </summary>
     public bool RecordedWithoutCompetency { get; set; }
 
+    /// <summary>The latest coordinator correction of this record: why, the note, who and when (a UTC instant). Each amend overwrites all four; null on rows never
+    /// amended or amended before these fields existed. Every amendment is also in the audit log.</summary>
+    public MedicationAmendmentReason? AmendmentReason { get; set; }
+    public string? AmendmentNote { get; set; }
+    public string? AmendedByName { get; set; }
+    public DateTime? AmendedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -47,5 +47,9 @@ public static class MedicationMapping
         IncidentId = incidentId,
         RecordedWithoutCompetency = a.RecordedWithoutCompetency,
         SupersededByAdministrationId = a.SupersededByAdministrationId,
+        AmendmentReason = a.AmendmentReason,
+        AmendmentNote = a.AmendmentNote,
+        AmendedByName = a.AmendedByName,
+        AmendedAt = a.AmendedAt,
     };
 }

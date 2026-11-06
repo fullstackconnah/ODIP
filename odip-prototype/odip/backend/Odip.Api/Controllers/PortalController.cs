@@ -832,6 +832,7 @@ public class PortalController : ControllerBase
         WitnessRequestedAt = ProviderLocalTime.AsUtc(a.WitnessRequestedAt),
         WitnessRespondedAt = ProviderLocalTime.AsUtc(a.WitnessRespondedAt),
         PrnOutcomeAt = ProviderLocalTime.AsUtc(a.PrnOutcomeAt),
+        AmendedAt = ProviderLocalTime.AsUtc(a.AmendedAt),
         CreatedAt = ProviderLocalTime.AsUtc(a.CreatedAt),
     };
 
