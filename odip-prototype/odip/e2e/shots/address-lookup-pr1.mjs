@@ -4,6 +4,8 @@
 // five fixed suggestions, an empty answer for "zzz", and a 404 on every call for the no-key state. Nothing real is called and no key exists here.
 // Captures (1280 fine pointer): idle, typing-under-3, suggestions-desktop, active-option-keyboard, none-found, picked-filled, edited-after-pick, no-key-plain.
 // Captures (390 touch): suggestions-390, picked-filled-390. One full page per breakpoint. Prints every check and exits 1 when one fails.
+// PR2 adds callers F (Accommodation create), H (Service locations, the add panel) and J (the enquiry form's booking "Where"):
+// f-suggestions-1280, f-picked-filled-1280, h-suggestions-1280, h-suggestions-390, j-picked-filled-1280, with the same numeric checks on the open list.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
@@ -29,6 +31,12 @@ const SUGGESTIONS = [
   { placeId: 'fake-place-5', mainText: '12 Example Court', secondaryText: 'Mount Gravatt East QLD' },
 ]
 const PICKED = { street: '12 Example Street', suburb: 'Brisbane City', state: 'QLD', postcode: '4000', formattedAddress: '12 Example Street, Brisbane City QLD 4000' }
+const PROVIDER = {
+  id: '00000000-0000-0000-0000-0000000000b1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sample Support Co', address: '1 Example Street, Melbourne VIC 3000',
+  state: 'VIC', gstRegistered: true, isPaceProvider: false, bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null, managerName: null, managerPhone: null,
+  tradingName: null, contactEmail: null, contactPhone: null, website: null, timeZoneId: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', updatedAt: '2026-10-30T01:00:00.0000000Z',
+  invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false,
+}
 
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
@@ -39,6 +47,9 @@ async function openPage(browser, vp, { noKey = false } = {}) {
   const calls = { suggest: [], details: [] }
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login }))
+  // PR2 pages (H): the provider row and an empty places list.
+  await page.route('**/api/v1/provider-settings', (r) => r.fulfill({ json: envelope(PROVIDER) }))
+  await page.route('**/api/v1/service-locations**', (r) => r.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/address/suggest', (r) => {
     const body = JSON.parse(r.request().postData() ?? '{}')
     calls.suggest.push({ url: r.request().url(), method: r.request().method(), q: body.q, session: body.session })
@@ -226,9 +237,107 @@ async function runNoKey(browser, vp) {
   await context.close()
 }
 
+// PR2 callers: measure the open list with the SHAPE section 6 numbers (--control-h / --tap-min read from the page, never free numbers).
+async function measureOpen(page, ctx, vp, input) {
+  const m = await page.evaluate(() => {
+    const el = document.querySelector('input[role="combobox"]')
+    const list = document.querySelector('[role="listbox"]')
+    const popup = list.closest('div[style*="position: fixed"]') ?? list.parentElement
+    const rows = [...list.querySelectorAll('[role="option"]')].map((r) => ({ h: r.getBoundingClientRect().height, sw: r.scrollWidth, cw: r.clientWidth }))
+    const pr = popup.getBoundingClientRect(), ir = el.getBoundingClientRect()
+    const probe = document.createElement('div'); probe.style.cssText = 'position:absolute;visibility:hidden;height:var(--control-h)'; document.body.append(probe)
+    const controlH = probe.getBoundingClientRect().height; probe.remove()
+    return { inputH: ir.height, inputW: ir.width, popupW: pr.width, popup: { l: pr.left, r: pr.right, t: pr.top, b: pr.bottom }, vw: document.documentElement.clientWidth, vh: innerHeight, rows, controlH, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth }
+  })
+  check(`${ctx} input height equals --control-h (${m.controlH})`, Math.abs(m.inputH - m.controlH) <= 0.5, m.inputH)
+  check(`${ctx} every option row is at least --control-h`, m.rows.length > 0 && m.rows.every((r) => r.h >= m.controlH - 0.5), m.rows.map((r) => r.h))
+  check(`${ctx} popup width equals input width (1px)`, Math.abs(m.popupW - m.inputW) <= 1, { popup: m.popupW, input: m.inputW })
+  check(`${ctx} popup sits inside the viewport`, m.popup.l >= 0 && m.popup.r <= m.vw && m.popup.t >= 0 && m.popup.b <= m.vh, { popup: m.popup, vw: m.vw, vh: m.vh })
+  check(`${ctx} no option is wider than its row`, m.rows.every((r) => r.sw <= r.cw), m.rows.map((r) => [r.sw, r.cw]))
+  check(`${ctx} at most 5 options`, m.rows.length >= 1 && m.rows.length <= 5, m.rows.length)
+  if (vp.touch) check(`${ctx} no horizontal overflow at 390`, m.overflow <= 0, m.overflow)
+}
+
+async function openAndType(page, input) {
+  await input.fill('')
+  await input.focus()
+  await input.pressSequentially('12 Exa')
+  await popupOf(page).waitFor({ state: 'visible', timeout: 30_000 })
+  await page.waitForTimeout(400)
+}
+async function pickFirst(page, vp) {
+  if (vp.touch) return popupOf(page).getByRole('option').first().tap()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+}
+const valueIs = (page, v) => page.waitForFunction((x) => document.querySelector('input[role="combobox"]')?.value === x, v, { timeout: 30_000 })
+
+// F: Accommodation create, the Address & contact card.
+async function runF(browser, vp) {
+  const ctx = `F ${vp.name}`
+  const { context, page } = await openPage(browser, vp)
+  try {
+    await page.goto(`${BASE_URL}/accommodation/new`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    const input = page.getByRole('combobox', { name: 'Address' })
+    await input.waitFor({ state: 'visible', timeout: 60_000 })
+    const group = input.locator('xpath=ancestor::*[.//input[@placeholder="e.g. QLD"]][1]')
+    await openAndType(page, input)
+    await measureOpen(page, ctx, vp, input)
+    await crop(page, input, `f-suggestions-${vp.name}.png`, vp, popupOf(page))
+    await pickFirst(page, vp)
+    await valueIs(page, PICKED.street)
+    const got = { street: await input.inputValue(), suburb: await page.getByPlaceholder('e.g. Surfers Paradise').inputValue(), state: await page.getByPlaceholder('e.g. QLD').inputValue(), postcode: await page.getByPlaceholder('e.g. 4217').inputValue() }
+    check(`${ctx} after a pick the four fields hold the fixture values`, got.street === PICKED.street && got.suburb === PICKED.suburb && got.state === PICKED.state && got.postcode === PICKED.postcode, got)
+    await crop(page, group, `f-picked-filled-${vp.name}.png`, vp)
+  } catch (e) { check(`${ctx} script error`, false, String(e.message).split('\n')[0]) }
+  await context.close()
+}
+
+// H: Service locations, the add panel's Address field.
+async function runH(browser, vp) {
+  const ctx = `H ${vp.name}`
+  const { context, page } = await openPage(browser, vp)
+  try {
+    await page.goto(`${BASE_URL}/settings?section=locations`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    await page.getByRole('button', { name: 'Add a place' }).click()
+    const input = page.getByRole('dialog').getByRole('combobox', { name: 'Address' })
+    await input.waitFor({ state: 'visible', timeout: 60_000 })
+    await page.waitForTimeout(400)
+    await openAndType(page, input)
+    await measureOpen(page, ctx, vp, input)
+    await crop(page, input, `h-suggestions-${vp.name}.png`, vp, popupOf(page))
+    await pickFirst(page, vp)
+    await valueIs(page, PICKED.formattedAddress)
+    check(`${ctx} after a pick the field holds the formatted address`, (await input.inputValue()) === PICKED.formattedAddress, await input.inputValue())
+  } catch (e) { check(`${ctx} script error`, false, String(e.message).split('\n')[0]) }
+  await context.close()
+}
+
+// J: the enquiry form's booking "Where".
+async function runJ(browser, vp) {
+  const ctx = `J ${vp.name}`
+  const { context, page } = await openPage(browser, vp)
+  try {
+    await page.goto(`${BASE_URL}/participants/new-inquiry`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    await page.getByLabel('Book the intake visit now').check()
+    const input = page.getByRole('combobox', { name: /^Where/ })
+    await input.waitFor({ state: 'visible', timeout: 60_000 })
+    await openAndType(page, input)
+    await pickFirst(page, vp)
+    await valueIs(page, PICKED.formattedAddress)
+    check(`${ctx} after a pick Where holds the formatted address`, (await input.inputValue()) === PICKED.formattedAddress, await input.inputValue())
+    await crop(page, input, `j-picked-filled-${vp.name}.png`, vp)
+  } catch (e) { check(`${ctx} script error`, false, String(e.message).split('\n')[0]) }
+  await context.close()
+}
+
 const browser = await chromium.launch({ headless: true })
 await run(browser, { name: '1280', width: 1280, height: 900, touch: false })
 await run(browser, { name: '390', width: 390, height: 844, touch: true })
 await runNoKey(browser, { name: '1280', width: 1280, height: 900, touch: false })
+await runF(browser, { name: '1280', width: 1280, height: 900, touch: false })
+await runH(browser, { name: '1280', width: 1280, height: 900, touch: false })
+await runH(browser, { name: '390', width: 390, height: 844, touch: true })
+await runJ(browser, { name: '1280', width: 1280, height: 900, touch: false })
 await browser.close()
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1

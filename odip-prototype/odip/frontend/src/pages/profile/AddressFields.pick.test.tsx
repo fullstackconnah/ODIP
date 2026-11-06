@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { pickAddress } from '@/test/addressPick'
 import { AddressFields } from './sharedFieldControls'
@@ -9,11 +9,11 @@ import { AddressFields } from './sharedFieldControls'
 vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).withAddressApi(await real<typeof import('@/api/client')>()))
 
 function Harness() {
-  const { control, register, setValue, watch, formState: { errors, dirtyFields } } = useForm<ParticipantFormData>({ defaultValues: { addressStreet: '', addressSuburb: 'Old Suburb', addressState: 'NSW', addressPostcode: '2000' } })
+  const { control, register, setValue, formState: { errors, dirtyFields } } = useForm<ParticipantFormData>({ defaultValues: { addressStreet: '', addressSuburb: 'Old Suburb', addressState: 'NSW', addressPostcode: '2000' } })
   return (
     <>
       <AddressFields control={control} register={register} setValue={setValue} errors={errors} />
-      <output data-testid="saved">{JSON.stringify([watch('addressStreet'), watch('addressSuburb'), watch('addressState'), watch('addressPostcode')])}</output>
+      <output data-testid="saved">{JSON.stringify(useWatch({ control, name: ['addressStreet', 'addressSuburb', 'addressState', 'addressPostcode'] }))}</output>
       <output data-testid="dirty">{Object.keys(dirtyFields).sort().join(',')}</output>
     </>
   )
