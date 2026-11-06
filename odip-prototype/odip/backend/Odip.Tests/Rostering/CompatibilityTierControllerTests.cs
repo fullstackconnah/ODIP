@@ -61,6 +61,21 @@ public class CompatibilityTierControllerTests
     private static async Task<Dictionary<Guid, int>> Ranks(OdipDbContext db, Guid participant, CompatibilityLevel level) =>
         await db.StaffParticipantCompatibilities.AsNoTracking().Where(c => c.ParticipantId == participant && c.Level == level).ToDictionaryAsync(c => c.UserId, c => c.Rank);
 
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("   ", null)]
+    [InlineData("  Prefers not to share a car  ", "Prefers not to share a car")]
+    public async Task UpsertExcluded_ReasonIsOptional_BlankIsStoredAsNullAndTextIsTrimmed(string? sent, string? stored)
+    {
+        using var db = TestDb.Create();
+        var (a, p) = (Staff(db, "Aa"), Participant(db));
+
+        var ok = await Put(db, a.Id, p.Id, CompatibilityLevel.Excluded, reason: sent);
+
+        Assert.Equal(stored, Assert.IsType<ApiResponse<CompatibilityRowDto>>(ok.Value).Data!.Reason);
+        Assert.Equal(stored, db.StaffParticipantCompatibilities.Single(c => c.UserId == a.Id).Reason);
+    }
+
     [Fact]
     public async Task UpsertWithRank_MovesTheRowAndRenumbersTheTierOneToN()
     {

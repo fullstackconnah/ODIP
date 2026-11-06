@@ -133,7 +133,7 @@ export default function CompatibilityPage() {
 
   function submit() {
     if (!draft) return
-    const reason = draft.reason.trim()
+    const reason = draft.reason.trim() || null // the reason is optional; blank is no reason
     upsert.mutate(
       { staffId: draft.staffId, participantId: draft.participantId, level: 'Excluded', reason },
       {
@@ -313,9 +313,10 @@ export default function CompatibilityPage() {
                 {`${pair.staffName} is listed as ${MARK[pair.level as keyof typeof MARK].label} for ${pair.participantName}. Marking No takes them off that list${pair.level === 'Preferred' ? `, and off ${pair.participantName}’s profile as preferred staff member if set` : ''}.`}
               </p>
             )}
-            <FormField label="Reason" required hint="Stored with this choice and visible in audit.">
+            <FormField label="Reason (optional)" hint="Stored with this choice and visible in audit.">
               <textarea
                 rows={2}
+                maxLength={1000}
                 value={draft.reason}
                 onChange={e => setDraft(d => d && { ...d, reason: e.target.value })}
                 placeholder="Why can’t they work together?"
@@ -329,10 +330,10 @@ export default function CompatibilityPage() {
             <Button variant="secondary" onClick={() => setDraft(null)}>Cancel</Button>
             <Button
               variant={editing ? 'primary' : 'danger'}
-              disabled={!draft?.staffId || !draft.participantId || !draft.reason.trim() || upsert.isPending}
+              disabled={!draft?.staffId || !draft.participantId || upsert.isPending}
               onClick={submit}
             >
-              {upsert.isPending ? 'Saving…' : editing ? 'Save reason' : 'Mark as No'}
+              {upsert.isPending ? 'Saving…' : editing ? 'Save' : 'Mark as No'}
             </Button>
           </>
         }
