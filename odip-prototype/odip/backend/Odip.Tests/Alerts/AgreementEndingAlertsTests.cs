@@ -18,7 +18,7 @@ namespace Odip.Tests.Alerts;
 public class AgreementEndingAlertsTests
 {
     private static async Task ApprovedEndingAsync(Fixture f, DateOnly end) =>
-        await MarkApprovedAsync(f.Db, await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: end.AddDays(-27), end: end));
+        await MarkApprovedAsync(f.Db, await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: end.AddDays(-27), end: end, agreementId: f.ParticipantId));
 
     /// <summary>The agreement alerts of the fixture's participant, asked as the participant page asks (one participant, archived ones included).</summary>
     private static async Task<List<ParticipantAlertDto>> AgreementAlertsAsync(Fixture f) =>
