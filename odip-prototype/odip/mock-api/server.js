@@ -2640,6 +2640,10 @@ function saveDraft(participantId, body) {
 
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 
+// With several agreements the server names each alert for its agreement (ParticipantAlertsService rule 12, AgreementEnding.Label).
+const AGREEMENT_KIND_LABEL = { NightSupport: 'Night support', ShortTermAccommodation: 'Short-term accommodation', Trip: 'Trip', Other: 'Other' }
+const agreementAlertMessage = (id, row) => (new Set((serviceAgreementDrafts[id] || []).map((d) => d.agreementId)).size > 1 ? `${(row.agreementName || '').trim() || AGREEMENT_KIND_LABEL[row.agreementKind] || 'Everyday support'}: ${row.status}` : row.status)
+
 // Agreement PR 2: the agreements ending, as AgreementEnding.FindAsync finds them on the server. An active participant's newest approved revision ending within 60 days of the provider's today, or
 // ended; a newer revision starting after it (a renewal) hides one still running, and an ended one says it waits. Soonest end first, in the participant alert's words. Revisions are newest first here.
 function agreementsEnding() {
@@ -2743,7 +2747,7 @@ const funding = fundingModule.create({
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
   // Agreement PR 2, rule 12 of ParticipantAlertsService: the agreement ending soon (Warning) or ended (Critical), from the ending list's rule, opening the agreement page.
   agreementAlertsOf: (id) => agreementsEnding().filter((row) => row.participantId === id).map((row) => ({
-    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft?agreement=${row.agreementId}`,
+    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: agreementAlertMessage(id, row), deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft?agreement=${row.agreementId}`,
   })),
 })
 // Intake booking: the booking fields on the enquiry feed, its writes and GET intake-visits. See intakeBooking.js.

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { CombinedWarning, combinedLines } from './CombinedWarning'
+import { CombinedWarning } from './CombinedWarning'
+import { combinedLines } from './combinedLines'
 import type { AgreementCheck } from '@/api/types'
 
 const check = (over: Partial<AgreementCheck>): AgreementCheck => ({

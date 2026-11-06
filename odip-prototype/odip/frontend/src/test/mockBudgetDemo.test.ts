@@ -255,7 +255,7 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
   it('says there is no budget when no plan is running, and prices nothing', () => {
     const check = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0001', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as Record<string, unknown>
 
-    expect(check).toEqual({ hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2027-01-31', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 })
+    expect(check).toEqual({ hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2027-01-31', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0, otherAgreements: [], combinedOver: false })
 
     // Marcus's plan has ended: the answer says so, and when, in the Budgets list's own two words.
     const ended = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0003', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as Record<string, unknown>

@@ -49,7 +49,7 @@ test('agreed shifts wait for approval, then fill from the plus, and a person dro
   await waitingButton.click();
   const waitingPanel = page.getByRole('dialog', { name: 'Agreements waiting for approval' });
   await expect(waitingPanel).toContainText(`Pw ${participant.token} v1`);
-  await expect(waitingPanel.getByRole('link', { name: `Pw ${participant.token} v1: open the service agreement` })).toHaveAttribute('href', `/participants/${participant.id}/agreement-draft`);
+  await expect(waitingPanel.getByRole('link', { name: `Pw ${participant.token} v1: open the service agreement` })).toHaveAttribute('href', `/participants/${participant.id}/agreement-draft?agreement=${participant.id}`);
   expect(await shiftsOf(participant.id)).toEqual([]);
 
   // 2. Approved: Wednesday and Thursday hold Agreed Needs staff shifts, and the waiting button has gone.
