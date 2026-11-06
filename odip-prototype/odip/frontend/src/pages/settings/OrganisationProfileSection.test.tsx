@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { ProviderSettingsDto } from '@/api/types'
+import { DETAILS, pickAddress } from '@/test/addressPick'
 import OrganisationProfileSection from './OrganisationProfileSection'
 import { contactEmailProblem, websiteProblem } from './providerRow'
 
@@ -11,6 +12,7 @@ const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 vi.mock('@/api/client', async importOriginal => ({
   ...await importOriginal<typeof import('@/api/client')>(),
   apiGet: api.get,
+  apiPost: async (url: string) => url === '/address/suggest' ? [(await import('@/test/addressPick')).SUGGESTION] : undefined,
   apiGetWithDefault: async (url: string, fallback: unknown) => (await api.get(url)) ?? fallback,
   apiPut: api.put,
 }))
@@ -58,7 +60,7 @@ describe('Organisation profile: state and manager', () => {
     const group = await screen.findByRole('radiogroup', { name: 'State *' })
     expect(group).toBeRequired()
     expect(group).not.toHaveAttribute('aria-invalid')
-    await user.type(screen.getByRole('textbox', { name: 'Registered business address' }), '1 Example Street')
+    await user.type(screen.getByRole('combobox', { name: 'Registered business address' }), '1 Example Street')
     expect(group).toHaveAttribute('aria-invalid', 'true')
     expect(group).toHaveAccessibleDescription("Choose the organisation's state.")
   })
@@ -70,7 +72,7 @@ describe('Organisation profile: state and manager', () => {
     await user.type(await screen.findByLabelText('Legal name'), 'Jo Care')
     await user.type(screen.getByLabelText('ABN'), '51824753556')
     await user.type(screen.getByLabelText('NDIS registration number'), '4050')
-    await user.type(screen.getByRole('textbox', { name: 'Registered business address' }), '1 Example Street')
+    await user.type(screen.getByRole('combobox', { name: 'Registered business address' }), '1 Example Street')
     expect(screen.getByRole('button', { name: /^Save/ })).toBeDisabled()
 
     await user.click(screen.getByRole('radio', { name: 'WA' }))
@@ -324,5 +326,19 @@ describe('Organisation profile: contact fields', () => {
     expect(await screen.findByDisplayValue('Riverbend Holidays')).toHaveAttribute('readonly')
     for (const label of ['Contact email', 'Contact phone', 'Website']) expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Organisation profile: address lookup (caller G)', () => {
+  it('a pick puts the formatted address in Registered business address and saves it', async () => {
+    api.get.mockImplementation(async (url: string) => url === '/address/details' ? DETAILS : row)
+    const user = userEvent.setup()
+    show()
+    const field = await screen.findByRole('combobox', { name: 'Registered business address' })
+    await user.clear(field)
+    await pickAddress(user, field)
+    expect(field).toHaveValue('12 Example Street, Brisbane City QLD 4000')
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/provider-settings', expect.objectContaining({ address: '12 Example Street, Brisbane City QLD 4000' })))
   })
 })

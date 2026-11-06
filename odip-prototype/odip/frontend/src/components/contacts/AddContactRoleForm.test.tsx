@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { pickAddress } from '@/test/addressPick'
 import AddContactRoleForm from './AddContactRoleForm'
 import { CONTACT_ROLE_TYPE_LABELS, type ParticipantContactRoleDto, type PersonDto } from '@/api/types/contacts'
 import type { ContactRoleType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
+
+vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).withAddressApi(await real<typeof import('@/api/client')>()))
 
 const {
   mockUseParticipant, mockUsePersons, mockCreateMutateAsync, mockUpdateMutateAsync,
@@ -331,5 +334,22 @@ describe('AddContactRoleForm', () => {
       const providerCall = mockCreateMutateAsync.mock.calls.find(c => c[0].data.roleType === 'ProviderContact')
       expect(providerCall?.[0].data).toMatchObject({ registeredProviderFlag: true })
     })
+  })
+})
+
+describe('AddContactRoleForm address lookup (caller E)', () => {
+  it('a pick fills the new person\'s address, suburb, state code and postcode, and they are saved', async () => {
+    const user = userEvent.setup()
+    mockUsePersons.mockReturnValue({ data: [] })
+    render(<AddContactRoleForm participantId="participant-1" mode="create" onSaved={vi.fn()} onCancel={vi.fn()} />)
+    await user.click(screen.getByPlaceholderText('Search people…'))
+    await user.click(screen.getByRole('button', { name: /none of these/i }))
+    await user.type(screen.getByLabelText('First name *'), 'Denise')
+    await pickAddress(user, screen.getByRole('combobox', { name: 'Address' }))
+    expect(screen.getByLabelText('Suburb')).toHaveValue('Brisbane City')
+    expect(screen.getByLabelText('State')).toHaveValue('QLD')
+    expect(screen.getByLabelText('Postcode')).toHaveValue('4000')
+    await user.click(screen.getByRole('button', { name: 'Save contact' }))
+    expect(mockCreateMutateAsync.mock.calls[0][0].data).toMatchObject({ newPersonAddressLine: '12 Example Street', newPersonSuburb: 'Brisbane City', newPersonState: 'QLD', newPersonPostcode: '4000' })
   })
 })
