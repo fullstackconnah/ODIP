@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -33,12 +34,12 @@ const DEFAULTS = {
 
 /** Every Intake step that owns a shared field, in one form. */
 function IntakeSteps() {
-  const { control, register, formState: { errors } } = useForm<ParticipantFormData>({ defaultValues: DEFAULTS })
+  const { control, register, setValue, formState: { errors } } = useForm<ParticipantFormData>({ defaultValues: DEFAULTS })
   const riskEntries = useFieldArray({ control, name: 'riskEntries' })
   const watched = useWatch({ control })
   return (
     <>
-      <ParticipantDetailsStep control={control} register={register} errors={errors} livingArrangementValue={undefined} />
+      <ParticipantDetailsStep control={control} register={register} setValue={setValue} errors={errors} livingArrangementValue={undefined} />
       <NdisFundingStep control={control} register={register} errors={errors} fundingSourceValue={watched.fundingSource} planTypeComplianceWarningValue={null} />
       <SupportNeedsStep control={control} register={register} errors={errors} overnightSupportValue={watched.overnightSupport} />
       <MedicalSummaryStep register={register} />
@@ -84,7 +85,8 @@ async function dropdownOptions(user: ReturnType<typeof userEvent.setup>, id: str
 
 const TEXT_CONTROLS = [
   'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'phone', 'email',
-  'addressStreet', 'addressSuburb', 'addressPostcode',
+  // addressStreet is the address lookup's combobox on Intake and still a plain input on Profile until the lookup reaches Profile's AddressFields (PR2), which restores it here.
+  'addressSuburb', 'addressPostcode',
   'ndisNumber', 'planStartDate', 'planEndDate',
   'medicalSummary', 'expressiveSkills', 'receptiveSkills', 'equipmentRequirements', 'behaviourRiskSummary',
   'mobilityAidWheelchair', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
@@ -93,7 +95,7 @@ const DROPDOWNS = ['addressState', 'fundingSource', 'planType', 'supportRatio', 
 
 async function collect(Steps: () => React.JSX.Element) {
   const user = userEvent.setup()
-  render(<Steps />)
+  render(<MemoryRouter><Steps /></MemoryRouter>)
   const signatures = Object.fromEntries([...TEXT_CONTROLS, ...DROPDOWNS].map((id) => [id, signature(id)]))
   const options: Record<string, string[]> = {}
   for (const id of DROPDOWNS) options[id] = await dropdownOptions(user, id)

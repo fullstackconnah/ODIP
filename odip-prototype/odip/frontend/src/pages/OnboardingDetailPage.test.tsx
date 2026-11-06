@@ -16,6 +16,9 @@ const { mockProviderToday, mockUseOnboarding, mockUseParticipant, beginServices,
   recordAgreement: { mutate: vi.fn(), isPending: false, error: null as unknown, reset: vi.fn() },
   recordExplained: { mutate: vi.fn(), isPending: false, error: null as unknown, reset: vi.fn() },
 }))
+vi.mock('./funding/FundingPlanEditor', () => ({
+  FundingPlanEditor: ({ open, participantId }: { open: boolean; participantId: string }) => (open ? <div role="dialog" aria-label="Plan budget editor">Editor for {participantId}</div> : null),
+}))
 vi.mock('@/api/hooks', () => ({
   useProviderTodayQuery: mockProviderToday,
   useOnboarding: mockUseOnboarding,
@@ -29,12 +32,12 @@ vi.mock('@/api/hooks', () => ({
 const open: ParticipantOnboardingDto = {
   participantId: 'p-1', isReady: false, servicesStartedAt: null, agreementSignedOn: null, noAgreementReason: null, complaintsExplainedOn: null, rightsExplainedOn: null,
   items: [
-    { key: 'profile', label: 'Profile details', done: true, missing: null },
-    { key: 'serviceNeeds', label: 'Service needs', done: false, missing: 'No current agreement draft with dated, priced support lines.' },
-    { key: 'agreement', label: 'Signed agreement', done: false, missing: 'Record the date it was signed, or why there is no written agreement.' },
-    { key: 'complaints', label: 'Told how to make a complaint', done: false, missing: 'Record the date you explained how to make a complaint.' },
-    { key: 'rights', label: 'Rights explained', done: false, missing: 'Record the date you explained their rights.' },
-    { key: 'funding', label: 'Funding', done: false, missing: 'No plan budget recorded.' },
+    { key: 'profile', label: 'Profile details', done: true, optional: false, missing: null },
+    { key: 'serviceNeeds', label: 'Service needs', done: false, optional: false, missing: 'No current agreement draft with dated, priced support lines.' },
+    { key: 'agreement', label: 'Signed agreement', done: false, optional: false, missing: 'Record the date it was signed, or why there is no written agreement.' },
+    { key: 'complaints', label: 'Told how to make a complaint', done: false, optional: false, missing: 'Record the date you explained how to make a complaint.' },
+    { key: 'rights', label: 'Rights explained', done: false, optional: false, missing: 'Record the date you explained their rights.' },
+    { key: 'funding', label: 'Funding', done: false, optional: false, missing: 'No plan budget recorded.' },
   ],
 }
 
@@ -124,7 +127,7 @@ describe('OnboardingDetailPage: the list', () => {
 const MINE = "Record on the Funding tab that you're this participant's my provider."
 const withMyProvider: ParticipantOnboardingDto = {
   ...open,
-  items: [...open.items, { key: 'myProvider', label: 'Recorded as my provider', done: false, missing: MINE }],
+  items: [...open.items, { key: 'myProvider', label: 'Recorded as my provider', done: false, optional: false, missing: MINE }],
 }
 
 describe('OnboardingDetailPage: the my provider item', () => {
@@ -424,5 +427,71 @@ describe('OnboardingDetailPage: fix round 2', () => {
     await user.click(screen.getByRole('button', { name: 'Begin services' }))
 
     expect(within(screen.getByRole('alertdialog')).queryByText(/archived participant/)).not.toBeInTheDocument()
+  })
+})
+
+describe('OnboardingDetailPage: optional items', () => {
+  const required = open.items.slice(0, 5).map((i, n) => ({ ...i, done: n < 4 }))
+  const withOptional = (extra: ParticipantOnboardingDto['items']): ParticipantOnboardingDto => ({ ...open, items: [...required, ...extra] })
+  const BUDGET = { key: 'budget' as const, label: 'Plan budget added', done: false, optional: true, missing: 'No current plan budget recorded.' }
+  const MINE_OPT = { key: 'myProvider' as const, label: 'Recorded as my provider', done: true, optional: true, missing: null }
+
+  it('heads an Optional group under the list, counting only required items in "n of m done"', () => {
+    mockUseOnboarding.mockReturnValue({ data: withOptional([BUDGET, MINE_OPT]), isLoading: false, isError: false })
+    renderPage()
+
+    expect(screen.getByRole('heading', { level: 2, name: '4 of 5 done' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Optional · 1 of 2 done' })).toBeInTheDocument()
+    expect(screen.getByText('Not counted, and never stops Make active.')).toBeInTheDocument()
+    const rows = within(screen.getByRole('list', { name: /^Optional/ })).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('Optional, to do')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Optional, done')).toBeInTheDocument()
+  })
+
+  it('shows no Optional group when no item is optional', () => {
+    renderPage()
+
+    expect(screen.queryByRole('heading', { name: /^Optional/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: '1 of 6 done' })).toBeInTheDocument()
+  })
+
+  it('leaves optional items out of the Make active and Begin services lists', async () => {
+    mockUseOnboarding.mockReturnValue({ data: withOptional([BUDGET]), isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Make active' }))
+    let dialog = screen.getByRole('alertdialog', { name: 'Make Jamie Rivers active?' })
+    expect(within(dialog).getByText('1 checklist item is still open:')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Plan budget added')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await user.click(screen.getByRole('button', { name: 'Begin services' }))
+    dialog = screen.getByRole('alertdialog', { name: 'Begin services for Jamie Rivers?' })
+    expect(within(dialog).queryByText('Plan budget added')).not.toBeInTheDocument()
+  })
+
+  it('offers "Add plan budget" for an open Budget item and opens the plan budget editor for a participant funded another way', async () => {
+    mockUseOnboarding.mockReturnValue({ data: withOptional([BUDGET]), isLoading: false, isError: false })
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: false, fundingSource: 'Other', planType: 'SelfManaged' }, isLoading: false })
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(screen.queryByRole('dialog', { name: 'Plan budget editor' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add plan budget' }))
+    expect(screen.getByRole('dialog', { name: 'Plan budget editor' })).toHaveTextContent('Editor for p-1')
+  })
+
+  it('links a done Budget item to the Funding tab, and gives a read-only role no fix', () => {
+    mockUseOnboarding.mockReturnValue({ data: withOptional([{ ...BUDGET, done: true, missing: null }]), isLoading: false, isError: false })
+    const view = renderPage()
+    expect(screen.getByRole('link', { name: 'Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    view.unmount()
+
+    asRole('Viewer')
+    mockUseOnboarding.mockReturnValue({ data: withOptional([BUDGET]), isLoading: false, isError: false })
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Add plan budget' })).not.toBeInTheDocument()
   })
 })

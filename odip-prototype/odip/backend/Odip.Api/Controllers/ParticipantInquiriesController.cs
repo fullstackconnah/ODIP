@@ -115,10 +115,11 @@ public class ParticipantInquiriesController : ControllerBase
         {
             // Everyone in onboarding stays listed, every item done or not: only "Make active" moves them on. The page counts the same "n of N".
             var detail = BuildDetail(p, rowsByParticipant.GetValueOrDefault(p.Id) ?? BlankOnboarding(p), facts);
+            var required = detail.Items.Where(i => !i.Optional).ToList();   // optional items are never counted
             result.Add(new ParticipantOnboardingWorklistDto
             {
                 ParticipantId = p.Id, FullName = p.FullName, ServicesStartedAt = p.ServicesStartedAt,
-                CompletedSteps = detail.Items.Count(i => i.Done), TotalSteps = detail.Items.Count, FirstMissing = detail.Items.FirstOrDefault(i => !i.Done)?.Label,
+                CompletedSteps = required.Count(i => i.Done), TotalSteps = required.Count, FirstMissing = required.FirstOrDefault(i => !i.Done)?.Label,
             });
         }
         return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(result));
@@ -396,12 +397,13 @@ public class ParticipantInquiriesController : ControllerBase
     /// The derived checks are <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> and <see cref="ParticipantReadinessGate.ServiceNeedsParticipants"/>,
     /// the same ones the roster issues and the strict gate read.
     /// </summary>
-    private sealed record OnboardingFacts(HashSet<Guid> ServiceNeedsDone, HashSet<Guid> FundingRecorded, HashSet<Guid> AnyPlan, HashSet<Guid> MyProviderRecorded);
+    private sealed record OnboardingFacts(HashSet<Guid> ServiceNeedsDone, HashSet<Guid> FundingRecorded, HashSet<Guid> AnyPlan, HashSet<Guid> MyProviderRecorded,
+        IReadOnlyDictionary<string, string> Modes, HashSet<Guid> BudgetRecorded);
 
     /// <summary>The checklist's three queried facts for a set of participants of one tenant, one query each (the plan history only when asked), plus one for the my-provider record of each current plan, so the worklist costs a fixed few queries however many are listed.</summary>
     private async Task<OnboardingFacts> LoadFactsAsync(List<Guid> ids, Guid tenantId, DateOnly today, bool withPlanHistory, CancellationToken ct)
     {
-        if (ids.Count == 0) return new(new(), new(), new(), new());
+        if (ids.Count == 0) return new(new(), new(), new(), new(), OnboardingItemModeRules.Defaults, new());
         var serviceNeeds = (await ParticipantReadinessGate.ServiceNeedsParticipants(_db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
         var funding = (await ParticipantReadinessGate.FundingRecordedParticipants(_db, today).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
         // The worklist shows only Done, the counts and the label, so it doesn't need the plan history behind the funding "Missing" wording.
@@ -414,7 +416,11 @@ public class ParticipantInquiriesController : ControllerBase
         var myProvider = plans.GroupBy(f => f.ParticipantId)
             .Where(g => (g.FirstOrDefault(f => f.PlanStart <= today && today <= f.PlanEnd) ?? g.OrderByDescending(f => f.PlanStart).First()).MyProvider == MyProviderRecord.Recorded)
             .Select(g => g.Key).ToHashSet();
-        return new(serviceNeeds, funding, anyPlan, myProvider);
+        // Optional items (owner 2026-11-06): the organisation's own setting, one explicit-tenant read per request; no row means the defaults.
+        var modes = OnboardingItemModeRules.Effective(await _db.ProviderSettings.Where(s => s.TenantId == tenantId).Select(s => s.OnboardingItemModes).FirstOrDefaultAsync(ct));
+        // Any plan of any funding source that has not ended (not FundingRecordedParticipants, which is vacuously true for funding that is not NDIS).
+        var budget = plans.Where(f => f.PlanEnd >= today).Select(f => f.ParticipantId).ToHashSet();
+        return new(serviceNeeds, funding, anyPlan, myProvider, modes, budget);
     }
 
     private async Task<ParticipantOnboardingDto> BuildDetailAlone(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct) =>
@@ -430,8 +436,8 @@ public class ParticipantInquiriesController : ControllerBase
             Item("profile", "Profile details", profileMissing.Count == 0, $"Missing: {string.Join(", ", profileMissing)}."),
             Item("serviceNeeds", "Service needs", serviceNeedsDone, "No current agreement draft with dated, priced support lines."),
             Item("agreement", "Signed agreement", agreementDone, "Record the date it was signed, or why there is no written agreement."),
-            Item("complaints", "Told how to make a complaint", onboarding.ComplaintsExplainedOn != null, "Record the date you explained how to make a complaint."),
-            Item("rights", "Rights explained", onboarding.RightsExplainedOn != null, "Record the date you explained their rights."),
+            Item("complaints", "Told how to make a complaint", onboarding.ComplaintsExplainedOn != null, "Record the date you explained how to make a complaint.", facts.Modes["complaints"] == OnboardingItemModeRules.Optional),
+            Item("rights", "Rights explained", onboarding.RightsExplainedOn != null, "Record the date you explained their rights.", facts.Modes["rights"] == OnboardingItemModeRules.Optional),
         };
         if (participant.FundingSource == ParticipantFundingSource.Ndis)
         {
@@ -443,18 +449,21 @@ public class ParticipantInquiriesController : ControllerBase
             items.Add(Item("funding", "Funding", fundingDone, missing));
             // Self-managed funds have no NDIA claim to be recorded for. Open items never stop Make active, this one included.
             if (participant.PlanType is PlanType.AgencyManaged or PlanType.PlanManaged)
-                items.Add(Item("myProvider", "Recorded as my provider", facts.MyProviderRecorded.Contains(participant.Id), "Record on the Funding tab that you're this participant's my provider."));
+                items.Add(Item("myProvider", "Recorded as my provider", facts.MyProviderRecorded.Contains(participant.Id), "Record on the Funding tab that you're this participant's my provider.", facts.Modes["myProvider"] == OnboardingItemModeRules.Optional));
         }
+        // The funding item exists exactly when the source is NDIS, so the budget item shows only when Funding is absent. Last, and never counted.
+        if (facts.Modes["budget"] == OnboardingItemModeRules.Optional && participant.FundingSource != ParticipantFundingSource.Ndis)
+            items.Add(Item("budget", "Plan budget added", facts.BudgetRecorded.Contains(participant.Id), "No current plan budget recorded.", true));
         return new ParticipantOnboardingDto
         {
-            ParticipantId = participant.Id, Items = items, IsReady = items.All(i => i.Done), ServicesStartedAt = participant.ServicesStartedAt,
+            ParticipantId = participant.Id, Items = items, IsReady = items.Where(i => !i.Optional).All(i => i.Done), ServicesStartedAt = participant.ServicesStartedAt,
             AgreementSignedOn = onboarding.AgreementSignedOn, NoAgreementReason = onboarding.NoAgreementReason,
             ComplaintsExplainedOn = onboarding.ComplaintsExplainedOn, RightsExplainedOn = onboarding.RightsExplainedOn,
         };
     }
 
-    private static OnboardingChecklistItemDto Item(string key, string label, bool done, string missing) =>
-        new() { Key = key, Label = label, Done = done, Missing = done ? null : missing };
+    private static OnboardingChecklistItemDto Item(string key, string label, bool done, string missing, bool optional = false) =>
+        new() { Key = key, Label = label, Done = done, Missing = done ? null : missing, Optional = optional };
 
     /// <summary>What "Profile details" still needs, in words. KEEP IN STEP with <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> (a test holds them together).</summary>
     internal static List<string> ProfileMissing(Participant p)

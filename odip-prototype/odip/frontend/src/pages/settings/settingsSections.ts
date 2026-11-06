@@ -17,7 +17,7 @@ export type SettingsPerms = Pick<
 
 export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
-  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'compliance' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'locations' | 'security'
+  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'compliance' | 'billing' | 'safety' | 'onboarding' | 'alerts' | 'rostering' | 'locations' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'referral-sources' | 'holidays'
   | 'import' | 'export' | 'retention' | 'integrations' | 'failed-sends'
@@ -62,6 +62,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'compliance', label: 'Compliance dates', group: 'Organisation', visible: p => (p.isAdmin || p.isSuperAdmin || p.isCoordinator) && p.hasOrganisation, readOnly: onlyAdminsChange, description: 'When your registration, audits, insurance and key personnel checks are due. Admins get a task 90 days before each date.' },
   { key: 'billing', label: 'Billing details', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice." },
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What we stop, and what we only warn about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
+  { key: 'onboarding', label: 'Onboarding checklist', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "Which extra items every participant's onboarding checklist shows. Optional items never stop a participant being made active, and every change is recorded in the audit log." },
   { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "How early we warn before a staff qualification or a participant's plan expires." },
   { key: 'rostering', label: 'Rostering rules', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How many hours a week the roster allows before it warns, and how far a finished shift can drift from the roster before it needs review.' },
   { key: 'locations', label: 'Service locations', group: 'Organisation', visible: withOrganisation, description: 'The places your team works, like a day centre or a hub. A shift can point at one, so the worker sees where to go.' },

@@ -9,6 +9,7 @@ import { FormField, labelClass } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
+import { useQuickAdd } from '@/hooks/useQuickAdd'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { ROUTINE_CATEGORIES } from '@/api/types/enums'
@@ -166,6 +167,8 @@ export default function RoutinesTab({ participantId }: { participantId: string |
     setModalError(null)
     setModalState({ mode: 'create' })
   }
+  const addRef = useRef<HTMLButtonElement>(null)
+  useQuickAdd(openCreate, { enabled: canWriteRoutines && !!participantId, focusRef: addRef })
 
   function openEdit(routine: ParticipantRoutineDto) {
     setForm({
@@ -243,7 +246,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">Routines &amp; Specifics</h2>
         {canWriteRoutines && participantId && (
-          <Button onClick={openCreate}>
+          <Button ref={addRef} onClick={openCreate}>
             <Plus className="w-4 h-4" /> New routine
           </Button>
         )}
