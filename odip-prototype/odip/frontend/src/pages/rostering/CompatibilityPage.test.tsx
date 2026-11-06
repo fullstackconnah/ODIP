@@ -137,6 +137,40 @@ describe('CompatibilityPage: the table', () => {
     await waitFor(() => expect(cellFor('Jamie Chen', 'Sam Taylor')).toHaveTextContent('No'))
   })
 
+  it.each([
+    ['', null],
+    ['   ', null],
+    ['  Asked to be apart  ', 'Asked to be apart'],
+  ])('marks No with the reason %j optional: it is sent as %j', async (typed, sent) => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility?view=table')
+    await screen.findByRole('grid')
+    await user.click(screen.getByRole('button', { name: 'Mark as No' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByLabelText(/^Staff/))
+    await user.click(await screen.findByRole('option', { name: 'Sam Taylor' }))
+    await user.click(within(dialog).getByLabelText(/^Participant/))
+    await user.click(await screen.findByRole('option', { name: 'Jamie Chen' }))
+    const reason = within(dialog).getByLabelText('Reason (optional)')
+    expect(reason).not.toBeRequired()
+    expect(reason).toHaveAttribute('maxlength', '1000')
+    if (typed) await user.type(reason, typed)
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as No' }))
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's1', participantId: 'p2', level: 'Excluded', reason: sent })
+  })
+
+  it('saves an edited reason cleared to blank as null', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility')
+    await screen.findByText('Past conflict')
+    await user.click(screen.getByRole('button', { name: 'Options for Morgan Lee' }))
+    await user.click(await screen.findByRole('option', { name: 'Edit reason…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.clear(within(dialog).getByLabelText(/Reason/))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's2', participantId: 'p1', level: 'Excluded', reason: null })
+  })
+
   it('opens the fixed-pair dialog on N, edits a No on N, and removes one on Delete', async () => {
     const user = userEvent.setup()
     renderPage('/rostering/compatibility?view=table')
@@ -254,7 +288,7 @@ describe('CompatibilityPage: the participant board', () => {
     await user.click(await screen.findByRole('button', { name: 'Options for Sam Taylor' }))
     await user.click(await screen.findByRole('option', { name: 'Mark No…' }))
     const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).queryByRole('button', { name: 'Save reason' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText(/^Staff/)).not.toBeInTheDocument()
     expect(within(dialog).getByText(/Sam Taylor is listed as Preferred for Alex Rivera\. Marking No takes them off that list/)).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText(/Reason/), 'Asked to be apart')
@@ -284,7 +318,7 @@ describe('CompatibilityPage: the participant board', () => {
     await user.click(await screen.findByRole('option', { name: 'Edit reason…' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByLabelText(/Reason/)).toHaveValue('Past conflict')
-    expect(within(dialog).getByRole('button', { name: 'Save reason' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
   it('shows a reader the board with no menus and no Add buttons', async () => {
