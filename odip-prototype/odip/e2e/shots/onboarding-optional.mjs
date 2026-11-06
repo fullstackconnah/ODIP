@@ -83,8 +83,8 @@ const open = async ({ path: route, role = 'Admin', width, height, touch, scheme 
 }
 
 const settings = (o) => open({ path: '/settings?section=onboarding', ready: (p) => p.getByRole('radiogroup', { name: 'Told how to make a complaint' }), ...o })
-const detail = (o) => open({ path: `/onboarding/${ID}`, ready: (p) => p.getByRole('heading', { name: /\d+ of \d+ done$/ }), ...o })
-const crop = async (t, name, locator = t.main, also) => { checks.push(checkCropHolds(await cropElement(t.page, locator, path.join(OUT_DIR, name), { natural: true, also }))) }
+const detail = (o) => open({ path: `/onboarding/${ID}`, ready: (p) => p.locator('#checklist-heading'), ...o })
+const crop = async (t, name, locator = t.main, also, pad = 16) => { checks.push(checkCropHolds(await cropElement(t.page, locator, path.join(OUT_DIR, name), { natural: true, also, pad }))) }
 const overflow = async (t, ctx) => { const w = await t.page.evaluate(() => document.documentElement.scrollWidth); check('no horizontal overflow at 390', ctx, { scrollWidth: w }, w <= 390) }
 const optionHeight = (page, group) => page.getByRole('radiogroup', { name: group }).getByRole('radio').first().evaluate((el) => el.getBoundingClientRect().height)
 
@@ -154,7 +154,7 @@ try {
   const dialog = t.page.getByRole('dialog').first()
   await dialog.waitFor({ state: 'visible', timeout: 15_000 })
   await t.page.waitForTimeout(400)
-  await crop(t, 'onboarding-budget-open.png', dialog)
+  await crop(t, 'onboarding-budget-open.png', dialog, undefined, 0) // the editor is a full-height drawer: no pad to take
   await t.context.close()
 
   for (const [kind, name] of [['all-done', 'onboarding-all-done.png'], ['none-optional', 'onboarding-none-optional.png']]) {
