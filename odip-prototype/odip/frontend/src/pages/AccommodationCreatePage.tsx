@@ -1,9 +1,10 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm } from 'react-hook-form'
+import { useController, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateAccommodation, useUpdateAccommodation, useAccommodationDetail } from '@/api/hooks'
+import { AddressField } from '@/components/AddressField'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
@@ -56,7 +57,7 @@ export default function AccommodationCreatePage() {
   const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = pageQuery
   const mutation = isEdit ? updateAccommodation : createAccommodation
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
+  const { register, control, setValue, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
     resolver: zodResolver(accommodationSchema),
     defaultValues: {
       isFullyModified: false,
@@ -64,6 +65,9 @@ export default function AccommodationCreatePage() {
       isWheelchairAccessible: false,
     },
   })
+
+  // The lookup's combobox is a controlled field; the other three stay registered inputs and a pick sets them as typed values would be: dirty and validated.
+  const { field: addressField } = useController({ control, name: 'address' })
 
   useFillOnce(existing, record => {
     reset({
@@ -176,7 +180,18 @@ export default function AccommodationCreatePage() {
         <Card title="Address & contact">
           <div className={formGrid}>
             <FormField label="Address" className={span.long}>
-              <input {...register('address')} placeholder="e.g. 123 Ocean Drive" />
+              <AddressField
+                value={addressField.value ?? ''}
+                onChange={addressField.onChange}
+                onBlur={addressField.onBlur}
+                placeholder="e.g. 123 Ocean Drive"
+                onPick={a => {
+                  const filled = { shouldDirty: true, shouldValidate: true }
+                  setValue('suburb', a.suburb, filled)
+                  setValue('state', a.state, filled)
+                  setValue('postcode', a.postcode, filled)
+                }}
+              />
             </FormField>
 
             <FormField label="Suburb" className={span.short}>

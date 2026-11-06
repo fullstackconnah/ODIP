@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { pickAddress } from '@/test/addressPick'
 import AccommodationCreatePage from './AccommodationCreatePage'
 import type { AccommodationDetailDto } from '@/api/types/accommodation'
+
+vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).withAddressApi(await real<typeof import('@/api/client')>()))
 
 const { mockUseAccommodationDetail, mockCreateMutateAsync, mockUpdateMutateAsync } = vi.hoisted(() => ({
   mockUseAccommodationDetail: vi.fn(),
@@ -130,5 +133,20 @@ describe('AccommodationCreatePage — editing a record that has not loaded', () 
     renderEditPage()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
     expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('isActive')
+  })
+})
+
+describe('AccommodationCreatePage address lookup (caller F)', () => {
+  it('a pick fills the address, suburb, state code and postcode, and they are submitted', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ id: 'a1' })
+    renderCreatePage()
+    await user.type(screen.getByPlaceholderText(/sunrise beach house/i), 'Test Property')
+    await pickAddress(user, screen.getByRole('combobox', { name: 'Address' }))
+    expect(screen.getByPlaceholderText(/surfers paradise/i)).toHaveValue('Brisbane City')
+    expect(screen.getByPlaceholderText('e.g. QLD')).toHaveValue('QLD')
+    expect(screen.getByPlaceholderText('e.g. 4217')).toHaveValue('4000')
+    await user.click(screen.getByRole('button', { name: /create accommodation/i }))
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ address: '12 Example Street', suburb: 'Brisbane City', state: 'QLD', postcode: '4000' })
   })
 })

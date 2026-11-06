@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react'
+import { AddressField } from '@/components/AddressField'
 import { Plus } from 'lucide-react'
 import { useParticipant, usePersons, useCreateContactRole, useUpdateContactRole } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
@@ -608,7 +609,11 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
               <input value={form.newOrganisation} onChange={e => setForm(f => ({ ...f, newOrganisation: e.target.value }))} />
             </FormField>
             <FormField label="Address">
-              <input value={form.newAddressLine} onChange={e => setForm(f => ({ ...f, newAddressLine: e.target.value }))} />
+              <AddressField
+                value={form.newAddressLine}
+                onChange={newAddressLine => setForm(f => ({ ...f, newAddressLine }))}
+                onPick={a => setForm(f => ({ ...f, newSuburb: a.suburb, newState: a.state, newPostcode: a.postcode }))}
+              />
             </FormField>
             <FormField label="Suburb">
               <input value={form.newSuburb} onChange={e => setForm(f => ({ ...f, newSuburb: e.target.value }))} />

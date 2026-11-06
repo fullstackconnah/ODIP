@@ -7,7 +7,7 @@
  * wizard, which never opts in) — see sharedFieldControls.tsx.
  */
 import { Controller } from 'react-hook-form'
-import type { Control, UseFormRegister, FieldErrors } from 'react-hook-form'
+import type { Control, UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
 import { CheckboxField } from '@/components/CheckboxField'
@@ -23,9 +23,10 @@ import { formGrid, span } from '@/lib/formGrid'
 
 const EMPTY: ReadonlySet<string> = new Set()
 
-export function KeyIdentifiersStep({ control, register, errors, participant, activeStaff, hiddenFields, sharedFieldsEditable = false }: {
+export function KeyIdentifiersStep({ control, register, setValue, errors, participant, activeStaff, hiddenFields, sharedFieldsEditable = false }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
+  setValue: UseFormSetValue<ParticipantFormData>
   errors: FieldErrors<ParticipantFormData>
   participant: ParticipantDetailDto
   activeStaff: { id: string; fullName: string }[]
@@ -50,7 +51,7 @@ export function KeyIdentifiersStep({ control, register, errors, participant, act
 
           <Card title="Address (from Intake)">
             <div className={formGrid}>
-              <AddressFields control={control} register={register} errors={errors} />
+              <AddressFields control={control} register={register} setValue={setValue} errors={errors} />
             </div>
           </Card>
 

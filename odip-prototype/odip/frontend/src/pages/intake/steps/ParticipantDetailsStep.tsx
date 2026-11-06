@@ -28,7 +28,7 @@ import { ADDRESS_STATE_ITEMS } from '../intakeOptions'
  * The street box, with the address lookup. A component of its own because FormField hands its id and aria props to its direct child, and a bare
  * Controller would swallow them (the label would point at nothing). A pick sets the other address fields as a typed value would: dirty and validated.
  */
-function AddressStreet({ control, setValue, ...aria }: { control: Control<ParticipantFormData>; setValue: UseFormSetValue<ParticipantFormData> } & Omit<AddressFieldProps, 'value' | 'onChange' | 'onPick'>) {
+export function AddressStreet({ control, setValue, ...aria }: { control: Control<ParticipantFormData>; setValue: UseFormSetValue<ParticipantFormData> } & Omit<AddressFieldProps, 'value' | 'onChange' | 'onPick'>) {
   const { field } = useController({ control, name: 'addressStreet' })
   return (
     <AddressField

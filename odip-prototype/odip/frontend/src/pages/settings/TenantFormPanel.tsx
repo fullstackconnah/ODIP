@@ -1,4 +1,6 @@
 import { inputClass, labelClass, textareaClass } from '@/components/FormField'
+import { AddressField } from '@/components/AddressField'
+import { FormField } from '@/components/FormField'
 import { useState, useEffect, useRef } from 'react'
 import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -479,16 +481,9 @@ export default function TenantFormPanel({
                 />
               </div>
 
-              <div>
-                <label htmlFor="tf-address" className={labelClass}>Address</label>
-                <input
-                  id="tf-address"
-                  type="text"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
+              <FormField label="Address">
+                <AddressField wholeLine id="tf-address" value={address} onChange={setAddress} onPick={a => setAddress(a.formatted)} />
+              </FormField>
 
               <CheckboxField
                 label="GST Registered"

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { AddressField } from '@/components/AddressField'
+import { FormField } from '@/components/FormField'
 import { ChevronRight } from 'lucide-react'
 import { AU_STATES, type PlanType } from '@/api/types/enums'
 import { Card } from '@/components/Card'
@@ -49,7 +51,15 @@ export function ParticipantDetailsFold({ form, errors, open, today, onToggle, on
             <fieldset className={`${span.long} min-w-0`}>
               <legend className={LEGEND}>Address</legend>
               <div className={formGrid}>
-                <TextField id="inquiry-address-street" className={span.long} label="Street" maxLength={200} {...text('addressStreet')} />
+                <FormField className={span.long} label="Street" error={errors.addressStreet}>
+                  <AddressField
+                    id="inquiry-address-street"
+                    maxLength={200}
+                    value={form.addressStreet}
+                    onChange={v => onChange('addressStreet', v)}
+                    onPick={a => { onChange('addressSuburb', a.suburb.slice(0, 100)); onChange('addressState', a.state); onChange('addressPostcode', a.postcode.slice(0, 4)) }}
+                  />
+                </FormField>
                 <TextField id="inquiry-address-suburb" className={span.medium} label="Suburb" maxLength={100} {...text('addressSuburb')} />
                 <SelectField
                   id="inquiry-address-state"

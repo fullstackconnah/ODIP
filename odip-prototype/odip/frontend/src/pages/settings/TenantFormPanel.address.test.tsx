@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { pickAddress } from '@/test/addressPick'
 import TenantFormPanel from './TenantFormPanel'
 import type { TenantCreatedDto } from '@/api/types'
 
 // A tenant's first user: any address can sign in, so one at neither the NEW tenant's domain nor a common email provider is a live login for whoever
 // owns it. The server refuses the first attempt (400, code AddressNeedsConfirmation) before the tenant, the user or an account exists; the panel asks
 // the admin to check the address and, on "Use this address", sends the same request again with the confirmation inside the first user.
+
+vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).withAddressApi(await real<typeof import('@/api/client')>()))
 
 const { mockCreate, firebase } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
@@ -111,5 +114,23 @@ describe('TenantFormPanel create: a first user address the server wants checked'
 
     expect(await screen.findByText('A tenant with this email domain already exists')).toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('TenantFormPanel create: address lookup (caller I)', () => {
+  it('a pick puts the formatted address in the provider Address field and it is sent with the tenant', async () => {
+    mockCreate.mockReset().mockResolvedValue(created)
+    const u = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Brightside Care')
+    await u.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'brightside.example.com')
+    await u.click(screen.getByRole('radio', { name: 'NSW' }))
+    await u.click(screen.getByRole('button', { name: /provider settings/i }))
+    const field = screen.getByRole('combobox', { name: 'Address' })
+    await pickAddress(u, field)
+    expect(field).toHaveValue('12 Example Street, Brisbane City QLD 4000')
+    await u.click(screen.getByRole('button', { name: 'Create tenant' }))
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled())
+    expect(mockCreate.mock.calls[0][0].providerSettings.address).toBe('12 Example Street, Brisbane City QLD 4000')
   })
 })
