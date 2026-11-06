@@ -174,8 +174,8 @@ export default function DashboardPage() {
       tone: 'danger',
       // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
       detail: `Expired, undated or due within ${plural(warningDays, 'day')}, across ${plural(qualIssueStaffCount, 'staff member')}.`,
-      action: { label: 'Review qualifications', to: '/qualifications' },
-      to: '/qualifications',
+      action: { label: 'Review qualifications', to: '/qualifications?show=attention' },
+      to: '/qualifications?show=attention',
       loading: staffLoading,
       error: staffError,
     })
