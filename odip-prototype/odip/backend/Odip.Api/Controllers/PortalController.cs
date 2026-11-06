@@ -423,6 +423,7 @@ public class PortalController : ControllerBase
             StartedAt = now,
             VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(startStamp, rosteredStartUtc),
             SentFromOffline = dto.StartedAt is not null,
+            StartSentFromOffline = dto.StartedAt is not null,
             IsActive = true,
         };
         _db.ShiftCompletions.Add(completion);
@@ -462,7 +463,7 @@ public class PortalController : ControllerBase
 
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
         if (completion is null || completion.LocationCheck is not (LocationCheckStatus.NotAtLocation or LocationCheckStatus.Unavailable)
-            || completion.SentFromOffline)   // a queued Start's reason is not the worker's to replace or clear
+            || completion.StartSentFromOffline)   // a queued Start's reason is not the worker's to replace or clear
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("There's nothing to explain for this start.", ShiftErrorCodes.ShiftLocationReasonNotNeeded));
 
         completion.LocationReason = LocationCheck.CleanReason(dto.Reason);
