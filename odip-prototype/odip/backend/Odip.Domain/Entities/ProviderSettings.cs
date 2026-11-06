@@ -55,6 +55,12 @@ public class ProviderSettings : ITenantEntity
     public MedicationCompetencyMode MedicationCompetencyMode { get; set; } = MedicationCompetencyMode.Warn;
 
     /// <summary>
+    /// Which optional onboarding checklist items the organisation shows: a JSON map of item key to mode (see <see cref="OnboardingItemModeRules"/>);
+    /// null means the defaults. Nullable with no default, so adding the column is metadata-only. Changes are audited as one field change, never whole-entity (bank details).
+    /// </summary>
+    public string? OnboardingItemModes { get; set; }
+
+    /// <summary>
     /// The row's version as well as its last change: a concurrency token (OdipDbContext), as on ParticipantInquiry. Held in whole microseconds, as PostgreSQL
     /// stores it, so the value GET sends, returned by the form as ExpectedUpdatedAt, still matches the stored one.
     /// </summary>

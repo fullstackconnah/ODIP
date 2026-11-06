@@ -19,7 +19,7 @@ const frame = { title: 'Organisation profile', description: 'Who you are.', read
 const row: ProviderSettingsDto = {
   id: 'p1', registrationNumber: '4050', abn: '51824753556', organisationName: 'Jo Care', address: '1 Example Street', state: 'WA', gstRegistered: false, isPaceProvider: false,
   bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-  managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
+  managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', onboardingItemModes: { complaints: 'Required', rights: 'Required', myProvider: 'Required', budget: 'Off' },
   updatedAt: '2026-10-23T01:00:00.123456Z',
   invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false,
 }
