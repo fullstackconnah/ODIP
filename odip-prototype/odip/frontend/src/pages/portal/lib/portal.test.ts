@@ -5,7 +5,7 @@ import type { PortalShiftSummaryDto } from '@/api/types'
 
 const shift = (over: Partial<PortalShiftSummaryDto> = {}): PortalShiftSummaryDto => ({
   id: 's', participantId: 'p', participantName: 'Mia Chen', serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00',
-  endsNextDay: false, durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0, ...over,
+  endsNextDay: false, durationHours: 8, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0, missingDetails: [], ...over,
 })
 // Wall clock in the provider's zone, Brisbane (UTC+10, no DST): the list judges today and ended there, whatever the device's zone.
 const TZ = 'Australia/Brisbane'
