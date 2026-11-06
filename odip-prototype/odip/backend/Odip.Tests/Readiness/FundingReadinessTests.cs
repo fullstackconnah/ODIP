@@ -179,6 +179,24 @@ public class FundingReadinessTests
         Assert.DoesNotContain(ParticipantReadiness.FundingNotRecorded, stillTheLastDay[participant.Id]);
     }
 
+    [Fact]
+    public async Task ActivationIssues_UnscopedSuperAdmin_EachParticipantIsJudgedByTheirOrganisationsOwnDate()
+    {
+        using var db = CreateDb();
+        SetProvider(db, tenantId: TenantA, state: "NSW");
+        SetProvider(db, tenantId: TenantB, state: "WA");
+        var sydney = SeedParticipant(db, TenantA, first: "Syd");
+        var perth = SeedParticipant(db, TenantB, first: "Per");
+        SeedPlan(db, sydney, new DateOnly(2026, 10, 3));
+        SeedPlan(db, perth, new DateOnly(2026, 10, 3));
+
+        // 15:30 UTC on 3 Oct is 01:30 on 4 Oct in Sydney but 23:30 on 3 Oct in Perth: only the Sydney plan has ended.
+        var issues = await ParticipantReadiness.ActivationIssuesAsync(db, new[] { sydney.Id, perth.Id }, FakeClock.AtUtc(2026, 10, 3, 15, 30), default);
+
+        Assert.Contains(ParticipantReadiness.FundingNotRecorded, issues[sydney.Id]);
+        Assert.DoesNotContain(ParticipantReadiness.FundingNotRecorded, issues[perth.Id]);
+    }
+
     // ── Activation: Warn lists it, Enforce refuses with it ──────────────────
 
     [Theory]
