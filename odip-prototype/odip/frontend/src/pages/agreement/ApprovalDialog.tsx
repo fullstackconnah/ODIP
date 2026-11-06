@@ -122,6 +122,9 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
   }
 
   const data = preview.data
+  // Information only: the server lists it among the reasons, but it never holds approval up and is not something to fix.
+  const reasons = data?.reasons.filter(reason => reason.code !== 'OtherAgreementOverlap') ?? []
+  const otherOverlaps = data?.otherAgreementOverlaps ?? 0
   // The server's reasons carry the ids of the STORED blocks, which an older save may have with gaps: they are read as stored, never regrouped (regrouping renumbers them).
   const groups = useMemo<ShiftGroup[]>(() => draft.blocks.map(entry => ({ entry, shiftIds: [] })), [draft.blocks])
   const say = (text: string) => friendlyMessage(shiftWords(text, groups), [])
@@ -175,8 +178,9 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
           ? <Callout tone="warning">{failureMessages(preview.error)[0]}</Callout>
           : <PageState kind="error" noun="approval summary" onRetry={() => preview.refetch()} />)}
         {data && (blocked
-          ? <Reasons reasons={data.reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
+          ? <Reasons reasons={reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
           : <WhatItDoes participantId={participantId} draft={draft} preview={data} activatesName={activatesName} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}
+        {otherOverlaps > 0 && <Callout tone='info'>{`${plural(otherOverlaps, 'new shift pattern')} ${otherOverlaps === 1 ? 'overlaps' : 'overlap'} the times of another agreement's patterns. Check the roster for the same worker booked twice.`}</Callout>}
         {data && !blocked && contacts && contacts.length > 0 && (
           <section aria-labelledby="agreed-heading" className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
             <h4 id="agreed-heading" className="font-semibold">Who agreed (optional)</h4>

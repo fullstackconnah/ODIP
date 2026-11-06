@@ -623,3 +623,34 @@ describe('ApprovalDialog: who agreed and how (optional)', () => {
     expect(screen.queryByRole('combobox', { name: 'Agreed by' })).not.toBeInTheDocument()
   })
 })
+
+describe('ApprovalDialog: patterns that overlap another agreement', () => {
+  const other = { code: "OtherAgreementOverlap", message: "2 of the new weekly patterns overlap in time another agreement's patterns for this participant. Approval is not held up by it." }
+  const line = "2 new shift patterns overlap the times of another agreement's patterns. Check the roster for the same worker booked twice."
+
+  it("says so as an information line when approval is allowed, and not as a reason", () => {
+    ready(preview({ reasons: [other], otherAgreementOverlaps: 2 }))
+    setUp()
+
+    expect(screen.getByText(line)).toBeInTheDocument()
+    expect(screen.queryByText(other.message)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled()
+  })
+
+  it("keeps the lone Superseded view when it comes with the overlap, and still says the overlap", () => {
+    const superseded = { code: "Superseded", message: "A newer revision of this agreement draft exists. Approve the latest revision instead." }
+    ready(preview({ canApprove: false, reasons: [superseded, other], otherAgreementOverlaps: 2 }))
+    setUp()
+
+    expect(screen.queryByText(/Fix each item/)).not.toBeInTheDocument()
+    expect(screen.getByText(superseded.message)).toBeInTheDocument()
+    expect(screen.getByText(line)).toBeInTheDocument()
+    expect(screen.queryByText(other.message)).not.toBeInTheDocument()
+  })
+
+  it("says nothing when no pattern overlaps", () => {
+    setUp()
+
+    expect(screen.queryByText(/another agreement/)).not.toBeInTheDocument()
+  })
+})

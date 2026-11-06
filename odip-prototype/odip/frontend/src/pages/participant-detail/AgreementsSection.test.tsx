@@ -150,7 +150,7 @@ describe('AgreementsSection: Add agreement and New revision', () => {
     renderSection()
     expect(screen.queryByRole('link', { name: 'New revision' })).toBeNull()
     await userEvent.click(screen.getByRole('link', { name: 'Add agreement' }))
-    expect(screen.getByTestId('where')).toHaveTextContent(/^/participants/p-1/agreement-draft?agreement=new$/)
+    expect(screen.getByTestId('where')).toHaveTextContent('/participants/p-1/agreement-draft?agreement=new')
   })
 
   it('a plain agreement that has ended shows New revision beside it, for its own agreement', async () => {
@@ -158,7 +158,7 @@ describe('AgreementsSection: Add agreement and New revision', () => {
     listState = { data: [version(2, '2025-07-01', '2026-06-30')] }
     renderSection()
     await userEvent.click(screen.getByRole('link', { name: 'New revision' }))
-    expect(screen.getByTestId('where')).toHaveTextContent(/^/participants/p-1/agreement-draft?agreement=a-1$/)
+    expect(screen.getByTestId('where')).toHaveTextContent('/participants/p-1/agreement-draft?agreement=a-1')
   })
 
   it('is hidden from a role that cannot draft', () => {
