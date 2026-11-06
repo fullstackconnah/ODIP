@@ -24,6 +24,8 @@ export function locationCheckLine(c: CheckFields): string | null {
       return reason ? `${away}: ${reason}` : `${away}. No reason given.`
     }
     case 'Unavailable':
+      // a queued Start stores "Started offline[: typed]" (server LocationCheck.StartedOfflineReason); it already says why, so no prefix
+      if (reason?.startsWith('Started offline')) return reason
       return reason ? `Location not available: ${reason}` : 'Location not available. No reason given.'
     default:
       return null

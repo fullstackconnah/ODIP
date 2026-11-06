@@ -107,6 +107,9 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>The worker sent a time the phone recorded offline (Start, Finish or a break); the review page marks it. False for every row before the installable app.</summary>
     public bool SentFromOffline { get; set; }
 
+    /// <summary>The Start itself was a queued tap. Unlike <see cref="SentFromOffline"/> a queued break never sets it; it locks the worker's location reason.</summary>
+    public bool StartSentFromOffline { get; set; }
+
     /// <summary>Why the worker moved either time (max 500); null when nothing was moved.</summary>
     public string? TimeAdjustmentReason { get; set; }
 

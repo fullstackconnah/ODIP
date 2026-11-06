@@ -7132,6 +7132,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("ShiftId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("StartSentFromOffline")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("StartTimeReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");

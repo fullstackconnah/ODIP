@@ -31,6 +31,7 @@ internal static class OlderSchemaSeeds
         ("ShiftCompletions", "DetailsRequired", "boolean NOT NULL DEFAULT FALSE"),
         ("ShiftCompletions", "PreTravelNone", "boolean NOT NULL DEFAULT FALSE"),
         ("ShiftCompletions", "PostTravelNone", "boolean NOT NULL DEFAULT FALSE"),
+        ("ShiftCompletions", "StartSentFromOffline", "boolean NOT NULL DEFAULT FALSE"),
         ("Participants", "RetentionStartsOn", "date"),
         ("Participants", "RetentionStartEstimated", "boolean NOT NULL DEFAULT FALSE"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
