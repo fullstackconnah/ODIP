@@ -67,6 +67,7 @@ public static class ParticipantReadinessGate
                     && !db.ServiceAgreementDrafts.Any(newerDraft =>
                         newerDraft.TenantId == p.TenantId
                         && newerDraft.ParticipantId == p.Id
+                        && newerDraft.AgreementId == draft.AgreementId
                         && newerDraft.Version > draft.Version))
                 && db.ElectronicSigningEvidence.Any(evidence =>
                     evidence.SnapshotId == snapshot.Id
@@ -92,23 +93,36 @@ public static class ParticipantReadinessGate
     public static IQueryable<Participant> ProfileDetailsParticipants(OdipDbContext db) => db.Participants.Where(ProfileDetailsRule);
 
     /// <summary>
-    /// "Service needs": the participant's NEWEST agreement draft (drafts are immutable revisions) has its plan and agreement dates, the agreement
+    /// "Service needs": a participant's NEWEST revision of an agreement (revisions are immutable) has its plan and agreement dates, the agreement
     /// inside the plan, and at least one line, every one with hours, a price, an item code and a catalogue version. A hand-typed line was priced on the
     /// agreement's start date, so its catalogue row has to be valid on it. A line the plan builder generated (it names its block) is priced on the date
     /// of each shift: when the plan crosses a catalogue price change its row starts after the agreement does.
+    /// With several agreements (D-6): ready when SOME agreement's newest revision passes, and no agreement that has been approved has a newest revision that fails
+    /// (a half-edited trip beside an approved one does not block; breaking an approved agreement does). One agreement reads as before.
     /// </summary>
     public static IQueryable<Participant> ServiceNeedsParticipants(OdipDbContext db) =>
-        db.Participants.Where(p => db.ServiceAgreementDrafts.Any(draft =>
-            draft.ParticipantId == p.Id && draft.TenantId == p.TenantId
-            && !db.ServiceAgreementDrafts.Any(newer => newer.ParticipantId == p.Id && newer.TenantId == p.TenantId && newer.Version > draft.Version)
-            && draft.PlanStartDate != default && draft.PlanEndDate != default && draft.AgreementStartDate != default && draft.AgreementEndDate != default
-            && draft.PlanEndDate >= draft.PlanStartDate && draft.AgreementEndDate >= draft.AgreementStartDate
-            && draft.AgreementStartDate >= draft.PlanStartDate && draft.AgreementEndDate <= draft.PlanEndDate
-            && draft.Lines.Any()
-            && !draft.Lines.Any(line => line.Hours <= 0 || line.UnitPrice <= 0 || string.IsNullOrWhiteSpace(line.ItemCode)
-                || string.IsNullOrWhiteSpace(line.CatalogueVersion)
-                || (string.IsNullOrEmpty(line.BlockKey)
-                    && (line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate))))));
+        db.Participants.Where(p =>
+            NewestOfEachAgreement(db).Any(draft => draft.ParticipantId == p.Id && draft.TenantId == p.TenantId
+                && db.ServiceAgreementDrafts.Where(ServiceNeedsDraftRule).Any(passing => passing.Id == draft.Id))
+            && !NewestOfEachAgreement(db).Any(draft => draft.ParticipantId == p.Id && draft.TenantId == p.TenantId
+                && !db.ServiceAgreementDrafts.Where(ServiceNeedsDraftRule).Any(passing => passing.Id == draft.Id)
+                && db.ServiceAgreementDraftApprovals.Any(a => a.TenantId == draft.TenantId && a.ParticipantId == draft.ParticipantId && a.AgreementId == draft.AgreementId)));
+
+    /// <summary>The newest revision of each agreement of each participant (query-shaped, for Npgsql).</summary>
+    public static IQueryable<ServiceAgreementDraft> NewestOfEachAgreement(OdipDbContext db) =>
+        db.ServiceAgreementDrafts.Where(draft => !db.ServiceAgreementDrafts.Any(newer =>
+            newer.TenantId == draft.TenantId && newer.ParticipantId == draft.ParticipantId && newer.AgreementId == draft.AgreementId && newer.Version > draft.Version));
+
+    /// <summary>What a revision must hold to count as service needs (see <see cref="ServiceNeedsParticipants"/>).</summary>
+    public static readonly Expression<Func<ServiceAgreementDraft, bool>> ServiceNeedsDraftRule = draft =>
+        draft.PlanStartDate != default && draft.PlanEndDate != default && draft.AgreementStartDate != default && draft.AgreementEndDate != default
+        && draft.PlanEndDate >= draft.PlanStartDate && draft.AgreementEndDate >= draft.AgreementStartDate
+        && draft.AgreementStartDate >= draft.PlanStartDate && draft.AgreementEndDate <= draft.PlanEndDate
+        && draft.Lines.Any()
+        && !draft.Lines.Any(line => line.Hours <= 0 || line.UnitPrice <= 0 || string.IsNullOrWhiteSpace(line.ItemCode)
+            || string.IsNullOrWhiteSpace(line.CatalogueVersion)
+            || (string.IsNullOrEmpty(line.BlockKey)
+                && (line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate))));
 
     public static Task<bool> IsActiveReadyAsync(OdipDbContext db, Guid participantId, CancellationToken ct) =>
         ActiveReadyParticipants(db).AnyAsync(p => p.Id == participantId, ct);

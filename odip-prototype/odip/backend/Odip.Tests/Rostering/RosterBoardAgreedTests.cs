@@ -296,7 +296,7 @@ public class RosterBoardAgreedTests
 
         var json = JsonSerializer.Serialize(await BoardAsync(dbName, TenantA), ApiJson);
 
-        Assert.Contains($"\"pendingAgreements\":[{{\"participantId\":\"{miaId}\",\"displayName\":\"Mia Chen\",\"draftId\":\"{v1Id}\",\"version\":1,\"canReceiveServices\":true}}]", json);
+        Assert.Contains($"\"pendingAgreements\":[{{\"participantId\":\"{miaId}\",\"displayName\":\"Mia Chen\",\"draftId\":\"{v1Id}\",\"version\":1,\"canReceiveServices\":true,", json);   // the agreement's id, kind and name follow (PR A)
         Assert.Contains("\"notReadyForRostering\":false", json);
         Assert.Contains($"\"staffLeave\":[{{\"staffId\":\"{samId}\",\"from\":\"2026-08-24\",\"to\":\"2026-08-24\",\"status\":\"Approved\"}}]", json);
     }

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Odip.Api.Middleware;
+using Odip.Infrastructure.Integrations;
 using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Domain.Interfaces;
@@ -197,6 +198,12 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetEffect>();
 // The plan quote is the one heavy request: about two in flight per organisation (a resource filter, because the rate limiter runs before authentication).
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
+// Address lookup (Google Places): a per-user budget as a resource filter, the 5 s typed client, and HttpClient's own request logging kept quiet. With no GooglePlaces:ApiKey both endpoints are 404.
+builder.Services.AddSingleton(Odip.Api.RateLimiting.AddressLookupRateLimits.Default);
+builder.Services.AddSingleton<Odip.Api.RateLimiting.AddressLookupRateLimiter>();
+builder.Services.AddScoped<Odip.Api.RateLimiting.AddressLookupRateLimitFilter>();
+builder.Services.AddGooglePlacesClient();
+builder.Logging.QuietGooglePlacesClient();
 // The data export: one at a time per organisation. The same limiter with one permit, keyed so the quote keeps its two.
 // shortcut: process-local, correct for the single api container in deploy/compose.yaml; move to a DB advisory lock if the API is ever scaled out.
 builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation));

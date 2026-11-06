@@ -238,6 +238,10 @@ public record PendingAgreementDto
     public int Version { get; init; }
     /// <summary>Participant.CanReceiveServicesRule: active, and finalised or a draft whose services have begun. False: no board row, and no shifts until services start.</summary>
     public bool CanReceiveServices { get; init; }
+    /// <summary>The agreement this revision belongs to; a participant's second agreement waiting is its own notice.</summary>
+    public Guid AgreementId { get; init; }
+    public Odip.Domain.Enums.AgreementKind AgreementKind { get; init; }
+    public string? AgreementName { get; init; }
 }
 
 /// <summary>

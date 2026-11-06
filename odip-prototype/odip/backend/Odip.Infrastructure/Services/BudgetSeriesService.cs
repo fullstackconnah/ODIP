@@ -105,20 +105,29 @@ public sealed class BudgetSeriesService
         var unavailable = (new BudgetExpectedDto { Status = BudgetExpectedStatus.Unavailable }, (IReadOnlyList<DayRange>?)null, new List<(Guid, DatedAmount)>());
 
         // Approved revisions with blocks, in version order (in memory: Npgsql drops an ORDER BY before some operators). A revision typed by hand has no blocks to re-price, covers no days and
-        // cuts no other revision short.
+        // cuts no other revision short. A revision cuts only a later revision of ITS OWN agreement short (D-4): a trip beside long day support does not end the day support at the trip's start.
         var revisions = (await _db.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks)
                 .Where(d => d.TenantId == tenantId && d.ParticipantId == participantId && _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id))
                 .ToListAsync(ct))
             .Where(d => d.Blocks.Count > 0).OrderBy(d => d.Version).ToList();
 
         var segments = new List<(ServiceAgreementDraft Draft, DayRange Days)>();
-        for (var i = 0; i < revisions.Count; i++)
+        var changes = new List<DateOnly>();
+        foreach (var agreement in revisions.GroupBy(r => r.AgreementId).OrderBy(g => g.Key))
         {
-            var later = revisions.Skip(i + 1).Select(r => r.AgreementStartDate).ToList();
-            var segEnd = later.Count > 0 && later.Min().AddDays(-1) < revisions[i].AgreementEndDate ? later.Min().AddDays(-1) : revisions[i].AgreementEndDate;
-            var from = revisions[i].AgreementStartDate > planStart ? revisions[i].AgreementStartDate : planStart;
-            var to = segEnd < planEnd ? segEnd : planEnd;
-            if (from <= to) segments.Add((revisions[i], new DayRange(from, to)));
+            var series = agreement.ToList();
+            var first = true;
+            for (var i = 0; i < series.Count; i++)
+            {
+                var later = series.Skip(i + 1).Select(r => r.AgreementStartDate).ToList();
+                var segEnd = later.Count > 0 && later.Min().AddDays(-1) < series[i].AgreementEndDate ? later.Min().AddDays(-1) : series[i].AgreementEndDate;
+                var from = series[i].AgreementStartDate > planStart ? series[i].AgreementStartDate : planStart;
+                var to = segEnd < planEnd ? segEnd : planEnd;
+                if (from > to) continue;
+                segments.Add((series[i], new DayRange(from, to)));
+                if (!first) changes.Add(from);
+                first = false;
+            }
         }
         if (segments.Count == 0) return (new BudgetExpectedDto { Status = BudgetExpectedStatus.NoAgreement }, null, new());
 
@@ -169,7 +178,7 @@ public sealed class BudgetSeriesService
             Status = BudgetExpectedStatus.Ok,
             StartsOn = runs[0].Start > planStart ? runs[0].Start : null,
             EndsOn = runs[^1].End < planEnd ? runs[^1].End : null,
-            RevisionChanges = segments.Skip(1).Select(s => s.Days.Start).ToList(),
+            RevisionChanges = changes,
             UnpricedLineCount = unpricedLines,
         }, covered, lines);
     }

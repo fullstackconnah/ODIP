@@ -342,8 +342,10 @@ public class ParticipantAlertsService
         foreach (var ending in agreementEndings)
         {
             var ended = ending.DaysLeft < 0;
+            // One alert for each ending agreement; a participant's first agreement (the participant's own id, or none recorded) keeps the plain link, any other names itself.
+            var named = ending.AgreementId != default && ending.AgreementId != ending.ParticipantId ? $"?agreement={ending.AgreementId}" : "";
             Add(ending.ParticipantId, ended ? "agreement-ended" : "agreement-ending-soon", ended ? AlertSeverity.Critical : AlertSeverity.Warning,
-                AgreementEnding.Describe(ending), "details", $"/participants/{ending.ParticipantId}/agreement-draft");
+                AgreementEnding.Describe(ending), "details", $"/participants/{ending.ParticipantId}/agreement-draft{named}");
         }
 
         // ── Rules 8 to 11: the participant's budget (phase 2b) ──

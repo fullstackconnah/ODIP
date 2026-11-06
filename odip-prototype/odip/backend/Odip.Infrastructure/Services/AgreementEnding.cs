@@ -1,11 +1,13 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
 
-/// <summary>A participant's newest approved revision that ends within <see cref="AgreementEnding.WarningDays"/> days or has ended. <see cref="DaysLeft"/> is below 0 once it has ended; <see cref="RenewalVersion"/> is the renewal waiting after it.</summary>
-public sealed record AgreementEndingRow(Guid ParticipantId, Guid DraftId, int Version, DateOnly AgreementEndDate, int DaysLeft, int? RenewalVersion, bool IsOngoing = false);
+/// <summary>An agreement's newest approved revision that ends within <see cref="AgreementEnding.WarningDays"/> days or has ended. <see cref="DaysLeft"/> is below 0 once it has ended; <see cref="RenewalVersion"/> is the renewal waiting after it.</summary>
+public sealed record AgreementEndingRow(Guid ParticipantId, Guid DraftId, int Version, DateOnly AgreementEndDate, int DaysLeft, int? RenewalVersion, bool IsOngoing = false,
+    Guid AgreementId = default, AgreementKind AgreementKind = AgreementKind.Core, string? AgreementName = null);
 
 /// <summary>
 /// Agreement PR 2: the one rule for "ending soon" and "ended" (spec Part B, D5), read by the participant alerts and the Agreements ending list.
@@ -21,11 +23,11 @@ public static class AgreementEnding
         var ids = participantIds.ToList();
         var revisions = await db.ServiceAgreementDrafts.AsNoTracking()
             .Where(d => ids.Contains(d.ParticipantId))
-            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.OriginalAgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
+            .Select(d => new { d.ParticipantId, d.AgreementId, d.AgreementKind, d.AgreementName, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.OriginalAgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
             .ToListAsync(ct);
 
         var rows = new List<AgreementEndingRow>();
-        foreach (var revisionsOfOne in revisions.GroupBy(r => r.ParticipantId))
+        foreach (var revisionsOfOne in revisions.GroupBy(r => (r.ParticipantId, r.AgreementId)))
         {
             var approved = revisionsOfOne.Where(r => r.Approved).MaxBy(r => r.Version);
             if (approved is null) continue;
@@ -35,10 +37,11 @@ public static class AgreementEnding
             if (daysLeft > WarningDays) continue;
             var renewal = revisionsOfOne.Where(r => r.Version > approved.Version && r.AgreementStartDate > approved.AgreementEndDate).MaxBy(r => r.Version);
             if (renewal is not null && daysLeft >= 0) continue;
-            rows.Add(new AgreementEndingRow(revisionsOfOne.Key, approved.Id, approved.Version, approved.AgreementEndDate, daysLeft, renewal?.Version, approved.IsOngoing));
+            var newest = revisionsOfOne.MaxBy(r => r.Version)!;
+            rows.Add(new AgreementEndingRow(revisionsOfOne.Key.ParticipantId, approved.Id, approved.Version, approved.AgreementEndDate, daysLeft, renewal?.Version, approved.IsOngoing, revisionsOfOne.Key.AgreementId, newest.AgreementKind, newest.AgreementName));
         }
 
-        return rows.OrderBy(r => r.AgreementEndDate).ThenBy(r => r.ParticipantId).ToList();
+        return rows.OrderBy(r => r.AgreementEndDate).ThenBy(r => r.ParticipantId).ThenBy(r => r.AgreementId).ToList();
     }
 
     /// <summary>The words the alert and the Agreements ending list share (the agreement page says the same as a sentence). No full stop, like every other alert message.</summary>

@@ -117,6 +117,14 @@ export default function QualificationsPage() {
     if (belowMd) window.scrollTo({ top: 0, behavior: 'instant' })
   }, [current?.staff.id, belowMd])
 
+  // A direct ?staff= load can pick a row below the list's fold: bring it into view once. Previous/Next scroll for themselves above.
+  const scrolledToChosen = useRef(false)
+  useEffect(() => {
+    if (scrolledToChosen.current || !chosen) return
+    scrolledToChosen.current = true
+    document.getElementById(`qual-staff-${chosen.staff.id}`)?.scrollIntoView({ block: 'nearest' })
+  }, [chosen])
+
   function closeEditor() {
     editSeq.current++
     setRereading(false)
@@ -317,6 +325,7 @@ export default function QualificationsPage() {
                   {
                     key: 'expiryDate',
                     header: 'Expiry Date',
+                    width: '13rem', // fits the date editor, so opening it does not reflow the columns
                     type: 'date',
                     editable: {
                       render: (r, onChange) => (
@@ -350,6 +359,7 @@ export default function QualificationsPage() {
                     key: 'actions',
                     header: '',
                     align: 'right' as const,
+                    width: '12rem', // fits Save and Cancel, so the editor opening does not squeeze the other columns
                     render: (r) => {
                       const isEditing = editingKey === r.key
                       const isSaving = savingKey === r.key || (isEditing && rereading) // one editor is open at a time, so rereading belongs to it

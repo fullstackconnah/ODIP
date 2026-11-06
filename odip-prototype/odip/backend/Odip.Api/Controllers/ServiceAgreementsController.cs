@@ -60,12 +60,12 @@ public class ServiceAgreementsController : ControllerBase
         var rows = await AgreementEnding.FindAsync(_db, participants.Keys, today, ct);
         return Ok(ApiResponse<List<AgreementEndingDto>>.Ok(rows.Select(r => new AgreementEndingDto
         {
-            ParticipantId = r.ParticipantId, ParticipantName = participants[r.ParticipantId].FullName, DraftId = r.DraftId, Version = r.Version,
+            ParticipantId = r.ParticipantId, ParticipantName = participants[r.ParticipantId].FullName, DraftId = r.DraftId, Version = r.Version, AgreementId = r.AgreementId, AgreementKind = r.AgreementKind, AgreementName = r.AgreementName,
             AgreementEndDate = r.AgreementEndDate, IsOngoing = r.IsOngoing, DaysLeft = r.DaysLeft, RenewalVersion = r.RenewalVersion, Status = AgreementEnding.Describe(r),
         }).ToList()));
     }
 
-    /// <summary>One row per participant who can receive services and holds an agreement revision: the current (newest approved) and waiting (newer, unapproved) revisions, the ending state, and the price list with any newer one. Filtering is the page's.</summary>
+    /// <summary>One row per agreement of each participant who can receive services: a participant with a trip beside long day support has two rows. Each holds the current (newest approved) and waiting (newer, unapproved) revisions, the ending state, and the price list with any newer one. Filtering is the page's.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<AgreementListDto>>> List(CancellationToken ct)
     {
@@ -76,26 +76,28 @@ public class ServiceAgreementsController : ControllerBase
             .Select(p => new Participant { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName })
             .ToListAsync(ct);
         var ids = participants.Select(p => p.Id).ToList();
-        var ending = (await AgreementEnding.FindAsync(_db, ids, today, ct)).ToDictionary(r => r.ParticipantId);
-        var revisions = await AgreementRevisions.LatestAsync(_db, tenantId, ids, ct);
+        var ending = (await AgreementEnding.FindAsync(_db, ids, today, ct)).ToDictionary(r => (r.ParticipantId, r.AgreementId));
+        var revisions = await AgreementRevisions.LatestPerAgreementAsync(_db, tenantId, ids, ct);
         var lists = await AgreementPriceLists.ListAsync(_db, ct);
         PriceListDto? Dto(string? version) => version is null ? null : new PriceListDto { Version = version, Start = lists.FirstOrDefault(l => l.Version == version)?.Start ?? default };
 
         var rows = new List<AgreementRowDto>();
         foreach (var p in participants.OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Id))
         {
-            if (!revisions.TryGetValue(p.Id, out var set)) continue;
-            ending.TryGetValue(p.Id, out var end);
+          foreach (var (key, set) in revisions.Where(x => x.Key.ParticipantId == p.Id).OrderBy(x => x.Key.AgreementId))
+          {
+            ending.TryGetValue(key, out var end);
             var endingState = end is null ? "None" : end.DaysLeft < 0 ? "Ended" : "Ending";
             var status = set.Current is null ? "NotApproved" : set.Waiting is not null ? "DraftWaiting" : endingState == "Ended" ? "Ended" : endingState == "Ending" ? "Ending" : "Active";
             var newer = set.Current is null ? null : AgreementPriceLists.Newer(lists, set.CurrentList, set.Current.AgreementEndDate);
             rows.Add(new AgreementRowDto
             {
-                ParticipantId = p.Id, ParticipantName = p.FullName, Status = status, EndingState = endingState, HasWaitingDraft = set.Waiting is not null,
+                ParticipantId = p.Id, ParticipantName = p.FullName, AgreementId = key.AgreementId, AgreementKind = set.AgreementKind, AgreementName = set.AgreementName, Status = status, EndingState = endingState, HasWaitingDraft = set.Waiting is not null,
                 Current = set.Current, Waiting = set.Waiting, DaysLeft = end?.DaysLeft, TermStart = set.TermStart,
                 PriceList = Dto(set.Current is null ? set.WaitingList : set.CurrentList),
                 NewerPriceList = newer is null ? null : new PriceListDto { Version = newer.Version, Start = newer.Start },
             });
+          }
         }
         var canApprove = await ServiceAgreementApprovalService.MayApproveAsync(_pricing, tenantId, Caller(), ct);
         return Ok(ApiResponse<AgreementListDto>.Ok(new AgreementListDto { CanApprove = canApprove, Rows = rows }));
@@ -193,8 +195,11 @@ public class ServiceAgreementsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<BulkItem>>>> Bulk(AgreementBulkRequestDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<List<BulkItem>>.Fail("A tenant context is required."));
-        var ids = (dto?.ParticipantIds ?? []).Distinct().ToList();
-        if (ids.Count is 0 or > MaxItems) return BadRequest(ApiResponse<List<BulkItem>>.Fail($"Select between 1 and {MaxItems} agreements."));
+        if (dto?.ParticipantIds is { Count: > 0 } && dto.Items is { Count: > 0 }) return BadRequest(ApiResponse<List<BulkItem>>.Fail("Send the agreements or the participants, not both."));
+        var series = dto?.Items is { Count: > 0 }
+            ? dto.Items.Select(i => new AgreementSeriesRef(i.ParticipantId, i.AgreementId)).Distinct().ToList()
+            : await _bulk.ExpandAsync(tenantId, (dto?.ParticipantIds ?? []).Distinct().ToList(), ct);
+        if (series.Count is 0 or > MaxItems) return BadRequest(ApiResponse<List<BulkItem>>.Fail($"Select between 1 and {MaxItems} agreements."));
         var action = dto!.Action;
         if (action is not ("renew" or "reprice" or "extend")) return BadRequest(ApiResponse<List<BulkItem>>.Fail("Choose renew, reprice or extend."));
         if (action == "extend" && dto.EndDate is null) return BadRequest(ApiResponse<List<BulkItem>>.Fail("Choose the new end date."));
@@ -216,7 +221,7 @@ public class ServiceAgreementsController : ControllerBase
         }
 
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
-        return Ok(ApiResponse<List<BulkItem>>.Ok(await _bulk.RunAsync(tenantId, action, ids, dto.EndDate, priceList, caller, actor, ct)));
+        return Ok(ApiResponse<List<BulkItem>>.Ok(await _bulk.RunAsync(tenantId, action, series, dto.EndDate, priceList, caller, actor, ct)));
     }
 
     private const string NotAnApproverWords = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing.";
