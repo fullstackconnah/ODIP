@@ -356,16 +356,16 @@ export default function QualificationsPage() {
                       const missing = r.state.status === 'none'
                       return isEditing ? (
                         <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
-                          <Button size="sm" onClick={() => handleSave(r)} disabled={isSaving || updateStaff.isPending || badInput}>
+                          <Button size="sm" className="min-h-[var(--tap-min)]" onClick={() => handleSave(r)} disabled={isSaving || updateStaff.isPending || badInput}>
                             {isSaving ? 'Saving…' : 'Save'}
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={closeEditor} disabled={savingKey === r.key}>
+                          <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)]" onClick={closeEditor} disabled={savingKey === r.key}>
                             Cancel
                           </Button>
                         </div>
                       ) : canWrite ? (
                         // Every row has one, so its name says whose credential it edits.
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(r)} disabled={updateStaff.isPending} aria-label={`${missing ? 'Add date' : 'Edit'}: ${r.qualification}, ${r.staffName}`}>
+                        <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)]" onClick={() => handleEdit(r)} disabled={updateStaff.isPending} aria-label={`${missing ? 'Add date' : 'Edit'}: ${r.qualification}, ${r.staffName}`}>
                           {missing ? 'Add date' : 'Edit'}
                         </Button>
                       ) : null
