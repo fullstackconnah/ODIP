@@ -726,6 +726,7 @@ public class OdipDbContext : DbContext
         {
             e.HasKey(i => i.Id);
             e.Property(i => i.Title).HasMaxLength(300).IsRequired();
+            e.Property(i => i.UpdatedAt).IsConcurrencyToken(); // the version a form carries as ExpectedUpdatedAt; two saves that both loaded first cannot both win
             e.Property(i => i.ReportableClassReason).HasMaxLength(500);
             e.Property(i => i.PoliceOfficerName).HasMaxLength(100);
             e.Property(i => i.AmbulanceOfficerName).HasMaxLength(100);

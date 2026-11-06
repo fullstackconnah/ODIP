@@ -1592,6 +1592,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime?>("UrgentAlertSentAt")
