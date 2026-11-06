@@ -759,6 +759,8 @@ public class IncidentsController : ControllerBase
         return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(incident.Id, ct)));
     }
 
+    private const string ChangedByOther = "Someone else changed this incident after you opened it. Cancel, then edit it again to see their changes.";
+
     /// <summary>Equal to the millisecond: Postgres keeps microseconds and a JS Date round trip keeps milliseconds. Unspecified (what the database hands back) reads as UTC.</summary>
     private static bool SameMillisecond(DateTime a, DateTime b) =>
         Utc(a).Ticks / TimeSpan.TicksPerMillisecond == Utc(b).Ticks / TimeSpan.TicksPerMillisecond;
@@ -773,9 +775,8 @@ public class IncidentsController : ControllerBase
         if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
 
         // A form loaded before someone else's change would delete what it never saw (a witness's statement, say), so refuse it.
-        // shortcut: check-then-save is not atomic (two PUTs inside one request's run both pass); upgrade = UpdatedAt.IsConcurrencyToken() on IncidentReport as at OdipDbContext.cs:1014 (needs a model-snapshot migration), mapping DbUpdateConcurrencyException to 409 in Update, the review action and archive.
         if (dto.ExpectedUpdatedAt is { } expected && !SameMillisecond(expected, i.UpdatedAt))
-            return Conflict(ApiResponse<IncidentListDto>.Fail("Someone else changed this incident after you opened it. Cancel, then edit it again to see their changes."));
+            return Conflict(ApiResponse<IncidentListDto>.Fail(ChangedByOther));
 
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
         if (crossFieldError != null)
@@ -979,7 +980,8 @@ public class IncidentsController : ControllerBase
         var hadTask = await _db.BookingTasks.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(t => t.SourceKey == detailedKey && t.TenantId == i.TenantId, ct);
         await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct, mayRaise: (hadTask || clockChanged) && i.Status != IncidentStatus.Closed);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<IncidentListDto>.Fail(ChangedByOther)); }
 
         return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(i.Id, ct)));
     }
@@ -1018,7 +1020,8 @@ public class IncidentsController : ControllerBase
         var hadTask = await _db.BookingTasks.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(t => t.SourceKey == detailedKey && t.TenantId == i.TenantId, ct);
         await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct, mayRaise: hadTask && i.Status != IncidentStatus.Closed);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<IncidentListDto>.Fail(ChangedByOther)); }
         return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(i.Id, ct)));
     }
 
@@ -1076,7 +1079,8 @@ public class IncidentsController : ControllerBase
         // both operate purely on Status.
         i.Status = IncidentStatus.Closed;
         i.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<bool>.Fail(ChangedByOther)); }
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
