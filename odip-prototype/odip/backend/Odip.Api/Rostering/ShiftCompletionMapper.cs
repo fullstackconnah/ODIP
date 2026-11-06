@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -30,7 +31,43 @@ public static class ShiftCompletionMapper
         DateTime ActualStart, DateTime? ActualEnd);
 
     /// <summary>The per-completion figures the review queue adds to each row.</summary>
-    public sealed record QueueExtras(int DosesWithoutOutcome, int BreakMinutes, int IncidentCount);
+    public sealed record QueueExtras(int DosesWithoutOutcome, int BreakMinutes, int IncidentCount, IReadOnlyList<string> MissingDetails);
+
+    /// <summary>
+    /// The deferrable answers still missing on each completion (<see cref="ShiftDetailsRules.Missing"/>), for the queue, the review, the worker's list and the
+    /// approve hold: the one place the rule is fed. A completion that never opted in costs one query for the page and nothing more. Every id is in the result.
+    /// </summary>
+    public static async Task<Dictionary<Guid, IReadOnlyList<string>>> MissingDetailsAsync(
+        OdipDbContext db, IReadOnlyCollection<Guid> completionIds, CancellationToken ct)
+    {
+        var result = completionIds.ToDictionary(id => id, _ => (IReadOnlyList<string>)Array.Empty<string>());
+        if (result.Count == 0) return result;
+        var rows = await db.ShiftCompletions.AsNoTracking()
+            .Where(c => completionIds.Contains(c.Id) && c.DetailsRequired)
+            .Select(c => new
+            {
+                c.Id, c.ShiftId, c.TenantId, c.Kilometres, c.PreShiftTravelMinutes, c.PreShiftTravelKilometres, c.PreTravelNone,
+                c.PostShiftTravelMinutes, c.PostShiftTravelKilometres, c.PostTravelNone, c.HandoverText, c.NothingToHandOver,
+                c.NothingToNoteConfirmed, c.AnythingToReport,
+            })
+            .ToListAsync(ct);
+        if (rows.Count == 0) return result;
+
+        var shiftIds = rows.Select(r => r.ShiftId).ToList();
+        var withNote = (await db.ShiftNotes.AsNoTracking().Where(n => shiftIds.Contains(n.ShiftId)).Select(n => n.ShiftId).Distinct().ToListAsync(ct)).ToHashSet();
+        var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
+        var settings = (await db.PlanPricingSettings.AsNoTracking().Where(s => tenantIds.Contains(s.TenantId)).ToListAsync(ct))
+            .GroupBy(s => s.TenantId).ToDictionary(g => g.Key, g => g.First());
+        foreach (var r in rows)
+        {
+            var travelAsked = PlanPricingPolicy.From(settings.GetValueOrDefault(r.TenantId)).ClaimProviderTravel;
+            result[r.Id] = ShiftDetailsRules.Missing(new ShiftDetailsFacts(
+                true, travelAsked, withNote.Contains(r.ShiftId), r.Kilometres, r.PreShiftTravelMinutes, r.PreShiftTravelKilometres, r.PreTravelNone,
+                r.PostShiftTravelMinutes, r.PostShiftTravelKilometres, r.PostTravelNone, r.HandoverText, r.NothingToHandOver, r.NothingToNoteConfirmed,
+                r.AnythingToReport));
+        }
+        return result;
+    }
 
     /// <summary>
     /// For each queue row: how many scheduled doses in the ROSTERED window have no outcome (the same slots, dedupe and active-record rule the
@@ -61,6 +98,7 @@ public static class ShiftCompletionMapper
             zones[tenantId] = (await ProviderTimeZoneResolver.ResolveAsync(db, tenantId, ct)).Zone;
         var slots = new MedicationSlotService(db);
         var nowUtc = DateTime.UtcNow;
+        var missing = await MissingDetailsAsync(db, completionIds, ct);
 
         foreach (var row in rows)
         {
@@ -73,7 +111,7 @@ public static class ShiftCompletionMapper
             });
             var due = await slots.GetWindowAsync(window.Item1, window.Item2, row.ParticipantId, zones[row.TenantId], includePrn: false, ct);
             var withoutOutcome = due.Slots.DistinctBy(s => (s.Medication.Id, s.ScheduledAt)).Count(s => s.Administration is null);
-            result[row.CompletionId] = new QueueExtras(withoutOutcome, breakMinutes, incidentsByShift.GetValueOrDefault(row.ShiftId));
+            result[row.CompletionId] = new QueueExtras(withoutOutcome, breakMinutes, incidentsByShift.GetValueOrDefault(row.ShiftId), missing[row.CompletionId]);
         }
         return result;
     }
@@ -163,7 +201,7 @@ public static class ShiftCompletionMapper
                 completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount,
                 extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual,
                 completion.OriginalActualStart is not null || completion.OriginalActualEnd is not null,
-                extras[completion.Id].IncidentCount,
+                extras[completion.Id].IncidentCount, extras[completion.Id].MissingDetails,
                 IsOffRoster(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, completion.ActualEnd), completion.ExtraTime));
         }
         return items;
@@ -208,6 +246,7 @@ public static class ShiftCompletionMapper
             .Where(b => b.ShiftCompletionId == c.Id)
             .OrderBy(b => b.StartedAt)
             .ToListAsync(ct);
+        var missingDetails = (await MissingDetailsAsync(db, [c.Id], ct))[c.Id];
         var (_, breakMinutes, netMinutes) = ShiftBreakRules.NetWorked(c.ActualStart, c.ActualEnd, now, breaks);
 
         return new ShiftCompletionDto(
@@ -223,7 +262,7 @@ public static class ShiftCompletionMapper
             c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
             c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres,
             c.PreShiftTravelMinutes, c.PreShiftTravelKilometres, c.PostShiftTravelMinutes, c.PostShiftTravelKilometres, c.AnythingToReport,
-            c.SentFromOffline, c.LocationCheck, c.LocationDistanceMetres, c.LocationAccuracyMetres, c.LocationReason,
+            c.SentFromOffline, missingDetails, c.PreTravelNone, c.PostTravelNone, c.LocationCheck, c.LocationDistanceMetres, c.LocationAccuracyMetres, c.LocationReason,
             c.StartTimeReason, c.FinishTimeReason, ShiftTimeRules.IsOffRoster(c.VarianceMinutesStart), c.ActualEnd is not null && ShiftTimeRules.IsOffRoster(c.VarianceMinutesEnd), c.ExtraTime);
     }
 

@@ -129,6 +129,15 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>Kilometres of the trip after the shift, 0 to 2,000 to one decimal place; null when not given. Not <see cref="Kilometres"/>.</summary>
     public decimal? PostShiftTravelKilometres { get; set; }
 
+    /// <summary>The worker ended with "add details later" (finish-later): the deferrable answers count toward Needs details and hold approval. False on every older completion and on a legacy Finish.</summary>
+    public bool DetailsRequired { get; set; }
+
+    /// <summary>"No trip" ticked for the trip to the participant; the leg's two values are then null.</summary>
+    public bool PreTravelNone { get; set; }
+
+    /// <summary>"No trip" ticked for the trip after the shift; the leg's two values are then null.</summary>
+    public bool PostTravelNone { get; set; }
+
     /// <summary>The worker's answer to "Anything to report?" at Finish: true, false, or null when skipped. Informational; it blocks nothing.</summary>
     public bool? AnythingToReport { get; set; }
 

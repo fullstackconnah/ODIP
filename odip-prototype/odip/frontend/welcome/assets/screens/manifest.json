@@ -113,9 +113,9 @@
     "kb2x": 61,
     "route": "/qualifications",
     "role": "Admin",
-    "cropTarget": "Qualifications: the issue tabs and the two staff groups opened, one credential expired and one expiring inside the 30-day window",
+    "cropTarget": "Qualifications: the staff list on the left with Tom Beattie selected, and his credentials on the right, first aid expired on 1 July",
     "fixture": false,
-    "alt": "Qualifications with two issues across two active staff: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's first aid expired on 1 July, each listed with their current credentials and an Edit link.",
+    "alt": "Qualifications with every active staff member listed on the left, each with a status dot and their worst state; Tom Beattie is selected and his first aid, expired on 1 July, is listed on the right with his other credentials, an Edit button, and Previous and Next buttons.",
     "notes": ""
   },
   {
@@ -288,9 +288,9 @@
     "kb2x": 75.6,
     "route": "/qualifications",
     "role": "Admin",
-    "cropTarget": "Qualifications: the issue tabs and the two staff groups opened, one credential expired and one expiring inside the 30-day window, at a 640px app width",
+    "cropTarget": "Qualifications: the staff list, then the selected person's credentials, at a 640px app width",
     "fixture": false,
-    "alt": "On a narrow screen, Qualifications with both staff groups open: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's expired first aid among their current credentials, each with an Edit link.",
+    "alt": "On a narrow screen, Qualifications shows the staff list first; picking Tom Beattie shows his credentials, his expired first aid among them, with Edit, Previous and Next buttons.",
     "notes": "",
     "variantOf": "credentials"
   },

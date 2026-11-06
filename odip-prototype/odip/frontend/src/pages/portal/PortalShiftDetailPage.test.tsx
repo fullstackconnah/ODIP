@@ -72,6 +72,7 @@ function renderAt(id: string, search = '') {
 function makeDetail(overrides: Partial<PortalShiftDetailDto> = {}): PortalShiftDetailDto {
   return {
     id: 'shift-1',
+    missingDetails: [],
     serviceDate: '2026-08-17',
     startTime: '09:00:00',
     endTime: '17:00:00',

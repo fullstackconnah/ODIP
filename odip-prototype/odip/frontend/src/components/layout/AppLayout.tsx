@@ -397,15 +397,15 @@ export default function AppLayout() {
   const unsent = useQueueRecords().length
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
-  // Opened from the drawer, the row that opened it is gone with the drawer: the menu button takes the focus back when the dialog closes.
-  const reportFromDrawer = useRef(false)
+  // Opened from the drawer (Report a problem, Sign out), the drawer closes first (it would cover the dialog) and the row that opened it is gone: the menu button takes the focus back when the dialog closes.
+  const dialogFromDrawer = useRef(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    if (!reportOpen && reportFromDrawer.current) {
-      reportFromDrawer.current = false
+    if (!reportOpen && !confirmSignOut && dialogFromDrawer.current) {
+      dialogFromDrawer.current = false
       menuButtonRef.current?.focus()
     }
-  }, [reportOpen])
+  }, [reportOpen, confirmSignOut])
   const drawerRef = useRef<HTMLElement>(null)
   const location = useLocation()
   const { prefs, setPref } = useUiPreferences()
@@ -531,14 +531,16 @@ export default function AppLayout() {
       </a>
       <ConfirmDialog
         open={confirmSignOut}
-        title="Sign out and delete unsent changes?"
-        message={`${plural(unsent, 'change')} on this phone ${unsent === 1 ? 'hasn’t' : 'haven’t'} been sent yet. Signing out deletes ${unsent === 1 ? 'it' : 'them'} from this phone.`}
-        confirmLabel="Sign out and delete"
+        title={unsent > 0 ? 'Sign out and delete unsent changes?' : 'Sign out?'}
+        message={unsent > 0
+          ? `${plural(unsent, 'change')} on this phone ${unsent === 1 ? 'hasn’t' : 'haven’t'} been sent yet. Signing out deletes ${unsent === 1 ? 'it' : 'them'} from this phone.`
+          : 'You’ll need to sign in again to use Bunya Support.'}
+        confirmLabel={unsent > 0 ? 'Sign out and delete' : 'Sign out'}
         cancelLabel="Stay signed in"
-        variant="danger"
+        variant={unsent > 0 ? 'danger' : 'default'}
         focusCancel
         onCancel={() => setConfirmSignOut(false)}
-        onConfirm={() => { offlineQueue.wipeAll(); void endSession() }}
+        onConfirm={() => { if (unsent > 0) offlineQueue.wipeAll(); void endSession() }}
       />
       <ReportProblemDialog open={reportOpen} onClose={() => setReportOpen(false)} />
       {/*
@@ -649,7 +651,7 @@ export default function AppLayout() {
           {/* A SuperAdmin with no organisation in view has none to report from (the server refuses it), so the row is not offered. */}
           {!(permissions.isSuperAdmin && !viewingTenantId) && (
             <button type="button"
-              onClick={() => { reportFromDrawer.current = isBelowLg; setSidebarOpen(false); setReportOpen(true) }}
+              onClick={() => { dialogFromDrawer.current = isBelowLg; setSidebarOpen(false); setReportOpen(true) }}
               data-glide="report"
               className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
               {...(rail ? rail.tip('Report a problem', 0) : {})}>
@@ -657,7 +659,7 @@ export default function AppLayout() {
               {footRail ? <span className="sr-only">Report a problem</span> : <span data-fold="label">Report a problem</span>}
             </button>
           )}
-          <button onClick={() => (unsent > 0 ? setConfirmSignOut(true) : endSession())}
+          <button onClick={() => { dialogFromDrawer.current = isBelowLg; setSidebarOpen(false); setConfirmSignOut(true) }}
             data-glide="signout"
             className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
             {...(rail ? rail.tip('Sign out', 0) : {})}>
