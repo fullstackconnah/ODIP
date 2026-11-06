@@ -15,10 +15,10 @@ export const sentenceDay = (iso: string, today: string) => (iso.slice(0, 4) === 
 /** Whether the expected line is drawn for this scope: an agreement was priced, and it reaches this scope's money. */
 export const expectedDrawn = (series: BudgetSeries, scope: BudgetSeriesScope) => series.expected.status === 'Ok' && scope.points.some(p => p.expected !== undefined)
 
-/** The day the budget is (or at this rate will be) reached, and whether that is still ahead. A reach today counts as reached. */
+/** The day the budget is (or at this rate will be) reached, and whether that is still ahead. A reach today counts as reached once used is at the limit; a pace forecast landing on today is still ahead. */
 export function limitReach(series: BudgetSeries, scope: BudgetSeriesScope): { on: string; ahead: boolean } | undefined {
   const on = scope.summary.limitReachedOn
-  return on === undefined ? undefined : { on, ahead: series.planIsCurrent && on > series.today }
+  return on === undefined ? undefined : { on, ahead: series.planIsCurrent && (on > series.today || scope.summary.used < scope.limit) }
 }
 
 /** The card's focal line, for the scope on screen. */

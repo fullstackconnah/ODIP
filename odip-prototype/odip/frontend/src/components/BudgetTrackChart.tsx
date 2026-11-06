@@ -189,7 +189,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
     const clear = (c: typeof cands[number]) => {
       const box = boxOf(c)
       if (box[0] < 0 || box[1] > W) return false
-      if (c.end && box[0] < M.left - 4 && ticks.some(v => Math.abs(y(v) - (c.y - 4)) < 12)) return false
+      if (c.end && box[0] < M.left - 4 && ticks.some(v => Math.abs(y(v) - (c.y - 4)) < 20)) return false
       return !onLine(box, [...drawn, [[M.left, limitY], [W - M.right, limitY]]])
     }
     const place = current ? cands.find(clear) ?? cands[0] : cands[0]
@@ -205,10 +205,30 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
   const limitCands = [limitY - 4, limitY + 14].map(by => ({ y: by, box: [M.left + 4, M.left + 4 + textW(limitText), by - 12, by + 3] as Box }))
   const taken = [...todayBox, renew.box, ...(usedPlace ? [usedPlace.box] : [])]
   const limitLabel = limitCands.find(c => !onLine(c.box, drawn) && !taken.some(t => hit(t, c.box))) ?? limitCands[0]
-  const reachText = reach ? `${reach.ahead ? 'Reaches' : 'Reached'} budget ${sentenceDay(reach.on, series.today)}` : ''
-  const reachX = reach ? Math.min(Math.max(x(reach.on), M.left + textW(reachText) / 2), W - M.right - textW(reachText) / 2) : 0
-  const reachCands = [limitY - 10, limitY + 18].map(by => ({ y: by, box: [reachX - textW(reachText) / 2, reachX + textW(reachText) / 2, by - 12, by + 3] as Box }))
-  const reachLabel = reachCands.find(c => !onLine(c.box, drawn) && ![...taken, limitLabel.box].some(t => hit(t, c.box))) ?? reachCands[0]
+  // The reach label, in order: above the dot, right of it, left of it, below the limit line, then (a current plan) the same two rows just right of the Today line; the first whose box keeps 4px from every other label and crosses no line, dot or plot edge. Narrow, with none, it drops its date (the sentence above the chart has it).
+  const reachWord = reach ? `${reach.ahead ? 'Reaches' : 'Reached'} budget` : ''
+  const reachPlace = (text: string) => {
+    const [w, rx] = [textW(text), x(reach!.on)]
+    const cx = Math.min(Math.max(rx, M.left + w / 2), W - M.right - w / 2)
+    const at = (px: number, anchor: 'start' | 'middle' | 'end', by: number) => {
+      const x0 = anchor === 'middle' ? px - w / 2 : anchor === 'end' ? px - w : px
+      return { x: px, anchor, y: by, box: [x0, x0 + w, by - 12, by + 3] as Box }
+    }
+    const cands = [at(cx, 'middle', limitY - 10), at(rx + 8, 'start', limitY - 8), at(rx - 8, 'end', limitY - 8), at(cx, 'middle', limitY + 18), ...(current ? [at(x(series.today) + 8, 'start', limitY - 8), at(x(series.today) + 8, 'start', limitY + 18)] : [])]
+    const [lines, dots, labels] = [
+      [...drawn, used.map(([d, v]) => pt(d, v)), [[x(planStart), limitY], [endX, limitY]], [[endX, M.top], [endX, baseline]], ...(current ? [[[x(series.today), M.top], [x(series.today), baseline]]] : [])],
+      [[rx - 4, rx + 4, limitY - 4, limitY + 4] as Box, ...(usedPlace ? [[usedPlace.lx - 4, usedPlace.lx + 4, usedPlace.ly - 4, usedPlace.ly + 4] as Box] : [])],
+      [...taken, limitLabel.box].map(([l, r, t, bt]) => [l - 4, r + 4, t - 4, bt + 4] as Box),
+    ]
+    const fits = (c: typeof cands[number]) => c.box[0] >= M.left && c.box[1] <= W - M.right && c.box[2] >= M.top && c.box[3] <= baseline && !onLine(c.box, lines) && ![...dots, ...labels].some(o => hit(o, c.box))
+    return { text, place: cands.find(fits), first: cands[0] }
+  }
+  const reachLabel = reach ? (() => {
+    const full = reachPlace(`${reachWord} ${sentenceDay(reach.on, series.today)}`)
+    const short = W < 480 && !full.place ? reachPlace(reachWord) : undefined
+    const pick = full.place ? full : short?.place ? short : full
+    return { text: pick.text, ...(pick.place ?? pick.first) }
+  })() : undefined
 
   const options = series.scopes.map(s => ({ key: s.scopeKey, label: s.scopeKey === 'plan' ? 'Whole plan' : s.name }))
   const choose = (next: string) => { setKey(next); setActive(null); setPinned(false) }
@@ -313,10 +333,10 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
                 <text x={renew.x} y={renew.y} textAnchor="end" className={`fill-[var(--color-muted-foreground)] text-xs ${HALO}`}>{renewText}</text>
               </g>
               <text x={limitLabel.box[0]} y={limitLabel.y} className={`fill-[var(--color-muted-foreground)] text-xs tabular-nums ${HALO}`}>{limitText}</text>
-              {reach && (
+              {reach && reachLabel && (
                 <g>
                   <circle className="bt-dot" data-dot="reach" cx={r1(x(reach.on))} cy={r1(limitY)} r={4} />
-                  <text x={reachX} y={reachLabel.y} textAnchor="middle" className={`fill-[var(--color-muted-foreground)] text-xs ${HALO}`}>{reachText}</text>
+                  <text x={reachLabel.x} y={reachLabel.y} textAnchor={reachLabel.anchor} data-reach-label className={`fill-[var(--color-muted-foreground)] text-xs ${HALO}`}>{reachLabel.text}</text>
                 </g>
               )}
               {current && (

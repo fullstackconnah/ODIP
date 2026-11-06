@@ -107,7 +107,7 @@ describe('BudgetTrackChart', () => {
     })
 
     it('a reach already past is labelled "Reached budget 3 Sep" and the pace line still runs to the plan end', () => {
-      render(<BudgetTrackChart series={withSummary({ pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2026-09-03' })} width={900} />)
+      render(<BudgetTrackChart series={withSummary({ pace: 16000, paceGapAtEnd: 4000, limitReachedOn: '2026-09-03', used: 12000 })} width={900} />)
       expect(labels()).toContain('Reached budget 3 Sep')
       expect(mark('pace')!.getAttribute('x2')).toBe(mark('renew')!.getAttribute('x1'))
     })

@@ -229,6 +229,14 @@ public class BudgetSeriesTests
     }
 
     [Fact]
+    public void LimitReachedOn_ASameDayCredit_DoesNotGiveAnEarlyDate()
+    {
+        // +10600 then -1000 on one day against a limit of 10000: the day ends at 9600, so the limit is first reached on the later day.
+        var line = Build(today: Oct1, used: [new(D(2026, 8, 1), 10600m), new(D(2026, 8, 1), -1000m), new(D(2026, 9, 1), 500m)]);
+        Assert.Equal(D(2026, 9, 1), line.Summary.LimitReachedOn);
+    }
+
+    [Fact]
     public void LimitReachedOn_PaceOverTheLimit_IsTheFirstDayAnEvenPaceReachesIt()
     {
         var line = Build(today: Oct1, used: [new(D(2026, 8, 1), 3000m)]);

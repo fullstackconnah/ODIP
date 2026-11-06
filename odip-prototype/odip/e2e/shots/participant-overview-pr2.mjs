@@ -1,5 +1,5 @@
 // Participant overview PR2: the budget limit line, the at-this-rate pace line, the reach dot and the renewal line on the shared chart (Overview and Funding tab).
-// Keeps PR1's setup and checks 1-6, 9 and 11; adds SHAPE.md numeric checks 7 (labels >= 12px), 8 (mark strokes 3:1 on the card) and 10 (no label box on another label, a line or a dot).
+// Keeps PR1's setup and checks 1-6, 9 and 11; adds SHAPE.md numeric checks 7 (labels >= 12px), 8 (mark strokes 3:1 on the card) and 10 (a mark label keeps 4px from other labels and off every line and dot).
 // bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to this script> <outdir>
 // Light theme pinned (colorScheme), Australian dates, reduced motion. The series is the mock's, reshaped here so each state is exact: `projected` (pace 10% over the limit, reach ahead),
 // `past` (used 12% over the limit, reach behind) and `ontrack` (pace 8% under, no reach). Fictional figures only.
@@ -148,11 +148,11 @@ function measureChart() {
     const cs = getComputedStyle(el), dot = sel.includes('dot'), c = dot && cs.fill !== 'none' ? cs.fill : cs.stroke
     marks[sel] = { colour: c, ratio: Math.round(ratio(rgb(c), cardBg) * 100) / 100, width: parseFloat(cs.strokeWidth), dash: cs.strokeDasharray }
   }
-  // Lines as sampled points (every data line except the used line, whose label sits against its own dot by design) and the dots as small boxes.
-  const lines = [...svg.querySelectorAll('[data-mark], [data-series]')].filter((e) => e.getAttribute('data-series') !== 'used').map((e) => {
-    const len = e.getTotalLength(), n = Math.max(2, Math.ceil(len / 4)), pts = []
+  // Lines as points sampled every 2px (every data line, the Today line and the limit dash included) and the dots as small boxes. The used label sits against its own line by design, so only the other labels are held off the used line.
+  const lines = [...svg.querySelectorAll('[data-mark], [data-series], [data-today] line')].map((e) => {
+    const len = e.getTotalLength(), n = Math.max(2, Math.ceil(len / 2)), pts = []
     for (let i = 0; i <= n; i++) { const p = e.getPointAtLength((len * i) / n); pts.push([p.x, p.y]) }
-    return { name: e.getAttribute('data-mark') ?? e.getAttribute('data-series'), pts }
+    return { name: e.getAttribute('data-mark') ?? e.getAttribute('data-series') ?? 'today', pts }
   })
   const dots = [...svg.querySelectorAll('circle[data-dot]')].map((c) => ({ name: 'dot ' + c.getAttribute('data-dot'), box: [c.cx.baseVal.value - c.r.baseVal.value, c.cx.baseVal.value + c.r.baseVal.value, c.cy.baseVal.value - c.r.baseVal.value, c.cy.baseVal.value + c.r.baseVal.value] }))
   const inset = (b) => [b[0] + 0.5, b[1] - 0.5, b[2] + 0.5, b[3] - 0.5]
@@ -162,9 +162,11 @@ function measureChart() {
     const tb = inset(t.box)
     // Axis tick pairs (for example the y "$0" and the first date tick) belong to the chart before PR2 and are not this check; every pair with a mark label is.
     const mine = (x) => /^(Budget $|Plan ends|Ended|Reache[sd] budget|Used |Today)/.test(x.text)
-    texts.slice(i + 1).forEach((u) => { if ((mine(t) || mine(u)) && hit(tb, inset(u.box))) clashes.push(`${t.text} x ${u.text}`) })
+    // A mark label keeps 4px from any other label (each box grown by 2px).
+    const grow = (b) => [b[0] - 2, b[1] + 2, b[2] - 2, b[3] + 2]
+    texts.slice(i + 1).forEach((u) => { if ((mine(t) || mine(u)) && hit(grow(t.box), grow(u.box))) clashes.push(`${t.text} x ${u.text}`) })
     dots.forEach((d) => { if (hit(tb, d.box)) clashes.push(`${t.text} x ${d.name}`) })
-    for (const l of lines) if (l.pts.some(([x, y]) => x > tb[0] && x < tb[1] && y > tb[2] && y < tb[3])) clashes.push(`${t.text} x ${l.name} line`)
+    for (const l of lines) if (!(l.name === 'used' && /^Used /.test(t.text)) && l.pts.some(([x, y]) => x > tb[0] && x < tb[1] && y > tb[2] && y < tb[3])) clashes.push(`${t.text} x ${l.name} line`)
   })
   return { texts: texts.map((t) => [t.text, t.size]), marks, clashes, hasReachDot: !!svg.querySelector('[data-dot="reach"]'), labels: texts.map((t) => t.text) }
 }
@@ -177,8 +179,8 @@ function chartChecks(tag, m, { reach, colours = true, ended = false }) {
     if ((sel.includes('reach') && reach === 'none') || (sel.includes('pace') && ended)) continue
     check(`8 ${tag} ${sel} drawn and 3:1 on the card`, v && v.ratio >= 3, v)
   }
-  check(`10 ${tag} no label box on another label, a line or a dot`, m.clashes.length === 0, m.clashes)
-  const want = { ahead: /^Reaches budget /, past: /^Reached budget /, none: null }[reach]
+  check(`10 ${tag} no mark label within 4px of another label, on a line or on a dot`, m.clashes.length === 0, m.clashes)
+  const want = { ahead: /^Reaches budget/, past: /^Reached budget/, none: null }[reach]
   if (want) check(`${tag} reach dot and "${want}" label`, m.hasReachDot && m.labels.some((l) => want.test(l)), m.labels)
   else check(`${tag} no reach dot or label`, !m.hasReachDot && !m.labels.some((l) => /^Reache[sd] budget/.test(l)), m.labels)
   check(`${tag} limit label and renewal label drawn`, m.labels.some((l) => /^Budget \$/.test(l)) && m.labels.some((l) => /^(Plan ends|Ended) /.test(l)), m.labels)
@@ -234,7 +236,7 @@ try {
     await cardOf(page).waitFor({ state: 'visible', timeout: 30_000 })
     runChecks('390 coordinator reach-projected', await page.evaluate(measureBand), { width: 390, count: 7, withCard: true })
     chartChecks('390 coordinator reach-projected', await chart(page), { reach: 'ahead' })
-    await shot(page, bandOf(page), 'overview-390-coordinator-reach-projected.png', { also: cardOf(page), touch: true })
+    await shot(page, bandOf(page), 'overview-390-coordinator-reach-projected.png', { also: cardOf(page), touch: true, natural: true })
     checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'overview-390-fullpage.png'), { touch: true })).checks)
     await context.close()
   })

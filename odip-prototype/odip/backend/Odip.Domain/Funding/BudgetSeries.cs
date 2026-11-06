@@ -113,15 +113,16 @@ public static class BudgetSeries
         if (totalUsed > 0m && totalUsed >= input.Limit)
         {
             var running = 0m;
-            foreach (var item in input.Used.OrderBy(i => i.Date))
+            foreach (var day in input.Used.GroupBy(i => i.Date).OrderBy(g => g.Key))   // a day counts at its end total, so a same-day credit cannot give an early date
             {
-                running += item.Amount;
-                if (running >= input.Limit) return item.Date < asOf ? item.Date : asOf;
+                running += day.Sum(i => i.Amount);
+                if (running >= input.Limit) return day.Key < asOf ? day.Key : asOf;
             }
         }
         if (pace is null || pace <= input.Limit || totalUsed <= 0m) return null;
+        // cannot fire while pace > limit gates this branch; kept as a guard
         var days = Math.Min(planDays, (int)Math.Ceiling(input.Limit * elapsed / totalUsed));   // days from the plan start, both ends included
-        return input.PlanStart.AddDays(Math.Max(days, 1) - 1);
+        return input.PlanStart.AddDays(days - 1);
     }
 
     /// <summary>The covered days as runs in date order: segments that overlap or touch are one run.</summary>
