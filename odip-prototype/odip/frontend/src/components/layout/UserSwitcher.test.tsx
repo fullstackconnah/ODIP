@@ -42,7 +42,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
-    await user.click(screen.getByRole('button', { name: /jamie support/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /jamie support/i }))
     // Selecting a user now opens a confirm dialog (PP-22) before switchTenant/selectUser
     // actually fires.
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
@@ -70,7 +70,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
-    await user.click(screen.getByRole('button', { name: /^jamie support/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^jamie support/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
     // Reopen (trigger now reads back "Jamie Support" from localStorage on this re-render — no
@@ -78,7 +78,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     // user: odip_user must still hold the ORIGINAL SuperAdmin identity. The trigger's own accessible name now starts
     // with the "USR" badge, not the user's name, so it's unambiguous against the dropdown row.
     await user.click(screen.getByRole('button', { name: /^usr/i }))
-    await user.click(screen.getByRole('button', { name: /^casey coordinator/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^casey coordinator/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
     expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('superadmin-1')
@@ -108,13 +108,13 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
-    await user.click(screen.getByRole('button', { name: /^jamie support/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^jamie support/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
     expect(JSON.parse(sessionStorage.getItem('odip_viewing_profile') || '{}').id).toBe('user-support-1')
 
     // Reopen the dropdown (selectUser closed it) to reach "Exit view".
     await user.click(screen.getByRole('button', { name: /^usr/i }))
-    await user.click(screen.getByRole('button', { name: /exit view/i }))
+    await user.click(screen.getByRole('menuitem', { name: /exit view/i }))
     // Exiting view is confirmed the same way switching users is.
     await user.click(screen.getByRole('button', { name: /^exit view$/i }))
 
@@ -133,11 +133,11 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
-    await user.click(screen.getByRole('button', { name: /^jamie support/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^jamie support/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
     await user.click(screen.getByRole('button', { name: /^usr/i }))
-    await user.click(screen.getByRole('button', { name: /exit view/i }))
+    await user.click(screen.getByRole('menuitem', { name: /exit view/i }))
     // The confirm dialog is now open — cancel it instead of confirming.
     await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
@@ -186,7 +186,7 @@ describe('UserSwitcher — touch target and small-screen trigger', () => {
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /^usr/i }))
-    const exit = screen.getByRole('button', { name: /exit view/i })
+    const exit = screen.getByRole('menuitem', { name: /exit view/i })
     expect(exit).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center')
     for (const name of [/^jamie support/i, /^casey coordinator/i]) {
       expect(screen.getByRole('button', { name })).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
@@ -203,7 +203,7 @@ describe('UserSwitcher — a switch whose reload was cancelled', () => {
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
-    await user.click(screen.getByRole('button', { name: /jamie support/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /jamie support/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
     expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-support-1')
 
@@ -248,10 +248,10 @@ describe("UserSwitcher dismissal", () => {
     await user.click(trigger);
 
     if (flow === "switch") {
-      const casey = screen.getByRole("button", { name: /Casey Coordinator/ });
+      const casey = screen.getByRole("menuitemradio", { name: /Casey Coordinator/ });
       await user.click(casey);
     } else {
-      const exit = screen.getByRole("button", { name: /Exit view/ });
+      const exit = screen.getByRole("menuitem", { name: /Exit view/ });
       await user.click(exit);
     }
 
@@ -310,7 +310,7 @@ describe('UserSwitcher: focus ring', () => {
     render(<UserSwitcher />)
 
     await user.click(screen.getByRole('button', { name: /^usr/i }))
-    const rows = [screen.getByRole('button', { name: /exit view/i }), screen.getByRole('button', { name: /^casey coordinator/i })]
+    const rows = [screen.getByRole('menuitem', { name: /exit view/i }), screen.getByRole('menuitemradio', { name: /^casey coordinator/i })]
     for (const row of rows) {
       expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]', 'focus-visible:relative')
       expect(row).not.toHaveClass('focus:ring-2')
@@ -328,5 +328,78 @@ describe('UserSwitcher: popover stays on screen on a phone', () => {
     await user.click(screen.getByRole('button', { name: /^usr/i }))
     const popover = screen.getByText('View as user', { exact: true }).closest('div.absolute')
     expect(popover).toHaveClass('right-0', 'w-64', 'max-sm:w-56')
+  })
+})
+
+describe('UserSwitcher: menu semantics and keyboard', () => {
+  const openByKey = async (key: string) => {
+    setSuperAdminSignedIn()
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+    const trigger = screen.getByRole('button', { name: /^usr/i })
+    trigger.focus()
+    await user.keyboard(key)
+    return { user, trigger }
+  }
+
+  it('is a labelled menu: radio items with the viewed user checked, Exit view a plain menuitem', async () => {
+    const { trigger } = await openByKey('{Enter}')
+    const menu = screen.getByRole('menu', { name: 'View as user' })
+    expect(trigger).toHaveAttribute('aria-controls', menu.id)
+    expect(screen.getByRole('menuitem', { name: /exit view/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: /^jamie support/i })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menuitemradio', { name: /^casey coordinator/i })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('opens on a click with focus on the checked item', async () => {
+    setSuperAdminSignedIn()
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    expect(screen.getByRole('menuitemradio', { name: /^jamie support/i })).toHaveFocus()
+  })
+
+  it('opens on ArrowDown at the first item when no user is checked, and ArrowDown moves on', async () => {
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+    screen.getByRole('button', { name: /^usr/i }).focus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitemradio', { name: /^jamie support/i })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitemradio', { name: /^casey coordinator/i })).toHaveFocus()
+  })
+
+  it('opens on ArrowUp at the last item; Home reaches Exit view', async () => {
+    const { user } = await openByKey('{ArrowUp}')
+    expect(screen.getByRole('menuitemradio', { name: /^casey coordinator/i })).toHaveFocus()
+    await user.keyboard('{Home}')
+    expect(screen.getByRole('menuitem', { name: /exit view/i })).toHaveFocus()
+    await user.keyboard('{ArrowUp}')
+    expect(screen.getByRole('menuitemradio', { name: /^casey coordinator/i })).toHaveFocus()
+  })
+
+  it('closes on Escape and puts focus back on the trigger', async () => {
+    const { user, trigger } = await openByKey('{Enter}')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('picking a user from the keyboard runs the same switch: storage keys written, reload called', async () => {
+    const { user } = await openByKey('{ArrowUp}')
+    await user.keyboard('{Enter}')
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
+    expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-coord-1')
+    expect(JSON.parse(sessionStorage.getItem('odip_viewing_profile') || '{}').id).toBe('user-coord-1')
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes on Tab', async () => {
+    const { user } = await openByKey('{Enter}')
+    await user.tab()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })
