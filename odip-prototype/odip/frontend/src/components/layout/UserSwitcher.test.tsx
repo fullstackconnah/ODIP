@@ -189,7 +189,7 @@ describe('UserSwitcher — touch target and small-screen trigger', () => {
     const exit = screen.getByRole('menuitem', { name: /exit view/i })
     expect(exit).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center')
     for (const name of [/^jamie support/i, /^casey coordinator/i]) {
-      expect(screen.getByRole('button', { name })).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
+      expect(screen.getByRole('menuitemradio', { name })).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
     }
   })
 })

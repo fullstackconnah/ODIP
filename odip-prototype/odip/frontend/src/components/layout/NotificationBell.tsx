@@ -41,7 +41,7 @@ export default function NotificationBell() {
   }
 
   // From lg the panel is a header popover, like the switchers: a click outside or Escape anywhere closes it (below lg the
-  // SlideOver's hook handles both). Escape listens on document, as UserSwitcher does, so it works when a click left focus elsewhere.
+  // SlideOver's hook handles both). Escape listens on document, as useMenuKeys does for the switchers, so it works when a click left focus elsewhere.
   useEffect(() => {
     if (!open || isBelowLg) return
     const onMouseDown = (e: MouseEvent) => {

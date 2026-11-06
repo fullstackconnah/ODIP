@@ -1,15 +1,16 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAdminTenantsSummary } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { switchViewAndReload } from '@/lib/viewAsSwitch'
 import { TONE } from '@/lib/tone'
 import { getViewAs, setViewAs, clearViewAs } from '@/lib/viewAs'
+import { useMenuKeys } from './useMenuKeys'
 
 export default function TenantSwitcher() {
   const [open, setOpen] = useState(false)
   const [pendingTenant, setPendingTenant] = useState<{ id: string; name: string } | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
+  const menu = useMenuKeys(open, setOpen)
   const { data: tenants = [] } = useAdminTenantsSummary()
   const viewingId = getViewAs('odip_viewing_tenant')
   const current = tenants.find(t => t.id === viewingId)
@@ -52,23 +53,6 @@ export default function TenantSwitcher() {
     }
   }, [tenants, viewingId])
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open])
-
   const switchTenant = (tenantId: string) => switchViewAndReload(() => {
     clearViewAs('odip_viewing_user')
     setViewAs('odip_viewing_tenant', tenantId)
@@ -76,15 +60,18 @@ export default function TenantSwitcher() {
   })
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={menu.rootRef} className="relative">
       {/* `--tap-min` floor: 44px tall under a coarse pointer (the header is 48px), unchanged on a mouse. Below sm the
           tenant name is dropped from the trigger, because a SuperAdmin's two switchers (badge + name + caret each),
           the bell and the avatar do not fit a 390px header: the badge and caret stay and the name moves into the
           accessible name and the tooltip. */}
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={menu.triggerRef}
+        onClick={menu.toggle}
+        onKeyDown={menu.onTriggerKeyDown}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? menu.menuId : undefined}
         aria-label={`SA ${current?.name ?? 'Loading…'}`}
         title={current?.name}
         className={`flex min-h-[var(--tap-min)] items-center gap-1.5 max-sm:gap-1 ${TONE.info.solid} border border-[var(--color-border)] rounded-lg px-2.5 max-sm:px-1.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
@@ -95,16 +82,19 @@ export default function TenantSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 max-sm:right-auto max-sm:left-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
+        <div ref={menu.menuRef} id={menu.menuId} role="menu" aria-labelledby={menu.headingId} onKeyDown={menu.onMenuKeyDown} onFocus={menu.onMenuFocus} className="absolute right-0 max-sm:right-auto max-sm:left-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+          <div id={menu.headingId} className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             Viewing as tenant
           </div>
           <div className="p-1.5">
             {tenants.map(tenant => (
               <button
                 key={tenant.id}
+                role="menuitemradio"
+                aria-checked={tenant.id === viewingId}
+                tabIndex={-1}
                 onClick={() => {
-  ref.current?.querySelector('button')?.focus();
+  menu.triggerRef.current?.focus();
   setOpen(false);
   setPendingTenant({ id: tenant.id, name: tenant.name });
 }}
