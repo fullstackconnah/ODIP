@@ -105,7 +105,7 @@ describe('RestrictivePracticeStep register list', () => {
   })
 
   it('in edit mode, while the register loads, the type dropdown does not flash', () => {
-    mockState.current = { isLoading: true, isError: false }
+    mockState.current = { isLoading: true, isError: false, isRefetching: false }
     mockActive.current = []
     render(<Harness defaults={{ restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-1' }} />)
 
@@ -113,7 +113,7 @@ describe('RestrictivePracticeStep register list', () => {
   })
 
   it('a failed register load shows the error, not the empty-register line, and keeps "None of these" usable', async () => {
-    mockState.current = { isLoading: false, isError: true }
+    mockState.current = { isLoading: false, isError: true, isRefetching: false }
     mockActive.current = []
     render(<Harness />)
 
