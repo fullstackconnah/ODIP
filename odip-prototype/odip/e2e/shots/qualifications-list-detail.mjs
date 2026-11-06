@@ -120,6 +120,8 @@ async function desktop() {
   check('7. ArrowDown moves focus to the next link, URL unchanged', `${focused}; url same ${page.url() === url0}`, /^A /.test(focused) && page.url() === url0)
 
   // 3 + editing. The date input is --control-h tall (32 on a fine pointer).
+  const headerXs = () => page.locator('table th').evaluateAll((ths) => ths.map((t) => Math.round(t.getBoundingClientRect().x)))
+  const xsBefore = await headerXs()
   await page.getByRole('button', { name: /^Edit: First Aid, Alex Aardvark$/ }).click()
   const input = page.getByLabel('Expiry date')
   await input.waitFor({ timeout: 5000 })
@@ -128,6 +130,9 @@ async function desktop() {
   const focusIn = await input.evaluate((el) => document.activeElement === el)
   check('date input takes focus on open', focusIn, focusIn)
   await shot(page, 'detail-1280-editing')
+  await shot(page, 'qual-editor-open-1280')
+  const xsAfter = await headerXs()
+  check('N1. every table header x is the same before and after the editor opens (1 px)', `${xsBefore} -> ${xsAfter}`, xsBefore.length > 1 && xsBefore.length === xsAfter.length && xsBefore.every((x, i) => Math.abs(x - xsAfter[i]) <= 1))
 
   // save error: the editor stays open with the typed value and an alert
   await input.fill(iso(365))
@@ -158,6 +163,14 @@ async function desktop() {
   await page.goto(BASE_URL + '/qualifications?show=attention&staff=s-alex', { waitUntil: 'domcontentloaded' })
   await page.locator(NAV).waitFor({ timeout: 30000 })
   await shot(page, 'list-1280-needs-attention')
+
+  // N3: a direct ?staff= load of the last person scrolls their row into the list's view
+  await page.goto(BASE_URL + q('s-zed'), { waitUntil: 'domcontentloaded' })
+  await page.locator(NAV + ' a[aria-current="page"]').waitFor({ timeout: 30000 })
+  await page.waitForTimeout(300)
+  const zedVis = await page.evaluate((nav) => { const a = document.querySelector(nav + ' a[aria-current="page"]').getBoundingClientRect(); const u = document.querySelector(nav + ' ul').getBoundingClientRect(); return { aTop: Math.round(a.top), aBottom: Math.round(a.bottom), uTop: Math.round(u.top), uBottom: Math.round(u.bottom) } }, NAV)
+  check('N3. direct ?staff= load: the selected row is inside the list view', JSON.stringify(zedVis), zedVis.aTop >= zedVis.uTop - 1 && zedVis.aBottom <= zedVis.uBottom + 1)
+  await shot(page, 'qual-direct-staff-1280')
 
   await page.goto(BASE_URL + q('s-alex'), { waitUntil: 'domcontentloaded' })
   await page.getByLabel('Search staff').fill('zzzz')
