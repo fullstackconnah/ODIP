@@ -19,7 +19,7 @@ import {
 import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto, ExtraTimeChoice, ExtraTimeDecision } from '@/api/types'
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatVarianceMinutes } from './lib/roster'
-import { formatServiceDate, plural } from '@/lib/format'
+import { formatServiceDate, joinList, plural } from '@/lib/format'
 import { unbroken } from '@/lib/intakeBooking'
 import { noBreakRefs } from '@/lib/noBreakRef'
 import { Button } from '@/components/Button'
@@ -31,7 +31,7 @@ import { TONE } from '@/lib/tone'
 import { NumberField } from '@/components/NumberField'
 import { apiErrorCode } from '@/lib/shiftPackageErrors'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
-import { travelLabel } from '@/pages/portal/shift/checklist'
+import { detailLabel, travelLabel } from '@/pages/portal/shift/checklist'
 
 const PAGE_SIZE = 50
 const DASH = '–'
@@ -226,6 +226,7 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
 }) {
   const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
   const lines = [
+    c.missingDetails.length > 0 && `Missing: ${joinList(c.missingDetails.map(k => detailLabel(k, 'the participant')))}.`,
     c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
     locationCheckLine(c),
     c.offRosterStart && offRosterLine('Started', c.varianceMinutesStart, c.startTimeReason),
@@ -234,6 +235,8 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
     c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
     c.kilometres != null && `${c.kilometres} km driven with the participant`,
     (c.preShiftTravelMinutes != null || c.preShiftTravelKilometres != null) && `Trip to the participant: ${travelLabel(c.preShiftTravelMinutes ?? null, c.preShiftTravelKilometres ?? null)}`,
+    c.preTravelNone && 'No trip to the participant.',
+    c.postTravelNone && 'No trip after the shift.',
     (c.postShiftTravelMinutes != null || c.postShiftTravelKilometres != null) && `Trip after the shift: ${travelLabel(c.postShiftTravelMinutes ?? null, c.postShiftTravelKilometres ?? null)}`,
     c.anythingToReport && 'The worker said there was something to report.',
     c.shiftReturnCount > 0 && `Returned to the worker ${plural(c.shiftReturnCount, 'time')} before.`,
@@ -297,6 +300,8 @@ export default function CompletionReviewPage() {
   const [decideError, setDecideError] = useState(false)
   const [decideStale, setDecideStale] = useState(false)   // set on open: Date.now() is impure in render
   const [batchResults, setBatchResults] = useState<ApproveBatchResultDto[] | null>(null)
+  const leftOut = (batchResults ?? []).filter(r => r.code === C.detailsMissing)
+  const failedResults = (batchResults ?? []).filter(r => !r.approved && r.code !== C.detailsMissing)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
   const { data: detail } = useCompletion(detailShiftId)
@@ -394,8 +399,11 @@ export default function CompletionReviewPage() {
     { key: 'serviceDate', header: 'Date', render: row => formatDateAu(row.serviceDate) },
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
-      key: 'variance', header: 'Variance', render: row => (
+      key: 'variance', header: 'Variance', className: 'md:min-w-[16rem]', render: row => (
         <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
+          {row.missingDetails.length > 0 && (
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Needs details</span>
+          )}
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
             {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
           </span>
@@ -414,6 +422,11 @@ export default function CompletionReviewPage() {
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>{EXTRA_TIME_LABEL[row.extraTime]}</span>
           )}
           <IncidentIndicator shiftId={row.shiftId} />
+          {row.missingDetails.length > 0 && (
+            <p id={`missing-${row.shiftId}`} className="w-full min-w-0 whitespace-normal break-words text-xs text-[var(--color-muted-foreground)]">
+              Waiting on {firstName(row.staffName)} to add: {joinList(row.missingDetails.map(k => detailLabel(k, firstName(row.participantName))))}.
+            </p>
+          )}
         </div>
       ),
     },
@@ -425,7 +438,7 @@ export default function CompletionReviewPage() {
             <Button variant="secondary" size="sm" onClick={() => setReturnTarget(row)} aria-label={`Return ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Return
             </Button>
-            <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
+            <Button size="sm" disabled={row.missingDetails.length > 0} aria-describedby={row.missingDetails.length > 0 ? `missing-${row.shiftId}` : undefined} onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Approve
             </Button>
           </div>
@@ -462,11 +475,12 @@ export default function CompletionReviewPage() {
           <div className="flex items-center justify-between gap-2">
             <p>
               {batchResults.filter(r => r.approved).length} approved
-              {batchResults.some(r => !r.approved) && `, ${batchResults.filter(r => !r.approved).length} failed`}.
+              {leftOut.length > 0 && `, ${leftOut.length} left out: details missing`}
+              {failedResults.length > 0 && `, ${failedResults.length} failed`}.
             </p>
             <Button variant="ghost" size="sm" onClick={() => setBatchResults(null)}>Dismiss</Button>
           </div>
-          {batchResults.filter(r => !r.approved).map(r => (
+          {failedResults.map(r => (
             <p key={r.shiftId} className="text-xs text-[var(--color-destructive)]">{r.shiftId}: {r.message ?? r.code ?? 'Could not approve.'}</p>
           ))}
         </div>

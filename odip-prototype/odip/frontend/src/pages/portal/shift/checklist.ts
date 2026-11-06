@@ -291,3 +291,47 @@ export function offlineDueDoses(shift: PortalShiftDetailDto, now: Date = new Dat
   return buildChecklist(shift).groups.flatMap(g => g.items).flatMap(i =>
     (i.kind === 'dose' && (due.has(i.key) || (shift.canRecordDoses && !i.slot.outcome && toDatetimeInputValue(i.slot.scheduledAt) <= nowLocal)) ? [i.slot] : []))
 }
+
+// ── Finish later: the answers a shift can still be missing ──
+
+/** The deferrable answers, in the order the server lists them (`ShiftDetailsRules`). */
+export const DETAIL_KEYS = ['kilometres', 'tripTo', 'tripAfter', 'notes', 'handover', 'report'] as const
+export type DetailKey = (typeof DETAIL_KEYS)[number]
+
+/** A missing answer in words; `first` is the participant's first name. An unknown key from a newer server reads as itself. */
+export function detailLabel(key: string, first: string): string {
+  switch (key) {
+    case 'kilometres': return 'kilometres'
+    case 'tripTo': return `trip to ${first}`
+    case 'tripAfter': return 'trip after the shift'
+    case 'notes': return 'notes'
+    case 'handover': return 'handover'
+    case 'report': return 'anything to report'
+    default: return key
+  }
+}
+
+/** What the unsaved form holds; the same facts as the server's `ShiftDetailsFacts`, so one case table pins both. */
+export interface DetailsForm {
+  kilometres: number | null
+  preMinutes: number | null; preKm: number | null; preNone: boolean
+  postMinutes: number | null; postKm: number | null; postNone: boolean
+  handoverText: string; nothingToHandOver: boolean
+  nothingToNote: boolean
+  anythingToReport: boolean | null
+}
+
+/**
+ * The live copy of `ShiftDetailsRules.Missing` for the unsaved form (the saved list always comes from the server). Both run
+ * `checklist.missingDetails.test.ts` and `ShiftDetailsRulesTests`, the same case table.
+ */
+export function missingDetails(form: DetailsForm, ctx: { travelAsked: boolean; hasNote: boolean }): DetailKey[] {
+  const missing: DetailKey[] = []
+  if (form.kilometres === null) missing.push('kilometres')
+  if (ctx.travelAsked && !form.preNone && (form.preMinutes === null || form.preKm === null)) missing.push('tripTo')
+  if (ctx.travelAsked && !form.postNone && (form.postMinutes === null || form.postKm === null)) missing.push('tripAfter')
+  if (!ctx.hasNote && !form.nothingToNote) missing.push('notes')
+  if (form.handoverText.trim() === '' && !form.nothingToHandOver) missing.push('handover')
+  if (form.anythingToReport === null) missing.push('report')
+  return missing
+}
