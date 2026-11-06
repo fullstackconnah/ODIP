@@ -296,7 +296,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
 
     const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
     answer([now])
-    sessionStorage.setItem('odip-shift-end-draft:shift-2', JSON.stringify({ step: 'times' }))
+    sessionStorage.setItem('odip-shift-end-draft:shift-2', JSON.stringify({ open: true }))
     renderPage()
     expect(screen.getByRole('link', { name: 'Continue finishing' })).toBeInTheDocument()
   })
@@ -341,6 +341,30 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
     expect(within(coming).getAllByRole('link').map(a => a.textContent)).toEqual([expect.stringContaining('Rae Returned'), expect.stringContaining('Fay Future')])
     expect(within(coming).getByText('Returned')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Earlier' })).getByText('Pat Plain')).toBeInTheDocument()
+  })
+
+  it('Needs details: a shift with details missing leads its own section, even outside the browsed week, and is not in Earlier', () => {
+    answer([
+      row({ id: 'n1', serviceDate: '2026-07-20', status: 'PendingReview', participantName: 'Nell Open', missingDetails: ['kilometres', 'tripTo', 'handover'] }),
+      row({ id: 'n2', serviceDate: '2026-08-18', status: 'PendingReview', participantName: 'Ned Inweek', missingDetails: ['report'] }),
+      row({ id: 'ok', serviceDate: '2026-08-18', status: 'PendingReview', participantName: 'Ola Complete' }),
+    ])
+    renderPage()
+
+    const needs = screen.getByRole('region', { name: 'Needs details' })
+    const links = within(needs).getAllByRole('link')
+    expect(links.map(a => a.getAttribute('href'))).toEqual(['/portal/shifts/n1#finish', '/portal/shifts/n2#finish'])
+    expect(within(needs).getAllByText('Needs details')).toHaveLength(3)   // the heading and the badge on each card
+    expect(within(needs).getByText('Still to add: kilometres, trip to Nell and handover')).toBeInTheDocument()
+    const earlier = screen.getByRole('region', { name: 'Earlier' })
+    expect(within(earlier).getByText('Ola Complete')).toBeInTheDocument()
+    expect(within(earlier).queryByText('Ned Inweek')).not.toBeInTheDocument()
+  })
+
+  it('shows no Needs details section when nothing is missing', () => {
+    answer([row({ id: 'ok', serviceDate: '2026-08-18', status: 'PendingReview', participantName: 'Ola Complete' })])
+    renderPage()
+    expect(screen.queryByRole('region', { name: 'Needs details' })).not.toBeInTheDocument()
   })
 })
 

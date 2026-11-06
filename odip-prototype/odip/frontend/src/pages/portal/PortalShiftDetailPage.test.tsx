@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   mockUseShiftNotes: vi.fn(),
   startMutateAsync: vi.fn(),
   finishMutateAsync: vi.fn(),
+  saveDetailsMutateAsync: vi.fn(),
   ackMutateAsync: vi.fn(),
   startBreakMutateAsync: vi.fn(),
   endBreakMutateAsync: vi.fn(),
@@ -24,7 +25,7 @@ const h = vi.hoisted(() => ({
   mutation: (fn: unknown) => () => ({ mutateAsync: fn, isPending: false }),
 }))
 const {
-  mockUsePortalShiftDetail, mockUseShiftNotes, startMutateAsync, finishMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync,
+  mockUsePortalShiftDetail, mockUseShiftNotes, startMutateAsync, finishMutateAsync, saveDetailsMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync,
   editBreakMutateAsync, deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync,
 } = h
 
@@ -33,6 +34,7 @@ vi.mock('@/api/hooks', () => ({
   useShiftNotes: h.mockUseShiftNotes,
   useStartShift: h.mutation(h.startMutateAsync),
   useFinishShift: h.mutation(h.finishMutateAsync),
+  useSaveFinishDetails: h.mutation(h.saveDetailsMutateAsync),
   useAcknowledgeHandover: h.mutation(h.ackMutateAsync),
   useStartBreak: h.mutation(h.startBreakMutateAsync),
   useEndBreak: h.mutation(h.endBreakMutateAsync),
@@ -202,6 +204,7 @@ function makeCompletion(overrides: Partial<NonNullable<PortalShiftDetailDto['com
 beforeEach(() => {
   for (const fn of [startMutateAsync, finishMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync, editBreakMutateAsync,
     deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync]) fn.mockReset().mockResolvedValue(undefined)
+  saveDetailsMutateAsync.mockReset().mockResolvedValue({})   // a sent PUT answers with the shift; undefined means it was queued
   Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
   mockUsePortalShiftDetail.mockReset()
   mockUseShiftNotes.mockReset().mockReturnValue({ data: [] })
@@ -239,11 +242,6 @@ const AT_LIBRARY = { name: 'Southside Library', address: null }
 const placed = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ serviceLocation: AT_LIBRARY, ...over })
 
 
-const noteWith = (over: Record<string, unknown> = {}) => ({
-  id: 'n1', shiftId: 'shift-1', authorUserId: 'u', authorName: 'Jack', body: 'Calm day', createdAt: '2026-08-17T09:00:00Z', updatedAt: '2026-08-17T09:00:00Z',
-  flaggedCategories: [], flagsAcknowledgedAt: null, incidentId: null, ...over,
-})
-
 const dose = (over: Record<string, unknown> = {}) => ({
   medicationId: 'med-1', medicationName: 'Paracetamol', strength: '500mg', doseDescription: '2 tablets', form: 'Tablet', route: 'Oral', directions: null,
   supportLevel: 'Administer', isHighRisk: false, scheduledAt: '2026-08-17T12:00:00', scheduledTime: '12:00', state: 'Due', isOverdue: false, outcome: null,
@@ -260,12 +258,12 @@ function desktop() {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(min-width: 64rem)', media: query, addEventListener: () => {}, removeEventListener: () => {} }))
 }
 
-/** Submit shift, and Finish anyway when the km-and-notes prompt (W11) asks: for tests that are about something else. */
-function submitAnyway() {
-  fireEvent.click(within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('button', { name: 'Submit shift' }))
-  const anyway = screen.queryByRole('button', { name: 'Finish anyway' })
-  if (anyway) fireEvent.click(anyway)
+/** Every answer the finish page asks for, as a worker would have typed them: a draft the page opens with. */
+const ANSWERED = {
+  open: true, touched: true, tappedAt: '2026-08-16T23:00:30Z', kilometres: '0', preTravelNone: true, postTravelNone: true,
+  anythingToReport: 'no', handoverText: '', nothingToHandOver: true, nothingToNote: true,
 }
+const saveDraft = (over: Record<string, unknown> = {}) => sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ ...ANSWERED, ...over }))
 
 /** A glance cell: the label's line, then the cell that holds it (FactBar glance markup). */
 const glanceCell = (label: string) => screen.getByText(label).parentElement!.parentElement!
@@ -684,314 +682,6 @@ describe('PortalShiftDetailPage: what sits where on a phone', () => {
   })
 })
 
-describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
-  const key = 'odip-shift-end-draft:shift-1'
-  const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
-  const blocker = (message: string) => ({ code: 'DOSE_OUTCOME_MISSING', message, medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: '2026-08-17T12:00:00' })
-  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
-  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
-  const heading = (name: string) => screen.getByRole('heading', { level: 2, name })
-  const endShift = () => fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
-  /** End shift, then each step's one tap, to step 5. */
-  function toSubmit() {
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    forward(/^(Nothing to note or hand over|Nothing to hand over|Nothing to note|Next)$/)
-  }
-
-  it('End shift opens step 1 of 5 with its heading focused, and hides the tabs and the glance strip', () => {
-    show(inProgress())
-    endShift()
-    expect(screen.getByRole('navigation', { name: 'Finish shift steps' })).toHaveTextContent('Step 1 of 5')
-    expect(heading('Your times')).toHaveFocus()
-    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
-    expect(screen.queryByText('Due now')).not.toBeInTheDocument()
-  })
-
-  it('with nothing to do every step is one tap, and Submit sends every key and never asks for a location', async () => {
-    const ask = vi.fn()
-    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: ask } })
-    show(inProgress())
-    toSubmit()
-    expect(heading('Check and submit')).toBeInTheDocument()
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1',
-      data: {
-        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
-        handoverText: null, nothingToHandOver: true, nothingToNote: true,
-      },
-    }))
-    expect(ask).not.toHaveBeenCalled()
-  })
-
-  it('sends a written handover trimmed, limited to 2000 characters, and the No answer', async () => {
-    declineGeolocation()
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    fireEvent.click(screen.getByRole('button', { name: 'No, nothing to report' }))
-    const box = screen.getByLabelText('Your handover note')
-    expect(box).toHaveAttribute('maxlength', '2000')
-    fireEvent.change(box, { target: { value: '  All settled.  ' } })
-    forward('Next')
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1',
-      data: {
-        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: false,
-        handoverText: 'All settled.', nothingToHandOver: false, nothingToNote: false,
-      },
-    }))
-  })
-
-
-  it('step 1 stops only on a running break, names it, and focuses its End break', async () => {
-    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u', withParticipant: false }] }))
-    endShift()
-    forward('Confirm times')
-    // In the sticky bar, above its buttons, so a refusal is on screen however long the step is (fix round 1 captures).
-    expect(bar().getByRole('alert')).toHaveTextContent('End your break first.')
-    await waitFor(() => expect(document.getElementById('brk-end-now-b1')).toHaveFocus())
-    expect(heading('Your times')).toBeInTheDocument()
-    expect(bar().getByRole('button', { name: 'Confirm times' })).toBeEnabled()
-  })
-
-  it('edits a break on step 1 with provider-zone digits sent as UTC instants with Z', async () => {
-    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: '2026-08-17T02:30:00Z', isRunning: false, minutes: 30, editedAt: null, createdByUserId: 'u', withParticipant: false }] }))
-    endShift()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(screen.getByLabelText('Break started')).toHaveValue('2026-08-17T12:00')   // Brisbane, UTC+10
-    fireEvent.change(screen.getByLabelText('Break started'), { target: { value: '2026-08-17T12:05' } })
-    fireEvent.change(screen.getByLabelText('Break ended'), { target: { value: '2026-08-17T12:40' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save break' }))
-    await waitFor(() => expect(editBreakMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1', breakId: 'b1', data: { startedAt: '2026-08-17T02:05:00Z', endedAt: '2026-08-17T02:40:00Z' },
-    }))
-  })
-
-  it('step 2 lists doses that need an outcome; Next names the count and focuses the first Record it; Not given opens the dose sheet', async () => {
-    show(inProgress({ medicationsDue: [dose({ state: 'Overdue', isOverdue: true })] as never, finishBlockers: [blocker('Paracetamol at 12:00 needs an outcome.')] as never }))
-    endShift()
-    forward('Confirm times')
-    expect(screen.getByRole('heading', { level: 3, name: 'Needs an outcome' })).toBeInTheDocument()
-    expect(screen.getByText('Paracetamol at 12:00 needs an outcome.')).toBeInTheDocument()
-    forward('Next')
-    expect(screen.getByRole('alert')).toHaveTextContent('Record an outcome for 1 dose before you go on.')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Record it' })).toHaveFocus())
-    fireEvent.click(screen.getByRole('button', { name: 'Not given this shift' }))
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByLabelText('Reason')).toBeInTheDocument()
-  })
-
-  it('step 2 counts two missing outcomes in the plural', () => {
-    show(inProgress({
-      medicationsDue: [dose({ medicationId: 'm1', state: 'Overdue', isOverdue: true }), dose({ medicationId: 'm2', state: 'Overdue', isOverdue: true })] as never,
-      finishBlockers: [blocker('Paracetamol at 12:00 needs an outcome.'), blocker('Ibuprofen at 12:00 needs an outcome.')] as never,
-    }))
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    expect(screen.getByRole('alert')).toHaveTextContent('Record an outcome for 2 doses before you go on.')
-  })
-
-  it("step 2 shows unticked routines without blocking (owner decision 7), ticks them in place, and folds the as-needed medicines", async () => {
-    const routine = (id: string, title: string, isCritical: boolean) => ({ id, title, description: '', category: 'PersonalCare', isCritical, startTime: null, endTime: null, occursAt: null, afterMidnight: false, isChecked: false, checkedAt: null, checkedByName: null, fromTickSnapshot: false })
-    const prn = { medicationId: 'p', medicationName: 'Ibuprofen', strength: null, doseDescription: '1 tablet', form: 'Tablet', route: 'Oral', directions: null, supportLevel: 'Administer', isHighRisk: false, indication: 'Pain', maxDosesPer24h: 3, minIntervalMinutes: 240, dosesInLast24h: 0, lastDoseAt: null, maxDosesReached: false, nextAvailableAt: null, outcomePendingAdministrationId: null }
-    show(inProgress({ shiftRoutines: [routine('r1', 'Pressure care', true), routine('r2', 'Water the plants', false)] as never, prn: [prn] as never }))
-    endShift()
-    forward('Confirm times')
-    expect(screen.getByRole('heading', { level: 3, name: 'Routines not ticked' })).toBeInTheDocument()
-    expect(screen.getByText("These don't stop you finishing. Tick any you did.")).toBeInTheDocument()
-    expect(screen.getByText('As needed · 1 medicine')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Pressure care/ }))
-    await waitFor(() => expect(checkRoutineMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', routineId: 'r1' }))
-    forward('Next')
-    expect(heading('Anything to report?')).toBeInTheDocument()
-  })
-
-
-  it('step 3: Yes saves the draft at step 3 and opens the incident form with the shift and a way back (Review Focus 4)', () => {
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    expect(bar().getByRole('button', { name: 'Skip' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, report it' }))
-    expect(JSON.parse(screen.getByTestId('incident-form').textContent!)).toMatchObject({
-      source: 'shift', shiftId: 'shift-1', participantId: 'participant-1', participantName: 'Mia Chen', returnTo: '/portal/shifts/shift-1',
-      incidentAt: '2026-08-17T18:58',   // the actual start (08:58Z) in Brisbane, so the form is dated at the shift, not its roster (review deep N3)
-    })
-    expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'report', reached: 'report', anythingToReport: 'yes' })
-  })
-
-  it('coming back from the incident form reopens step 3 with the answer, and Next is one tap', () => {
-    sessionStorage.setItem(key, JSON.stringify({ step: 'report', reached: 'report', anythingToReport: 'yes', timesSig: '' }))
-    show(inProgress())
-    expect(heading('Anything to report?')).toHaveFocus()
-    expect(screen.getByText(/You said yes and opened the incident form\./)).toBeInTheDocument()
-    forward('Next')
-    expect(heading('Note & handover')).toBeInTheDocument()
-  })
-
-  it('step 3 has one incident path: with a flagged note, Yes carries the note prefill and there is no second button (finish review fix 4)', () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith({ flaggedCategories: ['Falls'] })] })
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    expect(screen.getByText(/^A note mentions falls/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Report incident' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, report it' }))
-    expect(JSON.parse(screen.getByTestId('incident-form').textContent!)).toMatchObject({
-      source: 'shift-note', shiftNoteId: 'n1', shiftId: 'shift-1', returnTo: '/portal/shifts/shift-1',
-    })
-    expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'report', anythingToReport: 'yes' })
-  })
-
-  it("step 3 says when the answer was No, so coming back to it shows it answered", () => {
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    fireEvent.click(screen.getByRole('button', { name: 'No, nothing to report' }))
-    fireEvent.click(bar().getByRole('button', { name: 'Back' }))
-    expect(screen.getByText("You said there's nothing to report.")).toBeInTheDocument()
-    expect(bar().getByRole('button', { name: 'Next' })).toBeInTheDocument()
-  })
-
-  it('step 4 names the missing answers on its forward button', () => {
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    expect(bar().getByRole('button', { name: 'Nothing to note or hand over' })).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Nothing to hand over'))
-    expect(screen.getByLabelText('Your handover note')).toBeDisabled()
-    expect(bar().getByRole('button', { name: 'Nothing to note' })).toBeInTheDocument()
-  })
-
-  it('Back goes one step back; Back to shift leaves the flow, keeps every entry, and returns focus to End shift', async () => {
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    fireEvent.click(bar().getByRole('button', { name: 'Back' }))
-    expect(heading('Doses & routines')).toHaveFocus()
-    fireEvent.click(screen.getByRole('button', { name: 'Back to shift' }))
-    expect(screen.getByRole('tablist', { name: 'Shift' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'End shift' })).toHaveFocus())
-    expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: null, reached: 'report' })
-  })
-
-  it('resumes at the saved step with its entries, or at step 1 with a line when the breaks changed (Review Focus 4)', () => {
-    sessionStorage.setItem(key, JSON.stringify({ step: 'handover', reached: 'handover', handoverText: 'Half written', timesSig: '' }))
-    const { unmount } = show(inProgress())
-    expect(heading('Note & handover')).toHaveFocus()
-    expect(screen.getByLabelText('Your handover note')).toHaveValue('Half written')
-    unmount()
-
-    sessionStorage.setItem(key, JSON.stringify({ step: 'handover', reached: 'handover', handoverText: 'Half written', timesSig: 'stale' }))
-    show(inProgress())
-    expect(heading('Your times')).toBeInTheDocument()
-    expect(screen.getByText('Your breaks changed. Check your times again.')).toBeInTheDocument()
-  })
-
-
-  it('a 422 lists each blocker on step 5 with a Go to step link that lands on its step', async () => {
-    declineGeolocation()
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    finishMutateAsync.mockRejectedValueOnce({
-      response: { status: 422, data: { success: false, code: 'SHIFT_FINISH_BLOCKED', errors: ['x'], data: { ...makeDetail({ status: 'InProgress' }), finishBlockers: [blocker('Paracetamol at 12:00 needs an outcome before you finish.')] } } },
-    })
-    show(inProgress())
-    toSubmit()
-    submitAnyway()
-    await waitFor(() => expect(screen.getByText("You can't submit yet")).toBeInTheDocument())
-    expect(screen.getByText('Paracetamol at 12:00 needs an outcome before you finish.')).toBeInTheDocument()
-    await waitFor(() => expect(document.getElementById('finish-refusals')).toHaveFocus())   // brought on screen below a long summary
-    fireEvent.click(screen.getByRole('button', { name: 'Go to Doses' }))
-    expect(heading('Doses & routines')).toBeInTheDocument()
-  })
-
-  it('a network failure keeps every entry and offers Try again', async () => {
-    declineGeolocation()
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    finishMutateAsync.mockRejectedValueOnce(new Error('network'))
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    fireEvent.change(screen.getByLabelText('Your handover note'), { target: { value: 'Keep me' } })
-    forward('Next')
-    submitAnyway()
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't submit. Check your connection. Your entries are kept: try again."))
-    expect(bar().getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'submit', handoverText: 'Keep me' })
-  })
-
-  it('the rail lets the worker tap a visited step but not a later one', () => {
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    const pills = within(screen.getByRole('navigation', { name: 'Finish shift steps' })).getAllByRole('button')
-    expect(pills.map(p => p.hasAttribute('disabled'))).toEqual([false, false, false, true, true])
-    fireEvent.click(pills[0])
-    expect(heading('Your times')).toBeInTheDocument()
-  })
-
-  it('step 4 counts two notes in the plural', () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith({ id: 'n1' }), noteWith({ id: 'n2' })] })
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    expect(screen.getByText('2 notes on this shift.')).toBeInTheDocument()
-  })
-
-  it('step 4 counts the notes, and Add or edit notes opens the Notes tab, keeping every entry (plan check S1)', async () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    show(inProgress())
-    endShift()
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    expect(screen.getByText('1 note on this shift.')).toBeInTheDocument()
-    expect(screen.getAllByTestId('shift-notes-section')).toHaveLength(1)   // only the Notes panel's, mounted behind the flow
-    fireEvent.change(screen.getByLabelText('Your handover note'), { target: { value: 'Half written' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add or edit notes' }))
-    expect(screen.getByRole('tab', { name: /Notes/ })).toHaveAttribute('aria-selected', 'true')
-    await waitFor(() => expect(screen.getByRole('tab', { name: /Notes/ })).toHaveFocus())
-    expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: null, reached: 'handover', handoverText: 'Half written' })
-  })
-
-  it('shows Submitting… and takes no second tap while the location and the save are under way (plan check S5)', async () => {
-    finishMutateAsync.mockReturnValueOnce(new Promise(() => {}))
-    show(inProgress())
-    toSubmit()
-    submitAnyway()
-    await waitFor(() => expect(bar().getByRole('button', { name: 'Submitting…' })).toBeDisabled())
-    fireEvent.click(bar().getByRole('button', { name: 'Submitting…' }))
-    expect(finishMutateAsync).toHaveBeenCalledTimes(1)
-  })
-
-  it('clears the draft and leaves the flow on success', async () => {
-    show(inProgress())
-    toSubmit()
-    submitAnyway()
-    await waitFor(() => expect(sessionStorage.getItem(key)).toBeNull())
-    expect(screen.queryByRole('navigation', { name: 'Finish shift steps' })).not.toBeInTheDocument()
-  })
-})
-
 describe('PortalShiftDetailPage: other states', () => {
   it('shows the Returned reason on a returned Published shift', () => {
     show(makeDetail({ returnCount: 1, lastReturnReason: 'Please add a handover.' }))
@@ -1153,297 +843,12 @@ describe('PortalShiftDetailPage: the sticky bar by state (SHAPE §3)', () => {
   })
 })
 
-describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 1, 2, 3, 5)', () => {
-  // Brisbane, UTC+10: stamped 09:05:40, now 17:00:30.
-  const stamped = () => makeCompletion({ actualStart: '2026-08-16T23:05:40Z' })
-  const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: stamped(), ...over })
-  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
-  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
-  const heading = (name: string) => screen.getByRole('heading', { level: 2, name })
-  const open = (over: Partial<PortalShiftDetailDto> = {}) => {
-    show(inProgress(over))
-    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
-  }
-  const change = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
-  const moveFinish = (value: string, reason = 'Left early.') => {
-    fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
-    change('Your finish time', value)
-    change('Why did your times change?', reason)
-  }
-  const toStepFive = () => { forward('Confirm times'); forward('Next'); forward('Skip'); forward('Nothing to note or hand over') }
-
-  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-08-17T07:00:30Z')) })
-  afterEach(() => vi.useRealTimers())
-
-  it('Change offers the window the server accepts, and the reason appears once a time is open', () => {
-    open()
-    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
-    const start = screen.getByLabelText('Your start time')
-    expect(start).toHaveValue('2026-08-17T09:05')
-    expect(start).toHaveAttribute('min', '2026-08-17T08:50')
-    expect(start).toHaveAttribute('max', '2026-08-17T09:20')
-    expect(screen.getByText('Between 8:50 am and 9:20 am')).toBeInTheDocument()
-    expect(screen.getByLabelText('Why did your times change?')).toHaveAttribute('maxlength', '500')
-    fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
-    expect(screen.getByLabelText('Your finish time')).toHaveAttribute('max', '2026-08-17T17:00')
-    expect(screen.getByText('Up to 15 minutes before you submit.')).toBeInTheDocument()
-  })
-
-  it('refuses a start outside the window, naming it and focusing the field', async () => {
-    open()
-    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
-    change('Your start time', '2026-08-17T08:40')
-    change('Why did your times change?', 'Early')
-    forward('Confirm times')
-    expect(screen.getByRole('alert')).toHaveTextContent('Choose a time between 8:50 am and 9:20 am.')
-    await waitFor(() => expect(screen.getByLabelText('Your start time')).toHaveFocus())
-    expect(heading('Your times')).toBeInTheDocument()
-  })
-
-  it('asks why when a time moved, and focuses the reason', async () => {
-    open()
-    moveFinish('2026-08-17T16:50', '')
-    forward('Confirm times')
-    expect(screen.getByRole('alert')).toHaveTextContent('Say why your times changed.')
-    await waitFor(() => expect(screen.getByLabelText('Why did your times change?')).toHaveFocus())
-  })
-
-
-  it('Use the recorded time takes a change back: no reason is needed and nothing is sent', () => {
-    open()
-    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
-    change('Your start time', '2026-08-17T08:55')
-    fireEvent.click(screen.getByRole('button', { name: 'Use the recorded time for your start' }))
-    expect(screen.queryByLabelText('Your start time')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Why did your times change?')).not.toBeInTheDocument()
-    forward('Confirm times')
-    expect(heading('Doses & routines')).toBeInTheDocument()
-  })
-
-  it('a moved start and finish, the reason and the kilometres reach the server as Z instants and numbers', async () => {
-    open()
-    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
-    change('Your start time', '2026-08-17T08:55')
-    moveFinish('2026-08-17T16:50', '  Arrived early, left at ten to five.  ')
-    change('Kilometres driven with Mia', '12.5')
-    toStepFive()
-    expect(screen.getByText(/^8:55\s?am \(changed from 9:05\s?am\)$/i)).toBeInTheDocument()
-    expect(screen.getByText('12.5 km')).toBeInTheDocument()
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1',
-      data: {
-        actualStart: '2026-08-16T22:55:00Z', actualEnd: '2026-08-17T06:50:00Z',
-        timeAdjustmentReason: 'Arrived early, left at ten to five.', kilometres: 12.5, anythingToReport: null,
-        handoverText: null, nothingToHandOver: true, nothingToNote: true,
-      },
-    }))
-  })
-
-  it('a finish 10 minutes early asks why; the answer is sent as finishTimeReason, and an empty box still submits without it', async () => {
-    open()
-    moveFinish('2026-08-17T16:50', 'Left early.')
-    change('Why are you finishing 10 minutes early? (optional)', '  Participant went out  ')
-    toStepFive()
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
-    expect(finishMutateAsync.mock.calls[0][0].data).toMatchObject({ finishTimeReason: 'Participant went out', timeAdjustmentReason: 'Left early.' })
-    expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('startTimeReason')
-  })
-
-  it('Add a reason on the Submit step lands on step 1 with focus in the reason box', async () => {
-    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ step: 'submit', reached: 'submit', finishAsked: false, nothingToNote: true, nothingToHandOver: true, anythingToReport: 'no' }))
-    vi.setSystemTime(new Date('2026-08-17T07:07:30Z'))   // 17:07:30, seven minutes past the 17:00 rostered end
-    show(inProgress())
-    fireEvent.click(screen.getByRole('button', { name: 'Add a reason' }))
-    expect(heading('Your times')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText(/^Why are you finishing \d+ minutes late/)).toHaveFocus())
-  })
-
-  it('leaves finishTimeReason out when the box is empty, and never blocks Submit', async () => {
-    open()
-    moveFinish('2026-08-17T16:50', 'Left early.')
-    toStepFive()
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
-    expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('finishTimeReason')
-  })
-
-  it("a Change left on the recorded minute sends nothing and needs no reason; '0' km sends 0", async () => {
-    open()
-    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
-    change('Kilometres driven with Mia', '0')
-    toStepFive()
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1',
-      data: {
-        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: 0, anythingToReport: null,
-        handoverText: null, nothingToHandOver: true, nothingToNote: true,
-      },
-    }))
-  })
-
-  it('clears a refusal once the worker edits, so a fixed value is never shown as still wrong', () => {
-    open()
-    change('Kilometres driven with Mia', '12,5')
-    forward('Confirm times')
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
-    change('Kilometres driven with Mia', '12.5')
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it("refuses kilometres it can't read, on step 1 with focus on the field", async () => {
-    open()
-    change('Kilometres driven with Mia', '12,5')
-    forward('Confirm times')
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
-    await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia')).toHaveFocus())
-  })
-
-  describe('provider travel (travel PR-B)', () => {
-    const leg = (name: string) => within(screen.getByRole('group', { name }))
-    const preLeg = () => leg('Your trip to Mia (optional)')
-    const postLeg = () => leg('Your trip after the shift (optional)')
-    const type = (el: HTMLElement, value: string) => fireEvent.change(el, { target: { value } })
-
-    it('asks for both legs when the organisation claims travel, and narrows the kilometres help', () => {
-      open({ travelAsked: true })
-      expect(screen.getByText('From wherever you were before this shift.')).toBeInTheDocument()
-      expect(screen.getByText(/To your base or home\. If you.re going straight to another shift, leave this empty and add the trip on that shift\./)).toBeInTheDocument()
-      expect(preLeg().getByLabelText('Minutes')).toHaveValue('')
-      expect(postLeg().getByLabelText('Kilometres')).toHaveAttribute('inputmode', 'decimal')
-      expect(screen.getByText("Only driving with Mia during the shift. Enter 0 if you didn't drive.")).toBeInTheDocument()
-    })
-
-    it('asks for nothing when the shift detail has no travelAsked (cached before the deploy, carry N5)', async () => {
-      open()
-      expect(screen.queryByRole('group', { name: /trip/i })).not.toBeInTheDocument()
-      expect(screen.getByText("Only driving with Mia, not your trip to or from the shift. Enter 0 if you didn't drive.")).toBeInTheDocument()
-      toStepFive()
-      expect(screen.queryByText('Trip after the shift')).not.toBeInTheDocument()
-      submitAnyway()
-      await waitFor(() => expect(finishMutateAsync).toHaveBeenCalled())
-      expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('preShiftTravelMinutes')
-    })
-
-    it('sends the four values as numbers and says them on the summary', async () => {
-      open({ travelAsked: true })
-      type(preLeg().getByLabelText('Minutes'), '25')
-      type(preLeg().getByLabelText('Kilometres'), '12.3')
-      type(postLeg().getByLabelText('Minutes'), '20')
-      type(postLeg().getByLabelText('Kilometres'), '10')
-      toStepFive()
-      expect(screen.getByText('25 min, 12.3 km')).toBeInTheDocument()
-      expect(screen.getByText('20 min, 10 km')).toBeInTheDocument()
-      submitAnyway()
-      await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-        id: 'shift-1',
-        data: expect.objectContaining({ preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 20, postShiftTravelKilometres: 10 }),
-      }))
-    })
-
-    it('empty fields send null and read None', async () => {
-      open({ travelAsked: true })
-      toStepFive()
-      expect(screen.getAllByText('None').length).toBeGreaterThanOrEqual(2)
-      submitAnyway()
-      await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-        id: 'shift-1',
-        data: expect.objectContaining({ preShiftTravelMinutes: null, preShiftTravelKilometres: null, postShiftTravelMinutes: null, postShiftTravelKilometres: null }),
-      }))
-    })
-
-    it('names a bad leg under its field, on step 1, with focus on the field', async () => {
-      open({ travelAsked: true })
-      type(postLeg().getByLabelText('Minutes'), '481')
-      forward('Confirm times')
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-      expect(screen.getAllByText('Enter whole minutes from 0 to 480.')).toHaveLength(1)
-      expect(document.getElementById('finish-post-error')).toHaveTextContent('Enter whole minutes from 0 to 480.')
-      expect(postLeg().getByLabelText('Minutes')).toHaveAttribute('aria-invalid', 'true')
-      await waitFor(() => expect(postLeg().getByLabelText('Minutes')).toHaveFocus())
-      expect(heading('Your times')).toBeInTheDocument()
-    })
-
-    it('names a bad kilometres entry under its field once, not in the bar', async () => {
-      open({ travelAsked: true })
-      type(preLeg().getByLabelText('Kilometres'), '2001')
-      forward('Confirm times')
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-      expect(screen.getAllByText('Enter kilometres from 0 to 2,000.')).toHaveLength(1)
-      expect(document.getElementById('finish-pre-error')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
-      expect(preLeg().getByLabelText('Kilometres')).toHaveAttribute('aria-invalid', 'true')
-    })
-  })
-
-  it("refuses moved times that leave a break outside, focusing that break's Edit", async () => {
-    open({ breaks: [{ id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: '2026-08-17T06:52:00Z', isRunning: false, minutes: 12, editedAt: null, createdByUserId: 'u', withParticipant: false }] })
-    moveFinish('2026-08-17T16:50')
-    forward('Confirm times')
-    expect(screen.getByRole('alert')).toHaveTextContent('Your times must include your breaks. Change the break first, or your times.')
-    await waitFor(() => expect(document.getElementById('brk-edit-b1')).toHaveFocus())
-  })
-
-
-  it('drift: an end chosen earlier that slips past 15 minutes is caught on step 5 with two choices (Review Focus 2)', async () => {
-    open()
-    moveFinish('2026-08-17T16:50')
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    vi.setSystemTime(new Date('2026-08-17T07:06:30Z'))   // six minutes later, 16:50 is 16 minutes back
-    forward('Nothing to note or hand over')
-    expect(screen.getByText('Your finish time is now more than 15 minutes ago.')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Use the time I submit' }))
-    expect(screen.queryByText('Your finish time is now more than 15 minutes ago.')).not.toBeInTheDocument()
-    submitAnyway()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1',
-      data: expect.objectContaining({ actualEnd: null, timeAdjustmentReason: null }),
-    }))
-  })
-
-  it('drift: Change it goes back to step 1, and Submit checks the clock again itself', () => {
-    open()
-    moveFinish('2026-08-17T16:50')
-    toStepFive()
-    expect(screen.queryByText('Your finish time is now more than 15 minutes ago.')).not.toBeInTheDocument()
-    vi.setSystemTime(new Date('2026-08-17T07:06:30Z'))
-    submitAnyway()
-    expect(heading('Your times')).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('Choose a time no more than 15 minutes before now.')
-    expect(finishMutateAsync).not.toHaveBeenCalled()
-  })
-
-  it("a time the server refuses lands back on step 1 through Go to step", async () => {
-    finishMutateAsync.mockRejectedValueOnce({
-      response: { status: 400, data: { success: false, code: 'SHIFT_TIME_ADJUSTMENT_TOO_LARGE', errors: ['You can change your times by up to 15 minutes.'] } },
-    })
-    open()
-    moveFinish('2026-08-17T16:50')
-    toStepFive()
-    submitAnyway()
-    await waitFor(() => expect(screen.getByText('You can change your times by up to 15 minutes.')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Go to Times' }))
-    expect(heading('Your times')).toBeInTheDocument()
-    expect(screen.getByLabelText('Your finish time')).toHaveValue('2026-08-17T16:50')   // the entry is kept
-  })
-})
-
 describe('PortalShiftDetailPage: submitted (SHAPE §4)', () => {
-  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
-  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
 
   it('leads Now with Shift submitted, moves focus to it, announces once, and shows no bar', async () => {
+    saveDraft()
     show(makeDetail({ status: 'InProgress', completion: makeCompletion() }))
-    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
-    forward('Confirm times')
-    forward('Next')
-    forward('Skip')
-    forward('Nothing to note or hand over')
-    submitAnyway()
+    fireEvent.click(within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('button', { name: 'Submit shift' }))
 
     await waitFor(() => expect(screen.getByText('Shift submitted')).toHaveFocus())
     expect(screen.getByText('Shift submitted').closest('[role="status"],[role="alert"]')).toBeNull()   // the callout itself is quiet
@@ -1456,9 +861,9 @@ describe('PortalShiftDetailPage: submitted (SHAPE §4)', () => {
   })
 
   it('ignores a finish draft left on another device once the shift is submitted: no flow, the summary shows', () => {
-    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ step: 'submit', reached: 'submit' }))
+    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ open: true, touched: true }))
     show(makeDetail({ status: 'PendingReview', completion: makeCompletion({ actualEnd: '2026-08-17T17:00:00Z' }) }))
-    expect(screen.queryByRole('navigation', { name: 'Finish shift steps' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /^Ended / })).not.toBeInTheDocument()
     expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
     expect(screen.getByText(/waiting for a coordinator/i)).toBeInTheDocument()
   })
@@ -1489,45 +894,40 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
     localStorage.removeItem('odip_offline:u1:already:shift-1')
   })
 
-  /** End shift, then the forward button of each step until the last (a due dose adds a Doses step to the path). */
-  function toSubmit() {
+  /** The dose gate: offline a dose still without an outcome stops both buttons, names the dose, and keeps what was typed. */
+  function endShiftThenSubmit() {
     fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
-    for (let n = 0; n < 8 && !bar().queryByRole('button', { name: /Submit shift|Try again/ }); n++) {
-      fireEvent.click(bar().getAllByRole('button').at(-1)!)
-    }
-    if (!bar().queryByRole('button', { name: /Submit shift|Try again/ })) throw new Error(`never reached the submit step: ${bar().getAllByRole('button').map(b => b.textContent).join(' | ')} / ${[...document.querySelectorAll('h2')].map(h => h.textContent).join(' | ')}`)
+    fireEvent.click(bar().getByRole('button', { name: 'Submit shift' }))
   }
 
-  it('Finish with one dose due and no signal is blocked, names the dose and points the button at the reason', () => {
+  it('End shift with one dose due and no signal is held back, names the dose and sends nothing', () => {
     goOffline()
     show(inProgress({ medicationsDue: [dose()] as never, finishBlockers: [missing('Paracetamol', 'med-1', '2026-08-17T12:00:00')] as never }))
-    toSubmit()
-    const notice = screen.getByText("Finish can't be saved yet").closest('#finish-blocked') as HTMLElement
-    expect(notice).toHaveTextContent(/Paracetamol 500mg was due at 12:00 pm with no outcome recorded, and recording a dose needs a connection\. When you're back online, record it, then finish\./)
-    const submit = bar().getByRole('button', { name: 'Submit shift' })
-    expect(submit).toBeDisabled()
-    expect(submit).toHaveAttribute('aria-describedby', 'finish-blocked')
+    endShiftThenSubmit()
+    expect(within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('alert')).toHaveTextContent(/Paracetamol 500mg was due at 12:00 pm with no outcome recorded, and recording a dose needs a connection. When you're back online, record it, then end the shift./)
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+    expect(saveDetailsMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('Finish with two doses due lists both, joined with "and"', () => {
+  it('End shift with two doses due lists both, joined with "and"', () => {
     goOffline()
     const second = dose({ medicationId: 'med-2', medicationName: 'Movicol', strength: null, scheduledAt: '2026-08-17T13:00:00', scheduledTime: '13:00' })
     show(inProgress({
       medicationsDue: [dose(), second] as never,
       finishBlockers: [missing('Paracetamol', 'med-1', '2026-08-17T12:00:00'), missing('Movicol', 'med-2', '2026-08-17T13:00:00')] as never,
     }))
-    toSubmit()
-    expect(document.getElementById('finish-blocked')).toHaveTextContent(
-      /2 doses are due with no outcome recorded: Paracetamol 500mg \(12:00 pm\) and Movicol \(1:00 pm\)\. Recording a dose needs a connection\. When you're back online, record them, then finish\./,
+    endShiftThenSubmit()
+    expect(within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('alert')).toHaveTextContent(
+      /2 doses are due with no outcome recorded: Paracetamol 500mg \(12:00 pm\) and Movicol \(1:00 pm\). Recording a dose needs a connection. When you're back online, record them, then end the shift./,
     )
   })
 
-  it('offline with nothing due, Finish is not blocked', () => {
+  it('offline with nothing due, End shift goes straight out (it queues) and no dose notice shows', () => {
     goOffline()
     show(inProgress())
-    toSubmit()
-    expect(document.getElementById('finish-blocked')).toBeNull()
-    expect(bar().getByRole('button', { name: 'Submit shift' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+    expect(finishMutateAsync).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/Record d+ doses? before the shift ends/)).not.toBeInTheDocument()
   })
 
   it('a Finish waiting on this phone reads as finished (also after a reload) and the action bar steps aside', () => {
@@ -1572,116 +972,6 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
     localStorage.setItem('odip_offline:u1:already:shift-1', JSON.stringify({ savedAt: Date.now(), data: true }))
     show(makeDetail({ status: 'PendingReview', completion: makeCompletion() }))
     expect(screen.getByText(/already submitted before this phone sent its Finish, so the details entered here \(times, travel, kilometres, handover\) weren.t added/)).toBeInTheDocument()
-  })
-})
-
-describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
-  const inProgress = () => makeDetail({ status: 'InProgress', completion: makeCompletion({ actualStart: '2026-08-16T23:05:40Z' }) })
-  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
-  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
-  const km = (value: string) => fireEvent.change(screen.getByLabelText('Kilometres driven with Mia'), { target: { value } })
-  const toSubmit = () => { forward('Confirm times'); forward('Next'); forward('Skip'); forward(/^(Nothing to note or hand over|Nothing to hand over|Nothing to note|Next)$/) }
-  /** End shift, optionally enter km, walk to step 5 and tap Submit shift. */
-  const submit = (kilometres?: string) => {
-    show(inProgress())
-    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
-    if (kilometres !== undefined) km(kilometres)
-    toSubmit()
-    forward('Submit shift')
-  }
-  const dialog = () => within(screen.getByRole('alertdialog'))
-  const noDialog = () => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-
-  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-08-17T07:00:30Z')) })
-  afterEach(() => vi.useRealTimers())
-
-  it('asks when neither km nor notes were given, names both, and sends nothing yet', () => {
-    submit()
-    expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
-    // the close X has no text
-    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add them'])
-    expect(finishMutateAsync).not.toHaveBeenCalled()
-  })
-
-  it('names only the kilometres when notes exist', () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    submit()
-    expect(screen.getByRole('alertdialog', { name: 'No kilometres added' })).toBeInTheDocument()
-    // the close X has no text
-    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add kilometres'])
-  })
-
-  it('names only the notes when km was given', () => {
-    submit('12.5')
-    expect(screen.getByRole('alertdialog', { name: 'No notes added' })).toBeInTheDocument()
-    // the close X has no text
-    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add a note'])
-  })
-
-  it("counts '0' km as answered: with a note, Submit goes straight through", async () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    submit('0')
-    noDialog()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kilometres: 0 }) })))
-  })
-
-  it('does not ask when both are given', async () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    submit('12.5')
-    noDialog()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
-  })
-
-  it('Finish anyway sends the same request as without the prompt', async () => {
-    grantGeolocation()
-    submit()
-    fireEvent.click(dialog().getByRole('button', { name: 'Finish anyway' }))
-    noDialog()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
-      id: 'shift-1',
-      data: {
-        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
-        handoverText: null, nothingToHandOver: true, nothingToNote: true,
-      },
-    }))
-  })
-
-  it('Add kilometres goes back to step 1 with the field focused', async () => {
-    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
-    submit()
-    fireEvent.click(dialog().getByRole('button', { name: 'Add kilometres' }))
-    noDialog()
-    expect(screen.getByRole('heading', { level: 2, name: 'Your times' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia')).toHaveFocus())
-    expect(finishMutateAsync).not.toHaveBeenCalled()
-  })
-
-  it('Add a note goes to step 4 with Add or edit notes focused', async () => {
-    submit('3')
-    fireEvent.click(dialog().getByRole('button', { name: 'Add a note' }))
-    noDialog()
-    expect(screen.getByRole('heading', { level: 2, name: 'Note & handover' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add or edit notes' })).toHaveFocus())
-  })
-
-  it('does not ask twice once the worker chose Finish anyway', async () => {
-    finishMutateAsync.mockRejectedValueOnce(new Error('network'))
-    submit()
-    fireEvent.click(dialog().getByRole('button', { name: 'Finish anyway' }))
-    await waitFor(() => expect(bar().getByRole('button', { name: 'Try again' })).toBeInTheDocument())
-    forward('Try again')
-    noDialog()
-    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(2))
-  })
-
-  it('Escape closes the prompt without finishing, and the next Submit asks again', () => {
-    submit()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    noDialog()
-    expect(finishMutateAsync).not.toHaveBeenCalled()
-    forward('Submit shift')
-    expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
-    expect(finishMutateAsync).not.toHaveBeenCalled()
   })
 })
 
@@ -1764,5 +1054,68 @@ describe('PortalShiftDetailPage: the time check before Start (W2)', () => {
     fireEvent.change(within(sheet).getByLabelText(/^Why are you starting (early|late)\? \(optional\)$/), { target: { value: 'Early handover' } })
     fireEvent.click(within(sheet).getByRole('button', { name: 'Start shift' }))
     await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { latitude: -27.5, longitude: 153.02, accuracyMetres: 12, geolocationDeclined: false, startTimeReason: 'Early handover' } }))
+  })
+})
+
+describe('PortalShiftDetailPage: End shift takes the end at the tap (finish later)', () => {
+  const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
+  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
+  const tapEnd = () => fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+
+  it('End shift sends the finish once, with no typed end, and opens the details page', async () => {
+    show(inProgress())
+    tapEnd()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+    expect(finishMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { detailsLater: true } })
+    expect(saveDetailsMutateAsync).not.toHaveBeenCalled()
+    expect(bar().getByRole('button', { name: 'Submit shift' })).toBeInTheDocument()
+    expect(JSON.parse(sessionStorage.getItem('odip-shift-end-draft:shift-1')!)).toMatchObject({ open: true, tappedAt: expect.any(String) })
+  })
+
+  it('a running break ends first, then the shift', async () => {
+    const brk = { id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 0, editedAt: null, createdByUserId: 'u', withParticipant: false }
+    show(inProgress({ breaks: [brk] as never }))
+    tapEnd()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalled())
+    expect(endBreakMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', breakId: 'b1' })
+    expect(endBreakMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(finishMutateAsync.mock.invocationCallOrder[0])
+  })
+
+  it('a second tap inside 25 minutes sends the first tap as the end', async () => {
+    vi.setSystemTime(new Date('2026-08-17T07:12:00Z'))
+    saveDraft({ touched: false, tappedAt: '2026-08-17T07:00:00Z', open: false })
+    show(inProgress())
+    tapEnd()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalled())
+    expect(finishMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { detailsLater: true, endTappedAt: '2026-08-17T07:00:00Z' } })
+  })
+
+  it('a dose due online holds the end back: nothing is sent, the tap is kept in the draft', async () => {
+    show(inProgress({ finishBlockers: [{ code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: '2026-08-17T12:00:00' }] as never }))
+    tapEnd()
+    await waitFor(() => expect(bar().getByRole('button', { name: 'Submit shift' })).toBeInTheDocument())
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+    expect(JSON.parse(sessionStorage.getItem('odip-shift-end-draft:shift-1')!).tappedAt).toEqual(expect.any(String))
+  })
+
+  it('an ended shift with details missing says Needs details, lists what is left and opens the page from Add details', () => {
+    show(makeDetail({
+      status: 'PendingReview', missingDetails: ['kilometres', 'handover'] as never,
+      completion: makeCompletion({ actualEnd: '2026-08-17T07:00:30Z', missingDetails: ['kilometres', 'handover'] as never }),
+    }))
+    expect(screen.getAllByText('Needs details').length).toBeGreaterThan(0)
+    expect(screen.getByText('Add the rest of this shift')).toBeInTheDocument()
+    expect(screen.getByText(/Still to add: kilometres and handover/)).toBeInTheDocument()
+    expect(screen.queryByText(/waiting for your coordinator/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add details' }))
+    expect(bar().getByRole('button', { name: 'Submit shift' })).toBeInTheDocument()
+  })
+
+  it('the #finish link from My shifts opens the details page straight away', () => {
+    show(makeDetail({
+      status: 'PendingReview', missingDetails: ['kilometres'] as never,
+      completion: makeCompletion({ actualEnd: '2026-08-17T07:00:30Z', missingDetails: ['kilometres'] as never }),
+    }), '#finish')
+    expect(bar().getByRole('button', { name: 'Submit shift' })).toBeInTheDocument()
   })
 })
