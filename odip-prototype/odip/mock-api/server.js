@@ -2996,7 +2996,7 @@ const routes = [
     return paged(list)
   }],
   // GET /audit/{entityType}/{entityId}: the History tab's shape (AuditController), a few synthetic entries, newest first.
-  ['audit/:type/:id', () => {
+  ['audit/:id/:id', () => { // matchRoute knows only :id, so the entity type is a second :id
     const entries = [
       { id: 'au-3', action: 'Updated', changedAt: '2026-07-12T09:30:00Z', changedByName: 'Callum Radford', changes: [{ field: 'Phone', old: '0400 000 111', new: '0400 000 222' }] },
       { id: 'au-2', action: 'Updated', changedAt: '2026-07-10T02:15:00Z', changedByName: 'Dev Admin', changes: [{ field: 'Preferred name', old: null, new: 'Sam' }] },
