@@ -87,4 +87,49 @@ public class ExtraTimeBackfillMigrationTests : IClassFixture<PostgresFixture>
             Assert.True(c.Expected == (value is DBNull or null ? null : (int)value), $"{c.Name}: expected {c.Expected?.ToString() ?? "null"}, got {value}");
         }
     }
+
+    [SkippableFact]
+    public async Task Start_sent_from_offline_is_copied_from_sent_from_offline()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var connectionString = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(connectionString);
+        var migrator = db.GetService<IMigrator>();
+        var all = db.Database.GetMigrations().ToList();
+        var mine = all.Single(m => m.EndsWith("_AddShiftCompletionStartSentFromOffline", StringComparison.Ordinal));
+        await migrator.MigrateAsync(all[all.IndexOf(mine) - 1]);
+
+        var tenant = Guid.NewGuid();
+        var ids = new Dictionary<bool, Guid>();
+        await using (var conn = new NpgsqlConnection(connectionString))
+        {
+            await conn.OpenAsync();
+            await ExecAsync(conn, "SET session_replication_role = replica");   // the rows below skip the participant and worker they would point at
+            foreach (var sentFromOffline in new[] { true, false })
+            {
+                var shift = Guid.NewGuid();
+                var completion = Guid.NewGuid();
+                ids[sentFromOffline] = completion;
+                await ExecAsync(conn,
+                    "INSERT INTO \"Shifts\" (\"Id\",\"TenantId\",\"ParticipantId\",\"ServiceDate\",\"StartTime\",\"EndTime\",\"EndsNextDay\",\"NightType\",\"Ratio\",\"Status\",\"ReturnCount\",\"CreatedAt\",\"UpdatedAt\") " +
+                    "VALUES (@s,@t,@p,'2026-11-03','09:00','15:00',false,0,0,5,0,now(),now())", ("s", shift), ("t", tenant), ("p", Guid.NewGuid()));
+                await ExecAsync(conn,
+                    "INSERT INTO \"ShiftCompletions\" (\"Id\",\"TenantId\",\"ShiftId\",\"ActualStart\",\"StartedAt\",\"TimeZoneId\",\"SubmittedByUserId\",\"IsActive\",\"GeolocationDeclined\",\"NothingToHandOver\",\"NothingToNoteConfirmed\"," +
+                    "\"SentFromOffline\",\"StartWasManual\",\"CreatedAt\",\"UpdatedAt\") " +
+                    "VALUES (@c,@t,@s,now(),now(),'Australia/Sydney',@u,true,false,false,false,@o,false,now(),now())",
+                    ("c", completion), ("t", tenant), ("s", shift), ("u", Guid.NewGuid()), ("o", sentFromOffline));
+            }
+        }
+
+        await migrator.MigrateAsync();
+
+        await using var check = new NpgsqlConnection(connectionString);
+        await check.OpenAsync();
+        foreach (var (sentFromOffline, id) in ids)
+        {
+            await using var cmd = new NpgsqlCommand("SELECT \"StartSentFromOffline\" FROM \"ShiftCompletions\" WHERE \"Id\" = @id", check);
+            cmd.Parameters.AddWithValue("id", id);
+            Assert.Equal(sentFromOffline, (bool)(await cmd.ExecuteScalarAsync())!);
+        }
+    }
 }
