@@ -14,7 +14,7 @@ import { retryingAfterError } from '@/lib/queryPhase'
 // Rendered only for a ledger that has a running plan with pools (FundingLedger's main branch), so it never asks for a participant with no plan or one funded another way.
 
 // The longest sentence the card writes (every clause), laid out unseen so the loading card wraps to the loaded sentence's lines.
-const SENTENCE_SAMPLE = 'The whole plan: used $12,427.40 of $52,000.00 so far, $1,200.00 less than an even spread by 28 Oct. At this rate it reaches $50,000.00 by 30 Jun 2027, $2,000.00 under the budget. Booked shifts take it to $51,000.00. The agreement expects $52,000.00 by 30 Jun 2027.'
+const SENTENCE_SAMPLE = 'The whole plan: used $12,427.40 of $52,000.00 so far, $1,200.00 more than an even spread by 28 Oct. At this rate it reaches $56,000.00 by 30 Jun 2027, $4,000.00 over the budget, and reaches the budget on 14 Mar. Booked shifts take it to $51,000.00. The agreement expects $52,000.00 by 30 Jun 2027.'
 
 /**
  * `poolCount` is the ledger's pools: two or more put the plan / pool switch on the loaded card, so the loading card holds its place.

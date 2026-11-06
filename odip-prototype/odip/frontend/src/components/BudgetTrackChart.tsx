@@ -2,8 +2,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
 import type { BudgetSeries } from '@/api/types'
 import { money } from '@/lib/budgetLedger'
-import { budgetTrackFootnotes, budgetTrackSentence, chartHeight, compactAud, expectedDrawn, liveLine, readoutHeader, readoutRows, xTicks, yTicks } from '@/lib/budgetTrack'
-import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
+import { budgetTrackCaption, budgetTrackFootnotes, budgetTrackSentence, chartHeight, compactAud, expectedDrawn, limitReach, liveLine, readoutHeader, readoutRows, sentenceDay, xTicks, yTicks } from '@/lib/budgetTrack'
+import { writtenDay } from '@/lib/fundingPlan'
 import { AnnouncementRegion } from './AnnouncementRegion'
 import { Card } from './Card'
 import { SelectField } from './SelectField'
@@ -21,8 +21,14 @@ const DAY = 86_400_000
 const dayOf = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY
 const r1 = (n: number) => Math.round(n * 10) / 10
 
-type Line = 'budget' | 'used' | 'booked' | 'expected'
-const LEGEND: Record<Line, string> = { budget: 'Budget, spread evenly', used: 'Used', booked: 'Booked ahead', expected: 'Expected from the agreement (estimate)' }
+type Line = 'limit' | 'budget' | 'used' | 'booked' | 'pace' | 'expected'
+const LEGEND: Record<Line, string> = { limit: 'Budget limit', budget: 'Budget, spread evenly', used: 'Used', booked: 'Booked ahead', pace: 'At this rate (estimate)', expected: 'Expected from the agreement (estimate)' }
+
+type Box = readonly [left: number, right: number, top: number, bottom: number]
+const hit = (a: Box, b: Box) => a[0] < b[1] && b[0] < a[1] && a[2] < b[3] && b[2] < a[3]
+// shortcut: a 12px label is about 7px a character, so the new labels are boxed by length, not measured; the shots check measures the real boxes. Upgrade if a label ever runs long.
+const textW = (s: string) => s.length * 7
+const HALO = 'stroke-[var(--color-card)] [paint-order:stroke] [stroke-linejoin:round] [stroke-width:3px]'
 
 /** A series' line key: the mark's own class, so its colour, width and dash are the line's. */
 function LineKey({ line, width = 24 }: { line: Line; width?: number }) {
@@ -34,7 +40,7 @@ function LineKey({ line, width = 24 }: { line: Line; width?: number }) {
 }
 
 /** The legend; with no lines given it has every line, which the loading card lays out unseen so its height wraps as the loaded one does at any width. */
-export function BudgetTrackLegend({ lines = ['budget', 'used', 'booked', 'expected'], className = 'mt-3' }: { lines?: Line[]; className?: string }) {
+export function BudgetTrackLegend({ lines = ['limit', 'budget', 'used', 'booked', 'pace', 'expected'], className = 'mt-3' }: { lines?: Line[]; className?: string }) {
   return (
     <ul className={`flex flex-wrap gap-x-4 gap-y-1 ${className}`}>
       {lines.map(line => (
@@ -129,7 +135,11 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
   const plotH = H - M.top - M.bottom
   const span = Math.max(dayOf(planEnd) - dayOf(planStart), 1)
   const x = (iso: string) => M.left + ((dayOf(iso) - dayOf(planStart)) / span) * plotW
-  const max = Math.max(scope.limit, ...points.flatMap(p => [p.budget, p.used ?? 0, p.usedAndBooked ?? 0, p.expected ?? 0]))
+  // At this rate: from today's used to the reach when that is ahead, else to the plan end at the pace.
+  const reach = limitReach(series, scope)
+  const todayUsed = current ? points.find(p => p.date === series.today)?.used : undefined
+  const paceEnd: [string, number] | undefined = todayUsed === undefined || scope.summary.pace === undefined ? undefined : reach?.ahead ? [reach.on, scope.limit] : [planEnd, scope.summary.pace]
+  const max = Math.max(scope.limit, ...points.flatMap(p => [p.budget, p.used ?? 0, p.usedAndBooked ?? 0, p.expected ?? 0]), paceEnd?.[1] ?? 0)
   const ticks = yTicks(max, plotH)
   const top = ticks[ticks.length - 1]
   const y = (v: number) => M.top + plotH - (v / top) * plotH
@@ -150,7 +160,55 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
     const w = labelRef.current?.getComputedTextLength?.()
     if (w) setLabelW(w)
   }, [labelPoint?.used, W, key])
-  const legend: Line[] = ['budget', 'used', ...(showBooked ? ['booked' as const] : []), ...(showExpected ? ['expected' as const] : [])]
+  const legend: Line[] = ['limit', 'budget', 'used', ...(showBooked ? ['booked' as const] : []), ...(paceEnd ? ['pace' as const] : []), ...(showExpected ? ['expected' as const] : [])]
+
+  // Labels, placed so none sits on a line or another label. The used label goes first; the limit, reach and renewal labels keep clear of it.
+  const [limitY, endX] = [y(scope.limit), x(planEnd)]
+  const pt = (d: string, v: number) => [x(d), y(v)]
+  const drawn = [
+    [pt(planStart, 0), pt(planEnd, scope.limit)],
+    ...(showBooked ? [booked.map(([d, v]) => pt(d, v))] : []),
+    ...(showExpected ? expectedRuns.map(run => run.map(([d, v]) => pt(d, v))) : []),
+    ...(paceEnd ? [[pt(series.today, todayUsed!), pt(paceEnd[0], paceEnd[1])]] : []),
+  ]
+  const onLine = (box: Box, lines: number[][][]) => lines.some(pts => pts.some((p, i) => i > 0 && segmentInBox(pts[i - 1], p, box)))
+  const todayBox: Box[] = current ? [[x(series.today) - 17, x(series.today) + 17, M.top - 18, M.top - 2]] : []
+  const usedPlace = (() => {
+    if (!labelPoint) return null
+    const lx = x(labelPoint.date)
+    const ly = y(labelPoint.used!)
+    // Above-left of the dot first (it may run into the y-axis gutter), then lifted clear of the budget line when that runs above the dot, then below-right, then above-right: the first that leaves the chart and sits on no tick label or line. An ended plan keeps the first.
+    const budgetY = y(0) + ((limitY - y(0)) * (lx - 8 - x(planStart))) / (endX - x(planStart))
+    const cands = [
+      { end: true, x: lx - 8, y: Math.max(ly - 8, M.top + 12) },
+      { end: true, x: lx - 8, y: Math.max(Math.min(ly - 8, budgetY - 8), M.top + 12) },
+      { end: false, x: lx + 8, y: Math.min(ly + 16, baseline - 4) },
+      { end: false, x: lx + 8, y: Math.max(ly - 8, M.top + 12) },
+    ]
+    const boxOf = (c: typeof cands[number]): Box => { const x0 = c.end ? c.x - labelW : c.x; return [x0, x0 + labelW, c.y - 13, c.y + 4] }
+    const clear = (c: typeof cands[number]) => {
+      const box = boxOf(c)
+      if (box[0] < 0 || box[1] > W) return false
+      if (c.end && box[0] < M.left - 4 && ticks.some(v => Math.abs(y(v) - (c.y - 4)) < 12)) return false
+      return !onLine(box, [...drawn, [[M.left, limitY], [W - M.right, limitY]]])
+    }
+    const place = current ? cands.find(clear) ?? cands[0] : cands[0]
+    return { ...place, lx, ly, box: boxOf(place) }
+  })()
+  const renewText = `${current ? 'Plan ends' : 'Ended'} ${sentenceDay(planEnd, series.today)}`
+  const renewAbove: Box = [endX - textW(renewText), endX, M.top - 18, M.top - 2]
+  // Over the "Today" label, the renewal label moves inside the plot, top right.
+  const renew = todayBox.some(t => hit(t, renewAbove))
+    ? { x: endX - 4, y: M.top + 12, box: [endX - 4 - textW(renewText), endX - 4, M.top, M.top + 16] as Box }
+    : { x: endX, y: M.top - 6, box: renewAbove }
+  const limitText = `Budget ${money(scope.limit)}`
+  const limitCands = [limitY - 4, limitY + 14].map(by => ({ y: by, box: [M.left + 4, M.left + 4 + textW(limitText), by - 12, by + 3] as Box }))
+  const taken = [...todayBox, renew.box, ...(usedPlace ? [usedPlace.box] : [])]
+  const limitLabel = limitCands.find(c => !onLine(c.box, drawn) && !taken.some(t => hit(t, c.box))) ?? limitCands[0]
+  const reachText = reach ? `${reach.ahead ? 'Reaches' : 'Reached'} budget ${sentenceDay(reach.on, series.today)}` : ''
+  const reachX = reach ? Math.min(Math.max(x(reach.on), M.left + textW(reachText) / 2), W - M.right - textW(reachText) / 2) : 0
+  const reachCands = [limitY - 8, limitY + 16].map(by => ({ y: by, box: [reachX - textW(reachText) / 2, reachX + textW(reachText) / 2, by - 12, by + 3] as Box }))
+  const reachLabel = reachCands.find(c => !onLine(c.box, drawn) && ![...taken, limitLabel.box].some(t => hit(t, c.box))) ?? reachCands[0]
 
   const options = series.scopes.map(s => ({ key: s.scopeKey, label: s.scopeKey === 'plan' ? 'Whole plan' : s.name }))
   const choose = (next: string) => { setKey(next); setActive(null); setPinned(false) }
@@ -191,7 +249,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
     else readoutLeft = cx + 12 + readoutW <= W ? cx + 12 : cx - 12 - readoutW
     readoutLeft = Math.min(Math.max(readoutLeft, 0), Math.max(W - readoutW, 0))
   }
-  const readout = shown === null ? null : readoutRows(stops, shown, series)
+  const readout = shown === null ? null : readoutRows(stops, shown, series, scope)
   const at = shown === null ? null : stops[shown]
   const dots = at === null ? [] : ([
     ['budget', at.budget],
@@ -238,6 +296,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
                   <text x={x(t.date)} y={baseline + 18} textAnchor={x(t.date) + 28 > W ? 'end' : 'middle'} className="fill-[var(--color-muted-foreground)] text-xs">{t.label}</text>
                 </g>
               ))}
+              <line data-mark="limit" className="bt-limit" x1={r1(x(planStart))} x2={r1(endX)} y1={r1(limitY)} y2={r1(limitY)} />
               <path data-series="budget" className="bt-budget" d={pathOf([[planStart, 0], [planEnd, scope.limit]])} />
               {showExpected && <path data-series="expected" className="bt-expected" d={expectedRuns.map(pathOf).join('')} />}
               {showExpected && series.expected.revisionChanges.map(change => {
@@ -247,40 +306,31 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
                 return <line key={change} data-revision className="bt-tick" x1={r1(x(change))} x2={r1(x(change))} y1={r1(ty - 3)} y2={r1(ty + 3)} />
               })}
               {showBooked && booked.length > 0 && <path data-series="booked" className="bt-booked" d={pathOf(booked)} />}
+              {paceEnd && <line data-mark="pace" className="bt-pace" x1={r1(x(series.today))} y1={r1(y(todayUsed!))} x2={r1(x(paceEnd[0]))} y2={r1(y(paceEnd[1]))} />}
               {used.length > 0 && <path data-series="used" className="bt-used" d={pathOf(used)} />}
+              <g>
+                <line data-mark="renew" className="bt-renew" x1={r1(endX)} x2={r1(endX)} y1={M.top} y2={baseline} />
+                <text x={renew.x} y={renew.y} textAnchor="end" className={`fill-[var(--color-muted-foreground)] text-xs ${HALO}`}>{renewText}</text>
+              </g>
+              <text x={limitLabel.box[0]} y={limitLabel.y} className={`fill-[var(--color-muted-foreground)] text-xs tabular-nums ${HALO}`}>{limitText}</text>
+              {reach && (
+                <g>
+                  <circle className="bt-dot" data-dot="reach" cx={r1(x(reach.on))} cy={r1(limitY)} r={4} />
+                  <text x={reachX} y={reachLabel.y} textAnchor="middle" className={`fill-[var(--color-muted-foreground)] text-xs ${HALO}`}>{reachText}</text>
+                </g>
+              )}
               {current && (
                 <g data-today>
                   <line className="bt-today" x1={r1(x(series.today))} x2={r1(x(series.today))} y1={M.top} y2={baseline} />
                   <text x={x(series.today)} y={M.top - 6} textAnchor="middle" className="fill-[var(--color-muted-foreground)] text-xs">Today</text>
                 </g>
               )}
-              {labelPoint && (() => {
-                const lx = x(labelPoint.date)
-                const ly = y(labelPoint.used!)
-                // Above-left of the dot first (it may run into the y-axis gutter), then lifted clear of the budget line when that runs above the dot, then below-right, then above-right: the first that leaves the chart and sits on no tick label or line. An ended plan keeps the first.
-                const budgetY = y(0) + ((y(scope.limit) - y(0)) * (lx - 8 - x(planStart))) / (x(planEnd) - x(planStart))
-                const cands = [
-                  { end: true, x: lx - 8, y: Math.max(ly - 8, M.top + 12) },
-                  { end: true, x: lx - 8, y: Math.max(Math.min(ly - 8, budgetY - 8), M.top + 12) },
-                  { end: false, x: lx + 8, y: Math.min(ly + 16, baseline - 4) },
-                  { end: false, x: lx + 8, y: Math.max(ly - 8, M.top + 12) },
-                ]
-                const lines = [[[x(planStart), y(0)], [x(planEnd), y(scope.limit)]], ...(showBooked ? [booked.map(([d, v]) => [x(d), y(v)])] : []), ...(showExpected ? expectedRuns.map(run => run.map(([d, v]) => [x(d), y(v)])) : [])]
-                const clear = (c: typeof cands[number]) => {
-                  const x0 = c.end ? c.x - labelW : c.x
-                  const box = [x0, x0 + labelW, c.y - 13, c.y + 4] as const
-                  if (x0 < 0 || x0 + labelW > W) return false
-                  if (c.end && x0 < M.left - 4 && ticks.some(v => Math.abs(y(v) - (c.y - 4)) < 12)) return false
-                  return lines.every(pts => pts.every((pt, i) => i === 0 || !segmentInBox(pts[i - 1], pt, box)))
-                }
-                const place = current ? cands.find(clear) ?? cands[0] : cands[0]
-                return (
-                  <g>
-                    <circle className="bt-dot" data-dot="used" cx={r1(lx)} cy={r1(ly)} r={4} />
-                    <text ref={labelRef} data-used-label x={place.x} y={place.y} textAnchor={place.end ? 'end' : 'start'} className="fill-[var(--color-foreground)] stroke-[var(--color-card)] text-xs tabular-nums [paint-order:stroke] [stroke-linejoin:round] [stroke-width:3px]">Used {money(labelPoint.used!)}</text>
-                  </g>
-                )
-              })()}
+              {labelPoint && usedPlace && (
+                <g>
+                  <circle className="bt-dot" data-dot="used" cx={r1(usedPlace.lx)} cy={r1(usedPlace.ly)} r={4} />
+                  <text ref={labelRef} data-used-label x={usedPlace.x} y={usedPlace.y} textAnchor={usedPlace.end ? 'end' : 'start'} className="fill-[var(--color-foreground)] stroke-[var(--color-card)] text-xs tabular-nums [paint-order:stroke] [stroke-linejoin:round] [stroke-width:3px]">Used {money(labelPoint.used!)}</text>
+                </g>
+              )}
               {at && (
                 <g>
                   <line data-cross className="bt-cross" x1={r1(x(at.date))} x2={r1(x(at.date))} y1={M.top} y2={baseline} />
@@ -305,6 +355,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
                 </div>
               ))}
               {readout.note && <p className="text-xs text-[var(--color-muted-foreground)]">{readout.note}</p>}
+              {readout.over && <p className="text-xs text-[var(--color-muted-foreground)]">{readout.over}</p>}
             </div>
           )}
         </div>
@@ -312,7 +363,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
         {/* The wrapper clips; a table ignores sr-only's 1px width and would widen the phone layout. */}
         <div className="sr-only">
         <table data-table>
-          <caption>Weekly figures for {scope.name}, {writtenSpan(planStart, planEnd)}</caption>
+          <caption>{budgetTrackCaption(series, scope)}</caption>
           <thead>
             <tr><th scope="col">Week to</th><th scope="col">Budget, spread evenly</th><th scope="col">Used</th><th scope="col">Used and booked</th><th scope="col">Expected</th></tr>
           </thead>
