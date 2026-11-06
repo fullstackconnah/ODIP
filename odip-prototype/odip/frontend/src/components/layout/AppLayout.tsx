@@ -728,7 +728,7 @@ export default function AppLayout() {
 
         {/* Impersonation banner */}
         {viewingUserId && (
-          <div className="bg-[var(--color-warning-container)] border-b border-[var(--color-warning)] px-[var(--gutter,20px)] py-2 flex items-center justify-between gap-4">
+          <div className="h-10 bg-[var(--color-warning-container)] border-b border-[var(--color-warning)] px-[var(--gutter,20px)] flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-[var(--color-on-warning-container)] text-xs font-bold uppercase tracking-wide">Viewing as</span>
               <span className="text-[var(--color-on-warning-container)] text-sm font-semibold">{user.fullName}</span>
@@ -754,7 +754,7 @@ export default function AppLayout() {
           PlatformFooter (variant="shell"), the last thing in this column, carries it below lg (--mobile-nav-h, the safe area and
           0.75rem). The footer always renders, because its Accessibility link is unconditional, so nothing can end up behind the nav.
         */}
-        <main id="main" tabIndex={-1} className="flex-1 min-h-0 print:p-0 px-[var(--gutter,20px)] pt-4 pb-6 focus:outline-none lg:has-[[data-fit-screen]]:pb-0 lg:has-[[data-fit-screen]]:flex lg:has-[[data-fit-screen]]:flex-col lg:has-[[data-fit-screen]]:flex-none lg:has-[[data-fit-screen]]:h-[calc(100dvh-3rem-var(--safe-top))]">
+        <main id="main" tabIndex={-1} className={`flex-1 min-h-0 print:p-0 px-[var(--gutter,20px)] pt-4 pb-6 focus:outline-none lg:has-[[data-fit-screen]]:pb-0 lg:has-[[data-fit-screen]]:flex lg:has-[[data-fit-screen]]:flex-col lg:has-[[data-fit-screen]]:flex-none ${viewingUserId ? 'lg:has-[[data-fit-screen]]:h-[calc(100dvh-3rem-2.5rem-var(--safe-top))]' : 'lg:has-[[data-fit-screen]]:h-[calc(100dvh-3rem-var(--safe-top))]'}`}>
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}

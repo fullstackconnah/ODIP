@@ -315,7 +315,7 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
       {applyError && (
         <Callout tone={applyError.busy ? 'warning' : 'danger'} title={applyError.busy ? 'Someone else is saving this week’s roster' : applyError.unconfirmed ? 'We couldn’t confirm the apply' : 'Couldn’t apply the draft'}
           actions={applyError.unconfirmed ? undefined : <Button size="sm" variant="secondary" onClick={() => void apply()}>Try again</Button>}>
-          {applyError.unconfirmed ? 'Check the board before you apply again.' : `${applyError.message} ${applyError.busy ? 'Your draft is kept.' : 'Nothing was saved.'}`}
+          {applyError.unconfirmed ? 'Check the board to see what was applied.' : `${applyError.message} ${applyError.busy ? 'Your draft is kept.' : 'Nothing was saved.'}`}
         </Callout>
       )}
       <Tabs variant="underline" ariaLabel="Draft roster" active={tab} onChange={setTab} tabs={[

@@ -197,7 +197,7 @@ describe('the draft roster panel', () => {
     const { user } = setup({ onApply: vi.fn().mockRejectedValue(new Error('Network Error')) })
     await user.click(applyButton())
     expect(await screen.findByText('We couldn’t confirm the apply')).toBeInTheDocument()
-    expect(screen.getByText('Check the board before you apply again.')).toBeInTheDocument()
+    expect(screen.getByText('Check the board to see what was applied.')).toBeInTheDocument()
     expect(screen.queryByText(/Nothing was saved/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })

@@ -884,8 +884,8 @@ describe('the rolled-over amount of a period', () => {
     state = withPeriodEdit(state, key(state), 1, { rollover: '-5' })
     state = withPeriodEdit(state, key(state), 2, { rollover: '-$1,250.50' })
     state = withPeriodEdit(state, key(state), 3, { rollover: '--' })
-    expect(problemsOf(state)[1].rollover).toBe("A rolled-over amount can't be less than $0.00.")
-    expect(problemsOf(state)[2].rollover).toBe("A rolled-over amount can't be less than $0.00.")
+    expect(problemsOf(state)[1].rollover).toBe("A rolled-over amount can’t be less than $0.00.")
+    expect(problemsOf(state)[2].rollover).toBe("A rolled-over amount can’t be less than $0.00.")
     expect(problemsOf(state)[3].rollover).toBe('Enter dollars and cents, like 8000.00.')
   })
 
