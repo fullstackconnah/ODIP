@@ -166,7 +166,7 @@ export default function CompatibilityPage() {
     setRemoving(null)
   }
 
-  // By participant fits the screen from lg (the roster board's pattern, AppLayout's has-[[data-fit-screen]]): the grid takes the height left and each column scrolls inside itself. The Table view keeps the window scroll.
+  // By participant fits the screen from lg (the roster board's pattern, AppLayout's has-[[data-fit-screen]]): the grid takes the height left and each column scrolls inside itself. The Table view keeps the window scroll.  lg:relative on the board panel keeps the board's absolutely placed sr-only text inside the scroller, so it can't stretch the window.
   return (
     <div {...(!noPeopleYet && !showTable ? { 'data-fit-screen': true } : {})} className="flex flex-col gap-[var(--section-gap)] animate-fade-in lg:min-h-0 lg:flex-1">
       <PageHeader
@@ -233,7 +233,7 @@ export default function CompatibilityPage() {
             )}
           </nav>
           {current && (
-            <div className={cn('min-w-0 space-y-4 lg:min-h-0 lg:overflow-y-auto lg:p-0.5', !chosen && 'max-md:hidden')}>
+            <div className={cn('min-w-0 space-y-4 lg:relative lg:min-h-0 lg:overflow-y-auto lg:p-0.5', !chosen && 'max-md:hidden')}>
               <BackButton variant="link" label="participants" onBack={() => setParam('participant', null)} className="md:hidden" />
               <h2 className="text-lg font-semibold">{current.fullName}</h2>
               <TierBoard
