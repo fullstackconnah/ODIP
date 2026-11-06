@@ -10,7 +10,7 @@ import { useMenuKeys } from './useMenuKeys'
 export default function TenantSwitcher() {
   const [open, setOpen] = useState(false)
   const [pendingTenant, setPendingTenant] = useState<{ id: string; name: string } | null>(null)
-  const menu = useMenuKeys(open, setOpen)
+  const { rootRef, triggerRef, menuRef, menuId, headingId, toggle, onTriggerKeyDown, onMenuKeyDown, onMenuFocus } = useMenuKeys(open, setOpen)
   const { data: tenants = [] } = useAdminTenantsSummary()
   const viewingId = getViewAs('odip_viewing_tenant')
   const current = tenants.find(t => t.id === viewingId)
@@ -60,18 +60,18 @@ export default function TenantSwitcher() {
   })
 
   return (
-    <div ref={menu.rootRef} className="relative">
+    <div ref={rootRef} className="relative">
       {/* `--tap-min` floor: 44px tall under a coarse pointer (the header is 48px), unchanged on a mouse. Below sm the
           tenant name is dropped from the trigger, because a SuperAdmin's two switchers (badge + name + caret each),
           the bell and the avatar do not fit a 390px header: the badge and caret stay and the name moves into the
           accessible name and the tooltip. */}
       <button
-        ref={menu.triggerRef}
-        onClick={menu.toggle}
-        onKeyDown={menu.onTriggerKeyDown}
+        ref={triggerRef}
+        onClick={toggle}
+        onKeyDown={onTriggerKeyDown}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls={open ? menu.menuId : undefined}
+        aria-controls={open ? menuId : undefined}
         aria-label={`SA ${current?.name ?? 'Loading…'}`}
         title={current?.name}
         className={`flex min-h-[var(--tap-min)] items-center gap-1.5 max-sm:gap-1 ${TONE.info.solid} border border-[var(--color-border)] rounded-lg px-2.5 max-sm:px-1.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
@@ -82,8 +82,8 @@ export default function TenantSwitcher() {
       </button>
 
       {open && (
-        <div ref={menu.menuRef} id={menu.menuId} role="menu" aria-labelledby={menu.headingId} onKeyDown={menu.onMenuKeyDown} onFocus={menu.onMenuFocus} className="absolute right-0 max-sm:right-auto max-sm:left-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div id={menu.headingId} className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
+        <div ref={menuRef} id={menuId} role="menu" aria-labelledby={headingId} onKeyDown={onMenuKeyDown} onFocus={onMenuFocus} className="absolute right-0 max-sm:right-auto max-sm:left-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+          <div id={headingId} className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             Viewing as tenant
           </div>
           <div className="p-1.5">
@@ -94,7 +94,7 @@ export default function TenantSwitcher() {
                 aria-checked={tenant.id === viewingId}
                 tabIndex={-1}
                 onClick={() => {
-  menu.triggerRef.current?.focus();
+  triggerRef.current?.focus();
   setOpen(false);
   setPendingTenant({ id: tenant.id, name: tenant.name });
 }}

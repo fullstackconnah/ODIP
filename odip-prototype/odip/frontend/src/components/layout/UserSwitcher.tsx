@@ -12,7 +12,7 @@ export default function UserSwitcher() {
   const [open, setOpen] = useState(false)
   const [pendingUser, setPendingUser] = useState<TenantUserDto | null>(null)
   const [confirmingExit, setConfirmingExit] = useState(false)
-  const menu = useMenuKeys(open, setOpen)
+  const { rootRef, triggerRef, menuRef, menuId, headingId, toggle, onTriggerKeyDown, onMenuKeyDown, onMenuFocus } = useMenuKeys(open, setOpen)
 
   const viewingTenantId = getViewAs('odip_viewing_tenant')
   const viewingUserId = getViewAs('odip_viewing_user')
@@ -37,16 +37,16 @@ export default function UserSwitcher() {
   })
 
   return (
-    <div ref={menu.rootRef} className="relative">
+    <div ref={rootRef} className="relative">
       {/* Same floor and the same small-screen treatment as TenantSwitcher's trigger: 44px tall on touch, and below sm
           the user's name leaves the trigger (kept in its accessible name and tooltip) so the header fits 390px. */}
       <button
-        ref={menu.triggerRef}
-        onClick={menu.toggle}
-        onKeyDown={menu.onTriggerKeyDown}
+        ref={triggerRef}
+        onClick={toggle}
+        onKeyDown={onTriggerKeyDown}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls={open ? menu.menuId : undefined}
+        aria-controls={open ? menuId : undefined}
         aria-label={`USR ${currentViewUser?.fullName ?? 'View as user…'}`}
         title={currentViewUser?.fullName}
         className={`flex min-h-[var(--tap-min)] items-center gap-1.5 max-sm:gap-1 ${TONE.warning.solid} border border-[var(--color-border)] rounded-lg px-2.5 max-sm:px-1.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
@@ -59,8 +59,8 @@ export default function UserSwitcher() {
       </button>
 
       {open && (
-        <div ref={menu.menuRef} id={menu.menuId} role="menu" aria-labelledby={menu.headingId} onKeyDown={menu.onMenuKeyDown} onFocus={menu.onMenuFocus} className="absolute right-0 mt-1 w-64 max-sm:w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div id={menu.headingId} className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
+        <div ref={menuRef} id={menuId} role="menu" aria-labelledby={headingId} onKeyDown={onMenuKeyDown} onFocus={onMenuFocus} className="absolute right-0 mt-1 w-64 max-sm:w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+          <div id={headingId} className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             View as user
           </div>
           <div className="p-1.5">
@@ -69,7 +69,7 @@ export default function UserSwitcher() {
                 role="menuitem"
                 tabIndex={-1}
                 onClick={() => {
-  menu.triggerRef.current?.focus();
+  triggerRef.current?.focus();
   setOpen(false);
   setConfirmingExit(true);
 }}
@@ -91,7 +91,7 @@ export default function UserSwitcher() {
   if (!user.isActive) {
     return;
   }
-  menu.triggerRef.current?.focus();
+  triggerRef.current?.focus();
   setOpen(false);
   setPendingUser(user);
 }}

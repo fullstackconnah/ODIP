@@ -25,7 +25,7 @@ export function useMenuKeys(open: boolean, setOpen: (open: boolean) => void) {
 
   useEffect(() => {
     if (open) focusEntry()
-  }, [open])
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps -- entry is read from refs on open only
 
   useEffect(() => {
     if (!open) return
