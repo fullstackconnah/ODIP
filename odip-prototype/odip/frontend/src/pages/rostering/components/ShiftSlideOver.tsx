@@ -7,7 +7,6 @@ import { Dropdown } from '@/components/Dropdown'
 import type { DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
-import { SelectField } from '@/components/SelectField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
@@ -617,14 +616,18 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         )}
 
         {/* Typed by the coordinator for this shift only; never filled from the participant's address. autoComplete off so the browser offers no saved street addresses. */}
-        <SelectField
+        <FormField
           label="Service location"
           hint={places.length === 0 ? 'Add places in Settings, Service locations.' : 'The support worker sees the place and its address on their shift.'}
-          options={[{ value: '', label: 'None' }, ...placeOptions]}
-          value={serviceLocationId}
-          disabled={!canWrite}
-          onChange={e => setServiceLocationId(e.target.value)}
-        />
+        >
+          <SearchableSelect
+            value={serviceLocationId}
+            onChange={setServiceLocationId}
+            disabled={!canWrite}
+            placeholder="None"
+            items={[{ value: '', label: 'None' }, ...placeOptions]}
+          />
+        </FormField>
 
         <FormField label="Location details" hint="Anything extra the worker needs, like a room or a meeting point. Leave it empty for a shift at home.">
           <input type="text" value={location} maxLength={200} autoComplete="off" disabled={!canWrite} onChange={e => setLocation(e.target.value)} placeholder="e.g. Southside Library" />

@@ -51,6 +51,11 @@ describe('ServiceLocationsSection', () => {
     expect(screen.getByText(/No service locations yet/)).toBeInTheDocument()
   })
 
+  it('gives the actions column no visible caption (LOC-1a): a screen-reader header only, so the mobile card shows no right-aligned ACTIONS label', () => {
+    render(<ServiceLocationsSection />)
+    expect(screen.getAllByText('Actions')[0]).toHaveClass('sr-only')
+  })
+
   it('lists active places, then archived ones with no actions', () => {
     render(<ServiceLocationsSection />)
     expect(screen.getByText('Southside hub')).toBeInTheDocument()
