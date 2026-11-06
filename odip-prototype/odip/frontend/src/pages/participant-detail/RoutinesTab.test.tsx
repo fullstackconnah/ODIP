@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import RoutinesTab from './RoutinesTab'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
 
@@ -60,7 +61,7 @@ afterEach(() => {
 
 describe('RoutinesTab', () => {
   it('renders an empty state when there are no routines', () => {
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(screen.getByText('No routines yet')).toBeInTheDocument()
   })
 
@@ -73,7 +74,7 @@ describe('RoutinesTab', () => {
       isLoading: false,
     })
 
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     // "Every day" also appears as this routine's own day-set label on its card (formatDaySet),
     // so the group heading is asserted by role to disambiguate from that second occurrence.
@@ -94,7 +95,7 @@ describe('RoutinesTab', () => {
         isLoading: false,
       })
 
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       expect(screen.queryByRole('heading', { name: 'Every day' })).not.toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'Monday' })).toBeInTheDocument()
@@ -107,7 +108,7 @@ describe('RoutinesTab', () => {
 
     it('"Every day" is derived: unchecking it (only possible when all 7 are checked) clears the selection, and checking it selects all 7', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
 
       const everyDayCheckbox = screen.getByRole('checkbox', { name: 'Every day' })
@@ -140,7 +141,7 @@ describe('RoutinesTab', () => {
 
     it('rejects saving with no days selected', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
       await user.type(screen.getByLabelText(/title/i), 'No days task')
@@ -155,7 +156,7 @@ describe('RoutinesTab', () => {
 
     it('saves a multi-day selection as exactly the chosen set', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
       await user.type(screen.getByLabelText(/title/i), 'Swimming')
@@ -178,7 +179,7 @@ describe('RoutinesTab', () => {
         isLoading: false,
       })
 
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getAllByRole('button', { name: 'Edit' })[0])
 
       expect(screen.getByRole('checkbox', { name: 'Every day' })).not.toBeChecked()
@@ -190,7 +191,7 @@ describe('RoutinesTab', () => {
 
     it('formats the day-set label for the common cases: Every day, Weekdays, Weekends, and an arbitrary subset', () => {
       mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine({ days: ALL_DAYS })], isLoading: false })
-      const { unmount: unmount1 } = render(<RoutinesTab participantId="participant-1" />)
+      const { unmount: unmount1 } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       expect(screen.getAllByText('Every day').length).toBeGreaterThan(0)
       unmount1()
 
@@ -198,13 +199,13 @@ describe('RoutinesTab', () => {
         data: [makeRoutine({ days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] })],
         isLoading: false,
       })
-      const { unmount: unmount2 } = render(<RoutinesTab participantId="participant-1" />)
+      const { unmount: unmount2 } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       // One card render per applicable day bucket (5), each showing the "Weekdays" label.
       expect(screen.getAllByText('Weekdays')).toHaveLength(5)
       unmount2()
 
       mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine({ days: ['Saturday', 'Sunday'] })], isLoading: false })
-      const { unmount: unmount3 } = render(<RoutinesTab participantId="participant-1" />)
+      const { unmount: unmount3 } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       expect(screen.getAllByText('Weekends')).toHaveLength(2)
       unmount3()
 
@@ -212,7 +213,7 @@ describe('RoutinesTab', () => {
         data: [makeRoutine({ days: ['Monday', 'Wednesday', 'Friday'] })],
         isLoading: false,
       })
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       expect(screen.getAllByText('Mon, Wed, Fri')).toHaveLength(3)
     })
   })
@@ -221,7 +222,7 @@ describe('RoutinesTab', () => {
     setUserRole('ReadOnly')
     mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
 
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
@@ -232,7 +233,7 @@ describe('RoutinesTab', () => {
     setUserRole('SupportWorker')
     mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
 
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new routine/i })).toBeInTheDocument()
@@ -243,7 +244,7 @@ describe('RoutinesTab', () => {
     setUserRole(role)
     mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
 
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
@@ -252,7 +253,7 @@ describe('RoutinesTab', () => {
   it('says a deleted routine moves to Inactive routines instead of being removed for good', async () => {
     const user = userEvent.setup()
     mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
@@ -263,7 +264,7 @@ describe('RoutinesTab', () => {
 
   it('creates a new routine with the entered title, description and critical flag', async () => {
     const user = userEvent.setup()
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     // Both the header button and the empty-state action read "New routine" — the header one is first.
     await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
@@ -284,7 +285,7 @@ describe('RoutinesTab', () => {
 
   it('requires a title and description before saving', async () => {
     const user = userEvent.setup()
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
     await user.click(screen.getByRole('button', { name: /save routine/i }))
@@ -301,7 +302,7 @@ describe('RoutinesTab', () => {
       isLoading: false,
     })
 
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(screen.getByLabelText(/title/i)).toHaveValue('Morning routine')
@@ -320,7 +321,7 @@ describe('RoutinesTab', () => {
     const user = userEvent.setup()
     mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
 
-    render(<RoutinesTab participantId="participant-1" />)
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = screen.getByRole('alertdialog')
@@ -334,7 +335,7 @@ describe('RoutinesTab', () => {
   describe('PD-3 — partial time windows', () => {
     it('saves a routine with only a start time set', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
       await user.type(screen.getByLabelText(/title/i), 'Take morning tablets')
@@ -350,7 +351,7 @@ describe('RoutinesTab', () => {
 
     it('saves a routine with only an end time set', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
       await user.type(screen.getByLabelText(/title/i), 'Finish evening chores')
@@ -373,7 +374,7 @@ describe('RoutinesTab', () => {
         isLoading: false,
       })
 
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       expect(screen.getByText('From 7am')).toBeInTheDocument()
       expect(screen.getByText('By 5pm')).toBeInTheDocument()
@@ -388,7 +389,7 @@ describe('RoutinesTab', () => {
         isLoading: false,
       })
 
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       expect(screen.getByText('Untimed')).toBeInTheDocument()
       expect(screen.getByText('9:30am–11:30am')).toBeInTheDocument()
@@ -396,7 +397,7 @@ describe('RoutinesTab', () => {
 
     it('refuses an end time equal to the start time, only when both times are present', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
       await user.type(screen.getByLabelText(/title/i), 'Empty window')
@@ -419,7 +420,7 @@ describe('RoutinesTab', () => {
     // The shift screen (rostering/lib/routines.ts) and the server (RoutineWindowMatcher) both read an end before the start as running past midnight.
     it('saves an overnight routine as one routine: an end before the start is a night that runs past midnight', async () => {
       const user = userEvent.setup()
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
       await user.type(screen.getByLabelText(/title/i), 'Night settling')
@@ -441,7 +442,7 @@ describe('RoutinesTab', () => {
         data: [makeRoutine({ startTime: '07:00:00', endTime: null })],
         isLoading: false,
       })
-      const { unmount: unmount1 } = render(<RoutinesTab participantId="participant-1" />)
+      const { unmount: unmount1 } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getByRole('button', { name: 'Edit' }))
       expect(screen.getByLabelText(/start time/i)).toHaveValue('07:00')
       expect(screen.getByLabelText(/end time/i)).toHaveValue('')
@@ -452,7 +453,7 @@ describe('RoutinesTab', () => {
         data: [makeRoutine({ startTime: null, endTime: '17:00:00' })],
         isLoading: false,
       })
-      const { unmount: unmount2 } = render(<RoutinesTab participantId="participant-1" />)
+      const { unmount: unmount2 } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getByRole('button', { name: 'Edit' }))
       expect(screen.getByLabelText(/start time/i)).toHaveValue('')
       expect(screen.getByLabelText(/end time/i)).toHaveValue('17:00')
@@ -463,7 +464,7 @@ describe('RoutinesTab', () => {
         data: [makeRoutine({ startTime: '09:30:00', endTime: '11:30:00' })],
         isLoading: false,
       })
-      const { unmount: unmount3 } = render(<RoutinesTab participantId="participant-1" />)
+      const { unmount: unmount3 } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getByRole('button', { name: 'Edit' }))
       expect(screen.getByLabelText(/start time/i)).toHaveValue('09:30')
       expect(screen.getByLabelText(/end time/i)).toHaveValue('11:30')
@@ -474,7 +475,7 @@ describe('RoutinesTab', () => {
         data: [makeRoutine({ startTime: null, endTime: null })],
         isLoading: false,
       })
-      render(<RoutinesTab participantId="participant-1" />)
+      render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
       await user.click(screen.getByRole('button', { name: 'Edit' }))
       expect(screen.getByLabelText(/start time/i)).toHaveValue('')
       expect(screen.getByLabelText(/end time/i)).toHaveValue('')
@@ -489,7 +490,7 @@ describe('RoutinesTab — long list (T10)', () => {
       data: Array.from({ length: 23 }, (_, i) => makeRoutine({ id: `q${i}`, title: `Routine ${i}` })),
       isLoading: false,
     })
-    const { container } = render(<RoutinesTab participantId="participant-1" />)
+    const { container } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
     await user.click(screen.getByRole('button', { name: 'Show all 23' }))
     const rows = container.querySelectorAll('[data-show-row]')
@@ -509,11 +510,44 @@ describe('RoutinesTab — long list counts rows per day group (T10)', () => {
       ],
       isLoading: false,
     })
-    const { container } = render(<RoutinesTab participantId="participant-1" />)
+    const { container } = render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
     expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
     expect(screen.queryByText('Sunday only')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show all 7' }))
     expect(container.querySelectorAll('[data-show-row]')).toHaveLength(7)
     expect(screen.getByText('Sunday only')).toBeInTheDocument()
+  })
+})
+
+function Where() {
+  const { pathname, search } = useLocation()
+  return <p data-testid="where">{pathname + search}</p>
+}
+
+describe('Quick add from the Overview (?add=1)', () => {
+  const url = '/p?tab=daily&section=routines&add=1'
+  const renderAt = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><RoutinesTab participantId="participant-1" /><Where /></MemoryRouter>)
+
+  it('opens the add once, removes the param with replace, and returns focus to the section Add button on close', async () => {
+    const user = userEvent.setup()
+    renderAt(url)
+    expect(await screen.findByRole('dialog', { name: /New routine/i })).toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('/p?tab=daily&section=routines')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /New routine/i })[0]).toHaveFocus()
+  })
+
+  it('does not reopen after the param is gone (refresh, Back)', async () => {
+    renderAt('/p?tab=daily&section=routines')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('a role without the write gate opens nothing and still drops the param', async () => {
+    setUserRole('ReadOnly')
+    renderAt(url)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })

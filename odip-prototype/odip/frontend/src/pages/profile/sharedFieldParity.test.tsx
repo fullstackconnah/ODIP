@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -93,7 +94,7 @@ const DROPDOWNS = ['addressState', 'fundingSource', 'planType', 'supportRatio', 
 
 async function collect(Steps: () => React.JSX.Element) {
   const user = userEvent.setup()
-  render(<Steps />)
+  render(<MemoryRouter><Steps /></MemoryRouter>)
   const signatures = Object.fromEntries([...TEXT_CONTROLS, ...DROPDOWNS].map((id) => [id, signature(id)]))
   const options: Record<string, string[]> = {}
   for (const id of DROPDOWNS) options[id] = await dropdownOptions(user, id)

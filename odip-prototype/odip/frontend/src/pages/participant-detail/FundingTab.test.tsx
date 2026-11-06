@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import FundingTab from './FundingTab'
 import { plan, pool, quarters } from '@/test/fixtures/funding'
 import { noLedger, participantLedger } from '@/test/fixtures/ledger'
@@ -489,5 +489,41 @@ describe('Funding tab: my provider', () => {
     render(<MemoryRouter><FundingTab participantId="participant-1" planType="SelfManaged" /></MemoryRouter>)
 
     expect(screen.queryByText('My provider')).not.toBeInTheDocument()
+  })
+})
+
+function Where() {
+  const { pathname, search } = useLocation()
+  return <p data-testid="where">{pathname + search}</p>
+}
+
+describe('Quick add from the Overview (?add=1)', () => {
+  const renderAt = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><FundingTab participantId="participant-1" planType="PlanManaged" /><Where /></MemoryRouter>)
+  const ok = (r: ReturnType<typeof plansReply>) => ({ ...r, isSuccess: true })
+
+  beforeEach(() => { localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' })) })
+  afterEach(() => { localStorage.clear() })
+
+  it('with no plan recorded, opens Record plan budget once and removes the param', async () => {
+    useFundingPlans.mockReturnValue(ok(plansReply([])))
+    renderAt('/p?tab=funding&section=plan-budget&add=1')
+    expect(await screen.findByTestId('editor')).toHaveAttribute('data-plan', 'new')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
+  })
+
+  it('waits for the plans to answer before deciding', async () => {
+    useFundingPlans.mockReturnValue({ data: undefined, isLoading: true, isError: false, isSuccess: false, refetch: vi.fn() })
+    const view = renderAt('/p?tab=funding&section=plan-budget&add=1')
+    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+    useFundingPlans.mockReturnValue(ok(plansReply([])))
+    view.rerender(<MemoryRouter initialEntries={['/p?tab=funding&section=plan-budget&add=1']}><FundingTab participantId="participant-1" planType="PlanManaged" /><Where /></MemoryRouter>)
+    expect(await screen.findByTestId('editor')).toBeInTheDocument()
+  })
+
+  it('with a plan recorded, opens nothing (Record a new plan stays deliberate) and still drops the param', async () => {
+    useFundingPlans.mockReturnValue(ok(plansReply([plan()])))
+    renderAt('/p?tab=funding&section=plan-budget&add=1')
+    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+    expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })
