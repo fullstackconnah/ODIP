@@ -482,7 +482,7 @@ export default function TenantFormPanel({
               </div>
 
               <FormField label="Address">
-                <AddressField id="tf-address" value={address} onChange={setAddress} onPick={a => setAddress(a.formatted)} />
+                <AddressField wholeLine id="tf-address" value={address} onChange={setAddress} onPick={a => setAddress(a.formatted)} />
               </FormField>
 
               <CheckboxField

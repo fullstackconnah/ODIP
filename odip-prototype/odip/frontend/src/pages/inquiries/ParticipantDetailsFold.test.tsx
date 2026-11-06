@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { pickAddress } from '@/test/addressPick'
+import { pickAddress, details, DETAILS } from '@/test/addressPick'
 import { ParticipantDetailsFold, type DetailsForm } from './ParticipantDetailsFold'
 vi.mock('@/api/client', async (real) => (await import('@/test/addressPick')).withAddressApi(await real<typeof import('@/api/client')>()))
 
@@ -36,5 +36,18 @@ describe('ParticipantDetailsFold address lookup (caller D)', () => {
       ['addressStreet', '12 Example Street'], ['addressSuburb', 'Brisbane City'], ['addressState', 'QLD'], ['addressPostcode', '4000'],
     ]))
     expect(screen.getByRole('combobox', { name: 'Street' })).toHaveAttribute('maxlength', '200')
+  })
+  it('a 210-character street is cut to 200', async () => {
+    details.current = { ...DETAILS, street: 'S'.repeat(210) }
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    function Harness() {
+      const [f, setF] = useState(form)
+      return <ParticipantDetailsFold form={f} errors={{}} open today="2026-10-28" onToggle={() => undefined} onChange={(k, v) => { onChange(k, v); setF(p => ({ ...p, [k]: v })) }} />
+    }
+    render(<Harness />)
+    await pickAddress(user, screen.getByRole('combobox', { name: 'Street' }))
+    expect(onChange).toHaveBeenCalledWith('addressStreet', 'S'.repeat(200))
+    details.current = DETAILS
   })
 })

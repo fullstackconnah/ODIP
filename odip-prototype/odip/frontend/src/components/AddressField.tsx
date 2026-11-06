@@ -17,6 +17,8 @@ export type AddressFieldProps = {
   /** After a pick: the caller sets its other address fields from the parts (a part the place lacks is ''). */
   onPick: (parts: AddressParts) => void
   maxLength?: number
+  /** A single-text caller (the field holds the whole address): if details fail, the prediction's whole line goes in, not just its street. */
+  wholeLine?: boolean
   placeholder?: string
   /** A read-only field stays a read-only input (no typing, so no lookup). */
   readOnly?: boolean
@@ -46,7 +48,7 @@ const statusOf = (err: unknown) => (err as { response?: { status?: number } })?.
  * The list never opens on focus alone, so tabbing through a filled form stays quiet; Down opens it once there are suggestions.
  */
 export function AddressField({
-  id, value, onChange, onPick, maxLength, placeholder, readOnly, onBlur,
+  id, value, onChange, onPick, maxLength, wholeLine, placeholder, readOnly, onBlur,
   'aria-labelledby': ariaLabelledBy, 'aria-required': ariaRequired, 'aria-describedby': ariaDescribedBy, 'aria-invalid': ariaInvalid,
 }: AddressFieldProps) {
   const listboxId = useId()
@@ -159,7 +161,8 @@ export function AddressField({
       parts = { street: d.street, suburb: d.suburb, state: d.state, postcode: d.postcode, formatted: d.formattedAddress }
     } catch { /* silent: the prediction's own text goes in below */ }
     if (latest.current !== at) return   // the person kept typing while details loaded
-    const street = (parts ? parts.street : row.mainText).slice(0, maxLength ?? Infinity)
+    const fallback = wholeLine ? [row.mainText, row.secondaryText].filter(Boolean).join(', ') : row.mainText
+    const street = (parts ? parts.street : fallback).slice(0, maxLength ?? Infinity)
     latest.current = street
     onChangeRef.current(street)
     if (parts) {

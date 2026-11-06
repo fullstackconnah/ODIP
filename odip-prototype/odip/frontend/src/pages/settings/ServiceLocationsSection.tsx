@@ -194,7 +194,7 @@ export default function ServiceLocationsSection() {
             <input type="text" value={form.name} maxLength={100} autoComplete="off" placeholder="e.g. Southside day centre" onChange={e => edit({ name: e.target.value })} />
           </FormField>
           <FormField label="Address" hint="Shown to the support worker on their shift.">
-            <AddressField value={form.address} maxLength={300} onChange={address => edit({ address })} onPick={a => edit({ address: a.formatted.slice(0, 300) })} />
+            <AddressField wholeLine value={form.address} maxLength={300} onChange={address => edit({ address })} onPick={a => edit({ address: a.formatted.slice(0, 300) })} />
           </FormField>
           <div className="space-y-2">
             <FormField label="Map pin" required error={fieldErrors.pin} hint="Latitude, longitude. Stand at the place and use your location, or copy it from a map." keepHint>
