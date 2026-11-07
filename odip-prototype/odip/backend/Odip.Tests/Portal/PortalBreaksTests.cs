@@ -504,6 +504,28 @@ public class PortalBreaksTests
         Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ABreakEditOrDeleteThatArrivesAfterFinish_IsRefused_AndChangesNothing(bool edit)
+    {
+        var f = Create();
+        var start = NowUtc.AddMinutes(-60);
+        var brk = new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = f.Completion!.Id, StartedAt = start, EndedAt = start.AddMinutes(10), CreatedByUserId = f.Worker.Id };
+        f.Db.ShiftBreaks.Add(brk);
+        await f.Db.SaveChangesAsync();
+        var stale = await f.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.Id == f.Completion.Id);
+        f.Shift.Status = ShiftStatus.PendingReview;   // another device's Finish committed first
+        f.Completion.SubmittedAt = NowUtc;
+        await f.Db.SaveChangesAsync();
+
+        var service = new ShiftBreakService(f.Db, f.Clock);
+        var result = edit ? await service.EditAsync(stale, brk.Id, start, start.AddMinutes(5), default) : await service.DeleteAsync(stale, brk.Id, default);
+
+        Assert.Equal(ShiftBreakOutcome.ShiftNotInProgress, result.Outcome);
+        Assert.Equal(start.AddMinutes(10), (await f.Db.ShiftBreaks.SingleAsync()).EndedAt);
+    }
+
     [Fact]
     public void ABreakLeftRunningOnASubmittedCompletion_StopsGrowingAtTheActualEnd_InTheBreakDto()
     {
