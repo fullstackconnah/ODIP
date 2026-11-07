@@ -382,23 +382,23 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
         <AnnouncementRegion message={message} />
         {/* The wrapper clips; a table ignores sr-only's 1px width and would widen the phone layout. */}
         <div className="sr-only">
-        <table data-table>
-          <caption>{budgetTrackCaption(series, scope)}</caption>
-          <thead>
-            <tr><th scope="col">Week to</th><th scope="col">Budget, spread evenly</th><th scope="col">Used</th><th scope="col">Used and booked</th><th scope="col">Expected</th></tr>
-          </thead>
-          <tbody>
-            {stops.map(p => (
-              <tr key={p.date}>
-                <th scope="row">{writtenDay(p.date)}</th>
-                <td>{money(p.budget)}</td>
-                <Cell value={p.used} />
-                <Cell value={p.usedAndBooked} />
-                <Cell value={p.expected} />
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <table data-table>
+            <caption>{budgetTrackCaption(series, scope)}</caption>
+            <thead>
+              <tr><th scope="col">Week to</th><th scope="col">Budget, spread evenly</th><th scope="col">Used</th><th scope="col">Used and booked</th><th scope="col">Expected</th></tr>
+            </thead>
+            <tbody>
+              {stops.map(p => (
+                <tr key={p.date}>
+                  <th scope="row">{writtenDay(p.date)}</th>
+                  <td>{money(p.budget)}</td>
+                  <Cell value={p.used} />
+                  <Cell value={p.usedAndBooked} />
+                  <Cell value={p.expected} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <div className="mt-3 space-y-1 empty:hidden">
           {budgetTrackFootnotes(series, scope).map(note => (
