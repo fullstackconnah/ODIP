@@ -103,6 +103,28 @@ public class CaregiverSubmissionsControllerTests
     }
 
     [Fact]
+    public async Task CreateLink_WhileASubmittedFormWaits_Returns409AndChangesNothing()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        var payload = new PatchParticipantDto { CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Gardening" } };
+        var submitted = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted, payload);
+        var draft = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Draft);
+        var controller = MakeController(db, tenantId, Guid.NewGuid());
+
+        var result = await controller.CreateLink(p.Id, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("A caregiver form is waiting for review. Accept or decline it before sending a new link.",
+            Assert.IsType<ApiResponse<CaregiverLinkDto>>(conflict.Value).Errors![0]);
+        var rows = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().Where(s => s.ParticipantId == p.Id).ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(CaregiverSubmissionStatus.Submitted, rows.Single(r => r.Id == submitted.Id).Status);
+        Assert.Equal(CaregiverSubmissionStatus.Draft, rows.Single(r => r.Id == draft.Id).Status);
+        Assert.IsType<NoContentResult>(await controller.Accept(submitted.Id, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task CreateLink_OtherTenantsParticipant_Returns404()
     {
         var (db, tenantId) = CreateTenantDb();

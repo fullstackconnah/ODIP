@@ -30,7 +30,7 @@ public class ProblemReportPostgresTests : IClassFixture<PostgresFixture>
 
     private sealed class Sender : IProblemReportSender
     {
-        public Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct) =>
+        public Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct, bool isRetry = false) =>
             Task.FromResult(new ProblemReportSendResult(true, 77, null));
     }
 

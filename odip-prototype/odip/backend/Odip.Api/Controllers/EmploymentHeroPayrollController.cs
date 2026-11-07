@@ -125,7 +125,7 @@ public class EmploymentHeroPayrollController : ControllerBase
         return Ok(ApiResponse<SendMissingResultDto>.Ok(new SendMissingResultDto(queued, (await LoadAsync(tenantId, from, to, ct)).Check)));
     }
 
-    private static string? RangeRefusal(DateOnly from, DateOnly to) => from > to || to.DayNumber - from.DayNumber + 1 > MaxDays ? RangeMessage : null;
+    private static string? RangeRefusal(DateOnly from, DateOnly to) => from == default || to == default || from > to || to.DayNumber - from.DayNumber + 1 > MaxDays ? RangeMessage : null;
 
     private sealed record Item(Guid CompletionId, EmploymentHeroOutbox? Row, bool Sendable);
 

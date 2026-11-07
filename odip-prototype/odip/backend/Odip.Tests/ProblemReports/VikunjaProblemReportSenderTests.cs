@@ -176,6 +176,21 @@ public class VikunjaProblemReportSenderTests
     }
 
     [Fact]
+    public async Task ABackgroundRetryOfAFreshRow_SearchesFirst_AndAdoptsTheCard_WithNoCreate()
+    {
+        var report = ProblemReportCardTests.Report(); // Attempts 0, LastError null: the controller made the card, then its save failed
+        var handler = new StubHandler(c => c.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, "[{\"id\":99,\"title\":\"Sample Support Co: The roster will not save. [R-3f2a9c01]\",\"project_id\":7}]")
+            : Json(HttpStatusCode.OK, "{}"));
+
+        var result = await Sender(handler).TrySendAsync(report, CancellationToken.None, isRetry: true);
+
+        Assert.True(result.Sent);
+        Assert.Equal(99, result.CardId);
+        Assert.DoesNotContain(handler.Calls, c => c.Method == HttpMethod.Put && c.Url.EndsWith("/projects/7/tasks"));
+    }
+
+    [Fact]
     public async Task ARetryAfterAnUnknownOutcome_AdoptsTheCardTheBoardAlreadyHolds_AndSendsNoSecondCreate()
     {
         var report = ProblemReportCardTests.Report();
