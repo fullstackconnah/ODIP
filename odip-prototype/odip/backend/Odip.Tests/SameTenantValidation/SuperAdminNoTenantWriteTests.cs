@@ -393,7 +393,7 @@ public class SuperAdminNoTenantWriteTests
     public async Task TenantUser_Staff_Create_KeepsTenant()
     {
         var w = Setup(superAdmin: false);
-        var dto = new CreateStaffDto { FirstName = "Jane", LastName = "Doe", Email = "jane.doe@example.com", Position = Position.SupportWorker, IsActive = true };
+        var dto = new CreateStaffDto { FirstName = "Jane", LastName = "Doe", Email = "jane.doe@example.com", Position = Position.SupportWorker, IsActive = true, AddressConfirmed = true };
         Assert.IsType<CreatedAtActionResult>((await new StaffController(w.Db, currentTenant: w.Tenant).Create(dto, CancellationToken.None)).Result);
         await AssertAllInTenantA<User>(w.Db);
     }
