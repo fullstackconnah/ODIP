@@ -210,6 +210,45 @@ public class ComplianceEntitiesAuditTests
     }
 
     [Fact]
+    public async Task UpdatePersonPhone_WritesAuditLogWithOldNewAndActor()
+    {
+        var actingUserId = Guid.NewGuid();
+        using var db = CreateDb(actingUserId);
+        var person = new Person { Id = Guid.NewGuid(), TenantId = TenantId, FirstName = "Kim", LastName = "Ng", Phone = "0400 000 111" };
+        db.People.Add(person);
+        await db.SaveChangesAsync();
+
+        person.Phone = "0400 000 222";
+        await db.SaveChangesAsync();
+
+        var log = db.AuditLogs.Where(a => a.EntityType == nameof(Person) && a.EntityId == person.Id && a.Action == AuditAction.Updated).Single();
+        Assert.Contains("0400 000 111", log.Changes);
+        Assert.Contains("0400 000 222", log.Changes);
+        Assert.Equal(actingUserId, log.ChangedById);
+    }
+
+    [Fact]
+    public async Task RevokeServiceAgreementShare_WritesAuditLogWithRevokedAt()
+    {
+        var actingUserId = Guid.NewGuid();
+        using var db = CreateDb(actingUserId);
+        var share = new ServiceAgreementShare
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = Guid.NewGuid(), DraftId = Guid.NewGuid(), TokenHash = new string('a', 64),
+            RecipientName = "Kim Ng", RecipientEmail = "kim@example.com", SentByName = "Jane Coordinator", SentAt = DateTime.UtcNow, ExpiresAt = DateTime.UtcNow.AddDays(7),
+        };
+        db.ServiceAgreementShares.Add(share);
+        await db.SaveChangesAsync();
+
+        share.RevokedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var log = db.AuditLogs.Where(a => a.EntityType == nameof(ServiceAgreementShare) && a.EntityId == share.Id && a.Action == AuditAction.Updated).Single();
+        Assert.Contains("RevokedAt", log.Changes);
+        Assert.Equal(actingUserId, log.ChangedById);
+    }
+
+    [Fact]
     public async Task WithdrawParticipantConsent_AuditKeepsTheEarlierGrantedAsOld()
     {
         using var db = CreateDb(Guid.NewGuid());
