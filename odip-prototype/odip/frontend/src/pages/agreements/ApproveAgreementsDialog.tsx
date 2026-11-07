@@ -62,7 +62,7 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, 
         <div className="space-y-3 text-sm text-[var(--color-muted-foreground)]">
           <p>
             Each one is checked again as it is approved, and the roster is made from it.
-            {leftOut ? ` ${leftOut}` : skipped > 0 && `${plural(skipped, 'ticked row')} ${skipped === 1 ? 'has' : 'have'} no draft and ${skipped === 1 ? 'is' : 'are'} left as ${skipped === 1 ? 'it is' : 'they are'}.`}
+            {leftOut ? ` ${leftOut}` : skipped > 0 && ` ${plural(skipped, 'ticked row')} ${skipped === 1 ? 'has' : 'have'} no draft and ${skipped === 1 ? 'is' : 'are'} left as ${skipped === 1 ? 'it is' : 'they are'}.`}
           </p>
           {error && <Callout tone="danger">{error}</Callout>}
         </div>
