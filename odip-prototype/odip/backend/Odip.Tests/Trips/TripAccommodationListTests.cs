@@ -56,4 +56,55 @@ public class TripAccommodationListTests
         Assert.Equal(new DateOnly(2026, 9, 1), reservation.DateBooked);
         Assert.Equal(new DateOnly(2026, 9, 5), reservation.DateConfirmed);
     }
+
+    private static async Task<Guid> Reserve(ReservationsController c, Guid tripId, Guid propertyId, int fromDay, int toDay)
+    {
+        var made = await c.Create(new CreateReservationDto
+        {
+            TripInstanceId = tripId, AccommodationPropertyId = propertyId,
+            CheckInDate = new DateOnly(2026, 10, fromDay), CheckOutDate = new DateOnly(2026, 10, toDay), ReservationStatus = ReservationStatus.Booked,
+        }, CancellationToken.None);
+        return Assert.IsType<ApiResponse<ReservationDto>>(Assert.IsType<OkObjectResult>(made.Result).Value).Data!.Id;
+    }
+
+    private static Task<UpdateReservationDto> AsUpdate(OdipDbContext db, Guid id, int fromDay, int toDay, ReservationStatus status) =>
+        Task.FromResult(new UpdateReservationDto
+        {
+            TripInstanceId = db.AccommodationReservations.Single(r => r.Id == id).TripInstanceId,
+            AccommodationPropertyId = db.AccommodationReservations.Single(r => r.Id == id).AccommodationPropertyId,
+            CheckInDate = new DateOnly(2026, 10, fromDay), CheckOutDate = new DateOnly(2026, 10, toDay), ReservationStatus = status,
+        });
+
+    private static bool Flag(OdipDbContext db, Guid id) => db.AccommodationReservations.AsNoTracking().Single(r => r.Id == id).HasOverlapConflict;
+
+    [Fact]
+    public async Task OverlapFlags_ClearWhenTheOtherReservationIsCancelledMovedOrDeleted_AndAreSetOnBoth()
+    {
+        using var db = CreateDb();
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripName = "Beach Escape", StartDate = new DateOnly(2026, 10, 10), DurationDays = 20, Status = TripStatus.Planning };
+        var property = new AccommodationProperty { Id = Guid.NewGuid(), PropertyName = "Sunshine Beach Retreat" };
+        db.TripInstances.Add(trip);
+        db.AccommodationProperties.Add(property);
+        db.SaveChanges();
+        var c = new ReservationsController(db);
+
+        var a = await Reserve(c, trip.Id, property.Id, 10, 14);
+        var b = await Reserve(c, trip.Id, property.Id, 12, 16);
+        var other = await Reserve(c, trip.Id, property.Id, 20, 22);
+        Assert.True(Flag(db, a)); Assert.True(Flag(db, b)); Assert.False(Flag(db, other));
+
+        await c.Update(a, await AsUpdate(db, a, 10, 14, ReservationStatus.Cancelled), CancellationToken.None);
+        Assert.False(Flag(db, b));
+
+        await c.Update(a, await AsUpdate(db, a, 10, 14, ReservationStatus.Booked), CancellationToken.None);
+        Assert.True(Flag(db, a)); Assert.True(Flag(db, b));
+
+        await c.Update(b, await AsUpdate(db, b, 15, 18, ReservationStatus.Booked), CancellationToken.None);
+        Assert.False(Flag(db, a)); Assert.False(Flag(db, b));
+
+        await c.Update(b, await AsUpdate(db, b, 12, 16, ReservationStatus.Booked), CancellationToken.None);
+        await c.Delete(b, CancellationToken.None);
+        Assert.False(Flag(db, a));
+        Assert.False(Flag(db, other));
+    }
 }

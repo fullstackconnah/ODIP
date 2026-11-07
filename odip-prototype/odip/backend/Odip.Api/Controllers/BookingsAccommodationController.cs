@@ -499,6 +499,18 @@ public class ReservationsController : ControllerBase
     private IQueryable<AccommodationReservation> TenantReservations() =>
         _db.AccommodationReservations.Where(r => _db.TripInstances.Any(t => t.Id == r.TripInstanceId));
 
+    /// <summary>Recomputes HasOverlapConflict for every reservation of a property from the tracked state (so it sees the unsaved add, edit or delete): flagged when another live reservation of the property overlaps it, and never flagged itself once Cancelled or Unavailable.</summary>
+    private async Task RefreshOverlapFlagsAsync(Guid propertyId, CancellationToken ct)
+    {
+        var rows = await _db.AccommodationReservations.Where(x => x.AccommodationPropertyId == propertyId).ToListAsync(ct);
+        rows.AddRange(_db.ChangeTracker.Entries<AccommodationReservation>()
+            .Where(e => e.State == EntityState.Added && e.Entity.AccommodationPropertyId == propertyId).Select(e => e.Entity));
+        var live = rows.Where(x => _db.Entry(x).State != EntityState.Deleted
+            && x.ReservationStatus != ReservationStatus.Cancelled && x.ReservationStatus != ReservationStatus.Unavailable).Distinct().ToList();
+        foreach (var x in rows.Distinct())
+            x.HasOverlapConflict = live.Contains(x) && live.Any(o => o != x && o.CheckInDate < x.CheckOutDate && o.CheckOutDate > x.CheckInDate);
+    }
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ReservationDto>>>> GetAll(CancellationToken ct)
     {
@@ -533,14 +545,8 @@ public class ReservationsController : ControllerBase
             Cost = dto.Cost, ReservationStatus = dto.ReservationStatus, Comments = dto.Comments
         };
 
-        // Check overlap conflict
-        var hasConflict = await _db.AccommodationReservations
-            .AnyAsync(r => r.AccommodationPropertyId == dto.AccommodationPropertyId && r.Id != reservation.Id
-                && r.ReservationStatus != ReservationStatus.Cancelled && r.ReservationStatus != ReservationStatus.Unavailable
-                && r.CheckInDate < dto.CheckOutDate && r.CheckOutDate > dto.CheckInDate, ct);
-        reservation.HasOverlapConflict = hasConflict;
-
         _db.AccommodationReservations.Add(reservation);
+        await RefreshOverlapFlagsAsync(dto.AccommodationPropertyId, ct);
         await _db.SaveChangesAsync(ct);
         await _db.Entry(reservation).Reference(r => r.TripInstance).LoadAsync(ct);
         await _db.Entry(reservation).Reference(r => r.AccommodationProperty).LoadAsync(ct);
@@ -553,7 +559,7 @@ public class ReservationsController : ControllerBase
             BedroomsReserved = reservation.BedroomsReserved, BedsReserved = reservation.BedsReserved,
             Cost = reservation.Cost, ConfirmationReference = reservation.ConfirmationReference,
             ReservationStatus = reservation.ReservationStatus, Comments = reservation.Comments,
-            CancellationReason = reservation.CancellationReason, HasOverlapConflict = hasConflict
+            CancellationReason = reservation.CancellationReason, HasOverlapConflict = reservation.HasOverlapConflict
         }));
     }
 
@@ -565,6 +571,7 @@ public class ReservationsController : ControllerBase
         if (r == null) return NotFound(ApiResponse<ReservationDto>.Fail("Reservation not found"));
         if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
 
+        var oldPropertyId = r.AccommodationPropertyId;
         r.AccommodationPropertyId = dto.AccommodationPropertyId; r.RequestSentDate = dto.RequestSentDate;
         r.CheckInDate = dto.CheckInDate; r.CheckOutDate = dto.CheckOutDate;
         r.BedroomsReserved = dto.BedroomsReserved; r.BedsReserved = dto.BedsReserved;
@@ -573,12 +580,8 @@ public class ReservationsController : ControllerBase
         r.ConfirmationReference = dto.ConfirmationReference; r.CancellationReason = dto.CancellationReason;
         r.UpdatedAt = DateTime.UtcNow;
 
-        var hasConflict = await _db.AccommodationReservations
-            .AnyAsync(x => x.AccommodationPropertyId == dto.AccommodationPropertyId && x.Id != id
-                && x.ReservationStatus != ReservationStatus.Cancelled && x.ReservationStatus != ReservationStatus.Unavailable
-                && x.CheckInDate < dto.CheckOutDate && x.CheckOutDate > dto.CheckInDate, ct);
-        r.HasOverlapConflict = hasConflict;
-
+        await RefreshOverlapFlagsAsync(dto.AccommodationPropertyId, ct);
+        if (oldPropertyId != dto.AccommodationPropertyId) await RefreshOverlapFlagsAsync(oldPropertyId, ct);
         await _db.SaveChangesAsync(ct);
         await _db.Entry(r).Reference(x => x.TripInstance).LoadAsync(ct);
         await _db.Entry(r).Reference(x => x.AccommodationProperty).LoadAsync(ct);
@@ -591,7 +594,7 @@ public class ReservationsController : ControllerBase
             BedroomsReserved = r.BedroomsReserved, BedsReserved = r.BedsReserved,
             Cost = r.Cost, ConfirmationReference = r.ConfirmationReference,
             ReservationStatus = r.ReservationStatus, Comments = r.Comments,
-            CancellationReason = r.CancellationReason, HasOverlapConflict = hasConflict
+            CancellationReason = r.CancellationReason, HasOverlapConflict = r.HasOverlapConflict
         }));
     }
 
@@ -602,6 +605,7 @@ public class ReservationsController : ControllerBase
         var r = await TenantReservations().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound(ApiResponse<bool>.Fail("Reservation not found"));
         _db.AccommodationReservations.Remove(r);
+        await RefreshOverlapFlagsAsync(r.AccommodationPropertyId, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Reservation deleted"));
     }
