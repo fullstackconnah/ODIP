@@ -128,6 +128,21 @@ public class ParticipantConsentsControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
+    [Theory]
+    [InlineData("99")]
+    [InlineData("-1")]
+    public async Task Upsert_NumberThatNamesNoConsentType_ReturnsBadRequest_AndSavesNothing(string consentType)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantConsentsController(db);
+
+        var result = await controller.Upsert(participant.Id, consentType, new UpsertParticipantConsentDto { Granted = true }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantConsents.ToListAsync());
+    }
+
     [Fact]
     public async Task Upsert_ClearingAnswerBackToUnanswered_ClearsRecordedAt()
     {
