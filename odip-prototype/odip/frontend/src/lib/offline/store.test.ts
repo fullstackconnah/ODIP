@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OFFLINE_PREFIX, readSaved, readSession, sweepExpired, wipeOffline, writeSaved } from './store'
+import { OFFLINE_PREFIX, readSaved, readSession, sweepExpired, unsentOnDevice, wipeOffline, writeSaved } from './store'
 
 const H = 3_600_000
 
@@ -79,5 +79,28 @@ describe('offline store', () => {
     expect(localStorage.getItem(`${OFFLINE_PREFIX}u1:queue`)).toBe('[{"id":"r1"}]')
     expect(localStorage.getItem(`${OFFLINE_PREFIX}u1:replay-lock`)).toBe('1')
     expect(localStorage.getItem('unrelated')).toBe('x')
+  })
+
+  describe('unsentOnDevice', () => {
+    it('is 0 and nameless on empty storage', () => {
+      expect(unsentOnDevice()).toEqual({ count: 0, firstName: null })
+    })
+
+    it('counts another worker’s queue and returns the first name kept with it', () => {
+      localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, JSON.stringify([{ id: 'a', ownerFirstName: 'Asha' }, { id: 'b', ownerFirstName: 'Asha' }]))
+      localStorage.setItem(`${OFFLINE_PREFIX}u2:detail:s1`, JSON.stringify({ savedAt: 1, data: {} }))
+      expect(unsentOnDevice()).toEqual({ count: 2, firstName: 'Asha' })
+    })
+
+    it('counts records from an older build with no name as nameless', () => {
+      localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, JSON.stringify([{ id: 'a' }]))
+      expect(unsentOnDevice()).toEqual({ count: 1, firstName: null })
+    })
+
+    it('counts malformed JSON as 0 and does not throw', () => {
+      localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, '{not json')
+      localStorage.setItem(`${OFFLINE_PREFIX}u2:queue`, '{"a":1}')
+      expect(unsentOnDevice()).toEqual({ count: 0, firstName: null })
+    })
   })
 })
