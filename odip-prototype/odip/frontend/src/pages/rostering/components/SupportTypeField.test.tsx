@@ -83,7 +83,7 @@ describe('SupportTypeField', () => {
     expect(control).toBeDisabled()
     expect(control).toHaveValue('Art therapy')
     const described = document.getElementById(control.getAttribute('aria-describedby')!.split(' ')[0])
-    expect(described).toHaveTextContent('On claim CLM-0042. Delete that claim to change the support type.')
+    expect(described).toHaveTextContent('On claim CLM-0042. Delete that claim to change these.')
   })
 
   it('is disabled and says it is loading while the catalogue loads', () => {

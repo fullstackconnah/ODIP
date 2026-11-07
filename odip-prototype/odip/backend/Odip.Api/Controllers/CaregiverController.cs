@@ -103,10 +103,12 @@ public class CaregiverController : ControllerBase
     }
 
     [HttpPut("{token}/draft")]
+    [RequestSizeLimit(1_000_000)]
     public Task<IActionResult> SaveDraft(string token, [FromBody] CaregiverDraftDto body, CancellationToken ct)
         => WriteAsync(token, body, submit: false, ct);
 
     [HttpPost("{token}/submit")]
+    [RequestSizeLimit(1_000_000)]
     public Task<IActionResult> Submit(string token, [FromBody] CaregiverDraftDto body, CancellationToken ct)
         => WriteAsync(token, body, submit: true, ct);
 
