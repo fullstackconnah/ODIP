@@ -405,6 +405,22 @@ public class StaffController : ControllerBase
         HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
+    private const string LastAdminMessage = "Add another Admin first. An organisation needs at least one active Admin.";
+
+    /// <summary>
+    /// An Admin row: only an Admin may archive it, and (for every caller but a SuperAdmin) a change that demotes or archives the organisation's
+    /// last active Admin is refused. The role change itself is RoleGuardrailError's. <c>_db.Users</c> is tenant-filtered, so the count is this organisation's.
+    /// </summary>
+    private async Task<string?> AdminRowChangeErrorAsync(User s, UserRole newRole, bool archives, CancellationToken ct)
+    {
+        if (s.Role != UserRole.Admin || (User?.IsInRole("SuperAdmin") ?? false)) return null;
+        if (archives && !(User?.IsInRole("Admin") ?? false)) return "Only an Admin can archive an Admin.";
+        if (!s.IsActive || (newRole == UserRole.Admin && !archives)) return null;
+        // shortcut: two Admins archiving each other at the same moment can both pass this count; upgrade to a lock or a serializable transaction if it ever happens.
+        var otherAdmin = await _db.Users.AnyAsync(u => u.Id != s.Id && u.Role == UserRole.Admin && u.IsActive, ct);
+        return otherAdmin ? null : LastAdminMessage;
+    }
+
     /// <summary>See StaffCreateService.RoleGuardrailError.</summary>
     private string? ValidateRoleGuardrails(UserRole targetRole, UserRole? existingRole = null) =>
         StaffCreateService.RoleGuardrailError(User, targetRole, existingRole);
@@ -542,6 +558,9 @@ public class StaffController : ControllerBase
         var guardError = ValidateRoleGuardrails(dto.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
 
+        var adminRowError = await AdminRowChangeErrorAsync(s, dto.Role, archives: s.IsActive && !dto.IsActive, ct);
+        if (adminRowError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(adminRowError));
+
         // A row already on the SuperAdmin domain may not be brought back to life, or have its role changed, by a tenant caller.
         var reservedRowError = ReservedRowChangeError(s, becomesActive: dto.IsActive, newRole: dto.Role);
         if (reservedRowError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedRowError));
@@ -631,6 +650,9 @@ public class StaffController : ControllerBase
 
         var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
+
+        var adminRowError = await AdminRowChangeErrorAsync(s, s.Role, archives: true, ct);
+        if (adminRowError != null) return BadRequest(ApiResponse<bool>.Fail(adminRowError));
 
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
