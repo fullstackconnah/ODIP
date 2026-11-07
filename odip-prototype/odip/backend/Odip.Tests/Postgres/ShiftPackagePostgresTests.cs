@@ -963,6 +963,42 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.True(Assert.Single(await verify.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).ToListAsync()).IsRunning);
     }
 
+    // H25-2: break Edit and Delete take the shift row lock Start Break and Finish take, so an edit cannot land after Finish has read the breaks.
+    [SkippableTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ABreakEditOrDelete_WaitsForTheShiftRowLock_OnRealPostgres(bool edit)
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+        var t0 = new DateTime(2026, 7, 13, 23, 30, 0, DateTimeKind.Utc);
+        var brk = new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = completionId, StartedAt = t0, EndedAt = t0.AddMinutes(10), CreatedByUserId = userId };
+        db.ShiftBreaks.Add(brk);
+        await db.SaveChangesAsync();
+
+        await using var holder = new NpgsqlConnection(_pg.ConnectionString);   // stands in for a Finish that is mid-flight
+        await holder.OpenAsync();
+        await using var held = await holder.BeginTransactionAsync();
+        await using (var lockRow = new NpgsqlCommand("SELECT \"Id\" FROM \"Shifts\" WHERE \"Id\" = @shift FOR UPDATE", holder, held))
+        {
+            lockRow.Parameters.AddWithValue("shift", shiftId);
+            await lockRow.ExecuteScalarAsync();
+        }
+
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var completion = await request.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+        var service = new ShiftBreakService(request, FakeClock.AtUtc(2026, 7, 14, 7, 0));
+        var call = edit ? service.EditAsync(completion, brk.Id, t0, t0.AddMinutes(5), default) : service.DeleteAsync(completion, brk.Id, default);
+        await Task.Delay(700);
+        Assert.False(call.IsCompleted, "the break change must wait for the shift row");
+        await held.CommitAsync();
+
+        Assert.Equal(ShiftBreakOutcome.Ok, (await call).Outcome);
+        Assert.Null(request.Database.CurrentTransaction);
+    }
+
     /// <summary>The worker's portal controller over a request-scoped Postgres context, at a fixed instant.</summary>
     private PortalController PortalFor(OdipDbContext request, Guid tenantId, Guid userId, DateTime nowUtc)
     {

@@ -406,6 +406,16 @@ public class PortalFinishTimesTests
         Assert.Equal(ShiftErrorCodes.ShiftTimeAdjustmentReasonRequired, body.Code);
         Assert.Empty(await g.Db.ShiftCompletions.ToListAsync());
     }
+
+    [Fact]
+    public async Task AManualStartWithinTheClockSkew_AheadOfTheFinishInstant_NeverSavesTheStartAfterTheEnd()
+    {
+        // A start up to 5 minutes ahead is allowed (device clock skew); finishing with no end time must not store start > end.
+        var c = await Finish(Create(ShiftStatus.Published), Dto(start: Now.AddMinutes(3)));
+
+        Assert.True(c.StartWasManual);
+        Assert.True(c.ActualEnd >= c.ActualStart);
+    }
 }
 
 /// <summary>The My shifts list says "Returned" for a shift a coordinator sent back (SHAPE call 6): the summary carries the return count.</summary>
