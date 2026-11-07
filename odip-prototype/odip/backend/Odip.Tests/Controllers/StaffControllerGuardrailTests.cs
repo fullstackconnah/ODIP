@@ -50,13 +50,13 @@ public class StaffControllerGuardrailTests
         };
     }
 
-    private static User SeedUser(OdipDbContext db, Guid tenantId, UserRole role, string firstName = "Existing", string lastName = "User")
+    private static User SeedUser(OdipDbContext db, Guid tenantId, UserRole role, string firstName = "Existing", string lastName = "User", bool signedIn = true)
     {
         var user = new User
         {
             Id = Guid.NewGuid(), TenantId = tenantId, FirstName = firstName, LastName = lastName,
             Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
-            Role = role, IsActive = true,
+            Role = role, IsActive = true, LastLoginAt = signedIn ? DateTime.UtcNow : null,
         };
         db.Users.Add(user);
         db.SaveChanges();
@@ -245,5 +245,166 @@ public class StaffControllerGuardrailTests
         var result = await controller.GetById(foreignUser.Id, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    // ── Admin accounts: only an Admin may change or archive one; an organisation keeps one active Admin ──
+
+    private static UpdateStaffDto EditOf(User u, UserRole? role = null, bool? isActive = null, string? mobile = null) => new()
+    {
+        FirstName = u.FirstName, LastName = u.LastName, Email = u.Email, Mobile = mobile ?? u.Mobile,
+        Role = role ?? u.Role, Position = Position.SupportWorker, IsActive = isActive ?? u.IsActive,
+    };
+
+    private static string Error<T>(ActionResult<ApiResponse<T>> result)
+    {
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        return Assert.IsType<ApiResponse<T>>(badRequest.Value).Errors![0];
+    }
+
+    private const string LastAdminMessage = "Add another Admin first. An organisation needs at least one active Admin.";
+
+    [Fact]
+    public async Task Update_CoordinatorDemotesAdmin_ReturnsBadRequest_RowUnchanged()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, role: UserRole.Coordinator), CancellationToken.None);
+
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
+        Assert.Equal(UserRole.Admin, (await db.Users.SingleAsync(u => u.Id == admin.Id)).Role);
+    }
+
+    [Fact]
+    public async Task Update_CoordinatorArchivesAdmin_ReturnsBadRequest_RowUnchanged()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, isActive: false), CancellationToken.None);
+
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
+        Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_CoordinatorRestoresArchivedAdmin_IsRefused_StaysArchived()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        admin.IsActive = false;
+        db.SaveChanges();
+        var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, isActive: true), CancellationToken.None);
+
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
+        Assert.False((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_CoordinatorChangesOnlyAdminsPhone_IsRefused()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, mobile: "0400 000 000"), CancellationToken.None);
+
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
+        Assert.NotEqual("0400 000 000", (await db.Users.SingleAsync(u => u.Id == admin.Id)).Mobile);
+    }
+
+    [Fact]
+    public async Task Delete_CoordinatorTargetsAdmin_SaysOnlyAnAdminCanArchive()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Coordinator").Delete(admin.Id, CancellationToken.None);
+
+        Assert.Equal("Only an Admin can archive an Admin.", Error(result));
+        Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_SoleAdminDemotesSelf_ReturnsLastAdminError()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Admin").Update(admin.Id, EditOf(admin, role: UserRole.Coordinator), CancellationToken.None);
+
+        Assert.Equal(LastAdminMessage, Error(result));
+        Assert.Equal(UserRole.Admin, (await db.Users.SingleAsync(u => u.Id == admin.Id)).Role);
+    }
+
+    [Fact]
+    public async Task Update_SoleAdminArchivesSelf_ReturnsLastAdminError()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Admin").Update(admin.Id, EditOf(admin, isActive: false), CancellationToken.None);
+
+        Assert.Equal(LastAdminMessage, Error(result));
+        Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Delete_SoleAdminArchivesSelf_ReturnsLastAdminError()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "Admin").Delete(admin.Id, CancellationToken.None);
+
+        Assert.Equal(LastAdminMessage, Error(result));
+        Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Delete_AdminArchivesOtherAdmin_ThenLastAdminCannotArchiveSelf()
+    {
+        var (db, tenantId) = CreateDb();
+        var a = SeedUser(db, tenantId, UserRole.Admin);
+        var b = SeedUser(db, tenantId, UserRole.Admin);
+        var controller = MakeController(db, "Admin");
+
+        Assert.IsType<OkObjectResult>((await controller.Delete(b.Id, CancellationToken.None)).Result);
+        Assert.False((await db.Users.SingleAsync(u => u.Id == b.Id)).IsActive);
+
+        Assert.Equal(LastAdminMessage, Error(await controller.Delete(a.Id, CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task SoleSignedInAdmin_WithAnInvitedAdminWhoNeverSignedIn_CannotBeDemotedOrArchived()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, tenantId, UserRole.Admin, signedIn: false);
+        var controller = MakeController(db, "Admin");
+
+        Assert.Equal(LastAdminMessage, Error(await controller.Update(admin.Id, EditOf(admin, role: UserRole.Coordinator), CancellationToken.None)));
+        Assert.Equal(LastAdminMessage, Error(await controller.Update(admin.Id, EditOf(admin, isActive: false), CancellationToken.None)));
+        Assert.Equal(LastAdminMessage, Error(await controller.Delete(admin.Id, CancellationToken.None)));
+        var row = await db.Users.SingleAsync(u => u.Id == admin.Id);
+        Assert.True(row.IsActive);
+        Assert.Equal(UserRole.Admin, row.Role);
+    }
+
+    [Fact]
+    public async Task SoleAdmin_CannotArchiveSelf_EvenWhenAnotherOrganisationHasASignedInAdmin()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, Guid.NewGuid(), UserRole.Admin);
+
+        Assert.Equal(LastAdminMessage, Error(await MakeController(db, "Admin").Delete(admin.Id, CancellationToken.None)));
+        Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Delete_SuperAdminArchivesSoleAdmin_Succeeds()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        var result = await MakeController(db, "SuperAdmin").Delete(admin.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
     }
 }

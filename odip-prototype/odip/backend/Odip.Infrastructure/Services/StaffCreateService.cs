@@ -95,6 +95,7 @@ public sealed class StaffCreateService
         if (IsInRole("SuperAdmin")) return null;
         if (existingRole == UserRole.SuperAdmin) return "Cannot edit a SuperAdmin account.";
         if (targetRole == UserRole.SuperAdmin) return "Cannot grant the SuperAdmin role.";
+        if (existingRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can edit an Admin account.";
         if (targetRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can assign the Admin role.";
         return null;
     }

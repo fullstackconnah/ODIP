@@ -671,3 +671,45 @@ describe('StaffPage — CPR chip', () => {
     expect(within(chips).getAllByRole('listitem').map(li => li.textContent)).toEqual(['First aid', 'CPR', '+1'])
   })
 })
+
+// An Admin row is read-only to anyone but an Admin or SuperAdmin: the server refuses every change, so the row does not offer them.
+describe('StaffPage — Admin rows', () => {
+  function rowOf(name: string) {
+    return screen.getByText(name).closest('tr') as HTMLElement
+  }
+  beforeEach(() => {
+    mockUseStaff.mockReturnValue({
+      data: [
+        makeStaff({ id: 'a1', fullName: 'Ada Admin', role: 'Admin' }),
+        makeStaff({ id: 's2', fullName: 'Sam Lee', role: 'SupportWorker' }),
+      ],
+      isLoading: false,
+    })
+  })
+
+  it('offers a Coordinator no Edit, Deactivate or Archive on an Admin row, and still does on a SupportWorker row', () => {
+    setUserRole('Coordinator')
+    renderPage()
+
+    const admin = rowOf('Ada Admin')
+    expect(within(admin).queryByRole('link', { name: 'Edit' })).toBeNull()
+    expect(within(admin).queryByRole('button', { name: 'Deactivate' })).toBeNull()
+    expect(within(admin).queryByRole('button', { name: 'Archive' })).toBeNull()
+    expect(within(admin).getByRole('link', { name: /leave.*availability/i })).toBeInTheDocument()
+
+    const worker = rowOf('Sam Lee')
+    expect(within(worker).getByRole('link', { name: 'Edit' })).toBeInTheDocument()
+    expect(within(worker).getAllByRole('button', { name: 'Deactivate' })[0]).toBeInTheDocument()
+    expect(within(worker).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'SuperAdmin'])('offers %s the actions on an Admin row', role => {
+    setUserRole(role)
+    renderPage()
+
+    const admin = rowOf('Ada Admin')
+    expect(within(admin).getByRole('link', { name: 'Edit' })).toBeInTheDocument()
+    expect(within(admin).getAllByRole('button', { name: 'Deactivate' })[0]).toBeInTheDocument()
+    expect(within(admin).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+})
