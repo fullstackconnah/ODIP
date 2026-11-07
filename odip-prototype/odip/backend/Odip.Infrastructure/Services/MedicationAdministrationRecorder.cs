@@ -224,7 +224,7 @@ public sealed class MedicationAdministrationRecorder
             return Fail(RecordAdministrationOutcome.Invalid, "A note describing what was given instead is required when recording a wrong medication administration.");
 
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
-            return Fail(RecordAdministrationOutcome.Invalid, "A PRN reason is required when recording an administered PRN dose.");
+            return Fail(RecordAdministrationOutcome.Invalid, PrnReasonRequiredMessage);
 
         var participantName = MedicationMapping.ParticipantName(med.Participant);
         AdministrationDto ToDto(MedicationAdministration a) =>
@@ -305,7 +305,7 @@ public sealed class MedicationAdministrationRecorder
         if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered)
         {
             if (dto.WitnessStaffId is null && string.IsNullOrWhiteSpace(dto.WitnessName))
-                return Fail(RecordAdministrationOutcome.Invalid, "A witness is required for high-risk medication administration.");
+                return Fail(RecordAdministrationOutcome.Invalid, WitnessRequiredMessage);
 
             if (dto.WitnessStaffId.HasValue)
             {
@@ -613,12 +613,7 @@ public sealed class MedicationAdministrationRecorder
         if (dto.AdministeredAt is { } given)
         {
             var givenUtc = ProviderLocalTime.AsUtc(given);
-            if (givenUtc > nowUtc.AddMinutes(ClockSkewMinutes))
-            {
-                return Fail(RecordAdministrationOutcome.TimeRejected,
-                    "The time this dose was given can't be in the future. Check the time and try again.",
-                    MedicationErrorCodes.AdministrationTimeOutOfRange);
-            }
+            if (IsFutureTime(given, nowUtc)) return FutureTimeRejection();
 
             // The caller's bound is the shift's actual start (the portal); otherwise the start of the slot's provider-local day (the MAR).
             DateTime? lowerUtc = null;
@@ -657,6 +652,16 @@ public sealed class MedicationAdministrationRecorder
 
         return null;
     }
+
+    /// <summary>True when a dose time is further ahead of the server than a fast device clock explains (<see cref="ClockSkewMinutes"/>). Create and the coordinator amend share it.</summary>
+    public static bool IsFutureTime(DateTime given, DateTime nowUtc) => ProviderLocalTime.AsUtc(given) > nowUtc.AddMinutes(ClockSkewMinutes);
+
+    public const string FutureTimeMessage = "The time this dose was given can't be in the future. Check the time and try again.";
+    public const string PrnReasonRequiredMessage = "A PRN reason is required when recording an administered PRN dose.";
+    public const string WitnessRequiredMessage = "A witness is required for high-risk medication administration.";
+
+    private static RecordAdministrationResult FutureTimeRejection() =>
+        Fail(RecordAdministrationOutcome.TimeRejected, FutureTimeMessage, MedicationErrorCodes.AdministrationTimeOutOfRange);
 
     /// <summary>A provider-local wall-clock time for a message: "14:00" on the same local day as now, "15 Jul 14:00" otherwise (invariant culture).</summary>
     private static string FormatLocal(DateTime local, DateTime nowLocal) =>

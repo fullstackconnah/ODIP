@@ -184,4 +184,49 @@ public class ElectronicSigningEvidenceServiceTests
             Assert.Empty(db.ElectronicSigningEvidence.IgnoreQueryFilters());
         }
     }
+
+    private static ElectronicSigningSnapshot AddSnapshotWithEvidence(OdipDbContext db, Guid tenantId, Participant participant, ServiceAgreementDraft draft)
+    {
+        var snapshot = db.ElectronicSigningSnapshots.Add(new ElectronicSigningSnapshot
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, DraftId = draft.Id,
+            DraftVersion = draft.Version, DocumentJson = "pre-existing", DocumentHash = "not-checked-on-replay"
+        }).Entity;
+        db.ElectronicSigningEvidence.Add(new ElectronicSigningEvidence
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, SnapshotId = snapshot.Id, IdempotencyKey = "idem-1", SignerName = "Ada Participant",
+            SignerCapacity = "Participant", ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true,
+            PreviousEvidenceHash = "GENESIS", EvidenceHash = "stored"
+        });
+        return snapshot;
+    }
+
+    [Fact]
+    public async Task Submit_ReplayWithDifferentSignerName_IsRefused_AndSavesNothing()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); var snapshot = AddSnapshotWithEvidence(db, tenantId, participant, draft);
+            await db.SaveChangesAsync();
+            var attestation = new SubmitElectronicSigningEvidenceDto { IdempotencyKey = "idem-1", SignerName = "Someone Else", SignerCapacity = "Participant", DocumentWasDisplayed = true, ConsentToElectronicMethod = true, IntendsToSign = true };
+            var (evidence, error) = await new ElectronicSigningEvidenceService(db).SubmitAsync(tenantId, participant.Id, snapshot.Id, attestation, CancellationToken.None);
+            Assert.Null(evidence);
+            Assert.Equal("This signing request was already used with different signer details.", error);
+            Assert.Single(db.ElectronicSigningEvidence.IgnoreQueryFilters());
+        }
+    }
+
+    [Fact]
+    public async Task Submit_ReplayAfterNewerRevision_ReturnsTheStoredEvidence()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); var snapshot = AddSnapshotWithEvidence(db, tenantId, participant, draft);
+            AddNewerRevision(db, tenantId, participant, draft); await db.SaveChangesAsync();
+            var (evidence, error) = await new ElectronicSigningEvidenceService(db).SubmitAsync(tenantId, participant.Id, snapshot.Id, Attestation(), CancellationToken.None);
+            Assert.Null(error);
+            Assert.Equal("stored", evidence!.EvidenceHash);
+            Assert.Single(db.ElectronicSigningEvidence.IgnoreQueryFilters());
+        }
+    }
 }
