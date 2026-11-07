@@ -232,6 +232,43 @@ public class ClaimEditGuardsTests
         Assert.Equal(lines.Sum(l => l.TotalAmount), (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).TotalAmount);
     }
 
+// ── A paid amount is at least a cent, at most the line's total, in whole cents (the batch path's rule, H38-1) ──
+
+    [Theory]
+    [InlineData(100.01)]
+    [InlineData(0)]
+    [InlineData(12.345)]
+    public async Task APaidAmount_OutsideTheLinesRule_IsRefused_AndNothingIsSaved(double paid)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Submitted);
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = (decimal)paid }, Ct);
+
+        Assert.Equal(400, StatusOf(result));
+        Assert.Equal("Enter an amount between $0.01 and $100.00.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((ClaimLineItemStatus.Draft, (decimal?)null), (stored.Status, stored.PaidAmount));
+    }
+
+    [Theory]
+    [InlineData(100.0, 100.0)]
+    [InlineData(60.5, 60.5)]
+    [InlineData(null, 100.0)]
+    public async Task APaidAmount_WithinTheLinesRule_Saves_AndNoAmountSavesTheLineTotal(double? paid, double expected)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Submitted);
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = (decimal?)paid }, Ct);
+
+        Assert.Equal(200, StatusOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal((decimal)expected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).PaidAmount);
+    }
+
+
     // ── Limits on a line's amounts ─────────────────────────────────────────
 
     [Theory]

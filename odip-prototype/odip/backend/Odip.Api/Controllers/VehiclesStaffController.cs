@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -439,7 +440,7 @@ public class StaffController : ControllerBase
         HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
-    private const string LastAdminMessage = "Add another Admin first. An organisation needs at least one active Admin.";
+    internal const string LastAdminMessage = "Add another Admin first. An organisation needs at least one active Admin.";
 
     /// <summary>
     /// An Admin row: only an Admin may archive it, and (for every caller but a SuperAdmin) a change that demotes or archives the organisation's
@@ -452,7 +453,17 @@ public class StaffController : ControllerBase
         if (!s.IsActive || (newRole == UserRole.Admin && !archives)) return null;
         // Only an Admin who has signed in counts, as in EmploymentHeroStaffSync: an invited Admin who never has can't yet run the organisation.
         // shortcut: two Admins archiving each other at the same moment can both pass this count; upgrade to a lock or a serializable transaction if it ever happens.
-        var otherAdmin = await _db.Users.AnyAsync(u => u.Id != s.Id && u.Role == UserRole.Admin && u.IsActive && u.LastLoginAt != null, ct);
+        return await LastAdminErrorAsync(_db, s, ct);
+    }
+
+    /// <summary>
+    /// The refusal when <paramref name="admin"/> is its organisation's only active Admin who has signed in, else null. Filters on the row's TenantId itself, so it counts the
+    /// same organisation whether the caller is tenant-scoped (Staff) or not (the SuperAdmin user form).
+    /// </summary>
+    internal static async Task<string?> LastAdminErrorAsync(OdipDbContext db, User admin, CancellationToken ct)
+    {
+        var otherAdmin = await db.Users.IgnoreQueryFilters([TenantFilter.Name])
+            .AnyAsync(u => u.TenantId == admin.TenantId && u.Id != admin.Id && u.Role == UserRole.Admin && u.IsActive && u.LastLoginAt != null, ct);
         return otherAdmin ? null : LastAdminMessage;
     }
 
@@ -634,6 +645,14 @@ public class StaffController : ControllerBase
                 return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
         }
 
+        // Only when Active flips, and after every refusal above, so a refused edit changes nothing anywhere. Firebase first, as AdminUsers does:
+        // a failure then never leaves the row saved and the sign-in account out of step.
+        if (s.IsActive != dto.IsActive)
+        {
+            var syncError = await SyncFirebaseDisabledAsync(s, !dto.IsActive, addressChanged, ct);
+            if (syncError is { } failed) return StatusCode(failed.Status, ApiResponse<StaffDetailDto>.Fail(failed.Message));
+        }
+
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.EmploymentType = dto.EmploymentType; s.GoalWeeklyHours = dto.GoalWeeklyHours; s.Role = dto.Role;
         s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;
         if (addressChanged) s.SignInAddressUnconfirmed = false;   // the form asked about an unusual address above: it is person-confirmed now
@@ -690,9 +709,50 @@ public class StaffController : ControllerBase
         var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
 
+        if (s.IsActive)
+        {
+            var syncError = await SyncFirebaseDisabledAsync(s, true, addressChanging: false, ct);
+            if (syncError is { } failed) return StatusCode(failed.Status, ApiResponse<bool>.Fail(failed.Message));
+        }
+
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
+    }
+
+    /// <summary>
+    /// Sets the Disabled flag of this member's Firebase account to match Active, with the failure handling of AdminUsersController's update: no
+    /// account yet is skipped (the sign-in-account route creates it), an address Firebase refuses is a 400 to correct, anything else a 502.
+    /// Looked up by the address the row holds now. Returns null when the save may go on.
+    /// </summary>
+    private async Task<(int Status, string Message)?> SyncFirebaseDisabledAsync(User s, bool disabled, bool addressChanging, CancellationToken ct)
+    {
+        var email = EmailIdentity.Normalise(s.Email);
+        try
+        {
+            await _firebaseUserService.UpdateUserByEmailAsync(email, $"{s.FirstName} {s.LastName}".Trim(), disabled, ct);
+        }
+        catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
+        {
+            // Created before the sign-in account existed: nothing to change in Firebase.
+        }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex) && addressChanging)
+        {
+            // This edit is CHANGING the malformed address: refusing would block the edit that fixes it, so skip the sync and save the correction.
+            _logger?.LogWarning("Skipping the Firebase sync of user {UserId}: its stored address is not one Firebase accepts, and this edit changes it", s.Id);
+        }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            _logger?.LogWarning("Firebase refused the stored address of user {UserId} as invalid", s.Id);
+            return (StatusCodes.Status400BadRequest, "That doesn't look like a valid email address. Correct it first.");
+        }
+        catch (Exception ex)
+        {
+            // Deliberately broad: the confirmed failure (TokenResponseException) is not a FirebaseAuthException.
+            _logger?.LogError(ex, "Failed to sync user {Email} to Firebase Auth", email);
+            return (StatusCodes.Status502BadGateway, "Unable to sync the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project.");
+        }
+        return null;
     }
 
     /// <summary>
