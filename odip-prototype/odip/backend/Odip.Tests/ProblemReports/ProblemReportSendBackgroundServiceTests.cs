@@ -23,7 +23,7 @@ public class ProblemReportSendBackgroundServiceTests
         public List<(Guid Id, string? LastError)> Seen { get; } = new();
         public RecordingSender(Func<ProblemReport, ProblemReportSendResult> answer) => _answer = answer;
 
-        public Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct)
+        public Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct, bool isRetry = false)
         {
             Seen.Add((report.Id, report.LastError));
             return Task.FromResult(_answer(report));

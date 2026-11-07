@@ -43,7 +43,7 @@ public sealed class VikunjaProblemReportSender : IProblemReportSender
         _logger = logger;
     }
 
-    public async Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct)
+    public async Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct, bool isRetry = false)
     {
         var board = WorkBoardSettings.From(_config);
         if (board is null)
@@ -55,7 +55,7 @@ public sealed class VikunjaProblemReportSender : IProblemReportSender
         var dispatched = false;
         try
         {
-            if (report.Attempts > 0 || report.LastError is not null) // any retry searches first: an earlier attempt may have made the card without recording it
+            if (isRetry || report.Attempts > 0 || report.LastError is not null) // any retry searches first: an earlier attempt may have made the card without recording it
             {
                 dispatched = true; // a search that fails leaves the outcome as unknown, so the next try searches again
                 var found = await FindExistingCardAsync(board, report, ct);
