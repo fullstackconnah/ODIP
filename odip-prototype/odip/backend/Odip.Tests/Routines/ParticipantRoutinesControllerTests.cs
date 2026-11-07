@@ -477,4 +477,22 @@ public class ParticipantRoutinesControllerTests
         var saved = await verifyDb.ParticipantRoutines.IgnoreQueryFilters().SingleAsync();
         Assert.Equal(tenantId, saved.TenantId);
     }
+
+    [Fact]
+    public async Task Create_AndUpdate_RefuseAnUndefinedCategory_AndSaveNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRoutinesController(db);
+
+        var create = await controller.Create(participant.Id, CreateDto(category: (RoutineCategory)99), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(create.Result);
+        Assert.Empty(db.ParticipantRoutines);
+
+        Assert.IsType<OkObjectResult>((await controller.Create(participant.Id, CreateDto(), CancellationToken.None)).Result);
+        var id = db.ParticipantRoutines.Single().Id;
+        var update = await controller.Update(id, new UpdateParticipantRoutineDto { Title = "t", Description = "d", Category = (RoutineCategory)99, Days = AllDays }, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(update.Result);
+        Assert.Equal(RoutineCategory.PersonalCare, db.ParticipantRoutines.Single().Category);
+    }
 }
