@@ -128,6 +128,23 @@ public class InvitesSentTests
         Assert.Equal(stamped, (await db.Users.SingleAsync()).SignInInviteSentAt is not null);
     }
 
+    [Theory]
+    [InlineData("Coordinator", 1)]
+    [InlineData("Admin", 2)]
+    [InlineData("SuperAdmin", 2)]
+    public async Task Only_an_Admin_stamps_an_Admin_row(string role, int stamped)
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = DbFor(Guid.NewGuid().ToString(), tenantId);
+        var admin = await Seed(db, tenantId, "admin", role: UserRole.Admin);
+        var worker = await Seed(db, tenantId, "worker");
+
+        Assert.Equal(stamped, await Send(ControllerFor(db, role), admin.Id, worker.Id));
+
+        Assert.NotNull((await db.Users.SingleAsync(u => u.Id == worker.Id)).SignInInviteSentAt);
+        Assert.Equal(stamped == 2, (await db.Users.SingleAsync(u => u.Id == admin.Id)).SignInInviteSentAt is not null);
+    }
+
     [Fact]
     public void Roles_match_the_invite_callers_and_the_route_is_absolute()
     {
