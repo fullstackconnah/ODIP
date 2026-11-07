@@ -613,4 +613,19 @@ public class StaffControllerGuardrailTests
         Assert.False(saved.IsActive);
         Assert.Equal(corrected, saved.Email);
     }
+
+    [Fact]
+    public async Task Archiving_WhenTheSyncWasSkippedAndTheSaveThrows_MakesNoRevertCall()
+    {
+        var (db, tenantId, breakSave) = CreateBreakableDb();
+        var (edited, deleted) = (SeedUser(db, tenantId, UserRole.SupportWorker, signedIn: false), SeedUser(db, tenantId, UserRole.SupportWorker, signedIn: false));
+        var firebase = FirebaseThrowing(FirebaseTestExceptions.WithCode(AuthErrorCode.UserNotFound));
+        var controller = MakeController(db, "Admin", firebase);
+        breakSave();
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.Update(edited.Id, EditOf(edited, isActive: false), CancellationToken.None));
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.Delete(deleted.Id, CancellationToken.None));
+
+        VerifyFirebaseCalls(firebase, 2);   // the two skipped forward attempts, nothing sent back
+    }
 }
