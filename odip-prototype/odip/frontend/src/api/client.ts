@@ -98,6 +98,9 @@ apiClient.interceptors.response.use(
                 return token
               }
               const { auth } = await import('../lib/firebase')
+              // After a reload Firebase restores its user asynchronously: wait for it, or currentUser is null and a signed-in person is signed out. Never hang on it.
+              let timer: ReturnType<typeof setTimeout> | undefined
+              await Promise.race([auth?.authStateReady(), new Promise(resolve => { timer = setTimeout(resolve, REFRESH_TIMEOUT_MS) })]).catch(() => {}).finally(() => clearTimeout(timer))
               const currentUser = auth?.currentUser
               if (!currentUser) return null
               const idToken = await currentUser.getIdToken(true)
