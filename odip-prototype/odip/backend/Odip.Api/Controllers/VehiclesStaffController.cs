@@ -695,6 +695,9 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<SignInAccountDto>.Fail("Staff not found"));
 
+        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(guardError));
+
         var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebaseUserService, _logger, ct);
         if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
         if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
@@ -711,6 +714,10 @@ public class StaffController : ControllerBase
     {
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
+
+        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
+
         if (s.SignInAddressUnconfirmed is true)
         {
             s.SignInAddressUnconfirmed = false;
