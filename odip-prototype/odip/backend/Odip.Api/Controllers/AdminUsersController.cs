@@ -159,7 +159,7 @@ public class AdminUsersController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("Tenant not found"));
 
         // Validate role
-        if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || !Enum.IsDefined(role) || role == UserRole.SuperAdmin)
+        if (!EnumInput.TryParseDefined<UserRole>(dto.Role, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
         // A typed password is a live credential (the account is verified from the start), so it is held to PasswordPolicy here, as a 400,
@@ -324,7 +324,7 @@ public class AdminUsersController : ControllerBase
             return NotFound(ApiResponse<object>.Fail("User not found"));
 
         // Validate role
-        if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || !Enum.IsDefined(role) || role == UserRole.SuperAdmin)
+        if (!EnumInput.TryParseDefined<UserRole>(dto.Role, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
         // The address in the one form ODIP stores and compares (see EmailIdentity). Saving also repairs a row stored as typed.
