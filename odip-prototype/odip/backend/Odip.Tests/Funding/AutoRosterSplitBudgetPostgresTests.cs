@@ -59,12 +59,15 @@ public class AutoRosterSplitBudgetPostgresTests : IClassFixture<PostgresFixture>
         var roomy = kit.SeedParticipant(first: "Rae", last: "Green");
         kit.SeedPlan(roomy, LedgerKit.Core(PlanType.PlanManaged, LedgerKit.Q(2, 10000.00m)));
         var other = kit.SeedShift(roomy, Wed14Oct, startHour: 9, endHour: 13);
+        var laterSplit = kit.SeedShift(roomy, Wed14Oct.AddDays(1));   // 09:00 to 17:00, listed after the refused split and well inside budget
         kit.Db.BudgetSettings.Add(new BudgetSettings { Id = Guid.NewGuid(), TenantId = tenantId, Mode = BudgetLimitMode.HardLimit });
         var pat = Worker(kit.Db, tenantId, "Pat");
         var quinn = Worker(kit.Db, tenantId, "Quinn");
         var sam = Worker(kit.Db, tenantId, "Sam");
+        var una = Worker(kit.Db, tenantId, "Una");
+        var vic = Worker(kit.Db, tenantId, "Vic");
         await kit.Db.SaveChangesAsync(Ct);
-        foreach (var s in new[] { split, other }) { s.UserId = null; }
+        foreach (var s in new[] { split, other, laterSplit }) { s.UserId = null; }
         await kit.Db.SaveChangesAsync(Ct);
 
         var controller = new RosteringController(kit.Db, new StaffCompatibilityLinkService(kit.Db), new StaffUnavailabilityQuery(kit.Db), clock: kit.Clock, tenant: tenant.Object)
@@ -74,18 +77,25 @@ public class AutoRosterSplitBudgetPostgresTests : IClassFixture<PostgresFixture>
         var dto = new AutoRosterApplyDto
         {
             Rows = [new() { ShiftId = other.Id, StaffId = sam.Id }],
-            Splits = [new() { ShiftId = split.Id, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), CutAt = new TimeOnly(13, 0), FirstStaffId = pat.Id, SecondStaffId = quinn.Id }],
+            Splits =
+            [
+                new() { ShiftId = split.Id, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), CutAt = new TimeOnly(13, 0), FirstStaffId = pat.Id, SecondStaffId = quinn.Id },
+                new() { ShiftId = laterSplit.Id, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), CutAt = new TimeOnly(13, 0), FirstStaffId = una.Id, SecondStaffId = vic.Id },
+            ],
         };
 
         var applied = Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(Assert.IsType<OkObjectResult>((await controller.AutoRosterApply(Mon12Oct, dto, Ct)).Result).Value).Data!;
 
-        Assert.Equal(new[] { other.Id }, applied.Applied);
+        // A refused split is skipped, not a refusal of the batch: the row before it and the split after it are both saved.
+        Assert.Equal(new[] { other.Id, laterSplit.Id }, applied.Applied);
         Assert.Equal(split.Id, Assert.Single(applied.Skipped).ShiftId);
         kit.Db.ChangeTracker.Clear();
         var mine = await kit.Db.Shifts.AsNoTracking().Where(s => s.ParticipantId == tight.Id).ToListAsync(Ct);
         var whole = Assert.Single(mine);                                // no second half was left behind
         Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0), (Guid?)null), (whole.StartTime, whole.EndTime, whole.UserId));
         Assert.Equal(sam.Id, (await kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == other.Id, Ct)).UserId);
+        var thursday = (await kit.Db.Shifts.AsNoTracking().Where(s => s.ParticipantId == roomy.Id && s.ServiceDate == Wed14Oct.AddDays(1)).ToListAsync(Ct)).OrderBy(s => s.StartTime).ToList();
+        Assert.Equal(new[] { (new TimeOnly(9, 0), new TimeOnly(13, 0), (Guid?)una.Id), (new TimeOnly(13, 0), new TimeOnly(17, 0), (Guid?)vic.Id) }, thursday.Select(s => (s.StartTime, s.EndTime, s.UserId)));
     }
 
     [SkippableFact] // [D]
