@@ -1216,6 +1216,16 @@ describe('RowMenu: one set of row actions, two presentations', () => {
     expect(archive).toHaveBeenCalledTimes(2)
   })
 
+  it('tints only a danger item, in both presentations', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><RowMenu name='Beach trip' items={[{ label: 'Edit', icon: <span />, onSelect: () => {} }, { label: 'Delete draft', icon: <span />, onSelect: () => {}, danger: true }]} /></MemoryRouter>)
+    expect(screen.getByRole('button', { name: 'Delete draft' }).className).toContain('text-[var(--color-destructive)]')
+    expect(screen.getByRole('button', { name: 'Edit' }).className).not.toContain('text-[var(--color-destructive)]')
+    await user.click(screen.getByRole('button', { name: 'More actions for Beach trip' }))
+    expect(screen.getByRole('option', { name: 'Delete draft' }).className).toContain('text-[var(--color-destructive)]')
+    expect(screen.getByRole('option', { name: 'Edit' }).className).not.toContain('text-[var(--color-destructive)]')
+  })
+
   it('renders nothing for no items', () => {
     const { container } = render(<MemoryRouter><RowMenu name="x" items={[]} /></MemoryRouter>)
     expect(container).toBeEmptyDOMElement()
