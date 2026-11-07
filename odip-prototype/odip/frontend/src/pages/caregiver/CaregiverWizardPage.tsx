@@ -50,8 +50,14 @@ import { AboutYouStep } from './steps/AboutYouStep'
 import { hydrateFormFromProjection, hydrateBase } from './hydrate'
 import { changedLeaves } from './changedLeaves'
 import { Callout } from '@/components/Callout'
+import { extractErrorMessage } from '@/lib/utils'
 import { Wordmark } from '@/components/Wordmark'
 import { CaregiverProgress } from './CaregiverProgress'
+
+/** The server's own words for a refusal (a 400 names the limit that was passed); anything else keeps the plain line, so this public page shows no internals. */
+function saveFailure(err: unknown, fallback: string): string {
+  return (err as { response?: { status?: number } })?.response?.status === 400 ? extractErrorMessage(err, fallback) : fallback
+}
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
 
@@ -151,8 +157,8 @@ export default function CaregiverWizardPage() {
     try {
       await saveDraft.mutateAsync(buildDraftBody())
       return null
-    } catch {
-      setSaveError("We couldn't save your progress. Please check your connection and try again.")
+    } catch (err) {
+      setSaveError(saveFailure(err, "We couldn't save your progress. Please check your connection and try again."))
       return [{ path: step.fields[0] as string, message: 'Save failed — see the message below.', code: 'server' }]
     }
   }
@@ -182,8 +188,8 @@ export default function CaregiverWizardPage() {
     try {
       await saveDraft.mutateAsync(buildDraftBody())
       setProgressSaved(true)
-    } catch {
-      setSaveError("We couldn't save your progress. Please check your connection and try again.")
+    } catch (err) {
+      setSaveError(saveFailure(err, "We couldn't save your progress. Please check your connection and try again."))
     } finally {
       savingLater.current = false
     }
@@ -193,8 +199,8 @@ export default function CaregiverWizardPage() {
     setSaveError(null)
     try {
       await submit.mutateAsync(buildDraftBody())
-    } catch {
-      setSaveError("We couldn't submit the form. Please try again.")
+    } catch (err) {
+      setSaveError(saveFailure(err, "We couldn't submit the form. Please try again."))
     }
   }
 
