@@ -31,6 +31,10 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
     private static BatchResult<T> Done<T>(T value) => new(200, value);
 
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+
+    /// <summary>The one rule for what a line is marked paid at, shared by the batch and the claim line edit: a cent to the line total, in whole cents. Null when it holds.</summary>
+    public static string? PaidAmountRefusal(decimal amount, decimal lineTotal) =>
+        amount <= 0 || amount > lineTotal || decimal.Round(amount, 2) != amount ? $"Enter an amount between $0.01 and ${Money(lineTotal)}." : null;
     private static string? Trunc(string? text, int max) => text is { Length: > 0 } && text.Length > max ? text[..max] : text;
 
     private static (Guid? Id, string? Name) Who(ClaimsPrincipal user) =>
@@ -459,9 +463,9 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
                 continue;
             }
             var amount = request.Amount ?? line.ResultAmount ?? item.TotalAmount;
-            if (amount <= 0 || amount > item.TotalAmount || decimal.Round(amount, 2) != amount)
+            if (PaidAmountRefusal(amount, item.TotalAmount) is { } refusal)
             {
-                problems.Add(new BuildProblemDto(request.BatchLineId, reference, "Amount", $"Enter an amount between $0.01 and ${Money(item.TotalAmount)}."));
+                problems.Add(new BuildProblemDto(request.BatchLineId, reference, "Amount", refusal));
                 continue;
             }
             paying.Add((item, amount));

@@ -57,6 +57,9 @@ public static class AuditedEntities
         // who wrote or changed a note, and when, should be recoverable like any other
         // participant-facing record.
         typeof(ParticipantNote),
+        // A changed contact number or email, or a revoked agreement share, must be traceable.
+        typeof(Person),
+        typeof(ServiceAgreementShare),
 
         // Caregiver profile form: a family member's staged edits and the admin
         // create/revoke/accept/reject lifecycle around them are exactly the kind of
@@ -105,6 +108,11 @@ public static class AuditedEntities
         typeof(ParticipantContactRole),
         typeof(ParticipantRiskEntry),
         typeof(ParticipantHealthCondition),
+        // Care-plan records a coordinator edits: who changed an ADL level, routine, checklist item or community-access risk must be recoverable.
+        typeof(ParticipantAdlAssessment),
+        typeof(ParticipantChecklistItem),
+        typeof(ParticipantCommunityAccessRiskItem),
+        typeof(ParticipantRoutine),
         typeof(ShiftNote),
         typeof(BookingTask),
 

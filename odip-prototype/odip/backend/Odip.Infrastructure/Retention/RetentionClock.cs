@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Services;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -109,6 +110,26 @@ public static class RetentionClock
         foreach (var r in await Q<ParticipantBooking>().Where(b => archived.Any(a => a.Id == b.ParticipantId))
             .Join(Q<TripInstance>().Where(t => t.TenantId == tenantId), b => b.TripInstanceId, t => t.Id, (b, t) => new { b.ParticipantId, t.StartDate, t.DurationDays }).ToListAsync(ct))
             Push(r.ParticipantId, r.StartDate.AddDays(Math.Max(r.DurationDays - 1, 0)));
+
+        // Records written after the archive (their writes have no archived guard) are kept as records, so the latest of each one's own dates pushes the date out.
+        async Task PushLatest<E, D>(string column) where E : class, ITenantEntity
+        {
+            foreach (var r in await Q<E>().Where(e => e.TenantId == tenantId && archived.Any(a => a.Id == EF.Property<Guid>(e, "ParticipantId")))
+                .GroupBy(e => EF.Property<Guid>(e, "ParticipantId")).Select(g => new { Id = g.Key, Last = g.Max(e => EF.Property<D>(e, column)) }).ToListAsync(ct))
+                if (r.Last is DateTime last) Push(r.Id, LocalDate(last));
+        }
+        await PushLatest<ParticipantConsent, DateTime>("UpdatedAt");
+        await PushLatest<ParticipantConsent, DateTime?>("RecordedAt");
+        await PushLatest<RestrictivePractice, DateTime>("UpdatedAt");
+        await PushLatest<MedicationAdministration, DateTime>("CreatedAt");
+        await PushLatest<MedicationAdministration, DateTime?>("AdministeredAt");
+        await PushLatest<MedicationAdministration, DateTime?>("AmendedAt");
+        await PushLatest<ParticipantNote, DateTime>("UpdatedAt");
+        await PushLatest<ParticipantRiskEntry, DateTime>("UpdatedAt");
+        await PushLatest<ParticipantHealthCondition, DateTime>("UpdatedAt");
+        await PushLatest<ParticipantAdlAssessment, DateTime>("UpdatedAt");
+        await PushLatest<ParticipantChecklistItem, DateTime>("UpdatedAt");
+        await PushLatest<ParticipantCommunityAccessRiskItem, DateTime>("UpdatedAt");
 
         return starts;
     }
