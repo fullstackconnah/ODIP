@@ -1003,7 +1003,8 @@ public record CreateTripDto : IValidatableObject
 
 public record UpdateTripDto : CreateTripDto
 {
-    public TripStatus Status { get; init; } = TripStatus.Draft;
+    /// <summary>Null leaves the stored status alone.</summary>
+    public TripStatus? Status { get; init; }
     public TimeOnly? DepartureTime { get; init; }
     public TimeOnly? ReturnTime { get; init; }
 }
