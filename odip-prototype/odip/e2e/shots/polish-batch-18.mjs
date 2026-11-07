@@ -79,15 +79,20 @@ async function shiftState(browser, vp) {
     while (scroller && scroller !== document.body) { const o = getComputedStyle(scroller).overflowY; if (o === 'auto' || o === 'scroll') break; scroller = scroller.parentElement }
     const hb = hint.getBoundingClientRect(), db = d.getBoundingClientRect()
     const lh = parseFloat(getComputedStyle(hint).lineHeight)
+    const walker = document.createTreeWalker(hint, NodeFilter.SHOW_TEXT), tn = walker.nextNode(), words = []
+    const rr = document.createRange(); const re = /\S+/g; let mt
+    while ((mt = re.exec(tn.data))) { rr.setStart(tn, mt.index); rr.setEnd(tn, mt.index + mt[0].length); words.push(rr.getBoundingClientRect().bottom) }
+    const lastWords = words.filter((b) => b > Math.max(...words) - 2).length
     return {
       ratioOff: wrap('Ratio').querySelector('button').disabled, nightOff: wrap('Night type').querySelector('button').disabled, typeOff: wrap('Support type').querySelector('input').disabled,
-      hint: hint.textContent.trim(), hintRight: hb.right, dialogRight: db.right, hintLines: Math.round(hb.height / lh), sw: scroller?.scrollWidth, cw: scroller?.clientWidth,
+      hint: hint.textContent.trim(), hintRight: hb.right, dialogRight: db.right, hintLines: Math.round(hb.height / lh), lastWords, sw: scroller?.scrollWidth, cw: scroller?.clientWidth,
     }
   })
   check(t('Ratio, Night type and Support type are all disabled'), m.ratioOff && m.nightOff && m.typeOff, JSON.stringify(m))
   check(t('the hint names the claim and says these'), m.hint === `On claim ${CLAIM}. Delete that claim to change these.`, m.hint)
   check(t('the hint stays inside the panel'), m.hintRight <= m.dialogRight + 0.5, `${m.hintRight} <= ${m.dialogRight}`)
   check(t('the hint is at most 2 lines'), m.hintLines <= 2, m.hintLines)
+  check(t('the last hint line holds at least 2 words'), m.lastWords >= 2, m.lastWords)
   check(t('no horizontal overflow in the panel'), m.sw === undefined || m.sw <= m.cw, `${m.sw}/${m.cw}`)
   const row = dialog.locator('label', { hasText: /^Ratio$/ }).locator('xpath=../..')
   const r = await cropElement(page, field, path.join(OUT_DIR, `shift-claimed-${vp.name}.png`), { touch: vp.touch, also: row })
