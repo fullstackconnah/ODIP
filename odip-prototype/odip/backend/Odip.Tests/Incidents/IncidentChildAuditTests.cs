@@ -65,7 +65,7 @@ public class IncidentChildAuditTests
         Assert.Equal(witness.Id, removedWitness.EntityId);
         Assert.Equal(actorId, removedWitness.ChangedById);
         Assert.Single(logs, l => l.EntityType == "IncidentInjury" && l.Action == AuditAction.Deleted && l.EntityId == injury.Id && l.ChangedById == actorId);
-        Assert.Single(logs, l => l.EntityType == "IncidentInjury" && l.Action == AuditAction.Created && l.ChangedById == actorId);
+        Assert.Single(logs, l => l.EntityType == "IncidentInjury" && l.Action == AuditAction.Created && l.EntityId != injury.Id && l.ChangedById == actorId);
         // The witness's statement is recorded in the Deleted row's changes (no property exclusion covers it).
         Assert.Contains("I saw the whole thing.", removedWitness.Changes);
     }
