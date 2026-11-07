@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -14,6 +16,7 @@ namespace Odip.Tests.Controllers;
 public class SettingsAuditTests
 {
     private static readonly Guid A = Guid.NewGuid();
+    private static readonly Guid Actor = Guid.NewGuid();
 
     private static async Task<(OdipDbContext Db, SettingsController Controller)> Create()
     {
@@ -22,7 +25,12 @@ public class SettingsAuditTests
         var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = A, QualificationWarningDays = 30, SessionLengthMinutes = 60 });
         await db.SaveChangesAsync();
-        return (db, new SettingsController(db, tenant.Object));
+        var identity = new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, Actor.ToString()), new Claim("fullName", "Dana Admin") }, "test");
+        var controller = new SettingsController(db, tenant.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } }
+        };
+        return (db, controller);
     }
 
     [Fact]
@@ -35,6 +43,8 @@ public class SettingsAuditTests
         Assert.Contains("SessionLengthMinutes", row.Changes);
         Assert.Contains("\"60\"", row.Changes);
         Assert.Contains("\"120\"", row.Changes);
+        Assert.Equal(Actor, row.ChangedById);
+        Assert.Equal("Dana Admin", row.ChangedByName);
     }
 
     [Fact]
@@ -46,6 +56,8 @@ public class SettingsAuditTests
         Assert.Contains("QualificationWarningDays", row.Changes);
         Assert.Contains("\"30\"", row.Changes);
         Assert.Contains("\"45\"", row.Changes);
+        Assert.Equal(Actor, row.ChangedById);
+        Assert.Equal("Dana Admin", row.ChangedByName);
     }
 
     [Fact]
