@@ -136,6 +136,25 @@ public class CaregiverControllerTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task Get_TokenLongerThanAGeneratedOne_Returns404_EvenWhenItsHashIsStored()
+    {
+        using var db = CreateDb();
+        var (p, s, raw) = Seed(db);
+        Assert.Equal(43, raw.Length); // a generated token is 32 bytes of base64url, no padding
+        var tooLong = new string('a', 44);
+        db.CaregiverProfileSubmissions.Add(new CaregiverProfileSubmission
+        {
+            Id = Guid.NewGuid(), TenantId = s.TenantId, ParticipantId = p.Id, TokenHash = CaregiverTokenService.Hash(tooLong),
+            Status = CaregiverSubmissionStatus.Draft, CreatedByUserId = Guid.NewGuid(), ExpiresAt = DateTime.UtcNow.AddDays(14),
+        });
+        db.SaveChanges();
+        var controller = MakeController(db);
+
+        Assert.IsType<OkObjectResult>((await controller.Get(raw, CancellationToken.None)).Result); // exactly the generated length still resolves
+        Assert.IsType<NotFoundObjectResult>((await controller.Get(tooLong, CancellationToken.None)).Result);
+    }
+
     [Theory]
     [InlineData(CaregiverSubmissionStatus.Revoked)]
     [InlineData(CaregiverSubmissionStatus.Accepted)]

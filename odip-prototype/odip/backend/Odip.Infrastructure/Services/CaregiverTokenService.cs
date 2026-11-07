@@ -9,6 +9,9 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class CaregiverTokenService
 {
+    /// <summary>The length of a generated token: 32 bytes as unpadded base64url. A longer one cannot be ours.</summary>
+    public const int MaxRawTokenLength = 43;
+
     public static string GenerateRawToken()
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
