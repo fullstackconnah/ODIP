@@ -1,4 +1,4 @@
-// Self-check for overlapCheck's bottom corners and hideChrome's transition:none (no app needed; set-content pages).
+// Self-check for overlapCheck's bottom-edge samples and hideChrome's transition:none (no app needed; set-content pages).
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/capture-helper-selfcheck.mjs <outdir>
 import path from 'node:path'
 import { cropElement, overlapCheck, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
@@ -34,5 +34,11 @@ try {
   await page.setContent(shell(bar('transition:all 400ms')))
   const hidden = await probe('bar-transition-hidden', { hideChrome: true })
   checks.push({ name: 'hideChrome beats a transition-all bar with no wait', pass: hidden.pass, detail: hidden.detail })
+  // Chromium hit-testing honours border-radius, so corner samples would fail rounded elements
+  for (const [label, style] of [['radius-16', 'height:100px;border-radius:16px'], ['pill', 'width:120px;height:32px;border-radius:9999px']]) {
+    await page.setContent(`<main><div id="t" style="margin:100px 300px;background:#cde;${style}">target</div></main>`)
+    const round = await probe(label, {})
+    checks.push({ name: `overlapCheck passes a rounded block (${label}) with nothing over it`, pass: round.pass, detail: round.detail })
+  }
 } finally { await browser.close() }
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1

@@ -124,8 +124,8 @@ export async function cropElement(page, locator, file, { pad = 16, touch, also, 
   })
 }
 
-// Pass = the element lies inside the clip and the topmost element at its centre and 2 px inside its two bottom corners is the element or inside it. Run it from `during`.
-// Ignored: the app sidebar, and the dialog, popover or drawer the element lives in and its unpositioned content (a positioned cover inside it still fails). Returns { name, pass, detail }; detail.point names the covered point (centre, bottom-left, bottom-right).
+// Pass = the element lies inside the clip and the topmost element at its centre and 2 px inside its bottom edge at 25% and 75% of the width is the element or inside it. Run it from `during`.
+// Ignored: the app sidebar, and the dialog, popover or drawer the element lives in and its unpositioned content (a positioned cover inside it still fails). Returns { name, pass, detail }; detail.point names the covered point (centre, bottom-quarter-left, bottom-quarter-right).
 export async function overlapCheck(locator, clip, file) {
   const detail = await locator.evaluate((el, c) => {
     const r = el.getBoundingClientRect()
@@ -134,7 +134,7 @@ export async function overlapCheck(locator, clip, file) {
     const host = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true],[popover]')
     const ignored = (hit) => !!hit && (!!hit.closest('aside:has(nav[aria-label="Main"]),nav[aria-label="Main"]') || (!!host && host.contains(hit) && (hit === host || hit.contains(el) || !onPath(hit, host))))
     const clamp = (v, max) => Math.max(0, Math.min(v, max - 1))
-    const points = [['centre', r.left + r.width / 2, r.top + r.height / 2], ['bottom-left', r.left + 2, r.bottom - 2], ['bottom-right', r.right - 2, r.bottom - 2]]
+    const points = [['centre', r.left + r.width / 2, r.top + r.height / 2], ['bottom-quarter-left', r.left + r.width * 0.25, r.bottom - 2], ['bottom-quarter-right', r.left + r.width * 0.75, r.bottom - 2]]
     let hit = null, point = null, covered = false
     for (const [name, x, y] of points) {
       const h = document.elementFromPoint(clamp(x, innerWidth), clamp(y, innerHeight))
