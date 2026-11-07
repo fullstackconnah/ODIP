@@ -52,9 +52,9 @@ async function hideChrome(page, locators) {
     const hidden = []
     for (const e of document.body.querySelectorAll('*')) {
       const p = getComputedStyle(e).position
-      if ((p === 'fixed' || p === 'sticky') && !keepEls.some((k) => e.contains(k) || k.contains(e))) { hidden.push([e, e.style.visibility]); e.style.visibility = 'hidden' }
+      if ((p === 'fixed' || p === 'sticky') && !keepEls.some((k) => e.contains(k) || k.contains(e))) { hidden.push([e, e.style.visibility, e.style.transition]); e.style.visibility = 'hidden'; e.style.transition = 'none' }
     }
-    window.__restoreChrome = () => hidden.forEach(([e, v]) => { e.style.visibility = v })
+    window.__restoreChrome = () => hidden.forEach(([e, v, t]) => { e.style.visibility = v; e.style.transition = t })
   }, keep)
   return () => page.evaluate(() => window.__restoreChrome?.())
 }
@@ -124,16 +124,24 @@ export async function cropElement(page, locator, file, { pad = 16, touch, also, 
   })
 }
 
-// Pass = the element lies inside the clip and the topmost element at its centre is the element or inside it. Run it from `during`.
-// Ignored: the app sidebar, and the dialog, popover or drawer the element lives in and its unpositioned content (a positioned cover inside it still fails). Returns { name, pass, detail }.
+// Pass = the element lies inside the clip and the topmost element at its centre and 2 px inside its two bottom corners is the element or inside it. Run it from `during`.
+// Ignored: the app sidebar, and the dialog, popover or drawer the element lives in and its unpositioned content (a positioned cover inside it still fails). Returns { name, pass, detail }; detail.point names the covered point (centre, bottom-left, bottom-right).
 export async function overlapCheck(locator, clip, file) {
   const detail = await locator.evaluate((el, c) => {
-    const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    const r = el.getBoundingClientRect()
     // a positioned element between hit and the dialog (not an ancestor of the target) is a real cover
     const onPath = (n, h) => { for (; n && n !== h; n = n.parentElement) if (getComputedStyle(n).position !== 'static') return true; return false }
     const host = el.closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true],[popover]')
-    const ignored = !!hit && (!!hit.closest('aside:has(nav[aria-label="Main"]),nav[aria-label="Main"]') || (!!host && host.contains(hit) && (hit === host || hit.contains(el) || !onPath(hit, host))))
-    return { inClip: r.left >= c.x - 1 && r.top >= c.y - 1 && r.right <= c.x + c.width + 1 && r.bottom <= c.y + c.height + 1, covered: !hit || (!el.contains(hit) && !ignored), hit: hit ? hit.tagName + '.' + String(hit.className).split(' ')[0] : null }
+    const ignored = (hit) => !!hit && (!!hit.closest('aside:has(nav[aria-label="Main"]),nav[aria-label="Main"]') || (!!host && host.contains(hit) && (hit === host || hit.contains(el) || !onPath(hit, host))))
+    const clamp = (v, max) => Math.max(0, Math.min(v, max - 1))
+    const points = [['centre', r.left + r.width / 2, r.top + r.height / 2], ['bottom-left', r.left + 2, r.bottom - 2], ['bottom-right', r.right - 2, r.bottom - 2]]
+    let hit = null, point = null, covered = false
+    for (const [name, x, y] of points) {
+      const h = document.elementFromPoint(clamp(x, innerWidth), clamp(y, innerHeight))
+      if (!h || (!el.contains(h) && !ignored(h))) { hit = h; point = name; covered = true; break }
+      hit ??= h
+    }
+    return { inClip: r.left >= c.x - 1 && r.top >= c.y - 1 && r.right <= c.x + c.width + 1 && r.bottom <= c.y + c.height + 1, covered, point, hit: hit ? hit.tagName + '.' + String(hit.className).split(' ')[0] : null }
   }, clip)
   return { name: `crop is clear of fixed or sticky chrome: ${file}`, pass: detail.inClip && !detail.covered, detail }
 }
