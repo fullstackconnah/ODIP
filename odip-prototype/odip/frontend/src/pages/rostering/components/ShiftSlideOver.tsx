@@ -215,7 +215,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         const level = compat?.level
         return {
           ...option,
-          description: level === 'Preferred' || level === 'Backup' || level === 'Emergency' ? `${tierPlace(level, compat!.rank)} for this participant`
+          description: compat && (level === 'Preferred' || level === 'Backup' || level === 'Emergency') ? `${tierPlace(level, compat.rank)} for this participant`
             : level === 'Excluded' ? 'Can’t be rostered: marked No for this participant'
             : undefined,
           // The worker already on this shift stays pickable so the field keeps showing them; the server still lets the shift be reassigned, unassigned or cancelled.

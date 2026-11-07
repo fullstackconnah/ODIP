@@ -8,6 +8,7 @@ import { DataTable } from '@/components/DataTable'
 import { inputClass } from '@/components/FormField'
 import { TAP_AREA } from '@/components/tapArea'
 import { usePermissions } from '@/lib/permissions'
+import { httpStatusOf } from '@/lib/httpStatus'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -27,26 +28,30 @@ export default function ReferralSourcesSection() {
   const update = useUpdateReferralSource()
   const [editing, setEditing] = useState<Editing | null>(null)
   const [error, setError] = useState<string>()
+  /** The duplicate-name refusal (409), said on the name box itself. */
+  const [nameError, setNameError] = useState<string>()
   const addRef = useRef<HTMLButtonElement>(null)
   const busy = create.isPending || update.isPending
 
   const active = sources.filter(s => s.isActive)
   const hidden = sources.filter(s => !s.isActive)
 
-  const open = (next: Editing) => { setEditing(next); setError(undefined) }
-  const close = () => { setEditing(null); setError(undefined); addRef.current?.focus() }
+  const open = (next: Editing) => { setEditing(next); setError(undefined); setNameError(undefined) }
+  const close = () => { setEditing(null); setError(undefined); setNameError(undefined); addRef.current?.focus() }
 
   async function save() {
     if (!editing) return
     const name = editing.name.trim()
     if (!name) { setError('Enter a name.'); return }
-    setError(undefined)
+    setError(undefined); setNameError(undefined)
     try {
       if (editing.id) await update.mutateAsync({ id: editing.id, data: { name } })
       else await create.mutateAsync({ name })
       close()
     } catch (err) {
-      setError(extractErrorMessage(err, 'Could not save the source. Try again.'))
+      const message = extractErrorMessage(err, 'Could not save the source. Try again.')
+      if (httpStatusOf(err) === 409) setNameError(message)
+      else setError(message)
     }
   }
 
@@ -65,14 +70,17 @@ export default function ReferralSourcesSection() {
       <input
         autoFocus
         aria-label="Source name"
+        aria-invalid={nameError ? 'true' : undefined}
+        aria-describedby={nameError ? 'referral-source-name-error' : undefined}
         className={`${inputClass} basis-full sm:basis-0 sm:flex-1 sm:min-w-48`}
         maxLength={100}
         value={editing?.name ?? ''}
-        onChange={e => { setEditing(cur => cur && { ...cur, name: e.target.value }); setError(undefined) }}
+        onChange={e => { setEditing(cur => cur && { ...cur, name: e.target.value }); setError(undefined); setNameError(undefined) }}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } else if (e.key === 'Escape') close() }}
       />
       <Button size="sm" className={TAP_AREA} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
       <Button size="sm" variant="secondary" className={TAP_AREA} onClick={close}>Cancel</Button>
+      {nameError && <p id="referral-source-name-error" role="alert" className="basis-full text-xs text-[var(--color-destructive)]">{nameError}</p>}
     </div>
   )
 

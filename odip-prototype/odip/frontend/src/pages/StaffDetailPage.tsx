@@ -130,6 +130,8 @@ export default function StaffDetailPage() {
   }
 
   const { staff } = overview
+  // Only an Admin acts on an Admin row (the server refuses a Coordinator), so the sign-in actions and Edit share one gate.
+  const canActOnRow = staff.role !== 'Admin' || isAdmin || isSuperAdmin
   // The strip answers "are they cleared to work" before a tab is opened. Open incidents are not on the overview DTO, so there is no third segment.
   const expired = credentialRows.filter(c => c.state.status === 'overdue').length
   const expiring = credentialRows.filter(c => c.state.status === 'today' || c.state.status === 'soon').length
@@ -172,12 +174,12 @@ export default function StaffDetailPage() {
                     <CalendarOff className="w-4 h-4" /> Leave & availability
                   </Button>
                 )}
-                {canConfirmAddress && staff.isActive && staff.signInAddressUnconfirmed === true && (
+                {canConfirmAddress && canActOnRow && staff.isActive && staff.signInAddressUnconfirmed === true && (
                   <Button variant="secondary" size="md" onClick={() => setConfirming(true)} data-confirm-address>
                     <Mail className="w-4 h-4" /> Confirm address
                   </Button>
                 )}
-                {canManageSignIn && staff.isActive && !!staff.email && staff.signInAddressUnconfirmed !== true && (
+                {canManageSignIn && canActOnRow && staff.isActive && !!staff.email && staff.signInAddressUnconfirmed !== true && (
                   <>
                   <Button
                     variant="secondary"
@@ -193,7 +195,7 @@ export default function StaffDetailPage() {
                   {staff.signInInviteSentAt && !staff.hasSignedIn && <span className="text-[13px] text-[var(--color-muted-foreground)]">{`Invite sent ${formatDateAu(staff.signInInviteSentAt)}`}</span>}
                   </>
                 )}
-                {canWrite && (staff.role !== 'Admin' || isAdmin || isSuperAdmin) && (
+                {canWrite && canActOnRow && (
                   <Button to={`/staff/${id}/edit`} variant="primary" size="md">
                     <Pencil className="w-4 h-4" /> Edit
                   </Button>
@@ -205,7 +207,7 @@ export default function StaffDetailPage() {
       </div>
 
       {canConfirmAddress && staff.isActive && staff.signInAddressUnconfirmed === true && (
-        <Callout tone="warning">{`${staff.email} came from Employment Hero and isn't at your organisation's domain or a common email provider. ${staff.firstName} can't sign in until you confirm it.`}</Callout>
+        <Callout tone="warning">{`${staff.email} came from Employment Hero and isn't at your organisation's domain or a common email provider. ${staff.firstName} can't sign in until ${canActOnRow ? 'you confirm it.' : 'it is confirmed. An Admin can confirm this address.'}`}</Callout>
       )}
       <ConfirmDialog
         open={confirming}

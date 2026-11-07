@@ -11,8 +11,7 @@ import { KIND_LABEL, KIND_ORDER, isPlainAgreement } from '@/lib/agreementKind'
 import { useStickyOpen } from '@/hooks/useStickyOpen'
 import { formGrid, span } from '@/lib/formGrid'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
-import { STATES, ZONES, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
-import { parseDateOnly } from '@/lib/dateOnly'
+import { STATES, ZONES, ongoingPastCapText, planPastCap, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, addMonths } from '@/lib/planQuote'
 import { zoneOfMm } from '@/lib/planBlocks'
 
@@ -24,8 +23,6 @@ const DATE_MAX = `${PRICING_LAST_YEAR}-12-31`
 const PRESET_MONTHS = [1, 3, 6, 12] as const
 /** Starts, Length and Ends share one row from xl; Length is the widest so its longest option fits (the date span of 6 would not leave it room). */
 const startCol = 'md:col-span-1 xl:col-span-3', lengthCol = 'md:col-span-1 xl:col-span-5', endCol = 'md:col-span-1 xl:col-span-4'
-/** The pricing engine's longest period (PlanPricingEngine.MaxPeriodDays): Ongoing runs to the plan end, so a longer plan needs a chosen end. */
-const MAX_PERIOD_DAYS = 800
 const presetEnd = (start: string, months: number) => addDays(addMonths(start, months), -1)
 
 type AgreementStepProps = {
@@ -35,7 +32,7 @@ type AgreementStepProps = {
   recorded: { start: string; end: string } | null
   plan: { start: string; end: string }
   /** Problems with the dates, shown once the person has tried to go on. */
-  errors: { start?: string; end?: string; kind?: string; name?: string }
+  errors: { start?: string; end?: string; length?: string; kind?: string; name?: string }
   readOnly: boolean
   fundingTab: string
   /** Opens the editor to record the plan over the agreement, for a person who may; without it the button goes to the Funding tab. */
@@ -64,7 +61,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
   const { agreementStartDate: start, agreementEndDate: end } = details
   const canPreset = !!start && addMonths(start, 1) !== ''
   const canOngoing = !!recorded || !!details.planOverride
-  const planTooLong = !!start && (parseDateOnly(plan.end) ?? 0) - (parseDateOnly(start) ?? 0) + 1 > MAX_PERIOD_DAYS
+  const planTooLong = planPastCap(start, plan.end)
   const length = details.ongoing ? 'ongoing' : PRESET_MONTHS.find(months => !!start && end === presetEnd(start, months))?.toString() ?? 'custom'
   const chooseLength = (value: string) => {
     if (value === 'ongoing') onEdit({ ongoing: true, agreementEndDate: plan.end })
@@ -82,7 +79,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
         <FormField label="Agreement starts" className={startCol} error={errors.start}>
           <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementStartDate} onChange={event => onEdit({ agreementStartDate: event.target.value })} />
         </FormField>
-        <FormField label="Length" className={lengthCol} hint={[!canPreset && 'Choose the start first.', !canOngoing && 'Add the NDIS plan dates to choose Ongoing.', canOngoing && planTooLong && 'This NDIS plan runs longer than 800 days from the agreement start. Choose an end date instead of Ongoing.'].filter(Boolean).join(' ') || undefined}>
+        <FormField label="Length" className={lengthCol} error={errors.length} hint={[!canPreset && 'Choose the start first.', !canOngoing && 'Add the NDIS plan dates to choose Ongoing.', canOngoing && planTooLong && ongoingPastCapText].filter(Boolean).join(' ') || undefined}>
           <select value={length} onChange={event => chooseLength(event.target.value)}>
             <option value="custom">Choose an end date</option>
             {PRESET_MONTHS.map(months => <option key={months} value={months} disabled={!canPreset}>{months === 1 ? '1 month' : `${months} months`}</option>)}

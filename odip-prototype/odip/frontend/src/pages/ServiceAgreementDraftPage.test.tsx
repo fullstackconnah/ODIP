@@ -6,6 +6,7 @@ import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
 import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
+import { MAX_PERIOD_DAYS } from '@/lib/agreementDetails'
 
 const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate, populateMutate, sharing } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
@@ -118,6 +119,20 @@ describe('ServiceAgreementDraftPage: the wizard', () => {
     await next(user)
     expect(screen.getByText('Enter the day the agreement starts.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Agreement' })).toBeInTheDocument()
+  })
+
+  it('blocks Ongoing on the Length field once the start moves so the plan runs past the cap, until an end is chosen', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Length'), { target: { value: 'ongoing' } })
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2025-01-01' } })
+    await next(user)
+    const text = `This NDIS plan runs longer than ${MAX_PERIOD_DAYS} days from the agreement start. Choose an end date instead of Ongoing.`
+    expect(screen.getByText(text)).toBeInTheDocument()
+    expect(screen.getByLabelText('Length')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('heading', { level: 2, name: 'Agreement' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Length'), { target: { value: 'custom' } })
+    expect(screen.getByLabelText('Length')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('will not leave an empty week', async () => {
