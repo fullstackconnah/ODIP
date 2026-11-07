@@ -68,6 +68,10 @@ describe('ReferralSourcesSection', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('That source is already on the list.')
     expect(screen.getByLabelText('Source name')).toHaveValue('hospital')
+    expect(screen.getByLabelText('Source name')).toHaveAttribute('aria-invalid', 'true')
+    await user.type(screen.getByLabelText('Source name'), 's')
+    expect(screen.getByLabelText('Source name')).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('Hide and Show send isActive only', async () => {

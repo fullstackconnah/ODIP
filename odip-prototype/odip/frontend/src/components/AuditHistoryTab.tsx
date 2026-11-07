@@ -111,7 +111,7 @@ export default function AuditHistoryTab({ entityType, entityId }: Props) {
   return (
     <div>
       <p className="text-xs text-[var(--color-muted-foreground)] mb-2 tabular-nums">
-        {plural(data.total, 'event')} recorded
+        {data.entries.length < data.total ? `Showing the latest ${data.entries.length} of ${plural(data.total, 'event')}` : `${plural(data.total, 'event')} recorded`}
       </p>
       <div>
         {data.entries.map((entry) => (
