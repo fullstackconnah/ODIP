@@ -86,7 +86,7 @@ const isCoarse = (page) => page.evaluate(() => matchMedia('(pointer: coarse)').m
 
 // Shoot the whole element plus `pad` (a pad shrinks only at the page edge, or the right edge for a fluid-width element).
 // The viewport grows in height only, never in width: an element wider than the viewport fails checkCropHolds (overflowX).
-// Returns { file, clip, box, viewport, pad, coarse, touch, elementHeight }: clip is the real post-settle clip, box the element box.
+// Returns { file, clip, box, viewport, pad, coarse, touch, elementHeight, measured, overlap }: clip is the real post-settle clip, box the element box, overlap the overlapCheck result.
 export async function cropElement(page, locator, file, { pad = 16, touch, also, natural, during, hideChrome: hide } = {}) {
   touch ??= await isCoarse(page)
   await settle(page, locator)
@@ -112,12 +112,15 @@ export async function cropElement(page, locator, file, { pad = 16, touch, also, 
     const coarse = await isCoarse(page)
     const viewport = page.viewportSize()
     const restore = hide ? await hideChrome(page, also ? [locator, also] : [locator]) : null
-    let measured
+    let measured, overlap
     try {
       measured = during ? await during(clip) : undefined
+      // always run: a sticky bar or bottom nav over the element must fail checkCropHolds, not pass on geometry alone
+      const covers = [await overlapCheck(locator, clip, file), ...(also ? [await overlapCheck(also, clip, file)] : [])]
+      overlap = covers.length === 1 ? covers[0] : { ...covers[0], pass: covers.every((c) => c.pass), detail: covers.map((c) => c.detail) }
       await page.screenshot({ path: file, clip })
     } finally { await restore?.() }
-    return { file, clip, box, viewport, pad, coarse, touch, elementHeight: box.height, measured }
+    return { file, clip, box, viewport, pad, coarse, touch, elementHeight: box.height, measured, overlap }
   })
 }
 
@@ -159,15 +162,15 @@ export async function fullPage(page, file, { touch } = {}) {
 }
 
 // Passes only when the real clip holds the element plus pad on all four sides (1px rounding; the clip must also hold the bare element box, which must lie inside the viewport width; a pad may shrink at the top/left
-// page edge or the right viewport edge), lies inside the viewport, and the pointer stayed coarse for a touch crop.
-export function checkCropHolds({ file, clip, box, viewport, pad, coarse, touch }) {
+// page edge or the right viewport edge), lies inside the viewport, the pointer stayed coarse for a touch crop, and (when given) `overlap` passed.
+export function checkCropHolds({ file, clip, box, viewport, pad, coarse, touch, overlap }) {
   const t = 1
   const holds = clip.x <= Math.max(0, box.x - pad) + t && clip.y <= Math.max(0, box.y - pad) + t
     && clip.x + clip.width >= Math.min(box.x + box.width + pad, viewport.width) - t && clip.y + clip.height >= box.y + box.height + pad - t
   const overflowX = box.x < -t || box.x + box.width > viewport.width + t
   const whole = clip.x <= box.x + t && clip.y <= box.y + t && clip.x + clip.width >= box.x + box.width - t && clip.y + clip.height >= box.y + box.height - t && !overflowX
   const inside = clip.x >= 0 && clip.y >= 0 && clip.x + clip.width <= viewport.width + t && clip.y + clip.height <= viewport.height + t
-  return { name: `crop holds the whole element: ${path.basename(file)}`, pass: holds && whole && inside && (!touch || coarse), detail: { clip, box, viewport, pad, holds, whole, overflowX, inside, coarse } }
+  return { name: `crop holds the whole element: ${path.basename(file)}`, pass: holds && whole && inside && (!touch || coarse) && (overlap?.pass ?? true), detail: { clip, box, viewport, pad, holds, whole, overflowX, inside, coarse, ...(overlap && { overlap }) } }
 }
 
 export function writeChecks(outDir, checks) {
