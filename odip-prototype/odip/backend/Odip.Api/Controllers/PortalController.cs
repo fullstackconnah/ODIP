@@ -672,6 +672,8 @@ public class PortalController : ControllerBase
 
         var actualStart = startMoved ? askedStart!.Value : completion.ActualStart;
         var actualEnd = endMoved ? askedEnd!.Value : endStamp;
+        // A manual start may be up to 5 minutes ahead of the server clock (device skew). The worker is finishing now, so refusing would strand them: end at the start instead.
+        if (!startMoved && !endMoved && actualStart > actualEnd) actualEnd = actualStart;
         var reason = string.IsNullOrWhiteSpace(dto.TimeAdjustmentReason) ? null : dto.TimeAdjustmentReason.Trim();
         if (startMoved || endMoved)
         {
