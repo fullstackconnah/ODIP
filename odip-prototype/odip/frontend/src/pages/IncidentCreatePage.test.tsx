@@ -1768,6 +1768,30 @@ describe('IncidentCreatePage — common incident picker', () => {
     expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value).toContain('Sophie Brown')
   })
 
+  it('keeps the type once an injury row is on the form (the page passes injuriesCount)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pick(user, /Fell and was hurt/)
+    await pickTypeAndSeverity(user)
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)
+    await addMinimalInjury(user)
+    await clickBack(user)
+    await pick(user, /Had a seizure/)
+    expect(typeTrigger()).toBe('Injury')
+  })
+
+  it('keeps the type once restrictive practice details are on the form (the page passes rpData)', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillBasicsMinimallyAndNext(user, { incidentTypeOption: /Restrictive Practice/i })
+    await fillUnapprovedRpAndNext(user, /^seclusion/i)
+    await clickBack(user)
+    await clickBack(user)
+    await pick(user, /Had a seizure/)
+    expect(typeTrigger()).toBe(INCIDENT_TYPE_LABELS.RestrictivePracticeUse)
+  })
+
   it('picking Restrictive practice used adds the Restrictive practice step', async () => {
     const user = userEvent.setup()
     renderCreatePage()

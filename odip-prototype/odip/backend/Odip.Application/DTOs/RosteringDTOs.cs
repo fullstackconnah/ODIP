@@ -364,17 +364,14 @@ public record CreateShiftDto
     /// <summary>Ignored: the server never takes a pattern link from a request. It sets the link itself when it generates a shift from a pattern, and the budget's one-off rule reads only that saved link, so naming a pattern cannot dodge a hard limit.</summary>
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
-    private readonly string? _location;
     /// <summary>Where the shift happens, as the coordinator typed it: trimmed, blank is null, at most 200. Never filled from the participant's address. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <see cref="UpdateShiftDto.ExpectedStaffId"/>); null or blank clears it. A POST treats both as none.</summary>
-    public string? Location { get => _location; init { _location = value; HasLocation = true; } }
+    public string? Location { get; init { field = value; HasLocation = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasLocation { get; private init; }
-    private readonly Guid? _serviceLocationId;
     /// <summary>The saved place (Settings > Service locations) the shift is at; null clears it. Must be an active place of the shift's organisation, unless the shift already has it. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>).</summary>
-    public Guid? ServiceLocationId { get => _serviceLocationId; init { _serviceLocationId = value; HasServiceLocationId = true; } }
+    public Guid? ServiceLocationId { get; init { field = value; HasServiceLocationId = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasServiceLocationId { get; private init; }
-    private readonly string? _supportGroupCode;
     /// <summary>The shift's support type (a catalogue group code); blank is null, which is community access. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>); a POST treats both as none.</summary>
-    public string? SupportGroupCode { get => _supportGroupCode; init { _supportGroupCode = value; HasSupportGroupCode = true; } }
+    public string? SupportGroupCode { get; init { field = value; HasSupportGroupCode = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasSupportGroupCode { get; private init; }
     /// <summary>Required when the shift carries Warning findings; ignored (never enough) for Blocking findings.</summary>
     public string? OverrideReason { get; init; }
@@ -396,12 +393,11 @@ public record UpdateShiftDto : CreateShiftDto
 {
     public ShiftStatus Status { get; init; } = ShiftStatus.Draft;
 
-    private readonly Guid? _expectedStaffId;
     /// <summary>
     /// The chip's Publish (roster-draft-publish): who the board showed on the shift. When named and the shift's worker is someone else now, the update is refused (409) so a stale chip
     /// cannot write its worker back. A request that leaves it out (the slide-over) is not checked. Same left-out-versus-null rule as <see cref="AssignShiftDto.ExpectedStaffId"/>.
     /// </summary>
-    public Guid? ExpectedStaffId { get => _expectedStaffId; init { _expectedStaffId = value; ExpectsStaff = true; } }
+    public Guid? ExpectedStaffId { get; init { field = value; ExpectsStaff = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool ExpectsStaff { get; private init; }
 }
 
@@ -412,13 +408,12 @@ public record AssignShiftDto
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 
-    private readonly Guid? _expectedStaffId;
     /// <summary>
     /// Roster drag and drop (2026-10-14): who the board showed on the shift when the drop was made, null for nobody. When the request names it and the shift's worker is someone else
     /// now, the assign is refused (409) instead of replacing them by surprise. A request that leaves it out (the menus, LeaveApprovalsPage) is not checked. Its setter runs only when
     /// the JSON names the property, explicit null included, so <see cref="ExpectsStaff"/> tells "left out" from "null".
     /// </summary>
-    public Guid? ExpectedStaffId { get => _expectedStaffId; init { _expectedStaffId = value; ExpectsStaff = true; } }
+    public Guid? ExpectedStaffId { get; init { field = value; ExpectsStaff = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool ExpectsStaff { get; private init; }
 }
 
@@ -550,9 +545,8 @@ public record CreateShiftPatternDto
     public DateOnly? EffectiveTo { get; init; }
     public bool IsActive { get; init; } = true;
     public string? Notes { get; init; }
-    private readonly string? _supportGroupCode;
     /// <summary>The pattern's support type (a catalogue group code); blank is null, which is community access. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>); a POST treats both as none.</summary>
-    public string? SupportGroupCode { get => _supportGroupCode; init { _supportGroupCode = value; HasSupportGroupCode = true; } }
+    public string? SupportGroupCode { get; init { field = value; HasSupportGroupCode = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasSupportGroupCode { get; private init; }
 }
 
