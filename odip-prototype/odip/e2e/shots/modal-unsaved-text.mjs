@@ -58,7 +58,7 @@ async function shoot(vp, { section, tab, open, field, text, dialogName, file }) 
     const top = await page.evaluate(() => {
       const p = document.querySelector('[role="alertdialog"]')
       const hit = (el) => { const r = el.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && p.contains(h) }
-      return { dialog: hit(p), buttons: [...p.querySelectorAll('button')].map((b) => ({ name: b.textContent.trim(), top: hit(b), h: Math.round(b.getBoundingClientRect().height * 10) / 10 })), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth }
+      return { dialog: hit(p), buttons: [...p.querySelectorAll('button')].filter((b) => b.textContent.trim()).map((b) => ({ name: b.textContent.trim(), top: hit(b), h: Math.round(b.getBoundingClientRect().height * 10) / 10 })), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth }
     })
     check(`${ctx}: the prompt is the topmost layer (nothing covers it or its buttons)`, top.dialog && top.buttons.length === 2 && top.buttons.every((b) => b.top), top)
     if (vp.touch) check(`${ctx}: prompt buttons are at least --tap-min (44px) tall`, top.buttons.every((b) => b.h >= 44), top.buttons.map((b) => b.h))
