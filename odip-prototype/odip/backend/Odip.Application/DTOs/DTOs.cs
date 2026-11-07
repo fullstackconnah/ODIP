@@ -1478,7 +1478,7 @@ public record CreateStaffDto
     /// <summary>The 400 message for a goal outside 0 to 80 or off the half-hour, else null. Checked in the controller (not an attribute) so a direct call is refused too.</summary>
     public string? GoalHoursError() =>
         GoalWeeklyHours is { } hours && (hours < 0 || hours > 80 || hours % 0.5m != 0) ? "Goal hours a week must be from 0 to 80, in half-hours." : null;
-    [StringLength(50)]
+    [StringLength(20, ErrorMessage = "Mobile can be up to 20 characters.")]
     public string? Mobile { get; init; }
     [StringLength(100)]
     public string? Region { get; init; }
@@ -2582,6 +2582,7 @@ public record CreateAdminUserDto
     /// </summary>
     public bool AddressConfirmed { get; init; }
     public Position? Position { get; init; }
+    [StringLength(20, ErrorMessage = "Mobile can be up to 20 characters.")]
     public string? Mobile { get; init; }
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
