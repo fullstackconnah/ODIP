@@ -440,7 +440,7 @@ export default function StaffCreatePage() {
             </FormField>
 
             <FormField label="Notes" className={span.long}>
-              <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
+              <textarea {...register('notes')} rows={3} maxLength={2000} placeholder="Any additional notes..." />
             </FormField>
           </div>
         </Card>
@@ -509,7 +509,7 @@ export default function StaffCreatePage() {
 
             <div className={`${span.medium} space-y-1`}>
               <FormField label="Worker screening number">
-                <input {...register('workerScreeningNumber')} placeholder="e.g. WWC1234567" />
+                <input {...register('workerScreeningNumber')} maxLength={50} placeholder="e.g. WWC1234567" />
               </FormField>
               <FormField label="Worker screening expiry">
                 <input type="date" {...register('workerScreeningExpiryDate')} />

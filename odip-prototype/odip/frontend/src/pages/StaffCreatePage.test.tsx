@@ -384,3 +384,13 @@ describe('StaffCreatePage — CPR', () => {
     await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'staff-1', data: expect.objectContaining({ isCprQualified: true, cprExpiryDate: '2027-02-01' }) }))
   })
 })
+
+describe('StaffCreatePage — text caps', () => {
+  it('limits Notes to 2000 and the worker screening number to 50, as the server does', async () => {
+    mockUsePermissions.mockReturnValue({ isCoordinator: true })
+    renderCreatePage()
+
+    expect(await screen.findByLabelText('Notes')).toHaveAttribute('maxlength', '2000')
+    expect(screen.getByLabelText('Worker screening number')).toHaveAttribute('maxlength', '50')
+  })
+})

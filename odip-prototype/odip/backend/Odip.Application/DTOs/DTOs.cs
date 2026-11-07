@@ -1488,12 +1488,14 @@ public record CreateStaffDto
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public bool IsActive { get; init; } = true;
+    [StringLength(2000)]
     public string? Notes { get; init; }
     public DateOnly? FirstAidExpiryDate { get; init; }
     public DateOnly? CprExpiryDate { get; init; }
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    [StringLength(50)]
     public string? WorkerScreeningNumber { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
 }
