@@ -141,7 +141,7 @@ export default function StaffDetailPage() {
       attention: expired > 0 ? attentionForTone('negative') : expiring > 0 ? attentionForTone('warning') : undefined,
     },
     // formatServiceDate ends in the year (" 2026"); a shift in the next 14 days never needs it.
-    { label: 'Next shift', value: nextShift ? `${formatServiceDate(nextShift.serviceDate).slice(0, -5)}, ${formatShiftTime(nextShift.startTime)}` : 'None booked' },
+    { label: 'Next shift', value: nextShift ? `${formatServiceDate(nextShift.serviceDate).slice(0, -5)}, ${formatShiftTime(nextShift.startTime)}` : 'None' },
   ]
   // Join only the parts that exist: an empty position used to leave the row starting with a
   // stray " · " separator.

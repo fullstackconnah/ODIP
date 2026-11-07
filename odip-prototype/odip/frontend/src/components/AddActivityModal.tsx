@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { extractErrorMessage } from '@/lib/utils'
 import { useActivities, useCreateScheduledActivity, useUpdateScheduledActivity } from '@/api/hooks'
 import { modalGrid, modalSpan } from '@/lib/formGrid'
@@ -27,22 +27,24 @@ const fieldsOf = (a?: ScheduledActivityDto) => [
 const STATUS_OPTIONS = ['Planned', 'Booked', 'Confirmed', 'Completed', 'Cancelled'] as const
 
 export default function AddActivityModal({ tripDayId, editingActivity, eventTemplateId, onClose }: AddActivityModalProps) {
-  const [sourceTab, setSourceTab] = useState<'library' | 'custom'>(editingActivity ? 'custom' : 'library')
-  const [selectedActivityId, setSelectedActivityId] = useState('')
+  // Seeded from the activity being edited (the caller remounts per edit), so the first render is already clean.
+  const init = fieldsOf(editingActivity)
+  const [sourceTab, setSourceTab] = useState<'library' | 'custom'>(editingActivity ? (editingActivity.activityId ? 'library' : 'custom') : 'library')
+  const [selectedActivityId, setSelectedActivityId] = useState(init[0])
 
-  const [title, setTitle] = useState('')
-  const [startTime, setStartTime] = useState('')
-  const [endTime, setEndTime] = useState('')
-  const [location, setLocation] = useState('')
-  const [status, setStatus] = useState('Planned')
-  const [bookingReference, setBookingReference] = useState('')
-  const [estimatedCost, setEstimatedCost] = useState('')
-  const [providerName, setProviderName] = useState('')
-  const [providerPhone, setProviderPhone] = useState('')
-  const [providerEmail, setProviderEmail] = useState('')
-  const [providerWebsite, setProviderWebsite] = useState('')
-  const [accessibilityNotes, setAccessibilityNotes] = useState('')
-  const [notes, setNotes] = useState('')
+  const [title, setTitle] = useState(init[1])
+  const [startTime, setStartTime] = useState(init[2])
+  const [endTime, setEndTime] = useState(init[3])
+  const [location, setLocation] = useState(init[4])
+  const [status, setStatus] = useState(init[5])
+  const [bookingReference, setBookingReference] = useState(init[6])
+  const [estimatedCost, setEstimatedCost] = useState(init[7])
+  const [providerName, setProviderName] = useState(init[8])
+  const [providerPhone, setProviderPhone] = useState(init[9])
+  const [providerEmail, setProviderEmail] = useState(init[10])
+  const [providerWebsite, setProviderWebsite] = useState(init[11])
+  const [accessibilityNotes, setAccessibilityNotes] = useState(init[12])
+  const [notes, setNotes] = useState(init[13])
   const [notesOpenAtMount] = useState(() => !!(editingActivity?.accessibilityNotes || editingActivity?.notes))
   const notesFold = useStickyOpen(!!(accessibilityNotes || notes))
   const [timeError, setTimeError] = useState('')
@@ -54,28 +56,6 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
   const filteredActivities = eventTemplateId
     ? activities.filter((a: ActivityDto) => a.isActive && (!a.eventTemplateId || a.eventTemplateId === eventTemplateId))
     : activities.filter((a: ActivityDto) => a.isActive)
-
-  useEffect(() => {
-    if (editingActivity) {
-      setTitle(editingActivity.title || '')
-      setStartTime(editingActivity.startTime || '')
-      setEndTime(editingActivity.endTime || '')
-      setLocation(editingActivity.location || '')
-      setStatus(editingActivity.status || 'Planned')
-      setBookingReference(editingActivity.bookingReference || '')
-      setEstimatedCost(editingActivity.estimatedCost != null ? String(editingActivity.estimatedCost) : '')
-      setProviderName(editingActivity.providerName || '')
-      setProviderPhone(editingActivity.providerPhone || '')
-      setProviderEmail(editingActivity.providerEmail || '')
-      setProviderWebsite(editingActivity.providerWebsite || '')
-      setAccessibilityNotes(editingActivity.accessibilityNotes || '')
-      setNotes(editingActivity.notes || '')
-      if (editingActivity.activityId) {
-        setSelectedActivityId(editingActivity.activityId)
-        setSourceTab('library')
-      }
-    }
-  }, [editingActivity])
 
   const handleLibrarySelect = (activityId: string) => {
     setSelectedActivityId(activityId)

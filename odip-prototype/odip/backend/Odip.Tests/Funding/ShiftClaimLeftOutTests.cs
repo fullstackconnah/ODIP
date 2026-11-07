@@ -166,7 +166,7 @@ public class ShiftClaimLeftOutTests
         var preview = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
         var generate = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).GenerateAsync(person.Id, From, To, Ct));
 
-        const string expected = "Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. No catalogue sleepover item covers this date.";
+        var expected = $"Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. {person.FullName}: No catalogue sleepover item covers this date.";
         Assert.Equal(expected, preview.Message);
         Assert.Equal(expected, generate.Message);
         Assert.Empty(kit.Db.TripClaims);   // nothing was saved
@@ -184,7 +184,7 @@ public class ShiftClaimLeftOutTests
 
         Assert.Equal(
             "Nothing in this date range could be claimed: 3 completed, unclaimed shifts were left out. "
-            + "No catalogue sleepover item covers this date (2 shifts). It is a 1:3 group shift, which shift claims do not price yet (1 shift).",
+            + $"{person.FullName}: No catalogue sleepover item covers this date (2 shifts). {person.FullName}: It is a 1:3 group shift, which shift claims do not price yet (1 shift).",
             refusal.Message);
     }
 
