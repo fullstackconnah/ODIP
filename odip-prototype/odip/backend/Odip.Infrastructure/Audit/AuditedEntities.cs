@@ -105,6 +105,11 @@ public static class AuditedEntities
         typeof(ParticipantContactRole),
         typeof(ParticipantRiskEntry),
         typeof(ParticipantHealthCondition),
+        // Care-plan records a coordinator edits: who changed an ADL level, routine, checklist item or community-access risk must be recoverable.
+        typeof(ParticipantAdlAssessment),
+        typeof(ParticipantChecklistItem),
+        typeof(ParticipantCommunityAccessRiskItem),
+        typeof(ParticipantRoutine),
         typeof(ShiftNote),
         typeof(BookingTask),
 

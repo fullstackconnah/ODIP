@@ -362,4 +362,25 @@ public class ComplianceEntitiesAuditTests
     public Task ParticipantHealthCondition_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantHealthCondition>(
         (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, ConditionType = HealthConditionType.IntellectualDisability, Has = true },
         r => r.Notes = "Seizure plan added.", "Notes", "Seizure plan added.");
+
+    // H36-1: the care-plan records a coordinator edits (ADL levels, routines, checklist, community-access risks) need the same history.
+    [Fact]
+    public Task ParticipantAdlAssessment_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantAdlAssessment>(
+        (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, AdlType = AdlType.Toileting, Level = AdlLevel.Independent },
+        r => r.Level = AdlLevel.FullSupport, "Level", "FullSupport");
+
+    [Fact]
+    public Task ParticipantRoutine_Retire_IsAudited() => AssertUpdateAndDeleteAreAudited<ParticipantRoutine>(
+        (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, Title = "Morning meds", IsActive = true },
+        r => r.IsActive = false, "IsActive", "False");
+
+    [Fact]
+    public Task ParticipantChecklistItem_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantChecklistItem>(
+        (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, ItemType = default },
+        r => r.Notes = "Checked with guardian.", "Notes", "Checked with guardian.");
+
+    [Fact]
+    public Task ParticipantCommunityAccessRiskItem_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantCommunityAccessRiskItem>(
+        (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, ItemType = default },
+        r => r.StrategyNotes = "Staff stays within arm length.", "StrategyNotes", "Staff stays within arm length.");
 }
