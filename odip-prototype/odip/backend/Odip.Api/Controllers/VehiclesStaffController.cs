@@ -439,7 +439,7 @@ public class StaffController : ControllerBase
         HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
-    private const string LastAdminMessage = "Add another Admin first. An organisation needs at least one active Admin.";
+    internal const string LastAdminMessage = "Add another Admin first. An organisation needs at least one active Admin.";
 
     /// <summary>
     /// An Admin row: only an Admin may archive it, and (for every caller but a SuperAdmin) a change that demotes or archives the organisation's
@@ -452,7 +452,17 @@ public class StaffController : ControllerBase
         if (!s.IsActive || (newRole == UserRole.Admin && !archives)) return null;
         // Only an Admin who has signed in counts, as in EmploymentHeroStaffSync: an invited Admin who never has can't yet run the organisation.
         // shortcut: two Admins archiving each other at the same moment can both pass this count; upgrade to a lock or a serializable transaction if it ever happens.
-        var otherAdmin = await _db.Users.AnyAsync(u => u.Id != s.Id && u.Role == UserRole.Admin && u.IsActive && u.LastLoginAt != null, ct);
+        return await LastAdminErrorAsync(_db, s, ct);
+    }
+
+    /// <summary>
+    /// The refusal when <paramref name="admin"/> is its organisation's only active Admin who has signed in, else null. Filters on the row's TenantId itself, so it counts the
+    /// same organisation whether the caller is tenant-scoped (Staff) or not (the SuperAdmin user form).
+    /// </summary>
+    internal static async Task<string?> LastAdminErrorAsync(OdipDbContext db, User admin, CancellationToken ct)
+    {
+        var otherAdmin = await db.Users.IgnoreQueryFilters([TenantFilter.Name])
+            .AnyAsync(u => u.TenantId == admin.TenantId && u.Id != admin.Id && u.Role == UserRole.Admin && u.IsActive && u.LastLoginAt != null, ct);
         return otherAdmin ? null : LastAdminMessage;
     }
 
