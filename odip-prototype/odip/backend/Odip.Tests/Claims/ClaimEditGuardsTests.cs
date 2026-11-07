@@ -311,17 +311,39 @@ public class ClaimEditGuardsTests
         Assert.NotNull(stored.PaidDate);
     }
 
-    [Fact]
-    public async Task PayingEveryLineOfADraftClaim_DoesNotMakeTheClaimPaid()
+    [Theory]
+    [InlineData(TripClaimStatus.Draft)]
+    [InlineData(TripClaimStatus.Ready)]
+    public async Task ALineCannotBePaid_WhileItsClaimIsNotYetSubmitted_AndNothingIsWritten(TripClaimStatus status)
     {
         var (db, controller) = Create();
-        var (claim, first, second) = Seed(db, TripClaimStatus.Draft);
+        var (claim, line, _) = Seed(db, status);
+        var lineStatus = line.Status;
 
-        await controller.UpdateLineItem(claim.Id, first.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, Ct);
-        await controller.UpdateLineItem(claim.Id, second.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, Ct);
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = 10m }, Ct);
 
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as paid.", RefusalOf(result));
         db.ChangeTracker.Clear();
-        Assert.Equal(TripClaimStatus.Draft, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((lineStatus, (DateTime?)null, (decimal?)null), (stored.Status, stored.PaidAt, stored.PaidAmount));
+        Assert.Equal(status, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+    }
+
+    [Fact]
+    public async Task APaidLineOfADraftClaim_StillSavesAsPaid()
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Draft);
+        line.Status = ClaimLineItemStatus.Paid;
+        line.PaidAmount = 75m;
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = 80m }, Ct);
+
+        Assert.Equal(200, StatusOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(80m, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).PaidAmount);
     }
 
     // ── Acceptance: boundaries, the whole status matrix, and the total across a sequence ─────

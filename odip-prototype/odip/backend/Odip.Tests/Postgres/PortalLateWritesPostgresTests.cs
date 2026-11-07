@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -125,6 +126,30 @@ public class PortalLateWritesPostgresTests : IClassFixture<PostgresFixture>
         Assert.All(results, r => Assert.Equal(200, Assert.IsAssignableFrom<ObjectResult>(r.Result).StatusCode));
         await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
         Assert.Equal(noteId, Assert.Single(await verify.ShiftNotes.Where(n => n.ShiftId == shiftId).ToListAsync()).Id);
+    }
+
+    [SkippableFact]
+    public async Task AFinishThatLosesTheRaceToAStart_Answers409_AndLeavesNoTransactionOpen()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (shiftId, userId, completionId) = await SeedAsync(db);
+        // A Start won the race: the shift row the Finish loaded as Published already has its active completion, so the manual-start insert hits the unique index.
+        (await db.Shifts.SingleAsync(s => s.Id == shiftId)).Status = ShiftStatus.Published;
+        await db.SaveChangesAsync();
+
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var result = await PortalFor(request, tenantId, userId).FinishShift(shiftId,
+            new FinishShiftDto { ActualStart = new DateTime(2026, 7, 13, 23, 5, 0, DateTimeKind.Utc), NothingToNote = true }, default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal("This shift can't be finished right now.", Assert.Single(body.Errors!));
+        Assert.Equal(ShiftErrorCodes.ShiftNotInProgress, body.Code);
+        Assert.Null(request.Database.CurrentTransaction);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(completionId, Assert.Single(await verify.ShiftCompletions.Where(c => c.ShiftId == shiftId).ToListAsync()).Id);
     }
 
     [SkippableFact]
