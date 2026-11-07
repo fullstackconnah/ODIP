@@ -29,10 +29,9 @@ export function ClaimAgainDialog({ open, claimId, claimReference, claimStatus, o
   const make = useClaimAgain()
 
   const data = preview.data
-  const empty = !!data && data.lineItems.length === 0
   const previewFailed = !data && preview.isError
   const loading = !data && !previewFailed
-  const held = loading || previewFailed || empty
+  const held = loading || previewFailed
 
   function confirm() {
     if (held || make.isPending) return
@@ -66,8 +65,7 @@ export function ClaimAgainDialog({ open, claimId, claimReference, claimStatus, o
         <div className="flex flex-col gap-3">
           {loading && <p role="status" className={LINE}>Working out the new claim…</p>}
           {previewFailed && <Callout tone="danger">{noBreakRefs(extractErrorMessage(preview.error, "Couldn't work out the new claim. Please try again."))}</Callout>}
-          {empty && <p>Nothing on <span className="whitespace-nowrap">{claimReference}</span> can be claimed again.</p>}
-          {data && !empty && (
+          {data && (
             <>
               <p>
                 Bunya Support deletes {claimStatus.toLowerCase()} claim <span className="whitespace-nowrap font-medium">{claimReference}</span> and makes a new draft claim

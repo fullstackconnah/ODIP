@@ -78,8 +78,10 @@ describe('versionRows: the status of each version, from the date', () => {
   it('reads "today" in the viewer zone: 11 Oct 23:30 UTC is already 12 Oct in Sydney, so an agreement ended on the 11th is Ended there and Approved in UTC', () => {
     const instant = new Date('2026-10-11T23:30:00Z')
     const drafts = [version(1, '2026-07-01', '2026-10-11')]
-    if (setZone('Australia/Sydney')) expect(versionRows(drafts, localIsoDate(instant))[0].status).toBe('Ended')
-    if (setZone('UTC')) expect(versionRows(drafts, localIsoDate(instant))[0].status).toBe('Approved')
+    expect(setZone('Australia/Sydney')).toBe(true)
+    expect(versionRows(drafts, localIsoDate(instant))[0].status).toBe('Ended')
+    expect(setZone('UTC')).toBe(true)
+    expect(versionRows(drafts, localIsoDate(instant))[0].status).toBe('Approved')
   })
 })
 

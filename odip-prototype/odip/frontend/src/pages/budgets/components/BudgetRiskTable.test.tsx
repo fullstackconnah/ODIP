@@ -103,6 +103,12 @@ describe('BudgetRiskTable: a real row', () => {
     expect(screen.getByText('$730.75')).toBeInTheDocument()     // forecast
   })
 
+  it('shows a status the table does not know as its own word in a neutral pill, rather than crashing', () => {
+    renderTable(readyTable([riskRow({ status: 'Mystery' as BudgetRiskRow['status'] })]))
+
+    expect(screen.getByText('Mystery')).toBeInTheDocument()
+  })
+
   it('renders every column header once, so the card layout at 390 labels every value', () => {
     renderTable(readyTable([row]))
 
