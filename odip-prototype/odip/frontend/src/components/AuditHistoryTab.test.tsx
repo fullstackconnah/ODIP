@@ -44,6 +44,16 @@ describe('AuditHistoryTab', () => {
     expect(screen.queryByText('Yesterday')).not.toBeInTheDocument()
   })
 
+  it('says it shows only the latest events when there are more than it lists, and keeps the plain count otherwise', () => {
+    const fifty = Array.from({ length: 50 }, (_, i) => entry(`e${i}`, 'Updated', '2026-10-28T01:00:00Z'))
+    mockUseAuditHistory.mockReturnValue({ data: { entries: fifty, total: 120, page: 1, pageSize: 50 }, isLoading: false, isError: false })
+    const { unmount } = render(<AuditHistoryTab entityType="Trip" entityId="t1" />)
+    expect(screen.getByText('Showing the latest 50 of 120 events')).toBeInTheDocument()
+    unmount()
+    renderTab([entry('a', 'Updated', '2026-10-28T01:00:00Z')])
+    expect(screen.getByText('1 event recorded')).toBeInTheDocument()
+  })
+
   it('shows the empty state, not a crash, when the response has no entries list (PT-3)', () => {
     mockUseAuditHistory.mockReturnValue({ data: {}, isLoading: false, isError: false })
     render(<AuditHistoryTab entityType="Trip" entityId="t1" />)
