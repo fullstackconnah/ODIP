@@ -63,7 +63,7 @@ public class ProviderSettingsHttpTests
     };
 
     private static StringContent ContactBody(string field, string value) => new(
-        $$"""{"registrationNumber":"1234","abn":"12345678901","organisationName":"Org","address":"1 St","state":"NSW","{{field}}":"{{value}}"}""", Encoding.UTF8, "application/json");
+        $$"""{"registrationNumber":"REG","abn":"12345678901","organisationName":"Org","address":"1 St","state":"NSW","{{field}}":"{{value}}"}""", Encoding.UTF8, "application/json");
 
     [Fact]
     public async Task The_admin_organisation_read_returns_the_four_contact_fields()
