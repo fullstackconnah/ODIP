@@ -480,4 +480,21 @@ public class IncidentReportingClockTests
 
         Assert.Single(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
     }
+
+    // H26-4: ResolvedAt is the time it was resolved; reopening clears it, closing keeps it.
+    [Theory]
+    [InlineData(IncidentStatus.Draft, false)]
+    [InlineData(IncidentStatus.Closed, true)]
+    public async Task Update_LeavingResolved_ClearsResolvedAtUnlessClosed(IncidentStatus next, bool kept)
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var created = await CreateCriticalAsync(db, controller, reporter.Id);
+        await controller.Update(created.Id, UpdateDto(created) with { Status = IncidentStatus.Resolved }, CancellationToken.None);
+        Assert.NotNull((await db.IncidentReports.SingleAsync()).ResolvedAt);
+
+        await controller.Update(created.Id, UpdateDto(created) with { Status = next }, CancellationToken.None);
+
+        Assert.Equal(kept, (await db.IncidentReports.SingleAsync()).ResolvedAt != null);
+    }
 }

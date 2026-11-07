@@ -248,4 +248,18 @@ public class IncidentReviewTests
         Assert.Equal("{id:guid}/review", typeof(IncidentsController).GetMethod(nameof(IncidentsController.RecordReview))!.GetCustomAttribute<HttpMethodAttribute>()!.Template);
         Assert.Equal("{id:guid}/status-history", typeof(IncidentsController).GetMethod(nameof(IncidentsController.GetStatusHistory))!.GetCustomAttribute<HttpMethodAttribute>()!.Template);
     }
+
+    [Fact]
+    public async Task Review_MovingAResolvedIncidentBackToUnderReview_ClearsResolvedAt()
+    {
+        using var db = TestDb.Create();
+        var (admin, incident) = Seed(db, reviewed: false);
+        incident.Status = IncidentStatus.Resolved;
+        incident.ResolvedAt = Now.UtcDateTime.AddHours(-1);
+        db.SaveChanges();
+
+        await As(db, "Admin", admin.Id).RecordReview(incident.Id, new RecordIncidentReviewDto { ReviewNotes = "Reopened.", Status = IncidentStatus.UnderReview }, CancellationToken.None);
+
+        Assert.Null((await db.IncidentReports.SingleAsync()).ResolvedAt);
+    }
 }
