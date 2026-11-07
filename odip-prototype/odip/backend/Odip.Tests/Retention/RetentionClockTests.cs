@@ -164,6 +164,48 @@ public class RetentionClockTests
         Assert.False(status.Due);
     }
 
+    private static readonly DateTime After = new(2027, 3, 1, 1, 0, 0, DateTimeKind.Utc); // 12:00 on 1 Mar 2027 in Sydney
+    private static readonly DateTime Before = new(2018, 6, 1, 1, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>Every participant table the purge deletes whose writes have no archived guard: a record made after the archive is a record kept, so its date moves the clock.</summary>
+    public static TheoryData<string> PostArchiveSources => new()
+    {
+        "ParticipantConsent", "RestrictivePractice", "MedicationAdministration", "ParticipantNote", "ParticipantRiskEntry",
+        "ParticipantHealthCondition", "ParticipantAdlAssessment", "ParticipantChecklistItem", "ParticipantCommunityAccessRiskItem",
+    };
+
+    private static object PostArchiveRecord(string kind, Guid tenantId, Guid participantId, DateTime at) => kind switch
+    {
+        "ParticipantConsent" => new ParticipantConsent { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, ConsentType = ConsentType.PhotoVideo, CreatedAt = Before, UpdatedAt = at },
+        "RestrictivePractice" => new RestrictivePractice { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, Description = "x", CreatedAt = Before, UpdatedAt = at },
+        "MedicationAdministration" => new MedicationAdministration { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, CreatedAt = Before, AdministeredAt = at },
+        "ParticipantNote" => new ParticipantNote { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, Title = "x", CreatedAt = Before, UpdatedAt = at },
+        "ParticipantRiskEntry" => new ParticipantRiskEntry { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, CreatedAt = Before, UpdatedAt = at },
+        "ParticipantHealthCondition" => new ParticipantHealthCondition { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, CreatedAt = Before, UpdatedAt = at },
+        "ParticipantAdlAssessment" => new ParticipantAdlAssessment { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, CreatedAt = Before, UpdatedAt = at },
+        "ParticipantChecklistItem" => new ParticipantChecklistItem { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, CreatedAt = Before, UpdatedAt = at },
+        "ParticipantCommunityAccessRiskItem" => new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, CreatedAt = Before, UpdatedAt = at },
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    [Theory]
+    [MemberData(nameof(PostArchiveSources))]
+    public async Task A_record_made_after_the_archive_pushes_the_start_out_and_an_older_one_does_not(string kind)
+    {
+        var (db, tenantId, clock) = Rig();
+        var p = Archive(db, tenantId, new DateOnly(2026, 1, 1));
+        db.Add(PostArchiveRecord(kind, tenantId, p.Id, Before));
+        db.SaveChanges();
+        Assert.Equal(new DateOnly(2026, 1, 1), (await Status(db, tenantId, p, clock))!.Start);
+
+        db.Add(PostArchiveRecord(kind, tenantId, p.Id, After));
+        db.SaveChanges();
+        var status = (await Status(db, tenantId, p, clock))!;
+
+        Assert.Equal(new DateOnly(2027, 3, 1), status.Start);
+        Assert.Equal(new DateOnly(2034, 3, 1), status.DueOn);
+    }
+
     [Fact]
     public async Task A_later_trip_end_through_a_booking_and_a_later_incident_push_the_start_out()
     {
