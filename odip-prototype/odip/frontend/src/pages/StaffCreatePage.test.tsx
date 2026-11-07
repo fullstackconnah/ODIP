@@ -97,6 +97,12 @@ describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () 
     expect(screen.getByText(/only an admin can change this role/i)).toBeInTheDocument()
   })
 
+  it('stops the Mobile field at the 20 characters the account column holds', async () => {
+    renderEditPage('staff-1')
+
+    expect(await screen.findByLabelText(/mobile/i)).toHaveAttribute('maxlength', '20')
+  })
+
   it('still allows editing and saving other fields (Mobile), with the role unchanged in the payload', async () => {
     const user = userEvent.setup()
     renderEditPage('staff-1')

@@ -749,7 +749,16 @@ public class PortalController : ControllerBase
                 ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.ConstraintName == ShiftCompletion.ActiveIndexName)
+        {
+            // A Start (which takes no row lock) inserted the active completion first; the lock's transaction rolls back as this returns.
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift can't be finished right now.", ShiftErrorCodes.ShiftNotInProgress));
+        }
         await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
