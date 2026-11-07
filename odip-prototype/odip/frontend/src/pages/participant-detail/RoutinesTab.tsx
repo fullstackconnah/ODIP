@@ -189,7 +189,9 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   }
 
   // Typed text differs from what the modal opened with (whitespace counts): Escape, the backdrop and the X ask first.
-  const dirty = !!modalState && JSON.stringify(form) !== JSON.stringify(modalState.routine ? routineToForm(modalState.routine) : EMPTY_FORM)
+  // Day order is ignored: unticking and re-ticking a day appends it last, which is not a change.
+  const byWeekday = (f: typeof form) => JSON.stringify({ ...f, days: WEEKDAYS.filter(d => f.days.includes(d)) })
+  const dirty = !!modalState && byWeekday(form) !== byWeekday(modalState.routine ? routineToForm(modalState.routine) : EMPTY_FORM)
 
   function closeModal() {
     setModalState(null)

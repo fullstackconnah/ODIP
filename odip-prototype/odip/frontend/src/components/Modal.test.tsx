@@ -288,6 +288,8 @@ describe('Modal dirty', () => {
     ]) {
       await act()
       expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+      expect(screen.getByRole('alertdialog')).toHaveAccessibleDescription('You have unsaved changes. If you close this now, they will be lost.')
+      expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus()
       await user.click(screen.getByRole('button', { name: 'Keep editing' }))
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     }

@@ -553,6 +553,18 @@ describe('Quick add from the Overview (?add=1)', () => {
 })
 
 describe('RoutinesTab — unsaved text', () => {
+  it('unticking and re-ticking a day of an existing routine is not a change: Escape closes with no prompt', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine({ days: ['Monday', 'Wednesday', 'Friday'] })], isLoading: false })
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+    await user.click(screen.getByRole('checkbox', { name: 'Monday' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Monday' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('Escape after typing asks before discarding and Keep editing keeps the text', async () => {
     const user = userEvent.setup()
     render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })

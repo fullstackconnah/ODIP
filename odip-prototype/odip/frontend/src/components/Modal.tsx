@@ -94,7 +94,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         )}
       </div>
     </div>
-    <DiscardChangesDialog open={confirmingDiscard} what="dialog" onKeep={() => setConfirmingDiscard(false)} onDiscard={() => { setConfirmingDiscard(false); onClose() }} />
+    <DiscardChangesDialog open={confirmingDiscard} onKeep={() => setConfirmingDiscard(false)} onDiscard={() => { setConfirmingDiscard(false); onClose() }} />
     </>
   )
 }

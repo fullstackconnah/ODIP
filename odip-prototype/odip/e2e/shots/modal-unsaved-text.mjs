@@ -63,6 +63,8 @@ async function shoot(vp, { section, tab, open, field, text, dialogName, file }) 
     check(`${ctx}: the prompt is the topmost layer (nothing covers it or its buttons)`, top.dialog && top.buttons.length === 2 && top.buttons.every((b) => b.top), top)
     if (vp.touch) check(`${ctx}: prompt buttons are at least --tap-min (44px) tall`, top.buttons.every((b) => b.h >= 44), top.buttons.map((b) => b.h))
     check(`${ctx}: no horizontal overflow`, top.overflow <= 0, top.overflow)
+    const focused = await page.evaluate(() => document.activeElement?.textContent?.trim())
+    check(`${ctx}: focus is on Keep editing when the prompt opens`, focused === 'Keep editing', focused)
 
     const f = path.join(OUT_DIR, file)
     const r = await cropElement(page, prompt, f, { touch: vp.touch, also: dialog, pad: 16, during: (clip) => overlapCheck(prompt, clip, f) })

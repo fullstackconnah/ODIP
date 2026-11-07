@@ -142,7 +142,6 @@ export function SlideOver({
 
       <DiscardChangesDialog
         open={confirmingDiscard}
-        what="panel"
         onKeep={() => setConfirmingDiscard(false)}
         onDiscard={() => {
           setConfirmingDiscard(false)
