@@ -811,4 +811,69 @@ public class SignInAccountRouteTests
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.False((await db.Users.SingleAsync()).SignInAddressUnconfirmed);
     }
+
+    // ── Only an Admin acts on an Admin row (#695 house rule): the sign-in account and the held address are the row's identity ──
+
+    [Fact]
+    public async Task Staff_route_refuses_a_Coordinator_on_an_Admin_row_without_calling_Firebase()
+    {
+        var (db, tenantId) = StaffDb();
+        var admin = await SeedStaff(db, tenantId, "ada@acme.example.com", role: UserRole.Admin);
+        var firebase = FirebaseReturning(SignInAccountResult.Created);
+
+        var result = await StaffControllerFor(db, "Coordinator", firebase).EnsureSignInAccount(admin.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<SignInAccountDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal("Only an Admin can edit an Admin account.", Assert.Single(body.Errors!));
+        VerifyNeverEnsured(firebase);
+    }
+
+    [Fact]
+    public async Task Staff_route_lets_an_Admin_on_an_Admin_row_and_a_Coordinator_on_a_Worker_row_through()
+    {
+        var (db, tenantId) = StaffDb();
+        var admin = await SeedStaff(db, tenantId, "ada@acme.example.com", role: UserRole.Admin);
+        var worker = await SeedStaff(db, tenantId, "sam@acme.example.com");
+        var firebase = FirebaseReturning(SignInAccountResult.Created);
+
+        Assert.IsType<OkObjectResult>((await StaffControllerFor(db, "Admin", firebase).EnsureSignInAccount(admin.Id, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await StaffControllerFor(db, "Coordinator", firebase).EnsureSignInAccount(worker.Id, CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task ConfirmAddress_refuses_a_Coordinator_on_an_Admin_row_and_leaves_the_hold_and_the_card_item()
+    {
+        var (db, tenantId) = StaffDb();
+        var admin = await SeedStaff(db, tenantId, "ada@other.org", role: UserRole.Admin);
+        admin.SignInAddressUnconfirmed = true;
+        db.EmploymentHeroAttentions.Add(new Odip.Domain.Integrations.EmploymentHeroAttention
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Key = $"ConfirmAddress:{admin.Id}", Kind = Odip.Domain.Integrations.EmploymentHeroAttentionKind.ConfirmAddress,
+            UserId = admin.Id, Name = "Ada Admin", Reason = "x", CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await StaffControllerFor(db, "Coordinator", new Mock<IFirebaseUserService>()).ConfirmAddress(admin.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<bool>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal("Only an Admin can edit an Admin account.", Assert.Single(body.Errors!));
+        Assert.True((await db.Users.SingleAsync()).SignInAddressUnconfirmed);
+        Assert.Single(db.EmploymentHeroAttentions);
+    }
+
+    [Fact]
+    public async Task ConfirmAddress_lets_an_Admin_release_an_Admin_row_and_a_Coordinator_release_a_Worker_row()
+    {
+        var (db, tenantId) = StaffDb();
+        var admin = await SeedStaff(db, tenantId, "ada@other.org", role: UserRole.Admin);
+        var worker = await SeedStaff(db, tenantId, "sam@other.org");
+        admin.SignInAddressUnconfirmed = true;
+        worker.SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();
+
+        Assert.IsType<OkObjectResult>((await StaffControllerFor(db, "Admin", new Mock<IFirebaseUserService>()).ConfirmAddress(admin.Id, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await StaffControllerFor(db, "Coordinator", new Mock<IFirebaseUserService>()).ConfirmAddress(worker.Id, CancellationToken.None)).Result);
+
+        Assert.All(db.Users, u => Assert.False(u.SignInAddressUnconfirmed));
+    }
 }

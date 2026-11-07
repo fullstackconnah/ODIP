@@ -6,12 +6,12 @@ import { FinishFlow } from './FinishFlow'
 import { EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import type { PortalShiftDetailDto } from '@/api/types'
 
-const h = vi.hoisted(() => ({ finish: vi.fn(), save: vi.fn(), notes: { value: [] as unknown[] }, records: [] as { shiftId: string; kind: string; status: string }[] }))
+const h = vi.hoisted(() => ({ finish: vi.fn(), save: vi.fn(), notes: { value: [] as unknown[], loading: false }, records: [] as { shiftId: string; kind: string; status: string }[] }))
 
 vi.mock('@/api/hooks', () => ({
   useFinishShift: () => ({ mutateAsync: h.finish, isPending: false }),
   useSaveFinishDetails: () => ({ mutateAsync: h.save, isPending: false }),
-  useShiftNotes: () => ({ data: h.notes.value }),
+  useShiftNotes: () => (h.notes.loading ? { data: undefined, isLoading: true } : { data: h.notes.value }),
 }))
 vi.mock('@/api/hooks/portal', () => ({ useQueueRecords: () => h.records }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ id: 'user-1' }) }))
@@ -56,7 +56,7 @@ const barStatus = () => within(screen.getByRole('toolbar', { name: 'Shift action
 const later = () => fireEvent.click(screen.getByRole('button', { name: 'Add details later' }))
 
 describe('FinishFlow: the details page after End shift', () => {
-  beforeEach(() => { sessionStorage.clear(); h.finish.mockReset().mockResolvedValue({}); h.save.mockReset().mockResolvedValue({}); h.notes.value = []; h.records = [] })
+  beforeEach(() => { sessionStorage.clear(); h.finish.mockReset().mockResolvedValue({}); h.save.mockReset().mockResolvedValue({}); h.notes.value = []; h.notes.loading = false; h.records = [] })
   afterEach(() => { vi.useRealTimers() })
 
   it('Submit with everything answered sends one PUT with the answers and closes complete', async () => {
@@ -69,6 +69,19 @@ describe('FinishFlow: the details page after End shift', () => {
     expect(h.save.mock.calls[0][0].data).toMatchObject({ kilometres: 12.5, handoverText: 'All settled', preTravelNone: true, postTravelNone: true, anythingToReport: false })
     expect(h.finish).not.toHaveBeenCalled()   // already ended
     expect(loadEndDraft('s1')).toBeNull()
+  })
+
+  it('Queue 140: while the notes load the page does not say No notes yet, and Notes is not missing', () => {
+    draft({ nothingToNote: false })
+    h.notes.loading = true
+    renderFlow()
+    expect(screen.queryByText('No notes yet.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Nothing to note' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Still to add/)).not.toBeInTheDocument()
+    cleanup(); h.notes.loading = false
+    renderFlow()
+    expect(screen.getByText('No notes yet.')).toBeInTheDocument()
+    expect(screen.getByText(/Still to add/)).toBeInTheDocument()
   })
 
   it('typed: Add details later sends the typed fields and leaves incomplete', async () => {

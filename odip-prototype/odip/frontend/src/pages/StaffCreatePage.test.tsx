@@ -384,3 +384,31 @@ describe('StaffCreatePage — CPR', () => {
     await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'staff-1', data: expect.objectContaining({ isCprQualified: true, cprExpiryDate: '2027-02-01' }) }))
   })
 })
+
+describe('StaffCreatePage — text caps', () => {
+  it('limits Notes to 2000 and the worker screening number to 50, as the server does', async () => {
+    mockUsePermissions.mockReturnValue({ isCoordinator: true })
+    renderCreatePage()
+
+    expect(await screen.findByLabelText('Notes')).toHaveAttribute('maxlength', '2000')
+    expect(screen.getByLabelText('Worker screening number')).toHaveAttribute('maxlength', '50')
+  })
+})
+
+describe('StaffCreatePage — over-long Notes already on file', () => {
+  it('shows a field error on Save and sends no update, leaving the text untouched', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: true })
+    const long = 'n'.repeat(2001)
+    const staff = makeStaff({ notes: long })
+    mockUseStaffDetail.mockReturnValue({ data: staff, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: staff }) })
+    renderEditPage('staff-1')
+
+    await user.type(await screen.findByLabelText(/mobile/i), '0411 222 333')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText('Notes can be up to 2,000 characters. Shorten them to save.')).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Notes')).toHaveValue(long)
+  })
+})

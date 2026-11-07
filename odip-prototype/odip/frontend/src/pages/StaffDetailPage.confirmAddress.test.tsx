@@ -112,3 +112,39 @@ describe('StaffDetailPage: a held sign-in address', () => {
     expect(screen.queryByRole('button', { name: 'Confirm address' })).not.toBeInTheDocument()
   })
 })
+
+describe('StaffDetailPage: an Admin row', () => {
+  it('shows a Coordinator neither Confirm address nor Send set-password email, and says an Admin can confirm', () => {
+    renderPage({ role: 'Admin' }, 'Coordinator')
+
+    expect(screen.queryByRole('button', { name: 'Confirm address' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send set-password email' })).not.toBeInTheDocument()
+    expect(screen.getByText(/An Admin can confirm this address./)).toBeInTheDocument()
+  })
+
+  it('shows a Coordinator no Send button on an Admin row whose address is not held', () => {
+    renderPage({ role: 'Admin', signInAddressUnconfirmed: false }, 'Coordinator')
+
+    expect(screen.queryByRole('button', { name: 'Send set-password email' })).not.toBeInTheDocument()
+  })
+
+  it('shows an Admin the Confirm button, and Send once the address is not held', () => {
+    renderPage({ role: 'Admin' }, 'Admin')
+    expect(screen.getByRole('button', { name: 'Confirm address' })).toBeInTheDocument()
+  })
+
+  it('shows an Admin Send on an Admin row with no held address', () => {
+    renderPage({ role: 'Admin', signInAddressUnconfirmed: false }, 'Admin')
+    expect(screen.getByRole('button', { name: 'Send set-password email' })).toBeInTheDocument()
+  })
+
+  it('shows a Coordinator the Confirm button on a Worker row', () => {
+    renderPage({ role: 'SupportWorker' }, 'Coordinator')
+    expect(screen.getByRole('button', { name: 'Confirm address' })).toBeInTheDocument()
+  })
+
+  it('shows a Coordinator Send on a Worker row with no held address', () => {
+    renderPage({ role: 'SupportWorker', signInAddressUnconfirmed: false }, 'Coordinator')
+    expect(screen.getByRole('button', { name: 'Send set-password email' })).toBeInTheDocument()
+  })
+})

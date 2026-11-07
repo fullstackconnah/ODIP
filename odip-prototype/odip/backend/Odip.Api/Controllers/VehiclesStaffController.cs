@@ -708,6 +708,9 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<SignInAccountDto>.Fail("Staff not found"));
 
+        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(guardError));
+
         var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebaseUserService, _logger, ct);
         if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
         if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
@@ -724,6 +727,10 @@ public class StaffController : ControllerBase
     {
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
+
+        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
+
         if (s.SignInAddressUnconfirmed is true)
         {
             s.SignInAddressUnconfirmed = false;
@@ -739,7 +746,7 @@ public class StaffController : ControllerBase
 
     /// <summary>
     /// Records that the browser sent these people a sign-in invite email, so the next bulk invite skips them and the Staff page can say when. Only
-    /// people the caller could invite are stamped (active, never signed in, and a SuperAdmin row only by a SuperAdmin); any other id is skipped
+    /// people the caller could invite are stamped (active, never signed in, a SuperAdmin row only by a SuperAdmin, an Admin row only by an Admin or SuperAdmin); any other id is skipped
     /// silently. A tracked save, not a bulk update: Users are audited, so each person gets one Updated row with the caller as the actor. The Users
     /// query filter keeps it to the caller's own organisation (a SuperAdmin's to the one being viewed, or all when none is).
     /// </summary>
@@ -752,7 +759,8 @@ public class StaffController : ControllerBase
         if (ids.Count is 0 or > 100) return BadRequest(ApiResponse<int>.Fail("Send between 1 and 100 people at a time."));
 
         var isSuperAdmin = User.IsInRole("SuperAdmin");
-        var people = await _db.Users.Where(u => ids.Contains(u.Id) && u.IsActive && u.LastLoginAt == null && (isSuperAdmin || u.Role != UserRole.SuperAdmin)).ToListAsync(ct);
+        var isAdmin = isSuperAdmin || User.IsInRole("Admin");
+        var people = await _db.Users.Where(u => ids.Contains(u.Id) && u.IsActive && u.LastLoginAt == null && (isSuperAdmin || u.Role != UserRole.SuperAdmin) && (isAdmin || u.Role != UserRole.Admin)).ToListAsync(ct);
         var now = _clock.GetUtcNow().UtcDateTime;
         foreach (var person in people) person.SignInInviteSentAt = now;
         await _db.SaveChangesAsync(ct);
