@@ -319,4 +319,47 @@ public class ComplianceEntitiesAuditTests
         Assert.False(string.IsNullOrEmpty(signedOn.GetProperty("Old").GetString()));   // the replaced date is kept
         Assert.Contains("Participant chose not to have a written agreement.", updates[1].Changes);
     }
+
+    // H31-2/H31-3: who changed or removed a guardian's medical authorisation, a risk entry or a health condition must be recoverable.
+    private async Task AssertUpdateAndDeleteAreAudited<T>(Func<Participant, Person, T> make, Action<T> change, string changedField, string changedValue) where T : class
+    {
+        var actingUserId = Guid.NewGuid();
+        using var db = CreateDb(actingUserId);
+        var participant = NewParticipant();
+        var person = new Person { Id = Guid.NewGuid(), TenantId = TenantId, FirstName = "Cara", LastName = "Ng" };
+        db.Participants.Add(participant);
+        db.People.Add(person);
+        await db.SaveChangesAsync();
+        var row = make(participant, person);
+        db.Set<T>().Add(row);
+        await db.SaveChangesAsync();
+        var id = (Guid)typeof(T).GetProperty("Id")!.GetValue(row)!;
+
+        change(row);
+        await db.SaveChangesAsync();
+        db.Set<T>().Remove(row);
+        await db.SaveChangesAsync();
+
+        var logs = db.AuditLogs.Where(a => a.EntityType == typeof(T).Name && a.EntityId == id).ToList();
+        var update = Assert.Single(logs, a => a.Action == AuditAction.Updated);
+        Assert.Contains(changedField, update.Changes);
+        Assert.Contains(changedValue, update.Changes);
+        Assert.Single(logs, a => a.Action == AuditAction.Deleted);
+        Assert.All(logs.Where(a => a.Action != AuditAction.Created), a => Assert.Equal((actingUserId, "Jane Coordinator"), (a.ChangedById, a.ChangedByName)));
+    }
+
+    [Fact]
+    public Task ParticipantContactRole_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantContactRole>(
+        (p, person) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, PersonId = person.Id, RoleType = ContactRoleType.EmergencyContact, AuthorisedForMedicalInfo = true },
+        r => r.AuthorisedForMedicalInfo = false, "AuthorisedForMedicalInfo", "False");
+
+    [Fact]
+    public Task ParticipantRiskEntry_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantRiskEntry>(
+        (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, AtRiskParty = AtRiskParty.Participant, Description = "Leaves the house alone." },
+        r => r.Description = "Absconds at night.", "Description", "Absconds at night.");
+
+    [Fact]
+    public Task ParticipantHealthCondition_UpdateAndDelete_AreAudited() => AssertUpdateAndDeleteAreAudited<ParticipantHealthCondition>(
+        (p, _) => new() { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, ConditionType = HealthConditionType.IntellectualDisability, Has = true },
+        r => r.Notes = "Seizure plan added.", "Notes", "Seizure plan added.");
 }

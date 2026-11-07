@@ -1427,6 +1427,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.DecisionNote).HasMaxLength(2000);
             entity.Property(e => e.ExternalLeaveId).HasMaxLength(20);
             entity.Property(e => e.SentHours).HasPrecision(6, 2);
+            // The row's version: an approve and a withdraw that both loaded it Pending cannot both save, so the loser gets a 409 instead of overwriting the winner.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
             entity.HasIndex(e => new { e.TenantId, e.ExternalLeaveId })
                 .IsUnique()
                 .HasDatabaseName(LeaveRequest.ExternalLeaveIdIndexName)
