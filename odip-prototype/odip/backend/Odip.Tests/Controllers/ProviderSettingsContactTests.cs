@@ -42,7 +42,7 @@ public class ProviderSettingsContactTests
 
     private static UpsertProviderSettingsDto Dto(string? trading = null, string? email = null, string? phone = null, string? website = null) => new()
     {
-        RegistrationNumber = "REG", ABN = "12345678901", OrganisationName = "Org", Address = "1 St", State = "NSW",
+        RegistrationNumber = "1234", ABN = "12345678901", OrganisationName = "Org", Address = "1 St", State = "NSW",
         TradingName = trading, ContactEmail = email, ContactPhone = phone, Website = website,
     };
 

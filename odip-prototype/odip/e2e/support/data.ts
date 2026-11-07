@@ -99,7 +99,7 @@ export async function ensureProviderSettings(session: Session): Promise<void> {
     'PUT provider-settings',
     [200, 201],
     await call(sa, 'PUT', '/provider-settings', {
-      registrationNumber: 'E2E-0000-01',
+      registrationNumber: '4050000001',
       abn: '00000000000',
       organisationName: 'E2E Browser Acceptance (SYNTHETIC)',
       address: '1 Example Street, Newtown NSW 2042',

@@ -2651,8 +2651,10 @@ public record TenantSetupProviderDto
 {
     // The same limits as UpsertProviderSettingsDto, so setup cannot store what the Organisation profile save would then refuse.
     [StringLength(20)]
+    [RegularExpression(@"^[0-9 ]*$", ErrorMessage = "Use digits only for the registration number.")]
     public string RegistrationNumber { get; init; } = string.Empty;
     [StringLength(20)]
+    [RegularExpression(@"^[0-9 ]*$", ErrorMessage = "Use digits only for the ABN.")]
     public string ABN { get; init; } = string.Empty;
     [StringLength(200)]
     public string OrganisationName { get; init; } = string.Empty;

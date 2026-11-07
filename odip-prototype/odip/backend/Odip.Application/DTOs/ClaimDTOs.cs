@@ -585,8 +585,10 @@ public record ProviderSettingsDto
 public record UpsertProviderSettingsDto
 {
     [Required, StringLength(20)]
+    [RegularExpression(@"^[0-9 ]*$", ErrorMessage = "Use digits only for the registration number.")]
     public string RegistrationNumber { get; init; } = string.Empty;
     [Required, StringLength(20)]
+    [RegularExpression(@"^[0-9 ]*$", ErrorMessage = "Use digits only for the ABN.")]
     public string ABN { get; init; } = string.Empty;
     [Required, StringLength(200)]
     public string OrganisationName { get; init; } = string.Empty;
