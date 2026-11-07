@@ -11,8 +11,7 @@ import { KIND_LABEL, KIND_ORDER, isPlainAgreement } from '@/lib/agreementKind'
 import { useStickyOpen } from '@/hooks/useStickyOpen'
 import { formGrid, span } from '@/lib/formGrid'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
-import { STATES, ZONES, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
-import { parseDateOnly } from '@/lib/dateOnly'
+import { STATES, ZONES, ongoingPastCapText, planPastCap, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, addMonths } from '@/lib/planQuote'
 import { zoneOfMm } from '@/lib/planBlocks'
 
@@ -24,11 +23,6 @@ const DATE_MAX = `${PRICING_LAST_YEAR}-12-31`
 const PRESET_MONTHS = [1, 3, 6, 12] as const
 /** Starts, Length and Ends share one row from xl; Length is the widest so its longest option fits (the date span of 6 would not leave it room). */
 const startCol = 'md:col-span-1 xl:col-span-3', lengthCol = 'md:col-span-1 xl:col-span-5', endCol = 'md:col-span-1 xl:col-span-4'
-/** The pricing engine's longest period (PlanPricingEngine.MaxPeriodDays): Ongoing runs to the plan end, so a longer plan needs a chosen end. */
-export const MAX_PERIOD_DAYS = 800
-/** The plan runs past the cap from the start, so Ongoing (which runs to the plan end) cannot be chosen. */
-export const planPastCap = (start: string, planEnd: string) => !!start && (parseDateOnly(planEnd) ?? 0) - (parseDateOnly(start) ?? 0) + 1 > MAX_PERIOD_DAYS
-export const ongoingPastCapText = `This NDIS plan runs longer than ${MAX_PERIOD_DAYS} days from the agreement start. Choose an end date instead of Ongoing.`
 const presetEnd = (start: string, months: number) => addDays(addMonths(start, months), -1)
 
 type AgreementStepProps = {

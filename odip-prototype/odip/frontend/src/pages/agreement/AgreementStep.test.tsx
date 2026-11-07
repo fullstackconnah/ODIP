@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
-import { AgreementStep, MAX_PERIOD_DAYS } from './AgreementStep'
+import { AgreementStep } from './AgreementStep'
+import { MAX_PERIOD_DAYS } from '@/lib/agreementDetails'
 import type { Details } from '@/lib/agreementDetails'
 
 const base: Details = { state: 'NSW', zone: 'Standard', agreementStartDate: '2026-11-01', agreementEndDate: '2027-02-01', ongoing: false, representative: '', planOverride: null } as unknown as Details

@@ -6,7 +6,7 @@ import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
 import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
-import { MAX_PERIOD_DAYS } from './agreement/AgreementStep'
+import { MAX_PERIOD_DAYS } from '@/lib/agreementDetails'
 
 const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate, populateMutate, sharing } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),

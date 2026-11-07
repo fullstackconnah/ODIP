@@ -1,4 +1,11 @@
 import type { AgreementKind, AgreementState, PlanPriceZone } from '@/api/types'
+import { parseDateOnly } from '@/lib/dateOnly'
+
+/** The pricing engine's longest period (PlanPricingEngine.MaxPeriodDays): Ongoing runs to the plan end, so a longer plan needs a chosen end. */
+export const MAX_PERIOD_DAYS = 800
+/** The plan runs past the cap from the start, so Ongoing (which runs to the plan end) cannot be chosen. */
+export const planPastCap = (start: string, planEnd: string) => !!start && (parseDateOnly(planEnd) ?? 0) - (parseDateOnly(start) ?? 0) + 1 > MAX_PERIOD_DAYS
+export const ongoingPastCapText = `This NDIS plan runs longer than ${MAX_PERIOD_DAYS} days from the agreement start. Choose an end date instead of Ongoing.`
 
 export const STATES: AgreementState[] = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
 export const ZONES: { value: PlanPriceZone; label: string }[] = [
