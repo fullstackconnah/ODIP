@@ -205,7 +205,7 @@ public class LeaveController : ControllerBase
 
         var updateCallerId = ResolveCallerId();
         if (updateCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
-        // Your own request changes through the Portal, where it goes back to Pending; edited here an Approved one would widen with nobody's say (D4, deep M1).
+        // Your own request is withdrawn in the Portal while Pending; once decided, another coordinator edits it (D4, deep M1).
         if (leave.UserId == updateCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.LeaveType = dto.LeaveType;
