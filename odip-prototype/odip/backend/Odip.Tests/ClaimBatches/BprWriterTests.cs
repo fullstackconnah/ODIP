@@ -11,8 +11,8 @@ namespace Odip.Tests.ClaimBatches;
 /// <summary>The NDIA bulk-claim file writer: pure, so the format is pinned without a database.</summary>
 public class BprWriterTests
 {
-    private static BprRowOut Row(decimal? hours = 2.5m, decimal? quantity = null, string claimType = "", string reason = "", string support = "04_104_0125_6_1", string reference = "0123456789abcdef0123A1", decimal price = 193.99m, string registration = "PR1") =>
-        new(registration, "430000001", new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8), support, reference, quantity, hours, price, "P2", claimType, reason, "");
+    private static BprRowOut Row(decimal? hours = 2.5m, decimal? quantity = null, string claimType = "", string reason = "", string support = "04_104_0125_6_1", string reference = "0123456789abcdef0123A1", decimal price = 193.99m, string registration = "PR1", string abn = "") =>
+        new(registration, "430000001", new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8), support, reference, quantity, hours, price, "P2", claimType, reason, abn);
 
     private static string[][] Fields(byte[] file) =>
         Encoding.UTF8.GetString(file).Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Select(l => l.Split(',')).ToArray();
@@ -31,6 +31,13 @@ public class BprWriterTests
     [InlineData("4050012345", "4050012345")]
     public void Registration_number_is_guarded_against_formulas(string registration, string expected) =>
         Assert.Equal(expected, Fields(BprCsvService.Write([Row(registration: registration)]))[1][0]);
+
+    [Theory]
+    [InlineData("=1+1", "'=1+1")]
+    [InlineData("12 345 678 901", "12 345 678 901")]
+    [InlineData("", "")]
+    public void Abn_is_guarded_against_formulas(string abn, string expected) =>
+        Assert.Equal(expected, Fields(BprCsvService.Write([Row(abn: abn)]))[1][15]);
 
     [Fact]
     public void One_minute_is_written_0_01() => Assert.Equal("0:01", BprCsvService.FormatHours(1m / 60m));

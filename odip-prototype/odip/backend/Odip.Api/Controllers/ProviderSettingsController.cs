@@ -135,6 +135,10 @@ public partial class ProviderSettingsController : ControllerBase
             _db.ProviderSettings.Add(s);
         }
 
+        // Only a changed ABN is checked: every settings section echoes the whole row, so a stored value that predates the rule still saves. Blank and length are the DTO's.
+        if (dto.ABN != s.ABN && !Regex.IsMatch(dto.ABN, @"^[0-9 ]+\z"))
+            return BadRequest(ApiResponse<bool>.Fail("Enter the ABN as numbers only, like 12 345 678 901."));
+
         // The version the form loaded goes into the UPDATE's WHERE (not a read-then-compare, which would race): another Admin's save since then is a 409.
         // A new row has nothing to compare with. No version sent (an older open tab) saves as before.
         if (dto.ExpectedUpdatedAt is DateTime expected && _db.Entry(s).State != EntityState.Added)
