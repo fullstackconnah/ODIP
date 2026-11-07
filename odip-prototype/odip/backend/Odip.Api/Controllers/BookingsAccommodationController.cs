@@ -504,7 +504,9 @@ public class ReservationsController : ControllerBase
     {
         var rows = await _db.AccommodationReservations.Where(x => x.AccommodationPropertyId == propertyId).ToListAsync(ct);
         rows.AddRange(_db.ChangeTracker.Entries<AccommodationReservation>()
-            .Where(e => e.State == EntityState.Added && e.Entity.AccommodationPropertyId == propertyId).Select(e => e.Entity));
+            .Where(e => e.State is EntityState.Added or EntityState.Modified && e.Entity.AccommodationPropertyId == propertyId).Select(e => e.Entity));
+        // The query matches the saved property id: drop a reservation moved away, and keep one moved in from the tracked set.
+        rows = rows.Where(x => x.AccommodationPropertyId == propertyId).Distinct().ToList();
         var live = rows.Where(x => _db.Entry(x).State != EntityState.Deleted
             && x.ReservationStatus != ReservationStatus.Cancelled && x.ReservationStatus != ReservationStatus.Unavailable).Distinct().ToList();
         foreach (var x in rows.Distinct())
