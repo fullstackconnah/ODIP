@@ -339,4 +339,46 @@ public class SuperAdminNoTenantWriteTests
         Assert.IsType<CreatedAtActionResult>((await new TripsController(w.Db, NullLogger<TripsController>.Instance, tenant: w.Tenant).Create(dto, CancellationToken.None)).Result);
         await AssertAllInTenantA<TripInstance>(w.Db);
     }
+
+    [Fact]
+    public async Task TenantUser_Accommodation_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        Assert.IsType<CreatedAtActionResult>((await new AccommodationController(w.Db, w.Tenant).Create(new CreateAccommodationDto { PropertyName = "Beach House" }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<AccommodationProperty>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_EventTemplate_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        Assert.IsType<OkObjectResult>((await new EventTemplatesController(w.Db, w.Tenant).Create(new CreateEventTemplateDto { EventName = "Beach" }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<EventTemplate>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Person_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        Assert.IsType<CreatedAtActionResult>((await new PersonsController(w.Db, w.Tenant).Create(new CreatePersonDto { FirstName = "Karen", LastName = "Johnson" }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<Person>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Participant_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        var controller = new ParticipantsController(w.Db, new StaffCompatibilityLinkService(w.Db), new ParticipantDocumentService(w.Db), new SafetyNoteSyncService(w.Db), tenant: w.Tenant);
+        Assert.IsType<CreatedAtActionResult>((await controller.Create(new CreateParticipantDto { FirstName = "Dana", LastName = "Lee", IsDraft = true }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<Participant>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Staff_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        var dto = new CreateStaffDto { FirstName = "Jane", LastName = "Doe", Email = "jane.doe@example.com", Position = Position.SupportWorker, IsActive = true };
+        Assert.IsType<CreatedAtActionResult>((await new StaffController(w.Db, currentTenant: w.Tenant).Create(dto, CancellationToken.None)).Result);
+        await AssertAllInTenantA<User>(w.Db);
+    }
 }
