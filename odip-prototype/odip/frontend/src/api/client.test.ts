@@ -198,6 +198,7 @@ describe('a 401 on any other request', () => {
         const done = client.apiGet('/participants')
         await vi.advanceTimersByTimeAsync(15_000)
         await done
+        expect(vi.getTimerCount()).toBe(0)
 
         expect(requests.map(r => r.url)).toEqual(['/auth/exchange', '/participants'])
       } finally {
