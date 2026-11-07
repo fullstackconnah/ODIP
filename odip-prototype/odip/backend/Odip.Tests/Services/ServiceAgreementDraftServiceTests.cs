@@ -3,6 +3,7 @@ using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -78,6 +79,27 @@ public class ServiceAgreementDraftServiceTests
         Assert.Null(error);
         Assert.True(draft!.IsOngoing);
         Assert.Equal(new DateOnly(2026, 6, 30), draft.AgreementEndDate);
+    }
+
+    [Fact]
+    public async Task Ongoing_is_saved_when_the_plan_end_is_exactly_the_period_cap_from_the_agreement_start()
+    {
+        var planEnd = new DateOnly(2025, 7, 1).AddDays(PlanPricingEngine.MaxPeriodDays - 1);
+
+        var (draft, error) = await SaveAsync(Request() with { IsOngoing = true, PlanEndDate = planEnd });
+
+        Assert.Null(error);
+        Assert.True(draft!.IsOngoing);
+        Assert.Equal(planEnd, draft.AgreementEndDate);
+    }
+
+    [Fact]
+    public async Task Ongoing_is_refused_when_the_plan_end_is_one_day_past_the_period_cap()
+    {
+        var (draft, error) = await SaveAsync(Request() with { IsOngoing = true, PlanEndDate = new DateOnly(2025, 7, 1).AddDays(PlanPricingEngine.MaxPeriodDays) });
+
+        Assert.Null(draft);
+        Assert.Equal($"This NDIS plan runs longer than {PlanPricingEngine.MaxPeriodDays} days from the agreement start. Choose an end date instead of Ongoing.", error);
     }
 
     [Fact]

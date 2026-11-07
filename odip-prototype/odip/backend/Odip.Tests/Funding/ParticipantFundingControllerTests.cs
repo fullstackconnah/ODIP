@@ -217,6 +217,7 @@ public class ParticipantFundingControllerTests
             (await kit.Controller.Plans(id, default)).Result,
             (await kit.Controller.CreatePlan(id, Plan(), default)).Result,
             (await kit.Controller.UpdatePlan(id, Guid.NewGuid(), Plan() with { Revision = 1 }, default)).Result,
+            (await kit.Controller.SetMyProvider(id, Guid.NewGuid(), Mine(MyProviderRecord.Recorded, D(2026, 9, 1)), default)).Result,
             (await kit.Controller.DeletePlan(id, Guid.NewGuid(), default)).Result,
             (await kit.Controller.ApplyDatesToProfile(id, Guid.NewGuid(), default)).Result,
         };

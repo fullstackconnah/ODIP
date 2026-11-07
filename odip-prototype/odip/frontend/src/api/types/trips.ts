@@ -65,7 +65,7 @@ export interface CreateTripDto {
 }
 
 export interface UpdateTripDto extends CreateTripDto {
-  status: TripStatus
+  status?: TripStatus
   departureTime?: string
   returnTime?: string
 }
