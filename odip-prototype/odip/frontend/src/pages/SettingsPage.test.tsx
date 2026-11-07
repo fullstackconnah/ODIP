@@ -498,6 +498,18 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     expect(mockSyncMutate).toHaveBeenCalledTimes(2)
     expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
   })
+
+  it('Public Holidays: a rejected sync shows the sentence the server sent in the envelope errors', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
+    const sentence = 'toYear must be greater than or equal to fromYear.'
+    mockSyncMutate.mockImplementation((_vars, opts) =>
+      opts?.onError?.(Object.assign(new Error('Request failed with status code 400'), { response: { status: 400, data: { success: false, errors: [sentence] } } })))
+    renderSettingsPage('/settings?section=holidays')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync holidays' }))
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+  })
 })
 
 describe('SettingsPage — the shell from md: the rail, the open section and the URL', () => {

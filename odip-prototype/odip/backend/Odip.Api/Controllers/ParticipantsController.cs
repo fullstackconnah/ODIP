@@ -7,6 +7,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
@@ -32,8 +33,14 @@ public class ParticipantsController : ControllerBase
     private readonly TimeProvider _clock;
     private readonly ParticipantCreateService _creator;
     private readonly ServiceAgreementApprovalService _agreementApproval;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null, ServiceAgreementApprovalService? agreementApproval = null)
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a participant belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null, ServiceAgreementApprovalService? agreementApproval = null, ICurrentTenant? tenant = null)
     {
+        _tenant = tenant;
         _clock = clock ?? TimeProvider.System;
         _db = db;
         _compatLink = compatLink;
@@ -202,6 +209,7 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Create([FromBody] CreateParticipantDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ChooseOrganisation));
         // A retried "Complete Intake" (the response was lost to a 502 or a dropped connection) answers with the participant the first attempt made.
         var prior = await _creator.FindCompletedReplayAsync(dto, ct);
         if (prior != null)

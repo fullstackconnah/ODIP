@@ -637,13 +637,14 @@ public class RosteringController : ControllerBase
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
 
+        var participantTenantId = await _db.Participants.Where(p => p.Id == dto.ParticipantId).Select(p => p.TenantId).FirstOrDefaultAsync(ct);
         if (dto.ServiceLocationId is { } placeId
-            && !await ServiceLocationUsableAsync(placeId, await _db.Participants.Where(p => p.Id == dto.ParticipantId).Select(p => p.TenantId).FirstOrDefaultAsync(ct), copyFrom?.ServiceLocationId, ct))
+            && !await ServiceLocationUsableAsync(placeId, participantTenantId, copyFrom?.ServiceLocationId, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail(ServiceLocationRefusedMessage));
 
         var shift = new Shift
         {
-            Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
+            Id = Guid.NewGuid(), TenantId = participantTenantId, ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
             // No ShiftPatternId from the request: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
             // Only the server's own split of a shift (copyFrom, R7 auto-roster) carries the link and requirements of the shift it was cut from.
@@ -1965,7 +1966,8 @@ public class RosteringController : ControllerBase
 
         var pattern = new ShiftPattern
         {
-            Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, DefaultUserId = dto.DefaultStaffId,
+            Id = Guid.NewGuid(), TenantId = await _db.Participants.Where(p => p.Id == dto.ParticipantId).Select(p => p.TenantId).FirstAsync(ct),
+            ParticipantId = dto.ParticipantId, DefaultUserId = dto.DefaultStaffId,
             DayOfWeek = dto.DayOfWeek, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
             Ratio = dto.Ratio, NightType = dto.NightType, EffectiveFrom = dto.EffectiveFrom, EffectiveTo = dto.EffectiveTo,
             IsActive = dto.IsActive, Notes = dto.Notes, SupportGroupCode = supportCode
@@ -2159,7 +2161,11 @@ public class RosteringController : ControllerBase
 
         if (row == null)
         {
-            row = new StaffParticipantCompatibility { Id = Guid.NewGuid(), UserId = dto.StaffId, ParticipantId = dto.ParticipantId };
+            row = new StaffParticipantCompatibility
+            {
+                Id = Guid.NewGuid(), UserId = dto.StaffId, ParticipantId = dto.ParticipantId,
+                TenantId = await _db.Participants.Where(p => p.Id == dto.ParticipantId).Select(p => p.TenantId).FirstAsync(ct),
+            };
             _db.StaffParticipantCompatibilities.Add(row);
         }
 

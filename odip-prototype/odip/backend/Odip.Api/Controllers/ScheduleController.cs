@@ -238,7 +238,7 @@ public class ScheduleController : ControllerBase
                 IsManualHandlingCompetent = s.IsManualHandlingCompetent,
                 IsOvernightEligible = s.IsOvernightEligible,
                 TripStatuses = tripStatuses,
-                Availability = availabilityItemsByStaff[s.Id].ToList(),
+                Availability = StaffScreeningMask.Apply(availabilityItemsByStaff[s.Id].ToList(), User, s.Id),
                 PreferredForTrips = prefsByStaff.TryGetValue(s.Id, out var staffPrefs)
                     ? staffPrefs.Select(kv => new TripPreferenceDto(kv.Key, kv.Value)).ToList()
                     : new List<TripPreferenceDto>(),

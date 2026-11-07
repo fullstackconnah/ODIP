@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
@@ -267,6 +269,7 @@ public class ScheduleControllerTests
         db.SaveChanges();
 
         var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        controller.ControllerContext = AsRole("Coordinator", Guid.NewGuid());
         var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -299,6 +302,75 @@ public class ScheduleControllerTests
         Assert.Equal(new DateOnly(2026, 9, 10), legacyItem.StartDate);
         Assert.Equal(new DateOnly(2026, 9, 10), legacyItem.EndDate);
         Assert.Equal("First aid refresher", legacyItem.Notes);
+    }
+
+    private static ControllerContext AsRole(string role, Guid userId) => new()
+    {
+        HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, role), new Claim(ClaimTypes.NameIdentifier, userId.ToString()) }, "test")),
+        },
+    };
+
+    /// <summary>Two staff, each with a leave reason, a recurring-rule note and a legacy note; returns what the given caller sees on the board.</summary>
+    private static async Task<(User Me, User Other, ApiResponse<ScheduleOverviewDto> Body)> BoardAs(string role)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var me = SeedStaff(db);
+        var other = SeedStaff(db);
+        SeedTrip(db, new DateOnly(2026, 9, 10));
+        foreach (var u in new[] { me, other })
+        {
+            db.LeaveRequests.Add(new LeaveRequest
+            {
+                Id = Guid.NewGuid(), UserId = u.Id, LeaveType = LeaveType.Sick, StartDate = new DateOnly(2026, 9, 10), EndDate = new DateOnly(2026, 9, 11),
+                Status = LeaveStatus.Approved, Reason = "Reason " + u.Id, RequestedByUserId = u.Id, RequestedAt = DateTime.UtcNow,
+            });
+            db.RecurringUnavailabilities.Add(new RecurringUnavailability
+            {
+                Id = Guid.NewGuid(), UserId = u.Id, DayOfWeek = DayOfWeek.Thursday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0),
+                EffectiveFrom = new DateOnly(2026, 9, 1), Status = LeaveStatus.Approved, Notes = "Rule " + u.Id, RequestedByUserId = u.Id, RequestedAt = DateTime.UtcNow,
+            });
+            db.StaffAvailabilities.Add(new StaffAvailability
+            {
+                Id = Guid.NewGuid(), UserId = u.Id, AvailabilityType = AvailabilityType.Training, Notes = "Legacy " + u.Id,
+                StartDateTime = new DateOnly(2026, 9, 10).ToDateTime(new TimeOnly(9, 0)), EndDateTime = new DateOnly(2026, 9, 10).ToDateTime(new TimeOnly(12, 0)),
+            });
+        }
+        db.SaveChanges();
+
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db)) { ControllerContext = AsRole(role, me.Id) };
+        var result = await controller.GetScheduleOverview(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30), CancellationToken.None);
+        return (me, other, Assert.IsType<ApiResponse<ScheduleOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value));
+    }
+
+    [Theory]
+    [InlineData("SupportWorker")]
+    [InlineData("ReadOnly")]
+    public async Task AWorkerOrReadOnlyCaller_SeesOthersLeaveButNotWhy_AndKeepsTheirOwnNotes(string role)
+    {
+        var (me, other, body) = await BoardAs(role);
+
+        var theirs = AvailabilityFor(body, other.Id);
+        Assert.Equal(3, theirs.Count); // still shown as away
+        Assert.All(theirs, i => Assert.Null(i.Notes));
+        Assert.Contains(theirs, i => i.Kind == ScheduleAvailabilityKind.Leave && i.StartDate == new DateOnly(2026, 9, 10));
+
+        var mine = AvailabilityFor(body, me.Id);
+        Assert.Equal(3, mine.Count);
+        Assert.All(mine, i => Assert.NotNull(i.Notes));
+    }
+
+    [Theory]
+    [InlineData("Coordinator")]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task ACoordinatorOrAdmin_SeesEveryonesNotes(string role)
+    {
+        var (me, other, body) = await BoardAs(role);
+
+        Assert.All(AvailabilityFor(body, other.Id), i => Assert.NotNull(i.Notes));
+        Assert.All(AvailabilityFor(body, me.Id), i => Assert.NotNull(i.Notes));
     }
 
     [Fact]
