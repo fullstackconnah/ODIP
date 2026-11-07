@@ -147,6 +147,7 @@ public class RestrictivePracticesController : ControllerBase
         {
             Id = Guid.NewGuid(),
             ParticipantId = participantId,
+            TenantId = participant.TenantId,
             Type = row.Type,
             Description = row.Description,
             AuthorisedBy = row.AuthorisedBy,

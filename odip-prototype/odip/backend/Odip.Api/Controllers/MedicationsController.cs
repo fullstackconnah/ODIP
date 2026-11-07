@@ -94,6 +94,7 @@ public class MedicationsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             ParticipantId = participantId,
+            TenantId = participant.TenantId,
             Status = MedicationStatus.Active,
         };
         var answerError = RestraintAnswerError(dto, MedicationStatus.Active, null);
