@@ -303,6 +303,17 @@ describe('AgreementsSection: End early', () => {
     expect(within(status).getByRole('link', { name: 'Open roster' })).toHaveAttribute('href', '/participants/p-1?tab=people#roster')
   })
 
+  it('F7: the removed sentence comes before the roster link, so the notice does not end mid-sentence after Open roster', async () => {
+    endMutate.mockImplementation((_v, o) => o.onSuccess({ agreementEndDate: '2026-11-15', oldShiftsRemaining: { open: 2, assigned: 0, removed: 1 } }))
+    const dialog = await open()
+    await userEvent.type(dateField(dialog), '2026-11-15')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'End early' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    const text = screen.getByRole('status').textContent ?? ''
+    expect(text.indexOf('removed.')).toBeGreaterThan(-1)
+    expect(text.indexOf('removed.')).toBeLessThan(text.indexOf('Open roster'))
+  })
+
   it('on success focus returns to the row it came from', async () => {
     endMutate.mockImplementation((_v, o) => o.onSuccess({ agreementEndDate: '2026-11-15', oldShiftsRemaining: { open: 0, assigned: 0 } }))
     const dialog = await open()
