@@ -220,6 +220,21 @@ public class MedicationAmendmentReasonTests
     }
 
     [Fact]
+    public async Task Amend_HighRiskWithStoredWitnessUserId_NoWitnessSent_Succeeds()
+    {
+        var (_, c, a) = await SeedAmend((m, adm) => { m.IsHighRisk = true; adm.WitnessUserId = Guid.NewGuid(); adm.WitnessName = null; });
+        Assert.IsType<OkObjectResult>((await c.UpdateAdministration(a.Id, AmendDto(), CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task Amend_HighRiskWithNoStoredWitness_WitnessNameSent_SavesIt()
+    {
+        var (db, c, a) = await SeedAmend((m, adm) => { m.IsHighRisk = true; adm.WitnessUserId = null; adm.WitnessName = null; });
+        Assert.IsType<OkObjectResult>((await c.UpdateAdministration(a.Id, AmendDto(witness: "Sam"), CancellationToken.None)).Result);
+        Assert.Equal("Sam", (await db.MedicationAdministrations.AsNoTracking().SingleAsync()).WitnessName);
+    }
+
+    [Fact]
     public async Task Amend_PrnWithoutReason_IsRefused()
     {
         var (db, c, a) = await SeedAmend((m, _) => m.Type = MedicationType.Prn);

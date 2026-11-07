@@ -206,6 +206,32 @@ public class RetentionClockTests
         Assert.Equal(new DateOnly(2034, 3, 1), status.DueOn);
     }
 
+    /// <summary>A shift note (by its shift) and signing evidence (by its snapshot) written after the archive keep the record, so their server-side dates move the clock (H35-1, H35-2).</summary>
+    [Theory]
+    [InlineData("ShiftNote")]
+    [InlineData("ElectronicSigningEvidence")]
+    public async Task A_shift_note_or_signing_evidence_made_after_the_archive_pushes_the_start_out_and_an_older_one_does_not(string kind)
+    {
+        var (db, tenantId, clock) = Rig();
+        var p = Archive(db, tenantId, new DateOnly(2026, 1, 1));
+        var shift = new Shift { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, UserId = Guid.NewGuid(), ServiceDate = new DateOnly(2018, 6, 1), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0) };
+        var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, DraftId = Guid.NewGuid() };
+        db.AddRange(shift, snapshot);
+        void AddAt(DateTime at) => db.Add(kind == "ShiftNote"
+            ? new ShiftNote { Id = Guid.NewGuid(), TenantId = tenantId, ShiftId = shift.Id, AuthorUserId = Guid.NewGuid(), CreatedAt = Before, UpdatedAt = at }
+            : (object)new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = tenantId, SnapshotId = snapshot.Id, CreatedAt = at });
+        AddAt(Before);
+        db.SaveChanges();
+        Assert.Equal(new DateOnly(2026, 1, 1), (await Status(db, tenantId, p, clock))!.Start);
+
+        AddAt(After);
+        db.SaveChanges();
+        var status = (await Status(db, tenantId, p, clock))!;
+
+        Assert.Equal(new DateOnly(2027, 3, 1), status.Start);
+        Assert.Equal(new DateOnly(2034, 3, 1), status.DueOn);
+    }
+
     [Fact]
     public async Task A_later_trip_end_through_a_booking_and_a_later_incident_push_the_start_out()
     {
