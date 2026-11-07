@@ -50,7 +50,7 @@ function RowAction({ action, participantLabel }: { action: BudgetAttentionAction
  * Over, Forecast over and Approaching keep the colours that tell them apart.
  */
 function RiskPill({ status }: { status: BudgetRiskRow['status'] }) {
-  const { label, tone } = BUDGET_RISK_STATUS[status]
+  const { label, tone } = BUDGET_RISK_STATUS[status] ?? { label: status, tone: 'neutral' } // a status newer than this build: its word, not a crash
   return <StatusBadge tone={tone} label={label} />
 }
 
