@@ -90,7 +90,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
       startDate: tripEditForm.startDate,
       durationDays: tripEditForm.durationDays,
       bookingCutoffDate: toOptionalString(tripEditForm.bookingCutoffDate),
-      status: tripEditForm.status,
+      status: tripEditForm.status !== trip.status ? tripEditForm.status : undefined, // untouched: omit, so a newer stored status survives
       leadCoordinatorId: toOptionalString(tripEditForm.leadCoordinatorId),
       minParticipants: toOptionalNumber(tripEditForm.minParticipants),
       maxParticipants: toOptionalNumber(tripEditForm.maxParticipants),

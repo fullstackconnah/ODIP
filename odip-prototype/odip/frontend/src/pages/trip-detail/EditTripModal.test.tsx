@@ -55,6 +55,20 @@ describe('EditTripModal — what Save refuses', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(mutate).toHaveBeenCalledWith({ id: 't1', data: expect.objectContaining({ startDate: '2026-11-01', durationDays: 3 }) }, expect.anything())
   })
+
+  it('omits status when it was not changed, so a newer stored status survives', async () => {
+    const user = await setup()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mutate.mock.calls.at(-1)![0].data.status).toBeUndefined()
+  })
+
+  it('sends status once it was changed', async () => {
+    const user = await setup()
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(await screen.findByRole('option', { name: /Confirmed/ }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mutate.mock.calls.at(-1)![0].data.status).toBe('Confirmed')
+  })
 })
 
 describe('EditTripModal — a refused save', () => {
