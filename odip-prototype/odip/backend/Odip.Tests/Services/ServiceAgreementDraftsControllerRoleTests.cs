@@ -78,6 +78,26 @@ public class ServiceAgreementDraftsControllerRoleTests
         Assert.False(Allows(action, "ReadOnly"));
     }
 
+    /// <summary>Every HTTP action on the controller, found by reflection, so an action added without a roles guard is caught here whatever its verb.</summary>
+    public static TheoryData<string> EveryAction
+    {
+        get
+        {
+            var data = new TheoryData<string>();
+            foreach (var m in typeof(ServiceAgreementDraftsController).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly)
+                         .Where(m => m.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute), true).Length > 0)) data.Add(m.Name);
+            return data;
+        }
+    }
+
+    [Theory, MemberData(nameof(EveryAction))]
+    public void EveryAction_NamesAdminCoordinatorSuperAdmin_AndNoWorker(string action)
+    {
+        foreach (var role in Writers) Assert.True(Allows(action, role), role);
+        Assert.False(Allows(action, "SupportWorker"));
+        Assert.False(Allows(action, "ReadOnly"));
+    }
+
     [Theory, MemberData(nameof(PriceReadActions))]
     public void ReadsOfPrices_AreRestrictedToAdminCoordinatorSuperAdmin(string action)
     {
