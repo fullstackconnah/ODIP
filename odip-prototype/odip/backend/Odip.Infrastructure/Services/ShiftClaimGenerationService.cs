@@ -230,7 +230,7 @@ public partial class ShiftClaimGenerationService
             .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => (g.First().TripClaimId, g.First().ClaimReference, g.First().ClaimStatus));
 
         // A day is claimed once: a shift on a date the participant is on a live trip claim (the same rule as the ledger, so a Rejected or Cancelled claim frees the day) is left out and names that claim.
-        // shortcut: this reads once per run and does not lock against ClaimGenerationService, so a trip claim made at the same moment can still land; upgrade is the per-participant RosterGenerationLock taken in that engine too.
+        // The participant lock taken above is the one a trip claim takes for each booked participant, so a trip claim made at the same moment waits and then sees these lines.
         var tripClaimByDay = new Dictionary<DateOnly, string>();
         foreach (var l in await _db.ClaimLineItems.AsNoTracking()
                      .Where(BudgetLedgerService.ClaimLineStillCounts)
