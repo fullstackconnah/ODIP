@@ -9,7 +9,7 @@ namespace Odip.Infrastructure.DataExport;
 /// gets a leading ' first (OWASP CSV injection).
 /// A phone number (a + then digits and spaces) is exempt: a spreadsheet reads it as a plain number, never a formula.
 /// Values the export formats itself (numbers, dates, enums) use Quote only, so a negative amount stays a number.
-/// BprCsvService keeps its own escaping, because the NDIA's upload format must not change.
+/// BprCsvService keeps its own escaping, because the NDIA's upload format must not change; only the registration number (typed by an Admin) uses Text.
 /// </summary>
 public static class CsvCell
 {
