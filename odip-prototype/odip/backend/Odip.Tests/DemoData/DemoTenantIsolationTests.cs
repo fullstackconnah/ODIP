@@ -96,7 +96,9 @@ public class DemoTenantIsolationTests
             var row = after.Row(change.Key)!;
             var allowed = type switch
             {
-                nameof(AuditLog) => demoIds.Contains(row["EntityId"]),
+                nameof(AuditLog) => demoIds.Contains(row["EntityId"])
+                    // an injury or witness row is the Demo tenant's by the incident it hangs off, which its Created/Deleted changes name
+                    || ((string)row["EntityType"] is nameof(IncidentInjury) or nameof(IncidentWitness) && demoIncidents.Any(id => ((string)row["Changes"]).Contains(id))),
                 nameof(StaffAvailability) => demoUsers.Contains(row["UserId"]),
                 nameof(IncidentReport) => demoUsers.Contains(row["ReportedByUserId"]),
                 nameof(IncidentInjury) or nameof(IncidentWitness) => demoIncidents.Contains(row["IncidentReportId"]),
@@ -148,7 +150,9 @@ public class DemoTenantIsolationTests
         demoEntityIds.UnionWith(DemoTenantEntityIds(db));                      // every row of every tenant table that carries the Demo tenant
         var newAudit = (await db.AuditLogs.ToListAsync()).Where(a => !auditBefore.Contains(a.Id)).ToList();
         Assert.True(newAudit.Count > 100, "the top-up's rows are audited like anyone's");
-        Assert.All(newAudit, a => Assert.Contains(a.EntityId, demoEntityIds));
+        var demoIncidentIds = await db.IncidentReports.Where(i => demoUsers.Contains(i.ReportedByUserId)).Select(i => i.Id.ToString()).ToListAsync();
+        Assert.All(newAudit, a => Assert.True(demoEntityIds.Contains(a.EntityId)
+            || (a.EntityType is nameof(IncidentInjury) or nameof(IncidentWitness) && demoIncidentIds.Any(id => a.Changes.Contains(id))), a.EntityType));
     }
 
     /// <summary>The ids of every row, of every table that has a tenant column, that belongs to the Demo tenant: audit history may describe any of them.</summary>

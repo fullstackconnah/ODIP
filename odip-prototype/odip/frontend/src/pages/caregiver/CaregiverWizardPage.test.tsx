@@ -362,6 +362,25 @@ describe('CaregiverWizardPage — Save and continue later', () => {
     expect(screen.queryByText(/NullReferenceException/)).not.toBeInTheDocument()
   })
 
+  // H29-2: the server limits the name to 150 and the relationship to 100; the inputs stop typing there, and a 400 shows its own words.
+  it('limits the name and relationship inputs', async () => {
+    await open()
+    expect(screen.getByLabelText(/your name/i)).toHaveAttribute('maxlength', '150')
+    expect(screen.getByLabelText(/relationship to the participant/i)).toHaveAttribute('maxlength', '100')
+  })
+
+  it("shows the server's own words for a 400, and keeps the plain line for anything else", async () => {
+    const user = await open()
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    mockSaveDraftMutateAsync.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Your name can be up to 150 characters.'] } } })
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your name can be up to 150 characters.')
+
+    mockSaveDraftMutateAsync.mockRejectedValueOnce({ response: { status: 500, data: { errors: ['boom'] } } })
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save your progress.")
+  })
+
   it('says the progress was saved in a live region that was already on the page, and clears it on the next edit', async () => {
     const user = await open()
     const regionsBefore = screen.queryAllByRole('status')

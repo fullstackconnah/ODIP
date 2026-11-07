@@ -96,7 +96,7 @@ public class ProblemReportsController : ControllerBase
         {
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
             budget.CancelAfter(BoardBudget);
-            result = await _sender.TrySendAsync(report, budget.Token);
+            result = await _sender.TrySendAsync(report, budget.Token, isRetry: false);
         }
         catch (Exception)
         {

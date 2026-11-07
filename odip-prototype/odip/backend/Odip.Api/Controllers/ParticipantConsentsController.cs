@@ -45,7 +45,7 @@ public class ParticipantConsentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantConsentDto>>> Upsert(
         Guid participantId, string consentType, [FromBody] UpsertParticipantConsentDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<ConsentType>(consentType, ignoreCase: true, out var type))
+        if (!Enum.TryParse<ConsentType>(consentType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
             return BadRequest(ApiResponse<ParticipantConsentDto>.Fail("Unrecognised consent type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);

@@ -136,6 +136,25 @@ public class CaregiverControllerTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task Get_TokenLongerThanAGeneratedOne_Returns404_EvenWhenItsHashIsStored()
+    {
+        using var db = CreateDb();
+        var (p, s, raw) = Seed(db);
+        Assert.Equal(43, raw.Length); // a generated token is 32 bytes of base64url, no padding
+        var tooLong = new string('a', 44);
+        db.CaregiverProfileSubmissions.Add(new CaregiverProfileSubmission
+        {
+            Id = Guid.NewGuid(), TenantId = s.TenantId, ParticipantId = p.Id, TokenHash = CaregiverTokenService.Hash(tooLong),
+            Status = CaregiverSubmissionStatus.Draft, CreatedByUserId = Guid.NewGuid(), ExpiresAt = DateTime.UtcNow.AddDays(14),
+        });
+        db.SaveChanges();
+        var controller = MakeController(db);
+
+        Assert.IsType<OkObjectResult>((await controller.Get(raw, CancellationToken.None)).Result); // exactly the generated length still resolves
+        Assert.IsType<NotFoundObjectResult>((await controller.Get(tooLong, CancellationToken.None)).Result);
+    }
+
     [Theory]
     [InlineData(CaregiverSubmissionStatus.Revoked)]
     [InlineData(CaregiverSubmissionStatus.Accepted)]
@@ -217,6 +236,41 @@ public class CaregiverControllerTests
         var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
         Assert.Null(reloaded.Payload);
         Assert.Null(reloaded.CaregiverName);
+    }
+
+    [Theory]
+    [InlineData(151, 0, "Your name can be up to 150 characters.")]
+    [InlineData(200, 0, "Your name can be up to 150 characters.")]
+    [InlineData(10, 101, "Relationship can be up to 100 characters.")]
+    public async Task SaveDraft_TooLong_Returns400WithMessageAndKeepsEarlierDraft(int nameLen, int relLen, string message)
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var controller = MakeController(db);
+        await controller.SaveDraft(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = new PatchParticipantDto() }, CancellationToken.None);
+        var result = await controller.SaveDraft(raw, new CaregiverDraftDto
+        {
+            CaregiverName = new string('a', nameLen), CaregiverRelationship = relLen == 0 ? null : new string('b', relLen), Payload = new PatchParticipantDto(),
+        }, CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(message, Assert.IsType<ApiResponse<object>>(bad.Value).Errors![0]);
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal("Jane Smith", reloaded.CaregiverName);
+        Assert.Null(reloaded.CaregiverRelationship);
+    }
+
+    [Fact]
+    public async Task SaveDraft_NameAndRelationshipAtTheLimit_Saves()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var result = await MakeController(db).SaveDraft(raw, new CaregiverDraftDto
+        {
+            CaregiverName = " " + new string('a', 150) + " ", CaregiverRelationship = new string('b', 100), Payload = new PatchParticipantDto(),
+        }, CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(150, reloaded.CaregiverName!.Length);
     }
 
     [Fact]

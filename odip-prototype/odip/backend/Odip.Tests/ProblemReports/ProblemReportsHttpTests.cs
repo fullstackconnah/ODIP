@@ -289,7 +289,7 @@ public class ProblemReportsHttpTests
     {
         private readonly Func<ProblemReport, CancellationToken, Task<ProblemReportSendResult>> _send;
         public FakeSender(Func<ProblemReport, CancellationToken, Task<ProblemReportSendResult>> send) => _send = send;
-        public Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct) => _send(report, ct);
+        public Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct, bool isRetry = false) => _send(report, ct);
     }
 
     /// <summary>Builds a principal from X-Test-* headers; no X-Test-User header means no credentials at all.</summary>
