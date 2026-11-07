@@ -332,20 +332,22 @@ public class ClaimEditGuardsTests
         Assert.Equal(status, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
     }
 
-    [Fact]
-    public async Task APaidLineOfADraftClaim_StillSavesAsPaid()
+    [Theory]
+    [InlineData(ClaimLineItemStatus.Paid)]
+    [InlineData(ClaimLineItemStatus.PartiallyPaid)]
+    public async Task APaidLineOfADraftClaim_StillSavesAsItsSameStatus(ClaimLineItemStatus status)
     {
         var (db, controller) = Create();
         var (claim, line, _) = Seed(db, TripClaimStatus.Draft);
-        line.Status = ClaimLineItemStatus.Paid;
+        line.Status = status;
         line.PaidAmount = 75m;
         await db.SaveChangesAsync();
 
-        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = 80m }, Ct);
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = status, PaidAmount = 80m }, Ct);
 
         Assert.Equal(200, StatusOf(result));
         db.ChangeTracker.Clear();
-        Assert.Equal(80m, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).PaidAmount);
+        // Only Paid takes the amount; a part-paid line keeps the one it had.        Assert.Equal(status == ClaimLineItemStatus.Paid ? 80m : 75m, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).PaidAmount);
     }
 
     // ── Acceptance: boundaries, the whole status matrix, and the total across a sequence ─────

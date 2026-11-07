@@ -544,7 +544,7 @@ public class ClaimsController : ControllerBase
         var inFile = await _db.ClaimBatchLines.AsNoTracking()
             .Where(b => b.ClaimLineItemId == id && b.Outcome == ClaimBatchLineOutcome.Pending && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
             .Select(b => new { b.Batch.FileName, b.Batch.Status }).FirstOrDefaultAsync(ct);
-        if (inFile != null && (fieldEdit || (inFile.Status == ClaimBatchStatus.Built && dto.Status is ClaimLineItemStatus.Rejected or ClaimLineItemStatus.Paid)))
+        if (inFile != null && (fieldEdit || (inFile.Status == ClaimBatchStatus.Built && dto.Status is ClaimLineItemStatus.Rejected or ClaimLineItemStatus.Paid or ClaimLineItemStatus.PartiallyPaid)))
             return Conflict(ApiResponse<bool>.Fail($"This line is in {inFile.FileName}. Discard that file before changing it."));
 
         // The NDIA has not seen a Draft or Ready claim, so none of its lines can be rejected or paid yet (a line already paid or part-paid can still be re-saved).
