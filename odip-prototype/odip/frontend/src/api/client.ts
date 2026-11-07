@@ -79,6 +79,8 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && (config?.url?.endsWith('/auth/exchange') || config?.url?.endsWith('/auth/microsoft/refresh'))) {
       return Promise.reject(error)
     }
+    // Signing out: no refresh and no second endSession, only the original error.
+    if (error.response?.status === 401 && loggingOut) return Promise.reject(error)
     if (error.response?.status === 401 && !config._retried) {
       config._retried = true
       // A Microsoft session has no Firebase user: it is renewed at the Microsoft refresh, which says whether Microsoft's session is still good.
@@ -94,10 +96,15 @@ apiClient.interceptors.response.use(
               if (microsoft) {
                 const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh', undefined, { timeout: REFRESH_TIMEOUT_MS })
                 const token = res.data.data?.token ?? null
+                // Sign out may have started while the refresh was in flight: writing the token back would undo it, and the request must not be retried.
+                if (loggingOut) return null
                 if (token) localStorage.setItem('odip_token', token)
                 return token
               }
               const { auth } = await import('../lib/firebase')
+              // After a reload Firebase restores its user asynchronously: wait for it, or currentUser is null and a signed-in person is signed out. Never hang on it.
+              let timer: ReturnType<typeof setTimeout> | undefined
+              await Promise.race([auth?.authStateReady(), new Promise(resolve => { timer = setTimeout(resolve, REFRESH_TIMEOUT_MS) })]).catch(() => {}).finally(() => clearTimeout(timer))
               const currentUser = auth?.currentUser
               if (!currentUser) return null
               const idToken = await currentUser.getIdToken(true)
@@ -107,6 +114,7 @@ apiClient.interceptors.response.use(
                 { timeout: REFRESH_TIMEOUT_MS }
               )
               const newToken = exchangeRes.data.data?.token ?? null
+              if (loggingOut) return null
               if (newToken) localStorage.setItem('odip_token', newToken)
               return newToken
             } finally {
