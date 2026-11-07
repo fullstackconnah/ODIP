@@ -51,6 +51,8 @@ function renderFlow(s = shift(), over: { online?: boolean; onClose?: () => void 
 
 const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Submit shift' }))
 const barAlert = () => within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('alert')
+// The sync row is an empty status too, so pick the one with the notice text.
+const barStatus = () => within(screen.getByRole('toolbar', { name: 'Shift actions' })).getAllByRole('status').find(e => e.textContent)!
 const later = () => fireEvent.click(screen.getByRole('button', { name: 'Add details later' }))
 
 describe('FinishFlow: the details page after End shift', () => {
@@ -190,7 +192,7 @@ describe('FinishFlow: the details page after End shift', () => {
     draft({ tappedAt: TAP })
     renderFlow(shift({ status: 'InProgress' }, { actualEnd: null }))
     submit()
-    expect(barAlert()).toHaveTextContent('More than 25 minutes have passed, so your end time is now 5:40 pm. Use Change if you finished earlier.')
+    expect(barStatus()).toHaveTextContent('More than 25 minutes have passed, so your end time is now 5:40 pm. Use Change if you finished earlier.')
     expect(screen.getByRole('heading', { name: 'Ended 5:40 pm' })).toBeInTheDocument()
     expect(h.finish).not.toHaveBeenCalled()
     expect(h.save).not.toHaveBeenCalled()
@@ -207,7 +209,8 @@ describe('FinishFlow: the details page after End shift', () => {
     draft({ tappedAt: TAP, endOverride: '2026-08-17T16:50', adjustmentReason: 'Left early' })
     renderFlow(shift({ status: 'InProgress' }, { actualEnd: null }))
     submit()
-    expect(barAlert()).toHaveTextContent(/^Your tap was renewed. Check your finish time.$/)
+    expect(barStatus()).toHaveTextContent(/^Your tap was renewed. Check your finish time.$/)
+    expect(within(screen.getByRole('toolbar', { name: 'Shift actions' })).queryByRole('alert')).toBeNull()
   })
 
   it('S-1: a queued record from another shift leaves Still to add showing (DD2)', () => {

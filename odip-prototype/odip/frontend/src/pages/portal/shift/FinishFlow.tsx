@@ -86,7 +86,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
   const [editEnd, setEditEnd] = useState(d.endOverride !== null)
   // An edit clears the refusal it may have fixed: a stale "choose a time between" next to a corrected time misleads.
   const set = (patch: Partial<EndDraft>) => { setError(null); setD(prev => ({ ...prev, ...patch, touched: true })) }
-  const [error, setError] = useState<{ message: string; focus?: string; field?: TimesField } | null>(null)
+  const [error, setError] = useState<{ message: string; focus?: string; field?: TimesField; calm?: true } | null>(null)
   const [refusals, setRefusals] = useState<Refusal[]>([])
   const [networkError, setNetworkError] = useState(false)
   // One send per tap: set from the tap to the answer.
@@ -160,7 +160,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
       // The old tap is too old for the server: take a new one, show it, and send on the next press, so what is shown is what is saved.
       const now = new Date().toISOString()
       setD(prev => ({ ...prev, tappedAt: now }))
-      setError({ message: d.endOverride ? 'Your tap was renewed. Check your finish time.' : `More than 25 minutes have passed, so your end time is now ${formatWithTimeZone(now, shift.timeZoneId, { hour: 'numeric', minute: '2-digit' })}. Use Change if you finished earlier.` })
+      setError({ calm: true, message: d.endOverride ? 'Your tap was renewed. Check your finish time.' : `More than 25 minutes have passed, so your end time is now ${formatWithTimeZone(now, shift.timeZoneId, { hour: 'numeric', minute: '2-digit' })}. Use Change if you finished earlier.` })
       return
     }
     if (!later && !complete) {
@@ -256,7 +256,9 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
           </Callout>
         </div>
       )}
-      <ActionBar notice={barError ? (
+      <ActionBar notice={error?.calm ? (
+        <Callout tone="info">{error.message}</Callout>
+      ) : barError ? (
         <p role="alert" className="text-sm text-[var(--color-destructive)]">
           {error ? error.message : "Couldn't save. Check your connection. Your entries are kept: try again."}
         </p>
