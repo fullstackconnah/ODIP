@@ -374,12 +374,28 @@ public class MedicationsController : ControllerBase
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A note describing what was given instead is required when recording a wrong medication administration."));
 
         var now = DateTime.UtcNow;
+
+        // The same checks create runs on the resulting values (an amend that sends no time keeps the stored one). Not the PRN limits: this corrects a record.
+        var administeredAt = dto.AdministeredAt ?? admin.AdministeredAt;
+        if (dto.Status == MedicationAdministrationStatus.Administered)
+        {
+            if (administeredAt is null)
+                return BadRequest(ApiResponse<AdministrationDto>.Fail("The time this dose was given is required."));
+            if (MedicationAdministrationRecorder.IsFutureTime(administeredAt.Value, now))
+                return UnprocessableEntity(ApiResponse<AdministrationDto>.Fail(MedicationAdministrationRecorder.FutureTimeMessage, MedicationErrorCodes.AdministrationTimeOutOfRange));
+            var amendedMed = admin.ParticipantMedication!;
+            if (amendedMed.IsHighRisk && admin.WitnessUserId is null && string.IsNullOrWhiteSpace(admin.WitnessName) && string.IsNullOrWhiteSpace(dto.WitnessName))
+                return BadRequest(ApiResponse<AdministrationDto>.Fail(MedicationAdministrationRecorder.WitnessRequiredMessage));
+            if (amendedMed.Type == MedicationType.Prn && string.IsNullOrWhiteSpace(dto.PrnReason))
+                return BadRequest(ApiResponse<AdministrationDto>.Fail(MedicationAdministrationRecorder.PrnReasonRequiredMessage));
+        }
+
         admin.AmendmentReason = dto.AmendmentReason;
         admin.AmendmentNote = string.IsNullOrWhiteSpace(dto.AmendmentNote) ? null : dto.AmendmentNote.Trim();
         admin.AmendedByName = GetRecordedByName();
         admin.AmendedAt = now;
         admin.Status = dto.Status;
-        admin.AdministeredAt = dto.AdministeredAt;
+        admin.AdministeredAt = administeredAt;
         // Preserve the originally-recorded zone unless the caller supplies a new one — an amend
         // that doesn't touch AdministeredAt (the common case; see RecordAdministrationModal's
         // buildAmendFields) shouldn't wipe out how that original instant should be displayed.

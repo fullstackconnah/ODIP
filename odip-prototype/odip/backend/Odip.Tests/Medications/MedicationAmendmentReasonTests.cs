@@ -162,4 +162,77 @@ public class MedicationAmendmentReasonTests
         var dto = Odip.Infrastructure.Services.MedicationMapping.ToAdministrationDto(a, "P", "M", "D");
         Assert.Equal((MedicationAmendmentReason.WrongPerson, "n", "Cora", at), (dto.AmendmentReason, dto.AmendmentNote, dto.AmendedByName, dto.AmendedAt));
     }
+
+    // Amend runs the create checks on the resulting values (hunt 33, H33-2).
+    private static async Task<(OdipDbContext Db, MedicationsController C, MedicationAdministration A)> SeedAmend(
+        Action<ParticipantMedication, MedicationAdministration> shape)
+    {
+        var (db, c, a) = Seed();
+        var med = await db.ParticipantMedications.SingleAsync();
+        shape(med, a);
+        await db.SaveChangesAsync();
+        return (db, c, a);
+    }
+
+    private static UpdateAdministrationDto AmendDto(DateTime? at = null, string? witness = null, string? prn = null) => new()
+    {
+        Status = MedicationAdministrationStatus.Administered, AdministeredAt = at, WitnessName = witness, PrnReason = prn,
+        AmendmentReason = MedicationAmendmentReason.WrongTime,
+    };
+
+    private static async Task AssertAmendRefusedAsync(ActionResult<ApiResponse<AdministrationDto>> r, int status, string message, OdipDbContext db)
+    {
+        var obj = Assert.IsAssignableFrom<ObjectResult>(r.Result);
+        Assert.Equal(status, obj.StatusCode);
+        Assert.Equal(message, Assert.IsType<ApiResponse<AdministrationDto>>(obj.Value).Errors![0]);
+        Assert.Null((await db.MedicationAdministrations.AsNoTracking().SingleAsync()).AmendedAt);
+    }
+
+    [Fact]
+    public async Task Amend_NullTimeWithNothingStored_IsRefused()
+    {
+        var (db, c, a) = await SeedAmend((_, adm) => adm.AdministeredAt = null);
+        var r = await c.UpdateAdministration(a.Id, AmendDto(), CancellationToken.None);
+        await AssertAmendRefusedAsync(r, 400, "The time this dose was given is required.", db);
+    }
+
+    [Fact]
+    public async Task Amend_FutureTime_IsRefused()
+    {
+        var (db, c, a) = await SeedAmend((_, _) => { });
+        var r = await c.UpdateAdministration(a.Id, AmendDto(DateTime.UtcNow.AddHours(2)), CancellationToken.None);
+        await AssertAmendRefusedAsync(r, 422, "The time this dose was given can't be in the future. Check the time and try again.", db);
+    }
+
+    [Fact]
+    public async Task Amend_HighRiskWithoutWitness_IsRefused()
+    {
+        var (db, c, a) = await SeedAmend((m, _) => m.IsHighRisk = true);
+        var r = await c.UpdateAdministration(a.Id, AmendDto(), CancellationToken.None);
+        await AssertAmendRefusedAsync(r, 400, "A witness is required for high-risk medication administration.", db);
+    }
+
+    [Fact]
+    public async Task Amend_HighRiskWithStoredWitnessName_Succeeds()
+    {
+        var (_, c, a) = await SeedAmend((m, adm) => { m.IsHighRisk = true; adm.WitnessName = "Sam"; });
+        Assert.IsType<OkObjectResult>((await c.UpdateAdministration(a.Id, AmendDto(), CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task Amend_PrnWithoutReason_IsRefused()
+    {
+        var (db, c, a) = await SeedAmend((m, _) => m.Type = MedicationType.Prn);
+        var r = await c.UpdateAdministration(a.Id, AmendDto(), CancellationToken.None);
+        await AssertAmendRefusedAsync(r, 400, "A PRN reason is required when recording an administered PRN dose.", db);
+    }
+
+    [Fact]
+    public async Task Amend_NullTime_KeepsTheStoredTime()
+    {
+        var stored = new DateTime(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
+        var (db, c, a) = await SeedAmend((_, adm) => adm.AdministeredAt = stored);
+        Assert.IsType<OkObjectResult>((await c.UpdateAdministration(a.Id, AmendDto(), CancellationToken.None)).Result);
+        Assert.Equal(stored, (await db.MedicationAdministrations.AsNoTracking().SingleAsync()).AdministeredAt);
+    }
 }
