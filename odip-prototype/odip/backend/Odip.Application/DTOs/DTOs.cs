@@ -2503,11 +2503,11 @@ public record TenantDto(
     DateTime CreatedAt);
 
 public record CreateTenantDto(
-    [property: Required(ErrorMessage = "Enter the organisation name."), StringLength(200)] string Name,
+    [Required(ErrorMessage = "Enter the organisation name."), StringLength(200)] string Name,
     string? EmailDomain);
 
 public record UpdateTenantDto(
-    [property: Required(ErrorMessage = "Enter the organisation name."), StringLength(200)] string Name,
+    [Required(ErrorMessage = "Enter the organisation name."), StringLength(200)] string Name,
     string? EmailDomain,
     bool IsActive);
 
