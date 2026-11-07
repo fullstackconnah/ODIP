@@ -165,7 +165,7 @@ public class EmailIdentityWritersTests
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, "Admin")], "Test");
-        var controller = new StaffController(db)
+        var controller = new StaffController(db, firebaseUserService: new Mock<IFirebaseUserService>().Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
         };
