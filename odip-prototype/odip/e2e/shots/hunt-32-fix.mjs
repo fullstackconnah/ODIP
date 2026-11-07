@@ -70,7 +70,14 @@ try {
     check(vp.name, 'row reads Approved', (await page.getByText('Approved', { exact: true }).count()) >= 1)
     check(vp.name, 'no horizontal scroll', await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     const opts = { touch: vp.touch }
-    checks.push(checkCropHolds(await cropElement(page, callout, path.join(OUT_DIR, `${vp.name}-portal-withdraw-refused-callout.png`), { ...opts, also: page.getByText('Approved', { exact: true }).first() })))
+    // the bordered callout (role=alert) and the list wrapper, not the text inside the callout: the text starts after the icon
+    const box = page.getByRole('alert').filter({ hasText: REFUSED }).first()
+    const list = page.locator('table').first().locator('xpath=..')
+    const crop = await cropElement(page, box, path.join(OUT_DIR, `${vp.name}-portal-withdraw-refused-callout.png`), { ...opts, also: list })
+    checks.push(checkCropHolds(crop))
+    const bb = await box.boundingBox(), lb = await list.boundingBox()
+    const left = Math.min(bb.x, lb.x), right = Math.max(bb.x + bb.width, lb.x + lb.width)
+    check(vp.name, 'crop clip spans the callout container and list card by 8 px', crop.clip.x <= left - 8 && crop.clip.x + crop.clip.width >= right + 8, JSON.stringify({ clip: crop.clip, callout: bb, list: lb }))
     checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${vp.name}-portal-withdraw-refused.png`), opts)).checks)
     await context.close()
   }
