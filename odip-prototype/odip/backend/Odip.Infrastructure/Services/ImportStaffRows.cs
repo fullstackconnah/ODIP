@@ -24,7 +24,7 @@ public static class ImportStaffRows
         ["team leader"] = Position.TeamLeader, ["other"] = Position.Other,
     };
 
-    // [StringLength]/[EmailAddress] on CreateStaffDto. Mobile is checked against the column's 20 (the DTO allows 50, the database holds 20).
+    // [StringLength]/[EmailAddress] on CreateStaffDto. Mobile is checked against the column's 20 (the DTO and the database both allow 20).
     private static readonly Dictionary<string, string> Labels = new()
     {
         [nameof(CreateStaffDto.FirstName)] = "First name", [nameof(CreateStaffDto.LastName)] = "Last name",

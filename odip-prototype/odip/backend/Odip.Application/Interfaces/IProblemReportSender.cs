@@ -2,10 +2,10 @@ using Odip.Domain.Entities;
 
 namespace Odip.Application.Interfaces;
 
-/// <summary>Puts a saved <see cref="ProblemReport"/> on the Work Board as a card. Never throws for a board problem: it returns the outcome.</summary>
+/// <summary>Puts a saved <see cref="ProblemReport"/> on the Work Board as a card. Never throws for a board problem: it returns the outcome. <paramref name="isRetry"/> is true when an earlier try may have made the card without recording it.</summary>
 public interface IProblemReportSender
 {
-    Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct);
+    Task<ProblemReportSendResult> TrySendAsync(ProblemReport report, CancellationToken ct, bool isRetry = false);
 }
 
 /// <param name="Sent">True once a card exists (created now, or adopted from an earlier unknown outcome).</param>

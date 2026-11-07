@@ -208,6 +208,18 @@ public class EmploymentHeroPayrollControllerTests
         Assert.Equal(held ? c.ActualEnd.Value.AddMinutes(-20) : c.ActualEnd, shift.PaidEnd);
     }
 
+    [Fact]
+    public async Task A_check_with_no_dates_is_refused()
+    {
+        var (db, tenant) = await OrgAsync();
+        await using var _ = db;
+
+        var result = await Controller(db, tenant, new StubHttpHandler()).Check(default, default, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains(EmploymentHeroPayrollController.RangeMessage, string.Join(" ", ((ApiResponse<PayrollCheckDto>)bad.Value!).Errors));
+    }
+
     [Theory]
     [InlineData("2026-10-19", "2026-10-06")]
     [InlineData("2026-08-01", "2026-10-19")]
