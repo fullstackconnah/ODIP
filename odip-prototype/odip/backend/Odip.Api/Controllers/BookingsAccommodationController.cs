@@ -188,7 +188,12 @@ public class BookingsController : ControllerBase
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
-            return Conflict(ApiResponse<BookingDetailDto>.Fail("This participant is already booked on this trip."));
+            // The unique (trip, participant) index also keeps a cancelled row; say so, so the coordinator knows to change its status.
+            var cancelled = await _db.ParticipantBookings.AsNoTracking().AnyAsync(b => b.TripInstanceId == dto.TripInstanceId && b.ParticipantId == dto.ParticipantId
+                && b.Id != booking.Id && (b.BookingStatus == BookingStatus.Cancelled || b.BookingStatus == BookingStatus.NoLongerAttending), ct);
+            return Conflict(ApiResponse<BookingDetailDto>.Fail(cancelled
+                ? "This participant has a cancelled booking on this trip. Open it and change its status to rebook them."
+                : "This participant is already booked on this trip."));
         }
         var createdWarnings = await BudgetWarningsAsync(booking, ct);
         return CreatedAtAction(nameof(GetById), new { id = booking.Id },
