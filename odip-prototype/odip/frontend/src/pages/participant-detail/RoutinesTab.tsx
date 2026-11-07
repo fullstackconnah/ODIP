@@ -68,6 +68,17 @@ const EMPTY_FORM: RoutineFormState = {
   startTime: '', endTime: '', isCritical: false, isActive: true,
 }
 
+const routineToForm = (routine: ParticipantRoutineDto): RoutineFormState => ({
+  title: routine.title,
+  description: routine.description,
+  category: routine.category,
+  days: routine.days,
+  startTime: toTimeInputValue(routine.startTime),
+  endTime: toTimeInputValue(routine.endTime),
+  isCritical: routine.isCritical,
+  isActive: routine.isActive,
+})
+
 function RoutineCard({ routine, canWrite, canDelete, onEdit, onDelete }: {
   routine: ParticipantRoutineDto
   canWrite: boolean
@@ -171,20 +182,14 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   useQuickAdd(openCreate, { enabled: canWriteRoutines && !!participantId, focusRef: addRef })
 
   function openEdit(routine: ParticipantRoutineDto) {
-    setForm({
-      title: routine.title,
-      description: routine.description,
-      category: routine.category,
-      days: routine.days,
-      startTime: toTimeInputValue(routine.startTime),
-      endTime: toTimeInputValue(routine.endTime),
-      isCritical: routine.isCritical,
-      isActive: routine.isActive,
-    })
+    setForm(routineToForm(routine))
     setErrors({})
     setModalError(null)
     setModalState({ mode: 'edit', routine })
   }
+
+  // Typed text differs from what the modal opened with (whitespace counts): Escape, the backdrop and the X ask first.
+  const dirty = !!modalState && JSON.stringify(form) !== JSON.stringify(modalState.routine ? routineToForm(modalState.routine) : EMPTY_FORM)
 
   function closeModal() {
     setModalState(null)
@@ -315,6 +320,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       <Modal
         open={!!modalState}
         onClose={closeModal}
+        dirty={dirty}
         title={modalState?.mode === 'edit' ? 'Edit routine' : 'New routine'}
         size="md"
         footer={

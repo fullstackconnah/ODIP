@@ -3,7 +3,7 @@ import { X } from 'lucide-react'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { cn } from '@/lib/utils'
 import { Button } from './Button'
-import { ConfirmDialog } from './ConfirmDialog'
+import { DiscardChangesDialog } from './DiscardChangesDialog'
 
 export type SlideOverProps = {
   open: boolean
@@ -140,18 +140,14 @@ export function SlideOver({
         {footer && <div className={cn('shrink-0 border-t border-border p-[var(--card-pad)]', footerClassName)}>{footer}</div>}
       </div>
 
-      <ConfirmDialog
+      <DiscardChangesDialog
         open={confirmingDiscard}
-        onCancel={() => setConfirmingDiscard(false)}
-        onConfirm={() => {
+        what="panel"
+        onKeep={() => setConfirmingDiscard(false)}
+        onDiscard={() => {
           setConfirmingDiscard(false)
           onClose()
         }}
-        title="Discard changes?"
-        message="You have unsaved changes. If you close this panel now, they will be lost."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="danger"
       />
     </>
   )

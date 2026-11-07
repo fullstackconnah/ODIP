@@ -31,6 +31,12 @@ type RiskEntryFormState = {
 const EMPTY_FORM: RiskEntryFormState = {
   atRiskParty: 'Participant', description: '', mitigationNotes: '', isActive: true,
 }
+const entryToForm = (entry: ParticipantRiskEntryDto): RiskEntryFormState => ({
+  atRiskParty: entry.atRiskParty,
+  description: entry.description,
+  mitigationNotes: entry.mitigationNotes ?? '',
+  isActive: entry.isActive,
+})
 
 function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
   entry: ParticipantRiskEntryDto
@@ -109,16 +115,14 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
   }
 
   function openEdit(entry: ParticipantRiskEntryDto) {
-    setForm({
-      atRiskParty: entry.atRiskParty,
-      description: entry.description,
-      mitigationNotes: entry.mitigationNotes ?? '',
-      isActive: entry.isActive,
-    })
+    setForm(entryToForm(entry))
     setErrors({})
     setModalError(null)
     setModalState({ mode: 'edit', entry })
   }
+
+  // Typed text differs from what the modal opened with (whitespace counts): Escape, the backdrop and the X ask first.
+  const dirty = !!modalState && JSON.stringify(form) !== JSON.stringify(modalState.entry ? entryToForm(modalState.entry) : EMPTY_FORM)
 
   function closeModal() {
     setModalState(null)
@@ -232,6 +236,7 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
       <Modal
         open={!!modalState}
         onClose={closeModal}
+        dirty={dirty}
         title={modalState?.mode === 'edit' ? 'Edit risk entry' : 'Add risk entry'}
         size="md"
         footer={

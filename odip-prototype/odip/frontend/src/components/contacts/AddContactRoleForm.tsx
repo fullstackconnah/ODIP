@@ -205,6 +205,8 @@ export interface AddContactRoleFormProps {
   /** Called after a successful create/update (mutation cache already invalidated). */
   onSaved: () => void
   onCancel: () => void
+  /** Reports whether any field differs from what the form opened with, for a host Modal's `dirty`. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /** One selected role's field-specific inputs, parameterized so the same JSX renders once per
@@ -409,7 +411,7 @@ function RoleFieldsBlock({ role, values, planType, onChange }: {
  * "create new"). Edit mode is unchanged in shape — it always edits exactly one already-persisted
  * role, whose Person is fixed.
  */
-export default function AddContactRoleForm({ participantId, mode, role, onSaved, onCancel }: AddContactRoleFormProps) {
+export default function AddContactRoleForm({ participantId, mode, role, onSaved, onCancel, onDirtyChange }: AddContactRoleFormProps) {
   const primaryHintId = useId()
   const { data: participant } = useParticipant(participantId)
   const createRole = useCreateContactRole()
@@ -429,6 +431,10 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
   const [form, setForm] = useState<ContactFormState>(() =>
     mode === 'edit' && role ? roleToForm(role) : emptyForm(availableRoleTypes[0] ?? 'NextOfKin'),
   )
+  const [openedWith] = useState(form)
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(form) !== JSON.stringify(openedWith))
+  }, [form, openedWith, onDirtyChange])
   const [errors, setErrors] = useState<{ person?: string; roleTypes?: string }>({})
   const [formError, setFormError] = useState<string | null>(null)
 

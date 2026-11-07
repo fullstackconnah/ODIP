@@ -1,7 +1,8 @@
-import { useRef, useId, type ReactNode, type RefObject } from 'react'
+import { useRef, useId, useState, useCallback, type ReactNode, type RefObject } from 'react'
 import { X } from 'lucide-react'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { TAP_AREA } from './tapArea'
+import { DiscardChangesDialog } from './DiscardChangesDialog'
 
 export type ModalProps = {
   open: boolean
@@ -26,6 +27,8 @@ export type ModalProps = {
   hideClose?: boolean
   /** Pins the dialog near the top instead of centring it, for a dialog whose body grows in place (an editor opening) and must not move under the pointer. */
   alignTop?: boolean
+  /** The form inside has unsaved edits. Escape, the backdrop and the X then ask "Discard changes?" (**Keep editing** / **Discard**) instead of closing, as SlideOver does. A footer Cancel that calls `onClose` itself stays an explicit discard, and so does a save that closes the dialog by setting `open` to false. */
+  dirty?: boolean
 }
 
 const SIZE_MAP = {
@@ -35,20 +38,33 @@ const SIZE_MAP = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef, hideClose = false, alignTop = false }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef, hideClose = false, alignTop = false, dirty = false }: ModalProps) {
   const titleId = useId()
   const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  // A dialog closed from outside (open -> false) while the prompt was up must not greet the next open with a stale prompt.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (!open) setConfirmingDiscard(false)
+  }
+  const requestClose = useCallback(() => {
+    if (dirty) setConfirmingDiscard(true)
+    else onClose()
+  }, [dirty, onClose])
+
   // Escape, the Tab trap, scroll lock and focus in / back. Shared with SlideOver; a ConfirmDialog opened over a panel is
   // the topmost layer, so it alone answers Escape.
-  useDialogBehavior({ open, onClose, containerRef: dialogRef, initialFocusRef })
+  useDialogBehavior({ open, onClose: requestClose, containerRef: dialogRef, initialFocusRef })
 
   if (!open) return null
 
   return (
-    // Below lg the fixed bottom nav (AppLayout, z-50, later in the DOM) covers the screen foot: the bottom padding centres the dialog in what is left.
-    <div className={`modal-scrim fixed inset-0 z-50 flex justify-center bg-black/50 ${alignTop ? 'items-start pt-[8vh]' : 'items-center'} pb-[var(--mobile-nav-h)] lg:pb-0`} onClick={closeOnBackdrop ? onClose : undefined}>
+    <>
+    {/* Below lg the fixed bottom nav (AppLayout, z-50, later in the DOM) covers the screen foot: the bottom padding centres the dialog in what is left. */}
+    <div className={`modal-scrim fixed inset-0 z-50 flex justify-center bg-black/50 ${alignTop ? 'items-start pt-[8vh]' : 'items-center'} pb-[var(--mobile-nav-h)] lg:pb-0`} onClick={closeOnBackdrop ? requestClose : undefined}>
       <div
         ref={dialogRef}
         role={role}
@@ -65,7 +81,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
           {/* type="button": the dialog renders inline, so when it is opened from inside a <form> (the Profile
               wizard's embedded Contacts editor) an untyped close button would SUBMIT that form. TAP_AREA: the 28px
               button keeps its look and gets a 44px hit area on touch (R1-07). */}
-          {!hideClose && <button type="button" onClick={onClose} aria-label="Close dialog" className={`${TAP_AREA} p-1 hover:bg-[var(--color-accent)] rounded-lg`}>
+          {!hideClose && <button type="button" onClick={requestClose} aria-label="Close dialog" className={`${TAP_AREA} p-1 hover:bg-[var(--color-accent)] rounded-lg`}>
             <X className="w-5 h-5" />
           </button>}
         </div>
@@ -78,5 +94,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         )}
       </div>
     </div>
+    <DiscardChangesDialog open={confirmingDiscard} what="dialog" onKeep={() => setConfirmingDiscard(false)} onDiscard={() => { setConfirmingDiscard(false); onClose() }} />
+    </>
   )
 }
