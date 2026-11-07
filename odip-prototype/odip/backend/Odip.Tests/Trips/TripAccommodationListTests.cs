@@ -147,4 +147,58 @@ public class TripAccommodationListTests
         Assert.False(Flag(db, a));
         Assert.False(Flag(db, b));
     }
+    private static (OdipDbContext Db, ReservationsController C, TripInstance Trip, AccommodationProperty Active, AccommodationProperty Archived) CheckRig()
+    {
+        var db = CreateDb();
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripName = "Beach Escape", StartDate = new DateOnly(2026, 10, 10), DurationDays = 20, Status = TripStatus.Planning };
+        var active = new AccommodationProperty { Id = Guid.NewGuid(), PropertyName = "Sunshine Beach Retreat" };
+        var archived = new AccommodationProperty { Id = Guid.NewGuid(), PropertyName = "Old Lodge", IsActive = false };
+        db.AddRange(trip, active, archived);
+        db.SaveChanges();
+        return (db, new ReservationsController(db), trip, active, archived);
+    }
+
+    private static void AssertRefused<T>(ActionResult<ApiResponse<T>> result, string message) =>
+        Assert.Equal(message, Assert.Single(Assert.IsType<ApiResponse<T>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors));
+
+    private static CreateReservationDto NewReservation(TripInstance trip, AccommodationProperty property, int fromDay, int toDay) => new()
+    {
+        TripInstanceId = trip.Id, AccommodationPropertyId = property.Id,
+        CheckInDate = new DateOnly(2026, 10, fromDay), CheckOutDate = new DateOnly(2026, 10, toDay), ReservationStatus = ReservationStatus.Booked,
+    };
+
+    [Fact]
+    public async Task Create_RefusesAnArchivedPropertyAndACheckOutThatIsNotAfterCheckIn_AndSavesNothing()
+    {
+        var (db, c, trip, active, archived) = CheckRig();
+        using var _ = db;
+
+        AssertRefused(await c.Create(NewReservation(trip, archived, 10, 14), CancellationToken.None), "This property is archived. Choose an active property.");
+        AssertRefused(await c.Create(NewReservation(trip, active, 14, 10), CancellationToken.None), "Check-out must be after check-in.");
+        AssertRefused(await c.Create(NewReservation(trip, active, 10, 10), CancellationToken.None), "Check-out must be after check-in.");
+
+        Assert.Empty(db.AccommodationReservations);
+    }
+
+    [Fact]
+    public async Task Update_RefusesAMoveToAnArchivedPropertyAndInvertedDates_ButAnEditOnAPropertyArchivedLaterStillSaves()
+    {
+        var (db, c, trip, active, archived) = CheckRig();
+        using var _ = db;
+        var id = await Reserve(c, trip.Id, active.Id, 10, 14);
+        UpdateReservationDto Edit(Guid propertyId, int fromDay, int toDay, string? comments = null) => new()
+        {
+            TripInstanceId = trip.Id, AccommodationPropertyId = propertyId, Comments = comments,
+            CheckInDate = new DateOnly(2026, 10, fromDay), CheckOutDate = new DateOnly(2026, 10, toDay), ReservationStatus = ReservationStatus.Booked,
+        };
+
+        AssertRefused(await c.Update(id, Edit(archived.Id, 10, 14), CancellationToken.None), "This property is archived. Choose an active property.");
+        AssertRefused(await c.Update(id, Edit(active.Id, 14, 10), CancellationToken.None), "Check-out must be after check-in.");
+        Assert.Equal(active.Id, db.AccommodationReservations.Single().AccommodationPropertyId);
+
+        active.IsActive = false;
+        db.SaveChanges();
+        Assert.IsType<OkObjectResult>((await c.Update(id, Edit(active.Id, 10, 14, "late arrival"), CancellationToken.None)).Result);
+        Assert.Equal("late arrival", db.AccommodationReservations.Single().Comments);
+    }
 }

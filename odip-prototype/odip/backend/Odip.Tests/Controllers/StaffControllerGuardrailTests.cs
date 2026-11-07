@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -38,10 +39,11 @@ public class StaffControllerGuardrailTests
         return (new OdipDbContext(options, tenant.Object), tenantId);
     }
 
-    private static StaffController MakeController(OdipDbContext db, string actorRole)
+    // Always a mock: a controller built without one would reach the real Firebase service on every archive or reactivation.
+    private static StaffController MakeController(OdipDbContext db, string actorRole, Mock<IFirebaseUserService>? firebase = null)
     {
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, actorRole)], "Test");
-        return new StaffController(db)
+        return new StaffController(db, firebaseUserService: (firebase ?? new Mock<IFirebaseUserService>()).Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -406,5 +408,100 @@ public class StaffControllerGuardrailTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.False((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    // ── Active flips keep the Firebase account in step (as AdminUsers does) ──
+
+    private static void VerifyDisabled(Mock<IFirebaseUserService> firebase, string email, bool disabled) =>
+        firebase.Verify(f => f.UpdateUserByEmailAsync(email, It.IsAny<string>(), disabled, It.IsAny<CancellationToken>()), Times.Once);
+
+    private static void VerifyNoFirebaseCall(Mock<IFirebaseUserService> firebase) =>
+        firebase.Verify(f => f.UpdateUserByEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+
+    [Fact]
+    public async Task Update_ReactivatingAnArchivedMember_EnablesTheirFirebaseAccount()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        worker.IsActive = false;
+        db.SaveChanges();
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var result = await MakeController(db, "Admin", firebase).Update(worker.Id, EditOf(worker, isActive: true), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        VerifyDisabled(firebase, worker.Email, disabled: false);
+        Assert.True((await db.Users.SingleAsync(u => u.Id == worker.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_ArchivingAMember_DisablesTheirFirebaseAccount()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var result = await MakeController(db, "Admin", firebase).Update(worker.Id, EditOf(worker, isActive: false), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        VerifyDisabled(firebase, worker.Email, disabled: true);
+    }
+
+    [Fact]
+    public async Task Delete_ArchivingAMember_DisablesTheirFirebaseAccount()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var result = await MakeController(db, "Admin", firebase).Delete(worker.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        VerifyDisabled(firebase, worker.Email, disabled: true);
+        Assert.False((await db.Users.SingleAsync(u => u.Id == worker.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_NotChangingActive_MakesNoFirebaseCall()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var result = await MakeController(db, "Admin", firebase).Update(worker.Id, EditOf(worker, mobile: "0400 000 000"), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        VerifyNoFirebaseCall(firebase);
+    }
+
+    [Fact]
+    public async Task RefusedLastAdminArchive_MakesNoFirebaseCall()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        var firebase = new Mock<IFirebaseUserService>();
+        var controller = MakeController(db, "Admin", firebase);
+
+        Assert.Equal(LastAdminMessage, Error(await controller.Update(admin.Id, EditOf(admin, isActive: false), CancellationToken.None)));
+        Assert.Equal(LastAdminMessage, Error(await controller.Delete(admin.Id, CancellationToken.None)));
+        VerifyNoFirebaseCall(firebase);
+    }
+
+    [Fact]
+    public async Task Archiving_WhenFirebaseFails_SavesNothingAndSaysWhereToTurn()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.UpdateUserByEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("service account unusable"));
+        var controller = MakeController(db, "Admin", firebase);
+
+        var update = Assert.IsType<ObjectResult>((await controller.Update(worker.Id, EditOf(worker, isActive: false), CancellationToken.None)).Result);
+        var delete = Assert.IsType<ObjectResult>((await controller.Delete(worker.Id, CancellationToken.None)).Result);
+
+        Assert.Equal(502, update.StatusCode);
+        Assert.Equal(502, delete.StatusCode);
+        Assert.True((await db.Users.SingleAsync(u => u.Id == worker.Id)).IsActive);
     }
 }

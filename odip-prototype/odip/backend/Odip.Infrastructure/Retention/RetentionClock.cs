@@ -131,6 +131,17 @@ public static class RetentionClock
         await PushLatest<ParticipantChecklistItem, DateTime>("UpdatedAt");
         await PushLatest<ParticipantCommunityAccessRiskItem, DateTime>("UpdatedAt");
 
+        // A shift note is kept with its shift, and signing evidence with its snapshot, so one written after the archive pushes the date out.
+        // UpdatedAt, not CreatedAt: the server sets it on every edit, and the phone-sent create time is held within 48 hours of now.
+        foreach (var r in await Q<ShiftNote>().Where(n => n.TenantId == tenantId)
+            .Join(Q<Shift>().Where(s => s.TenantId == tenantId && archived.Any(a => a.Id == s.ParticipantId)), n => n.ShiftId, s => s.Id, (n, s) => new { s.ParticipantId, n.UpdatedAt })
+            .GroupBy(x => x.ParticipantId).Select(g => new { Id = g.Key, Last = g.Max(x => x.UpdatedAt) }).ToListAsync(ct))
+            Push(r.Id, LocalDate(r.Last));
+        foreach (var r in await Q<ElectronicSigningEvidence>().Where(e => e.TenantId == tenantId)
+            .Join(Q<ElectronicSigningSnapshot>().Where(s => s.TenantId == tenantId && archived.Any(a => a.Id == s.ParticipantId)), e => e.SnapshotId, s => s.Id, (e, s) => new { s.ParticipantId, e.CreatedAt })
+            .GroupBy(x => x.ParticipantId).Select(g => new { Id = g.Key, Last = g.Max(x => x.CreatedAt) }).ToListAsync(ct))
+            Push(r.Id, LocalDate(r.Last));
+
         return starts;
     }
 }

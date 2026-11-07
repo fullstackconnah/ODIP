@@ -209,3 +209,45 @@ describe('AccommodationTab — form labels and cost', () => {
     expect(screen.getByRole('button', { name: '+ Create new' })).toHaveClass(...TAP_AREA.split(' '))
   })
 })
+
+describe('AccommodationTab — reservation form follows the server rules', () => {
+  const trip = { startDate: '2026-10-10T00:00:00', endDate: '2026-10-14T00:00:00' } as TripDetailDto
+  const oneDay = { startDate: '2026-10-10T00:00:00', endDate: '2026-10-10T00:00:00' } as TripDetailDto
+  const withProperties = () => {
+    properties.length = 0
+    properties.push(property(), property({ id: 'ap2', propertyName: 'Old Lodge', isActive: false }), property({ id: 'ap3', propertyName: 'Closed Cabin', isActive: false }))
+  }
+  const optionNames = () => screen.getAllByRole('option').map(o => o.textContent ?? '')
+
+  it('offers active properties only on the add form', async () => {
+    const user = userEvent.setup()
+    withProperties()
+    render(<MemoryRouter><AccommodationTab tripId="t1" trip={trip} accommodation={[]} canWrite /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Add Accommodation' }))
+    await user.click(screen.getByRole('combobox'))
+    const names = optionNames()
+    expect(names.some(n => n.includes('Sunshine Beach Retreat'))).toBe(true)
+    expect(names.some(n => n.includes('Old Lodge'))).toBe(false)
+  })
+
+  it('keeps the reservation\'s own archived property on the edit form, marked, and hides other archived ones', async () => {
+    const user = userEvent.setup()
+    withProperties()
+    render(<MemoryRouter><AccommodationTab tripId="t1" trip={trip} accommodation={[reservation({ accommodationPropertyId: 'ap2', propertyName: 'Old Lodge' })]} canWrite /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Edit reservation' }))
+    await user.click(screen.getByRole('combobox'))
+    const names = optionNames()
+    expect(names.some(n => n.includes('Old Lodge') && n.endsWith('(archived)'))).toBe(true)
+    expect(names.some(n => n.includes('Closed Cabin'))).toBe(false)
+  })
+
+  it('opens a one-day trip with check-out the next day, and sets the check-out minimum to the day after check-in', async () => {
+    const user = userEvent.setup()
+    withProperties()
+    render(<MemoryRouter><AccommodationTab tripId="t1" trip={oneDay} accommodation={[]} canWrite /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Add Accommodation' }))
+    expect(screen.getByLabelText('Check-in')).toHaveValue('2026-10-10')
+    expect(screen.getByLabelText('Check-out')).toHaveValue('2026-10-11')
+    expect(screen.getByLabelText('Check-out')).toHaveAttribute('min', '2026-10-11')
+  })
+})

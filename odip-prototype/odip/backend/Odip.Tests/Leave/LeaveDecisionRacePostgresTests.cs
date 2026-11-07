@@ -116,4 +116,23 @@ public class LeaveDecisionRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(LeaveStatus.Cancelled, status);
         Assert.Empty(outbox);
     }
+
+    [SkippableFact(DisplayName = "Postgres: a decline then a withdraw of the same Pending leave: the withdraw is 409, the leave stays Declined, no outbox row")]
+    public async Task DeclineWins_TheWithdrawIs409_AndSavesNothing()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, coordinatorId, workerId, leaveId) = await SeedAsync();
+        await using var coordinatorDb = Open(tenantId);
+        await using var workerDb = Open(tenantId);
+        await workerDb.LeaveRequests.SingleAsync(l => l.Id == leaveId, Ct);
+
+        Assert.IsType<OkObjectResult>((await new LeaveController(coordinatorDb) { ControllerContext = Caller(coordinatorId, UserRole.Coordinator) }.DeclineLeave(leaveId, new LeaveDecisionDto(), Ct)).Result);
+        var portal = new PortalController(workerDb, Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId)) { ControllerContext = Caller(workerId, UserRole.SupportWorker) };
+        var withdraw = Assert.IsType<ConflictObjectResult>((await portal.CancelMyLeaveRequest(leaveId, Ct)).Result);
+
+        Assert.Equal("Only pending requests can be withdrawn.", Assert.IsType<ApiResponse<LeaveRequestDto>>(withdraw.Value).Errors!.Single());
+        var (status, outbox) = await StoredAsync(tenantId, leaveId);
+        Assert.Equal(LeaveStatus.Declined, status);
+        Assert.Empty(outbox);
+    }
 }
