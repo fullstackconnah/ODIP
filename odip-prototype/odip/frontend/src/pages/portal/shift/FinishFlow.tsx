@@ -160,7 +160,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
       // The old tap is too old for the server: take a new one, show it, and send on the next press, so what is shown is what is saved.
       const now = new Date().toISOString()
       setD(prev => ({ ...prev, tappedAt: now }))
-      setError({ message: `More than 25 minutes have passed, so your end time is now ${formatWithTimeZone(now, shift.timeZoneId, { hour: 'numeric', minute: '2-digit' })}. Use Change if you finished earlier.` })
+      setError({ message: d.endOverride ? 'Your tap was renewed. Check your finish time.' : `More than 25 minutes have passed, so your end time is now ${formatWithTimeZone(now, shift.timeZoneId, { hour: 'numeric', minute: '2-digit' })}. Use Change if you finished earlier.` })
       return
     }
     if (!later && !complete) {
@@ -217,7 +217,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
   }
 
   // One notice slot: a bar error first; the dose callout and the sync row already speak when a dose or an unsent change is waiting.
-  const stillToAdd = !complete && !dosesBlock && records.length === 0
+  const stillToAdd = !complete && !dosesBlock && !records.some(r => r.shiftId === shift.id)
   const barError = (error && !INLINE_FIELD.test(error.field ?? '')) || networkError
   return (
     <div id="finish" ref={topRef} tabIndex={-1} className="space-y-4 outline-none">

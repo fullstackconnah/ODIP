@@ -75,7 +75,7 @@ public record AgreementCheckPoolDto
     public decimal AlreadyOverBy { get; init; }
     /// <summary>The periods the agreement touches, in date order.</summary>
     public List<AgreementCheckPeriodDto> Periods { get; init; } = new();
-    /// <summary>What this agreement and the participant's other active agreements cost together in this pool, over all its periods.</summary>
+    /// <summary>What this agreement and the participant's other active agreements cost together in this pool, in the periods this agreement touches (the same periods as AgreementCost).</summary>
     public decimal CombinedCost { get; init; }
     /// <summary>How far the combined cost passes the money available, when the combined warning applies to this pool (see <see cref="AgreementCheckDto.CombinedOver"/>); 0 otherwise, and always 0 for a pool with no limit recorded.</summary>
     public decimal CombinedOverBy { get; init; }

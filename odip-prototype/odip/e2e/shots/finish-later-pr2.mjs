@@ -321,6 +321,23 @@ try {
       await context.close()
     }
 
+    // b-tap-stale-override: a stale tap with a changed finish time says so shortly instead of naming a time that is not used.
+    {
+      const local = wall(at(-45), 'Australia/Sydney')
+      const draft = { open: true, touched: true, tappedAt: at(-40).toISOString(), endOverride: `${local.date}T${local.time.slice(0, 5)}`, adjustmentReason: 'Left early', kilometres: '0', preTravelNone: true, postTravelNone: true, anythingToReport: 'no', nothingToHandOver: true, nothingToNote: true }
+      const { context, page } = await open(browser, vp, { draft })
+      await route(page, world())
+      await gotoShift(page)
+      await page.getByRole('heading', { level: 2, name: /^Ended / }).waitFor({ state: 'visible', timeout: 60_000 })
+      await bar(page).getByRole('button', { name: 'Submit shift' }).click()
+      const notice = page.getByText('Your tap was renewed. Check your finish time.')
+      await notice.waitFor({ state: 'visible', timeout: 30_000 })
+      await page.waitForTimeout(400)
+      check(t('b-tap-stale-override: the short notice shows and names no time'), (await notice.count()) === 1 && (await page.getByText(/More than 25 minutes/).count()) === 0)
+      await crop(page, page.locator('#finish'), 'finish-stale-tap-override', vp)
+      await context.close()
+    }
+
     // b-handover-limit: the handover is full at 2000 characters; the counter says so and no more can be typed.
     {
       const draft = { open: true, touched: true, tappedAt: NOW.toISOString(), handoverText: 'a'.repeat(2000) }
