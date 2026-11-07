@@ -12,6 +12,8 @@ export type DropdownItem = {
   icon?: ReactNode
   description?: string
   disabled?: boolean
+  /** Tints the row with the destructive colour. */
+  danger?: boolean
 }
 
 type DropdownProps = {
@@ -376,7 +378,7 @@ export function Dropdown({
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
               // min-h --tap-min: 44px rows under a coarse pointer (a phone's row actions live here), 0px and so unchanged on a mouse.
-              className={`w-full min-h-[var(--tap-min)] flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
+              className={`w-full min-h-[var(--tap-min)] flex items-center gap-3 px-3 py-1.5 text-sm ${item.danger ? 'text-[var(--color-destructive)]' : 'text-[var(--color-foreground)]'} text-left transition-colors ${
                 item.disabled
                   ? `cursor-not-allowed ${item.description ? '' : 'opacity-40'}`
                   : focusedIndex === idx

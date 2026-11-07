@@ -83,7 +83,7 @@ export function AgreementsSection({ participantId }: { participantId: string }) 
     const download: RowMenuItem = { label: 'Download PDF', icon: <Download className="w-4 h-4" aria-hidden="true" />, onSelect: () => pdf.mutate({ participantId, id: r.id }) }
     const visiblePdf = { label: 'PDF', onClick: () => pdf.mutate({ participantId, id: r.id }) }
     if (r.status === 'Draft' && r.newest) {
-      return { visible: { label: 'Edit', to: link(g) }, menu: [{ label: 'Delete draft', icon: <Trash2 className="w-4 h-4" aria-hidden="true" />, onSelect: () => setDialog({ kind: 'delete', row: r, group: g }) }] }
+      return { visible: { label: 'Edit', to: link(g) }, menu: [{ label: 'Delete draft', icon: <Trash2 className="w-4 h-4" aria-hidden="true" />, onSelect: () => setDialog({ kind: 'delete', row: r, group: g }), danger: true }] }
     }
     if (r.status !== 'Approved' && r.status !== 'Upcoming') return { visible: visiblePdf, menu: [] }
     // A newer approved revision that starts on or before this one's end owns what is left of it, so ending this one early would end nothing.

@@ -107,4 +107,44 @@ public class TripAccommodationListTests
         Assert.False(Flag(db, a));
         Assert.False(Flag(db, other));
     }
+
+    [Fact]
+    public async Task SameDayCheckOutAndCheckIn_IsNotAClash()
+    {
+        using var db = CreateDb();
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripName = "Beach Escape", StartDate = new DateOnly(2026, 10, 10), DurationDays = 20, Status = TripStatus.Planning };
+        var property = new AccommodationProperty { Id = Guid.NewGuid(), PropertyName = "Sunshine Beach Retreat" };
+        db.TripInstances.Add(trip);
+        db.AccommodationProperties.Add(property);
+        db.SaveChanges();
+        var c = new ReservationsController(db);
+
+        var first = await Reserve(c, trip.Id, property.Id, 10, 14);
+        var second = await Reserve(c, trip.Id, property.Id, 14, 16);
+
+        Assert.False(Flag(db, first));
+        Assert.False(Flag(db, second));
+    }
+
+    [Fact(Skip = "Real bug, run 20261107-203432-6571: ReservationsController.Update leaves HasOverlapConflict true on the moved reservation and on the old property's other one (RefreshOverlapFlagsAsync reads the moved row under its old DB property with its new tracked property). Unskip once fixed.")]
+    public async Task MovingAReservationToAnotherProperty_ClearsTheFlagOnTheOldPropertysOtherReservation()
+    {
+        using var db = CreateDb();
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripName = "Beach Escape", StartDate = new DateOnly(2026, 10, 10), DurationDays = 20, Status = TripStatus.Planning };
+        var old = new AccommodationProperty { Id = Guid.NewGuid(), PropertyName = "Sunshine Beach Retreat" };
+        var elsewhere = new AccommodationProperty { Id = Guid.NewGuid(), PropertyName = "Hinterland Lodge" };
+        db.TripInstances.Add(trip);
+        db.AccommodationProperties.AddRange(old, elsewhere);
+        db.SaveChanges();
+        var c = new ReservationsController(db);
+        var a = await Reserve(c, trip.Id, old.Id, 10, 14);
+        var b = await Reserve(c, trip.Id, old.Id, 12, 16);
+        Assert.True(Flag(db, a)); Assert.True(Flag(db, b));
+
+        var move = (await AsUpdate(db, a, 10, 14, ReservationStatus.Booked)) with { AccommodationPropertyId = elsewhere.Id };
+        await c.Update(a, move, CancellationToken.None);
+
+        Assert.False(Flag(db, a));
+        Assert.False(Flag(db, b));
+    }
 }

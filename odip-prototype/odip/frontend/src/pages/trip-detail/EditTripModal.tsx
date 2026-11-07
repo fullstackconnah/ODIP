@@ -44,6 +44,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const { data: allStaff = [] } = useStaff()
   const [tripEditForm, setTripEditForm] = useState<TripEditFormState | null>(null)
   const initialized = useRef(false)
+  const openedStatus = useRef(trip.status) // the status the form opened with, not the live one
   const [errors, setErrors] = useState<{ startDate?: string; durationDays?: string }>({})
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
       startDate: tripEditForm.startDate,
       durationDays: tripEditForm.durationDays,
       bookingCutoffDate: toOptionalString(tripEditForm.bookingCutoffDate),
-      status: tripEditForm.status,
+      status: tripEditForm.status !== openedStatus.current ? tripEditForm.status : undefined, // untouched: omit, so a newer stored status survives
       leadCoordinatorId: toOptionalString(tripEditForm.leadCoordinatorId),
       minParticipants: toOptionalNumber(tripEditForm.minParticipants),
       maxParticipants: toOptionalNumber(tripEditForm.maxParticipants),

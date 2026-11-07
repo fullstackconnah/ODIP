@@ -846,7 +846,7 @@ export function RowActions({ children, overlay = false, className = '' }: { chil
 }
 
 /** `disabled` keeps the item visible with its reason in `description` (the icon's title from md up, the menu line on a phone). */
-export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => void; to?: string; disabled?: boolean; description?: string; /** The icon button's accessible name when the label alone would not tell two rows apart. */ ariaLabel?: string }
+export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => void; to?: string; disabled?: boolean; description?: string; /** Tints the item with the destructive colour (a delete); archive stays neutral. */ danger?: boolean; /** The icon button's accessible name when the label alone would not tell two rows apart. */ ariaLabel?: string }
 
 /**
  * One set of row actions, two presentations. From md up the items are icon buttons in a `RowActions overlay` (revealed on hover, the way a desk
@@ -863,7 +863,7 @@ export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string })
         {items.map(item => item.to ? (
           <Button key={item.label} to={item.to} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.ariaLabel ?? item.label} onClick={e => e.stopPropagation()}>{item.icon}</Button>
         ) : (
-          <Button key={item.label} variant="ghost" size="sm" iconOnly title={item.disabled && item.description ? item.description : item.label} aria-label={item.ariaLabel ?? item.label} disabled={item.disabled} onClick={e => { e.stopPropagation(); item.onSelect?.() }}>{item.icon}</Button>
+          <Button key={item.label} variant={item.danger ? 'ghost-danger' : 'ghost'} size="sm" iconOnly title={item.disabled && item.description ? item.description : item.label} aria-label={item.ariaLabel ?? item.label} disabled={item.disabled} onClick={e => { e.stopPropagation(); item.onSelect?.() }}>{item.icon}</Button>
         ))}
       </RowActions>
       {/* The panel is portalled, but React still bubbles its events to the row: keep a row that opens on click from opening. */}
@@ -872,7 +872,7 @@ export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string })
           variant="icon"
           label={`More actions for ${name}`}
           icon={<MoreHorizontal className="w-5 h-5" aria-hidden="true" />}
-          items={items.map(item => ({ value: item.label, label: item.label, icon: item.icon, disabled: item.disabled, description: item.description }))}
+          items={items.map(item => ({ value: item.label, label: item.label, icon: item.icon, disabled: item.disabled, description: item.description, danger: item.danger }))}
           onSelect={value => { const item = items.find(i => i.label === value); if (item) run(item) }}
           triggerClassName="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
         />

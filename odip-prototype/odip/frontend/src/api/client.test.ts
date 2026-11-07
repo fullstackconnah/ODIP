@@ -346,6 +346,7 @@ describe('a 401 on any other request', () => {
         await vi.advanceTimersByTimeAsync(200)
         await ending
         expect(logouts(requests)).toHaveLength(1)
+        expect(vi.getTimerCount()).toBe(0)
       } finally {
         vi.useRealTimers()
         jsdomNoise.mockRestore()
