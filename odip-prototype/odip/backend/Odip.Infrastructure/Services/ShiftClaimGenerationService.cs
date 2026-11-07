@@ -300,9 +300,9 @@ public partial class ShiftClaimGenerationService
         // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
         // shifts are left out with the reason, never dropped silently. A participant funded another way is never claimed, even with an NDIS number still on file.
         var noNdisNumber = ClaimFunding.IsOtherFunded(participant)
-            ? $"{participant.FullName}: {ClaimFunding.OtherFundedNotClaimed}"
+            ? ClaimFunding.OtherFundedNotClaimed
             : string.IsNullOrWhiteSpace(participant.NdisNumber)
-                ? $"{participant.FullName}: NDIS number missing. Add it to the participant's profile, then generate the claim again."
+                ? "NDIS number missing. Add it to the participant's profile, then generate the claim again."
                 : null;
         foreach (var shift in shifts)
         {
@@ -314,7 +314,7 @@ public partial class ShiftClaimGenerationService
             }
             if (heldBy.TryGetValue(shift.Id, out var heldClaim))
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"It is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
                 continue;
             }
             if (cancelToday is { } today && NotClaimableCancellation(shift, today, zone) is { } notYet)
@@ -326,13 +326,13 @@ public partial class ShiftClaimGenerationService
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say. Approved extra time that cannot be claimed (over a hard limit, outside the shift's date,
             // or a window nothing prices) is left out on its own: the shift is claimed without it and the extra time is listed with the reason.
             var window = windows[shift.Id];
-            string? extraReason = window.CannotClaimExtraBecause is { } cannot ? $"{participant.FullName}: {cannot}. The shift is claimed without it; add the extra time as a manual claim."
+            string? extraReason = window.CannotClaimExtraBecause is { } cannot ? $"{cannot}. The shift is claimed without it; add the extra time as a manual claim."
                 : extraRefusal.GetValueOrDefault(shift.Id);
             var outcome = PriceOn(shift, extraReason is null ? window.Priced : window.WithoutExtra ?? window.Priced, zone);
             if (extraReason is null && window.WithoutExtra is not null && !outcome.IsPriced)
             {
                 outcome = PriceOn(shift, window.WithoutExtra, zone);
-                if (outcome.IsPriced) extraReason = $"{participant.FullName}: the extra time could not be priced ({outcome.NotPricedSentence}). The shift is claimed without it; add the extra time as a manual claim.";
+                if (outcome.IsPriced) extraReason = $"The extra time could not be priced ({outcome.NotPricedSentence}). The shift is claimed without it; add the extra time as a manual claim.";
             }
             if (!outcome.IsPriced)
             {
@@ -365,7 +365,7 @@ public partial class ShiftClaimGenerationService
                 && SupportTypeCheck.IsAmbiguousForDay(catalogueItems.Contains(l.CatalogueItem) ? catalogueItems : personalCareRows, l.DayType, participant.IsIntensiveSupport, l.Date));
             if (ambiguous is not null)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"{participant.FullName}: more than one rate matches this support type on {ambiguous.Date:d MMM yyyy}.") });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"More than one rate matches this support type on {ambiguous.Date:dd/MM/yyyy}.") });
                 continue;
             }
 
@@ -393,13 +393,13 @@ public partial class ShiftClaimGenerationService
         if (lineItems.Count == 0)
         {
             // A cancellation is one shift (or a participant's few): its own reason is the refusal, not the date-range wording.
-            if (cancelToday is not null) throw new NothingClaimableException(leftOut.Count == 1 ? leftOut[0].Reason : NothingClaimable(leftOut), leftOut);
+            if (cancelToday is not null) throw new NothingClaimableException(leftOut.Count == 1 ? $"{participant.FullName}: {leftOut[0].Reason}" : NothingClaimable(participant.FullName, leftOut), leftOut);
             // Nothing priced because no row of the group is valid on any of these dates (the catalogue starts after them): say so, the same way the trip engine does.
             if (leftOut.All(l => l.Reason == NoCatalogueRateSentence) && !shifts.Any(s => RowsOf(s).Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
                 throw new InvalidOperationException(FormattableString.Invariant(
                     $"No catalogue row covers these shifts' dates ({shifts[0].ServiceDate:dd/MM/yyyy} to {shifts[^1].ServiceDate:dd/MM/yyyy}). Import the catalogue for that period first."));
             // There ARE completed, unclaimed shifts here: none of them could be priced, so the refusal says they were left out, and why.
-            throw new NothingClaimableException(NothingClaimable(leftOut), leftOut);
+            throw new NothingClaimableException(NothingClaimable(participant.FullName, leftOut), leftOut);
         }
 
         return (lineItems, leftOut, participant);
@@ -420,7 +420,7 @@ public partial class ShiftClaimGenerationService
         const string Manual = "The shift is claimed without it; add the extra time as a manual claim if the budget allows.";
         if (_ledger is null || MoneyTenantIdFor(participant.TenantId) is not { } moneyTenantId)
         {
-            foreach (var s in withExtra) refusals[s.Id] = $"{participant.FullName}: the budget could not be checked, so the extra time was left out. {Manual}";
+            foreach (var s in withExtra) refusals[s.Id] = $"The budget could not be checked, so the extra time was left out. {Manual}";
             return refusals;
         }
         var extras = new List<(Guid ShiftId, DateOnly ServiceDate, IReadOnlyList<ShiftCostPart> Increment)>();
@@ -430,7 +430,7 @@ public partial class ShiftClaimGenerationService
             var worked = priceOn(s, windows[s.Id].Priced, zone);
             var held = priceOn(s, windows[s.Id].WithoutExtra!, zone);
             if (!worked.IsPriced) continue;   // the main loop leaves it out with the pricing reason
-            if (!held.IsPriced) { refusals[s.Id] = $"{participant.FullName}: the budget could not be checked, so the extra time was left out. {Manual}"; continue; }
+            if (!held.IsPriced) { refusals[s.Id] = $"The budget could not be checked, so the extra time was left out. {Manual}"; continue; }
             var increment = ShiftPriceEstimator.PartsOf(worked)
                 .Concat(ShiftPriceEstimator.PartsOf(held).Select(p => p with { Amount = -p.Amount, Hours = -p.Hours }))
                 .GroupBy(p => (p.Date, p.PaceCategory)).Select(g => new ShiftCostPart(g.Key.Date, g.Key.PaceCategory, g.Sum(p => p.Amount), g.Sum(p => p.Hours)))
@@ -438,7 +438,7 @@ public partial class ShiftClaimGenerationService
             if (increment.Count > 0) extras.Add((s.Id, s.ServiceDate, increment));
         }
         foreach (var (shiftId, over) in await _ledger.ExtraTimeOverBudgetAsync(moneyTenantId, participant.Id, extras, ct))
-            refusals[shiftId] = $"{participant.FullName}: the extra time would take {over} over its budget (hard limit). {Manual}";
+            refusals[shiftId] = $"The extra time would take {over} over its budget (hard limit). {Manual}";
         return refusals;
     }
 
@@ -468,10 +468,10 @@ public partial class ShiftClaimGenerationService
     /// The refusal when shifts were found but none could be claimed: how many were left out and why, grouped by reason. "No completed, unclaimed shifts found" would be untrue here
     /// (they are there, and are still waiting), so it says they were left out instead.
     /// </summary>
-    private static string NothingClaimable(IReadOnlyList<ShiftClaimLeftOutDto> leftOut)
+    private static string NothingClaimable(string participantName, IReadOnlyList<ShiftClaimLeftOutDto> leftOut)
     {
         var count = leftOut.Count;
-        var why = string.Join(" ", leftOut.GroupBy(l => l.Reason).Select(g => count > 1 ? $"{g.Key.TrimEnd('.')} ({g.Count()} {(g.Count() == 1 ? "shift" : "shifts")})." : g.Key));
+        var why = string.Join(" ", leftOut.GroupBy(l => l.Reason).Select(g => count > 1 ? $"{participantName}: {g.Key.TrimEnd('.')} ({g.Count()} {(g.Count() == 1 ? "shift" : "shifts")})." : $"{participantName}: {g.Key}"));
         return $"Nothing in this date range could be claimed: {count} completed, unclaimed {(count == 1 ? "shift was" : "shifts were")} left out. {why}";
     }
 

@@ -87,11 +87,11 @@ public partial class ShiftClaimGenerationService
         var cancelled = new List<Shift>();
         foreach (var shift in shifts)
         {
-            string? why = shift.ParticipantId != participant.Id ? $"{participant.FullName}: this shift moved to another participant, so it can't be claimed again."
-                : takenBy.TryGetValue(shift.Id, out var other) ? $"{participant.FullName}: it is now on claim {other}."
+            string? why = shift.ParticipantId != participant.Id ? $"This shift moved to another participant, so it can't be claimed again."
+                : takenBy.TryGetValue(shift.Id, out var other) ? $"It is now on claim {other}."
                 : shift.Status == ShiftStatus.Completed ? null
                 : shift.Status == ShiftStatus.Cancelled && cancelLines.ContainsKey(shift.Id) ? null
-                : $"{participant.FullName}: this shift changed since it was claimed ({shift.Status.ToString().ToLowerInvariant()} now), so it can't be claimed again.";
+                : $"This shift changed since it was claimed ({shift.Status.ToString().ToLowerInvariant()} now), so it can't be claimed again.";
             if (why is null && shift.Status == ShiftStatus.Completed && mixed.Contains(shift.Id)) throw new ClaimAgainRefusedException(MixedHandFlip);
             if (why is not null) leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = why });
             else (shift.Status == ShiftStatus.Cancelled ? cancelled : completed).Add(shift);

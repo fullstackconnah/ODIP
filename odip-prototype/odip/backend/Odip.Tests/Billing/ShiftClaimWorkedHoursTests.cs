@@ -223,7 +223,9 @@ public class ShiftClaimWorkedHoursTests
         var result = await engine.GenerateAsync(person.Id, Day, Day, Ct);
 
         Assert.Equal(8m, Assert.Single(kit.Db.ClaimLineItems.Where(l => l.TripClaimId == result.Claim.Id)).Hours);
-        Assert.Contains("budget could not be checked", Assert.Single(result.LeftOut).Reason);
+        var reason = Assert.Single(result.LeftOut).Reason;
+        Assert.Contains("budget could not be checked", reason);
+        Assert.DoesNotContain(person.FullName, reason); // the row already names the participant
     }
 
     [Fact]
