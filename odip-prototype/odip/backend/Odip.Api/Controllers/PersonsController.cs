@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -27,7 +28,16 @@ namespace Odip.Api.Controllers;
 public class PersonsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public PersonsController(OdipDbContext db) => _db = db;
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a person belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public PersonsController(OdipDbContext db, ICurrentTenant? tenant = null)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     /// <summary>List/search people for this tenant — the SearchableSelect person picker's data
     /// source. Unpaged (mirrors StaffController's list shape): tenant contact-book sizes don't
@@ -73,6 +83,7 @@ public class PersonsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<PersonDto>>> Create([FromBody] CreatePersonDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<PersonDto>.Fail(ChooseOrganisation));
         var nameError = ValidateName(dto.FirstName, dto.LastName);
         if (nameError != null) return BadRequest(ApiResponse<PersonDto>.Fail(nameError));
 
