@@ -62,6 +62,7 @@ public class ParticipantNotesController : ControllerBase
         var note = new ParticipantNote
         {
             Id = Guid.NewGuid(),
+            TenantId = participant.TenantId,
             ParticipantId = participantId,
             Title = dto.Title,
             Description = dto.Description,

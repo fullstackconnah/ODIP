@@ -59,6 +59,8 @@ public class NotificationsController : ControllerBase
         var existing = (await _db.NotificationPreferences.Where(p => p.UserId == callerId.Value).ToListAsync(ct))
             .GroupBy(p => (p.EventType, p.Channel))
             .ToDictionary(g => g.Key, g => g.First());
+        // The row belongs to the caller's organisation; a SuperAdmin with no organisation chosen has no ambient one to stamp.
+        var callerTenantId = await _db.Users.Where(u => u.Id == callerId.Value).Select(u => u.TenantId).FirstOrDefaultAsync(ct);
         foreach (var (eventType, channel, enabled) in parsed)
         {
             if (existing.TryGetValue((eventType, channel), out var row))
@@ -69,7 +71,7 @@ public class NotificationsController : ControllerBase
             // Also tracked here, so a repeated key in this request updates the row just added (last value wins).
             row = new NotificationPreference
             {
-                Id = Guid.NewGuid(), UserId = callerId.Value, EventType = eventType, Channel = channel, Enabled = enabled,
+                Id = Guid.NewGuid(), TenantId = callerTenantId, UserId = callerId.Value, EventType = eventType, Channel = channel, Enabled = enabled,
             };
             _db.NotificationPreferences.Add(row);
             existing[(eventType, channel)] = row;

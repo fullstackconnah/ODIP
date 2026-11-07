@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 
@@ -22,11 +23,17 @@ public class TripsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ILogger<TripsController> _logger;
     private readonly TimeProvider _clock;
-    public TripsController(OdipDbContext db, ILogger<TripsController> logger, TimeProvider? clock = null)
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a trip belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public TripsController(OdipDbContext db, ILogger<TripsController> logger, TimeProvider? clock = null, ICurrentTenant? tenant = null)
     {
         _db = db;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
+        _tenant = tenant;
     }
 
     /// <summary>
@@ -137,15 +144,20 @@ public class TripsController : ControllerBase
         }));
     }
 
+    private const string MaxBelowMinMessage = "Maximum participants can't be less than the minimum.";
+    private static bool MaxBelowMin(CreateTripDto d) => d.MinParticipants is { } min && d.MaxParticipants is { } max && max < min;
+
     /// <summary>Create a new trip instance.</summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDetailDto>>> Create([FromBody] CreateTripDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<TripDetailDto>.Fail(ChooseOrganisation));
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
         if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
+        if (MaxBelowMin(dto)) return BadRequest(ApiResponse<TripDetailDto>.Fail(MaxBelowMinMessage));
 
         var trip = new TripInstance
         {
@@ -206,10 +218,16 @@ public class TripsController : ControllerBase
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
         if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
+        if (MaxBelowMin(dto)) return BadRequest(ApiResponse<TripDetailDto>.Fail(MaxBelowMinMessage));
+        if (dto.Status is { } status)
+        {
+            var statusError = await ApplyStatusChangeAsync(t, status, ct);
+            if (statusError != null) return BadRequest(ApiResponse<TripDetailDto>.Fail(statusError));
+        }
 
         t.TripName = dto.TripName; t.TripCode = dto.TripCode; t.EventTemplateId = dto.EventTemplateId;
         t.Destination = dto.Destination; t.Region = dto.Region; t.StartDate = dto.StartDate;
-        t.DurationDays = dto.DurationDays; t.BookingCutoffDate = dto.BookingCutoffDate; t.Status = dto.Status;
+        t.DurationDays = dto.DurationDays; t.BookingCutoffDate = dto.BookingCutoffDate;
         t.LeadCoordinatorId = dto.LeadCoordinatorId; t.MinParticipants = dto.MinParticipants;
         t.MaxParticipants = dto.MaxParticipants; t.RequiredWheelchairCapacity = dto.RequiredWheelchairCapacity;
         t.RequiredBeds = dto.RequiredBeds; t.RequiredBedrooms = dto.RequiredBedrooms;
@@ -260,27 +278,45 @@ public class TripsController : ControllerBase
         var t = await _db.TripInstances.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<bool>.Fail("Trip not found"));
 
-        if (dto.Status.HasValue && dto.Status.Value == TripStatus.InProgress && t.Status != TripStatus.InProgress)
+        if (dto.Status is { } status)
+        {
+            var statusError = await ApplyStatusChangeAsync(t, status, ct);
+            if (statusError != null) return BadRequest(ApiResponse<bool>.Fail(statusError));
+        }
+
+        t.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>
+    /// A status that differs from the stored one: the pre-departure gate before InProgress, the claims task on Completed, then the new status is set.
+    /// Returns the refusal, or null. The same for PUT and PATCH.
+    /// </summary>
+    private async Task<string?> ApplyStatusChangeAsync(TripInstance t, TripStatus newStatus, CancellationToken ct)
+    {
+        if (newStatus == t.Status) return null;
+
+        if (newStatus == TripStatus.InProgress)
         {
             var gateErrors = new List<string>();
 
             var hasConfirmedStaff = await _db.StaffAssignments
-                .AnyAsync(sa => sa.TripInstanceId == id && sa.Status == AssignmentStatus.Confirmed, ct);
+                .AnyAsync(sa => sa.TripInstanceId == t.Id && sa.Status == AssignmentStatus.Confirmed, ct);
             if (!hasConfirmedStaff)
                 gateErrors.Add("at least one confirmed staff assignment is required");
 
             var hasConfirmedBooking = await _db.ParticipantBookings
-                .AnyAsync(pb => pb.TripInstanceId == id && pb.BookingStatus == BookingStatus.Confirmed, ct);
+                .AnyAsync(pb => pb.TripInstanceId == t.Id && pb.BookingStatus == BookingStatus.Confirmed, ct);
             if (!hasConfirmedBooking)
                 gateErrors.Add("at least one confirmed participant booking is required");
 
             if (gateErrors.Count > 0)
-                return BadRequest(ApiResponse<bool>.Fail(
-                    $"Pre-departure gate failed: {string.Join("; ", gateErrors)}"));
+                return $"Pre-departure gate failed: {string.Join("; ", gateErrors)}";
         }
 
         // Auto-create GenerateNdisClaims task when trip moves to Completed
-        if (dto.Status.HasValue && dto.Status.Value == TripStatus.Completed && t.Status != TripStatus.Completed)
+        if (newStatus == TripStatus.Completed)
         {
             // A row made at setup with nothing typed yet (no ABN or registration number) is not a profile that has been filled in. Read for the trip's own organisation: a SuperAdmin's unfiltered query would find another one's.
             var hasProviderSettings = await _db.ProviderSettings.AnyAsync(s => s.TenantId == t.TenantId && s.ABN != "" && s.RegistrationNumber != "", ct);
@@ -289,14 +325,15 @@ public class TripsController : ControllerBase
                 : $"Generate NDIS claims for {t.TripName} — fill in Settings › Organisation profile first";
 
             var alreadyExists = await _db.BookingTasks.AnyAsync(bt =>
-                bt.TripInstanceId == id && bt.TaskType == TaskType.GenerateNdisClaims, ct);
+                bt.TripInstanceId == t.Id && bt.TaskType == TaskType.GenerateNdisClaims, ct);
 
             if (!alreadyExists)
             {
                 _db.BookingTasks.Add(new BookingTask
                 {
                     Id = Guid.NewGuid(),
-                    TripInstanceId = id,
+                    TenantId = t.TenantId,
+                    TripInstanceId = t.Id,
                     TaskType = TaskType.GenerateNdisClaims,
                     Title = taskTitle,
                     Priority = TaskPriority.High,
@@ -307,10 +344,8 @@ public class TripsController : ControllerBase
             }
         }
 
-        if (dto.Status.HasValue) t.Status = dto.Status.Value;
-        t.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<bool>.Ok(true));
+        t.Status = newStatus;
+        return null;
     }
 
     /// <summary>Soft-delete (archive) a trip.</summary>

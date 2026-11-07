@@ -48,13 +48,13 @@ public class ParticipantConsentsController : ControllerBase
         if (!Enum.TryParse<ConsentType>(consentType, ignoreCase: true, out var type))
             return BadRequest(ApiResponse<ParticipantConsentDto>.Fail("Unrecognised consent type."));
 
-        var participant = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
-        if (!participant) return NotFound(ApiResponse<ParticipantConsentDto>.Fail("Participant not found"));
+        var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
+        if (tenantId == null) return NotFound(ApiResponse<ParticipantConsentDto>.Fail("Participant not found"));
 
         var row = await _db.ParticipantConsents.FirstOrDefaultAsync(c => c.ParticipantId == participantId && c.ConsentType == type, ct);
         if (row == null)
         {
-            row = new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = participantId, ConsentType = type };
+            row = new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = participantId, TenantId = tenantId.Value, ConsentType = type };
             _db.ParticipantConsents.Add(row);
         }
 

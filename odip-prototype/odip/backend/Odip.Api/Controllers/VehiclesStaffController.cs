@@ -25,7 +25,16 @@ namespace Odip.Api.Controllers;
 public class VehiclesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public VehiclesController(OdipDbContext db) => _db = db;
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a vehicle belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public VehiclesController(OdipDbContext db, ICurrentTenant? tenant = null)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<VehicleListDto>>>> GetAll(
@@ -67,6 +76,7 @@ public class VehiclesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<VehicleDetailDto>>> Create([FromBody] CreateVehicleDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<VehicleDetailDto>.Fail(ChooseOrganisation));
         var v = new Vehicle
         {
             Id = Guid.NewGuid(), VehicleName = dto.VehicleName, Registration = dto.Registration,
@@ -369,6 +379,8 @@ public class VehicleAssignmentsController : ControllerBase
 [Route("api/v1/staff")]
 public class StaffController : ControllerBase
 {
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a staff member belongs to one organisation.";
+
     private readonly OdipDbContext _db;
     private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
@@ -536,6 +548,7 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Create([FromBody] CreateStaffDto dto, CancellationToken ct)
     {
+        if (_currentTenant is { TenantId: null }) return BadRequest(ApiResponse<StaffDetailDto>.Fail(ChooseOrganisation));
         // A connected organisation's staff come from Employment Hero, the master list (EmploymentHeroStaffSync). The frontend hides the button; this is the rule.
         if (await EmploymentHeroStaffSync.IsConnectedAsync(_db, _currentTenant?.TenantId, ct))
             return Conflict(ApiResponse<StaffDetailDto>.Fail(EmploymentHeroStaffSync.StaffFromEmploymentHeroMessage));

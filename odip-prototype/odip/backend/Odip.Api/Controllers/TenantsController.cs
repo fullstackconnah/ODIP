@@ -61,7 +61,7 @@ public class TenantsController : ControllerBase
         var tenant = new Tenant
         {
             Id = Guid.NewGuid(),
-            Name = dto.Name,
+            Name = dto.Name.Trim(),
             EmailDomain = domain,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -224,7 +224,7 @@ public class TenantsController : ControllerBase
         if (domainChanged && domain is not null && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != id))
             return Conflict("A tenant with this email domain already exists");
 
-        tenant.Name = dto.Name;
+        tenant.Name = dto.Name.Trim();
         tenant.EmailDomain = domain;
         tenant.IsActive = dto.IsActive;
         await _db.SaveChangesAsync();

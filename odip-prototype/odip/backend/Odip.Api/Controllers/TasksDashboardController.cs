@@ -300,7 +300,16 @@ public class TasksController : ControllerBase
 public class ActivitiesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ActivitiesController(OdipDbContext db) => _db = db;
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: an activity belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public ActivitiesController(OdipDbContext db, ICurrentTenant? tenant = null)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ActivityDto>>>> GetAll(CancellationToken ct)
@@ -325,6 +334,7 @@ public class ActivitiesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Create([FromBody] CreateActivityDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<ActivityDto>.Fail(ChooseOrganisation));
         if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
             return BadRequest(ApiResponse<ActivityDto>.Fail("Event template not found."));
 
@@ -364,7 +374,16 @@ public class ActivitiesController : ControllerBase
 public class EventTemplatesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public EventTemplatesController(OdipDbContext db) => _db = db;
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: an event template belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public EventTemplatesController(OdipDbContext db, ICurrentTenant? tenant = null)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<EventTemplateDto>>>> GetAll(CancellationToken ct)
@@ -388,6 +407,7 @@ public class EventTemplatesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<EventTemplateDto>>> Create([FromBody] CreateEventTemplateDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<EventTemplateDto>.Fail(ChooseOrganisation));
         var e = new EventTemplate
         {
             Id = Guid.NewGuid(), EventCode = dto.EventCode, EventName = dto.EventName,

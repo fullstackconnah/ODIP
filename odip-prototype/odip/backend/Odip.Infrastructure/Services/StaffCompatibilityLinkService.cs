@@ -84,6 +84,8 @@ public class StaffCompatibilityLinkService
                 appended = new StaffParticipantCompatibility
                 {
                     Id = Guid.NewGuid(),
+                    // The participant is tracked by the caller; a SuperAdmin with no organisation has no ambient tenant to stamp the row.
+                    TenantId = _db.Participants.Local.FirstOrDefault(p => p.Id == participantId)?.TenantId ?? default,
                     UserId = newUserId.Value,
                     ParticipantId = participantId,
                     Level = CompatibilityLevel.Preferred,
