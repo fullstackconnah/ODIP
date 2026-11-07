@@ -63,6 +63,8 @@ export default function ContactsTab({ participantId, participant }: { participan
   const showAll = useShowAll(roles.length, tableRef, 'tbody tr')
 
   const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; role?: ParticipantContactRoleDto } | null>(null)
+  // The form owns its fields and reports whether they differ from what it opened with.
+  const [formDirty, setFormDirty] = useState(false)
   const [deletingRole, setDeletingRole] = useState<ParticipantContactRoleDto | null>(null)
   const [listError, setListError] = useState<string | null>(null)
 
@@ -78,6 +80,7 @@ export default function ContactsTab({ participantId, participant }: { participan
 
   function closeModal() {
     setModalState(null)
+    setFormDirty(false)
   }
 
   async function confirmDelete() {
@@ -206,6 +209,7 @@ export default function ContactsTab({ participantId, participant }: { participan
       <Modal
         open={!!modalState}
         onClose={closeModal}
+        dirty={formDirty}
         title={modalState?.mode === 'edit' ? 'Edit contact' : 'Add contact'}
         size="lg"
       >
@@ -216,6 +220,7 @@ export default function ContactsTab({ participantId, participant }: { participan
             role={modalState.role}
             onSaved={closeModal}
             onCancel={closeModal}
+            onDirtyChange={setFormDirty}
           />
         )}
       </Modal>

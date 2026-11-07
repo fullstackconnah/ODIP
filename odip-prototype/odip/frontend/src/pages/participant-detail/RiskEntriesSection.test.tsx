@@ -229,3 +229,20 @@ describe('RiskEntriesSection — long list (T10)', () => {
     expect(rows[5]).toHaveFocus()
   })
 })
+
+describe('RiskEntriesSection — unsaved text', () => {
+  it('Escape after typing asks before discarding and Keep editing keeps the text', async () => {
+    const user = userEvent.setup()
+    render(<RiskEntriesSection participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Add risk' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add risk' }))
+    await user.type(screen.getByLabelText(/description/i), 'Slippery floor')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText(/description/i)).toHaveValue('Slippery floor')
+  })
+})

@@ -17,6 +17,13 @@ interface AddActivityModalProps {
   onClose: () => void
 }
 
+/** Every typed field, in the form the dialog holds it: what an activity looks like when the dialog opens (none = a blank new one). */
+const fieldsOf = (a?: ScheduledActivityDto) => [
+  a?.activityId || '', a?.title || '', a?.startTime || '', a?.endTime || '', a?.location || '', a?.status || 'Planned', a?.bookingReference || '',
+  a?.estimatedCost != null ? String(a.estimatedCost) : '', a?.providerName || '', a?.providerPhone || '', a?.providerEmail || '', a?.providerWebsite || '',
+  a?.accessibilityNotes || '', a?.notes || '',
+]
+
 const STATUS_OPTIONS = ['Planned', 'Booked', 'Confirmed', 'Completed', 'Cancelled'] as const
 
 export default function AddActivityModal({ tripDayId, editingActivity, eventTemplateId, onClose }: AddActivityModalProps) {
@@ -133,6 +140,9 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
     }
   }
 
+  // Typed text differs from what the dialog opened with (whitespace counts): Escape, the backdrop and the X ask first.
+  const dirty = JSON.stringify([selectedActivityId, title, startTime, endTime, location, status, bookingReference, estimatedCost, providerName, providerPhone, providerEmail, providerWebsite, accessibilityNotes, notes])
+    !== JSON.stringify(fieldsOf(editingActivity))
   const isSubmitting = createActivity.isPending || updateActivity.isPending
 
   return (
@@ -140,6 +150,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
       stickyFooter
       open
       onClose={onClose}
+      dirty={dirty}
       title={editingActivity ? 'Edit Activity' : 'Add Activity'}
       footer={
         <>

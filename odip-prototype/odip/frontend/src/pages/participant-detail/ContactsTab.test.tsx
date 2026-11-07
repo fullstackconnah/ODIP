@@ -290,3 +290,16 @@ describe('Quick add from the Overview (?add=1)', () => {
     expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })
+
+describe('ContactsTab — unsaved text', () => {
+  it('Escape after typing a name asks before discarding; Keep editing keeps it', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><ContactsTab participantId="participant-1" /></MemoryRouter>)
+    await user.click(screen.getAllByRole('button', { name: /Add contact/ })[0])
+    await user.type(screen.getByPlaceholderText(/Search people/), 'Dav')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByPlaceholderText(/Search people/)).toHaveValue('Dav')
+  })
+})

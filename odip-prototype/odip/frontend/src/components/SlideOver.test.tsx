@@ -256,7 +256,8 @@ describe('SlideOver dirty', () => {
     await user.keyboard('{Escape}')
 
     const prompt = screen.getByRole('alertdialog', { name: 'Discard changes?' })
-    expect(prompt).toHaveAccessibleDescription(/unsaved changes/i)
+    expect(prompt).toHaveAccessibleDescription('You have unsaved changes. If you close this now, they will be lost.')
+    expect(within(prompt).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
     expect(onClose).not.toHaveBeenCalled()
 
     await user.click(within(prompt).getByRole('button', { name: 'Keep editing' }))

@@ -193,7 +193,7 @@ export default function StaffDetailPage() {
                   {staff.signInInviteSentAt && !staff.hasSignedIn && <span className="text-[13px] text-[var(--color-muted-foreground)]">{`Invite sent ${formatDateAu(staff.signInInviteSentAt)}`}</span>}
                   </>
                 )}
-                {canWrite && (
+                {canWrite && (staff.role !== 'Admin' || isAdmin || isSuperAdmin) && (
                   <Button to={`/staff/${id}/edit`} variant="primary" size="md">
                     <Pencil className="w-4 h-4" /> Edit
                   </Button>

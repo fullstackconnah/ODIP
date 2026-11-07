@@ -333,3 +333,33 @@ describe('Quick add from the Overview (?add=1)', () => {
     expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })
+
+describe('NotesTab — unsaved text', () => {
+  it('Escape after typing asks before discarding; Keep editing keeps the text; a clean New note closes at once', async () => {
+    const user = userEvent.setup()
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
+    await user.click(screen.getAllByRole('button', { name: /new note/i })[0])
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: /new note/i })[0])
+    await user.type(screen.getByLabelText(/title/i), 'Evening')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText(/title/i)).toHaveValue('Evening')
+  })
+
+  it('editing: an untouched note closes at once, a changed one asks', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.type(screen.getByLabelText(/title/i), ' ')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
+})
