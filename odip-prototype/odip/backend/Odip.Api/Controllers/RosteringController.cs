@@ -454,7 +454,7 @@ public class RosteringController : ControllerBase
 
             // One staff member's week has no Unfilled lane: an empty list, never null (the client spreads it).
             var unfilled = staffId is null
-                ? weekShifts.Where(s => s.UserId is null).Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList()
+                ? weekShifts.Where(s => s.UserId is null && s.GroupActivityId is null).Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList()
                 : new List<ShiftDto>();
 
             board = new RosterBoardDto
@@ -722,6 +722,10 @@ public class RosteringController : ControllerBase
         if (dto.HasLocation && location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        // Ruling 2: what the activity owns (who, which participant, ratio, day and times) cannot change here; notes, location and cancelling still save.
+        if (shift.GroupActivityId is not null && (dto.Ratio != shift.Ratio || dto.ParticipantId != shift.ParticipantId || dto.StaffId != shift.UserId || dto.ServiceDate != shift.ServiceDate
+                || dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftOnGroupActivityMessage, GroupActivityOnShiftCode));
         if (dto.HasServiceLocationId && dto.ServiceLocationId is { } newPlaceId && !await ServiceLocationUsableAsync(newPlaceId, shift.TenantId, shift.ServiceLocationId, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail(ServiceLocationRefusedMessage));
         if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
@@ -886,6 +890,7 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<bool>.Fail("Shift not found."));
+        if (shift.GroupActivityId is not null) return Conflict(ApiResponse<bool>.Fail(DeleteOnGroupActivityMessage, GroupActivityOnShiftCode));
         // A started or finished shift has a completion (and notes) behind it, held by a Restrict foreign key: refuse it as the other writes do, never a 500.
         if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed)
             return Conflict(ApiResponse<bool>.Fail(ShiftNotDeletableMessage, ShiftErrorCodes.ShiftStatusLocked));
@@ -934,6 +939,7 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        if (shift.GroupActivityId is not null) return Conflict(ApiResponse<ShiftDto>.Fail(WorkerOnGroupActivityMessage, GroupActivityOnShiftCode));
         if (IsLockedForStaffChange(shift.Status))
             return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
         // A drop names who the board showed (nobody, or the person the prompt offered to replace): someone changed the shift since, so say so rather than replace them by surprise.
@@ -990,6 +996,7 @@ public class RosteringController : ControllerBase
             var to = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.ToShiftId, ct);
             // The query filter keeps both in the caller's organisation; a SuperAdmin with no tenant sees all of them, so they must also share one.
             if (from is null || to is null || from.TenantId != to.TenantId) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+            if (from.GroupActivityId is not null || to.GroupActivityId is not null) return Conflict(ApiResponse<ShiftDto>.Fail(WorkerOnGroupActivityMessage, GroupActivityOnShiftCode));
             if (IsLockedForStaffChange(from.Status) || IsLockedForStaffChange(to.Status))
                 return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
             // The person the page carried is no longer on the source (or nobody is): never move somebody else by surprise.
@@ -1236,6 +1243,7 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == split.ShiftId, ct);
         if (shift is null) return "Shift not found.";
+        if (shift.GroupActivityId is not null) return "This shift is part of a group activity.";   // ruling 1: the activity owns its workers
         if (shift.UserId is not null || shift.Status is not (ShiftStatus.Draft or ShiftStatus.Published) || shift.StartTime != split.StartTime || shift.EndTime != split.EndTime)
             return "This shift has changed since the draft.";
         if (shift.EndsNextDay || shift.NightType != SleepoverType.None || shift.Ratio != SupportRatio.OneToOne) return "This shift can't be split.";
@@ -2617,6 +2625,12 @@ public class RosteringController : ControllerBase
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
+    // Group activities (PR1): a shift on an activity is changed from the activity, so the board's writes refuse the fields the activity owns.
+    private const string GroupActivityOnShiftCode = "GA_ON_ACTIVITY";
+    private const string ShiftOnGroupActivityMessage = "This shift is part of a group activity. Change it on the activity.";
+    private const string WorkerOnGroupActivityMessage = "This shift is part of a group activity. Change who works it on the activity.";
+    private const string DeleteOnGroupActivityMessage = "This shift is part of a group activity. Remove them from the activity first.";
+
     private const string ShiftNotDeletableMessage = "This shift has been started or finished, so it can't be deleted.";
     private const string ShiftHasRecordsMessage = "This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead.";
     private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";
