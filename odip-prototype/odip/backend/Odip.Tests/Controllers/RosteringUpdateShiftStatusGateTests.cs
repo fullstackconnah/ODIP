@@ -229,4 +229,42 @@ public class RosteringUpdateShiftStatusGateTests
         var reopened = await UpdateAsync(db, shift, DtoFor(shift, ShiftStatus.Published));
         Assert.Equal(ShiftStatus.Published, reopened.Status);
     }
+
+    [Fact]
+    public async Task ACompletedShiftOnALiveClaim_KeepsItsRatioAndNightType_ButStillTakesNotes()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, ShiftStatus.Completed);
+        ClaimOn(db, shift);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var ratio = await controller.UpdateShift(shift.Id, DtoFor(shift, shift.Status) with { Ratio = SupportRatio.OneToTwo }, CancellationToken.None);
+        var night = await controller.UpdateShift(shift.Id, DtoFor(shift, shift.Status) with { NightType = SleepoverType.Sleepover }, CancellationToken.None);
+
+        foreach (var result in new[] { ratio, night })
+        {
+            var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+            var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
+            Assert.Equal(ShiftErrorCodes.ShiftSupportTypeLocked, body.Code);
+            Assert.Contains("TC-CANC-0001", body.Errors!.Single());
+        }
+        var saved = await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal((SupportRatio.OneToOne, SleepoverType.None), (saved.Ratio, saved.NightType));   // a refused write must not persist
+
+        var noted = await UpdateAsync(db, shift, DtoFor(shift, shift.Status) with { Notes = "Handover done." });
+        Assert.Equal("Handover done.", noted.Notes);
+    }
+
+    [Fact]
+    public async Task ACompletedShiftWithNoClaim_CanStillChangeItsRatio()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, ShiftStatus.Completed);
+
+        var saved = await UpdateAsync(db, shift, DtoFor(shift, shift.Status) with { Ratio = SupportRatio.OneToTwo });
+
+        Assert.Equal(SupportRatio.OneToTwo, saved.Ratio);
+    }
 }

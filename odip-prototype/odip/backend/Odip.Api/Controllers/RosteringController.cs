@@ -765,7 +765,7 @@ public class RosteringController : ControllerBase
         // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
         // variance is computed against those values, so editing them out from under an
         // in-flight or already-reviewed completion would silently invalidate it. Every other
-        // field (Notes, Ratio, NightType, etc.) remains editable on these statuses; the worker is refused above.
+        // field (Notes, Ratio, NightType, etc.) remains editable on these statuses unless the shift is on a claim (Ratio and NightType, below); the worker is refused above.
         if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed
             && (dto.ServiceDate != shift.ServiceDate || dto.StartTime != shift.StartTime
                 || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
@@ -773,11 +773,14 @@ public class RosteringController : ControllerBase
                 "Shift times cannot be changed after the shift has started. Return the completion to the worker first.",
                 ShiftErrorCodes.ShiftTimesLocked));
 
-        // A PUT that leaves the support type out keeps the stored one. It is checked when it changes (or the date moves under a code), and it is locked while the shift is on a claim that still counts.
+        // A PUT that leaves the support type out keeps the stored one. It is checked when it changes (or the date moves under a code), and it is locked while the shift is on a claim that still counts. So are Ratio and NightType: the claim priced them, and the shift must keep saying what was billed.
         var supportCode = dto.HasSupportGroupCode ? SupportTypeCheck.Tidy(dto.SupportGroupCode) : shift.SupportGroupCode;
         var supportChanged = supportCode != shift.SupportGroupCode;
-        if (supportChanged && (await ClaimReferencesAsync(new[] { shift.Id }, ct)).TryGetValue(shift.Id, out var claimedOn))
-            return Conflict(ApiResponse<ShiftDto>.Fail($"This shift is on claim {claimedOn}, so its support type can't change. Delete that claim to change it.", ShiftErrorCodes.ShiftSupportTypeLocked));
+        var pricingChanged = dto.Ratio != shift.Ratio || dto.NightType != shift.NightType;
+        if ((supportChanged || pricingChanged) && (await ClaimReferencesAsync(new[] { shift.Id }, ct)).TryGetValue(shift.Id, out var claimedOn))
+            return Conflict(ApiResponse<ShiftDto>.Fail(supportChanged
+                ? $"This shift is on claim {claimedOn}, so its support type can't change. Delete that claim to change it."
+                : $"This shift is on claim {claimedOn}, so its ratio and night type can't change. Delete that claim to change them.", ShiftErrorCodes.ShiftSupportTypeLocked));
         if ((supportChanged || (supportCode is not null && dto.ServiceDate != shift.ServiceDate)) && await SupportTypeCheck.RefusalAsync(_db, supportCode, dto.ServiceDate, ct) is { } supportRefusal)
             return BadRequest(ApiResponse<ShiftDto>.Fail(supportRefusal));
 
