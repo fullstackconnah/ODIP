@@ -118,6 +118,19 @@ public class ParticipantAdlAssessmentsControllerTests
     }
 
     [Fact]
+    public async Task Upsert_UndefinedNumericType_ReturnsBadRequest_AndSavesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantAdlAssessmentsController(db);
+
+        var result = await controller.Upsert(participant.Id, "99", new UpsertParticipantAdlAssessmentDto { Level = AdlLevel.Independent }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantAdlAssessments.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
     public async Task Upsert_UnrecognisedAdlType_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

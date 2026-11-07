@@ -130,6 +130,19 @@ public class ParticipantHealthConditionsControllerTests
     }
 
     [Fact]
+    public async Task Upsert_UndefinedNumericType_ReturnsBadRequest_AndSavesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantHealthConditionsController(db);
+
+        var result = await controller.Upsert(participant.Id, "99", new UpsertParticipantHealthConditionDto { Has = true }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantHealthConditions.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
     public async Task Upsert_BlankSeverityAndNotes_AreStoredAsNull()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

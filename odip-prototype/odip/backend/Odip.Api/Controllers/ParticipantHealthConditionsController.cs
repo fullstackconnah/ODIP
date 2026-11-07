@@ -43,7 +43,7 @@ public class ParticipantHealthConditionsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantHealthConditionDto>>> Upsert(
         Guid participantId, string conditionType, [FromBody] UpsertParticipantHealthConditionDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<HealthConditionType>(conditionType, ignoreCase: true, out var type))
+        if (!Enum.TryParse<HealthConditionType>(conditionType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
             return BadRequest(ApiResponse<ParticipantHealthConditionDto>.Fail("Unrecognised health condition type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);

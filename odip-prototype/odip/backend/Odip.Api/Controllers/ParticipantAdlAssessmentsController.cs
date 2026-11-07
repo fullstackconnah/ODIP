@@ -43,7 +43,7 @@ public class ParticipantAdlAssessmentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantAdlAssessmentDto>>> Upsert(
         Guid participantId, string adlType, [FromBody] UpsertParticipantAdlAssessmentDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<AdlType>(adlType, ignoreCase: true, out var type))
+        if (!Enum.TryParse<AdlType>(adlType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
             return BadRequest(ApiResponse<ParticipantAdlAssessmentDto>.Fail("Unrecognised ADL type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
