@@ -13,6 +13,8 @@ public class AppSettings : ITenantEntity
     public bool HiddenAccommodation { get; set; }
     public bool HiddenVehicles { get; set; }
     public bool HiddenTrips { get; set; }
+    /// <summary>Group activities on the roster board (off until completion and claims ship).</summary>
+    public bool GroupActivitiesEnabled { get; set; }
     public int QualificationWarningDays { get; set; } = 30;
     /// <summary>Weekly rostered hours above which a worker gets the OVER_HOURS warning. One number for the organisation; 38 is the old fixed value.</summary>
     public int WeeklyHoursWarning { get; set; } = 38;

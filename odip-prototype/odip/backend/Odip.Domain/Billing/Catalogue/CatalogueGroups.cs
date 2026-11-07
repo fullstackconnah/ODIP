@@ -24,10 +24,13 @@ public static class CatalogueGroups
     /// <summary>The flat sleepover items a shift claim takes (shift billing PR3): the short-term accommodation sleepover (RG 0115) for a STA group, the non-SIL personal care sleepover (RG 0107) for every other shift.</summary>
     public const string StaSleepoverItemNumber = "01_206_0115_1_1", SleepoverItemNumber = "01_010_0107_1_1";
 
+    /// <summary>The support type of a group-activity line: a shift with this code is a group line, and a one-off shift made on a group activity carries it.</summary>
+    public const string GroupActivitiesGroupCode = "GRP_GROUP_ACTIVITIES";
+
     private static readonly CatalogueGroupDefinition CommunityAccess = new(CommunityAccessGroupCode, "Group Community Access", 4);
     private static readonly CatalogueGroupDefinition CommunityAccessHighIntensity = new("GRP_COMMUNITY_ACCESS_HI", "Community Access - High Intensity", 4);
     private static readonly CatalogueGroupDefinition PersonalCare = new(PersonalCareGroupCode, "Personal Care", 1);
-    private static readonly CatalogueGroupDefinition GroupActivities = new("GRP_GROUP_ACTIVITIES", "Group Activities", 4);
+    private static readonly CatalogueGroupDefinition GroupActivities = new(GroupActivitiesGroupCode, "Group Activities", 4);
     private static readonly CatalogueGroupDefinition StaSupport = new("GRP_STA_SUPPORT", "Short-Term Accommodation - Support Hours", 1);
     private static readonly CatalogueGroupDefinition StaAccommodation = new("GRP_STA_ACCOMMODATION", "Short-Term Accommodation - Overnight Stays", 1);
     private static readonly CatalogueGroupDefinition Sleepover = new(SleepoverGroupCode, "Sleepover", 1);

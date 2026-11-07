@@ -269,6 +269,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("AutoRosterReach")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("GroupActivitiesEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("HiddenAccommodation")
                         .HasColumnType("boolean");
 
@@ -6665,6 +6668,119 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("NotificationPreferences");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("EndsNextDay")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("MinStaffRequired")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateOnly>("ServiceDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("ServiceLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActivityId");
+
+                    b.HasIndex("ServiceLocationId");
+
+                    b.HasIndex("TenantId", "ServiceDate");
+
+                    b.ToTable("GroupActivities");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivityStaff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AcknowledgedFindingCodes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("EndsNextDay")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("GroupActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("GroupActivityId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "UserId");
+
+                    b.ToTable("GroupActivityStaff");
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.HandoverAcknowledgement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6909,6 +7025,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("EndsNextDay")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("GroupActivityId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Location")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -6972,6 +7091,8 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("GroupActivityId");
 
                     b.HasIndex("ParticipantId");
 
@@ -8704,6 +8825,44 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivity", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Activity", "Activity")
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Odip.Domain.Entities.ServiceLocation", "ServiceLocation")
+                        .WithMany()
+                        .HasForeignKey("ServiceLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Activity");
+
+                    b.Navigation("ServiceLocation");
+
+                    b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivityStaff", b =>
+                {
+                    b.HasOne("Odip.Domain.Rostering.GroupActivity", "GroupActivity")
+                        .WithMany("Staff")
+                        .HasForeignKey("GroupActivityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("GroupActivity");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.HandoverAcknowledgement", b =>
                 {
                     b.HasOne("Odip.Domain.Rostering.Shift", "Shift")
@@ -8763,6 +8922,11 @@ namespace Odip.Infrastructure.Migrations
 
             modelBuilder.Entity("Odip.Domain.Rostering.Shift", b =>
                 {
+                    b.HasOne("Odip.Domain.Rostering.GroupActivity", "GroupActivity")
+                        .WithMany()
+                        .HasForeignKey("GroupActivityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
                         .WithMany()
                         .HasForeignKey("ParticipantId")
@@ -8783,6 +8947,8 @@ namespace Odip.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("GroupActivity");
 
                     b.Navigation("Participant");
 

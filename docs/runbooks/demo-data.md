@@ -213,6 +213,10 @@ DELETE FROM "ParticipantMedications"
   WHERE "Id" IN (SELECT "Id" FROM demo_medication);
 DELETE FROM "Shifts"
   WHERE "Id" IN (SELECT "Id" FROM demo_shift);
+DELETE FROM "GroupActivityStaff"
+  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant);
+DELETE FROM "GroupActivities"
+  WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant);
 DELETE FROM "LeaveRequests"
   WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
 DELETE FROM "RecurringUnavailabilities"
