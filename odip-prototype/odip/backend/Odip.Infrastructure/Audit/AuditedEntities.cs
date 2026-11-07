@@ -97,6 +97,10 @@ public static class AuditedEntities
         typeof(TripClaim),
         typeof(ClaimLineItem),
         typeof(ParticipantConsent),
+        // Who removed a guardian's medical authorisation, or changed a clinical list, must be recoverable.
+        typeof(ParticipantContactRole),
+        typeof(ParticipantRiskEntry),
+        typeof(ParticipantHealthCondition),
         typeof(ShiftNote),
         typeof(BookingTask),
 
