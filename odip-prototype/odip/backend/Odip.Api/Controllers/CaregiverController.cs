@@ -45,7 +45,7 @@ public class CaregiverController : ControllerBase
     /// <summary>The one lookup. Existence, liveness, expiry and participant presence all in one query.</summary>
     private async Task<(CaregiverProfileSubmission sub, Participant p)?> ResolveLiveAsync(string token, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(token)) return null;
+        if (string.IsNullOrWhiteSpace(token) || token.Length > CaregiverTokenService.MaxRawTokenLength) return null;
         var hash = CaregiverTokenService.Hash(token);
         var now = DateTime.UtcNow;
         var sub = await _db.CaregiverProfileSubmissions
