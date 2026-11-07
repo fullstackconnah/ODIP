@@ -161,9 +161,9 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 if (tracked is null) continue;
 
                 await ProcessRowAsync(tenantDb, tracked, emailChannel, baseUrl, ct);
+                // Saved per row: a failure on a later row of the group must not leave an already-sent row Pending, to be sent again.
+                await tenantDb.SaveChangesAsync(ct);
             }
-
-            await tenantDb.SaveChangesAsync(ct); // one SaveChangesAsync per tenant-group, not per row
         }
     }
 
@@ -185,6 +185,13 @@ public class NotificationDispatchBackgroundService : BackgroundService
         {
             row.Status = NotificationOutboxStatus.Skipped;
             row.LastError = "Recipient not found";
+            return;
+        }
+        // A deactivated user gets no email (the bell item stays).
+        if (!recipient.IsActive)
+        {
+            row.Status = NotificationOutboxStatus.Skipped;
+            row.LastError = "Recipient is deactivated";
             return;
         }
 
