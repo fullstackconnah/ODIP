@@ -39,6 +39,9 @@ export async function endSession(reason?: string, opts?: { keepQueue?: boolean }
     const { auth } = await import('../lib/firebase')
     if (auth) await (await import('firebase/auth')).signOut(auth)
   } catch { /* ignore */ }
+  // A refresh still in flight sets the cookie when it answers: let it settle (5 s at most) so the logout delete is the last Set-Cookie. None in flight: no wait.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([refreshPromise?.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, 5000) })]).finally(() => clearTimeout(timer))
   try {
     await apiClient.post('/auth/logout', undefined, { timeout: 5000, headers: token ? { Authorization: `Bearer ${token}` } : undefined })
   } catch { /* ignore */ }
@@ -94,6 +97,7 @@ apiClient.interceptors.response.use(
           refreshPromise = (async () => {
             try {
               if (microsoft) {
+                if (loggingOut) return null
                 const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh', undefined, { timeout: REFRESH_TIMEOUT_MS })
                 const token = res.data.data?.token ?? null
                 // Sign out may have started while the refresh was in flight: writing the token back would undo it, and the request must not be retried.
@@ -108,6 +112,7 @@ apiClient.interceptors.response.use(
               const currentUser = auth?.currentUser
               if (!currentUser) return null
               const idToken = await currentUser.getIdToken(true)
+              if (loggingOut) return null
               const exchangeRes = await apiClient.post<ApiResponse<{ token: string }>>(
                 '/auth/exchange',
                 { idToken },
