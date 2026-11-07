@@ -314,7 +314,7 @@ public partial class ShiftClaimGenerationService
             }
             if (heldBy.TryGetValue(shift.Id, out var heldClaim))
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"It is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
                 continue;
             }
             if (cancelToday is { } today && NotClaimableCancellation(shift, today, zone) is { } notYet)
@@ -332,7 +332,7 @@ public partial class ShiftClaimGenerationService
             if (extraReason is null && window.WithoutExtra is not null && !outcome.IsPriced)
             {
                 outcome = PriceOn(shift, window.WithoutExtra, zone);
-                if (outcome.IsPriced) extraReason = $"the extra time could not be priced ({outcome.NotPricedSentence}). The shift is claimed without it; add the extra time as a manual claim.";
+                if (outcome.IsPriced) extraReason = $"The extra time could not be priced ({outcome.NotPricedSentence}). The shift is claimed without it; add the extra time as a manual claim.";
             }
             if (!outcome.IsPriced)
             {
@@ -365,7 +365,7 @@ public partial class ShiftClaimGenerationService
                 && SupportTypeCheck.IsAmbiguousForDay(catalogueItems.Contains(l.CatalogueItem) ? catalogueItems : personalCareRows, l.DayType, participant.IsIntensiveSupport, l.Date));
             if (ambiguous is not null)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"more than one rate matches this support type on {ambiguous.Date:dd/MM/yyyy}.") });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"More than one rate matches this support type on {ambiguous.Date:dd/MM/yyyy}.") });
                 continue;
             }
 
@@ -420,7 +420,7 @@ public partial class ShiftClaimGenerationService
         const string Manual = "The shift is claimed without it; add the extra time as a manual claim if the budget allows.";
         if (_ledger is null || MoneyTenantIdFor(participant.TenantId) is not { } moneyTenantId)
         {
-            foreach (var s in withExtra) refusals[s.Id] = $"the budget could not be checked, so the extra time was left out. {Manual}";
+            foreach (var s in withExtra) refusals[s.Id] = $"The budget could not be checked, so the extra time was left out. {Manual}";
             return refusals;
         }
         var extras = new List<(Guid ShiftId, DateOnly ServiceDate, IReadOnlyList<ShiftCostPart> Increment)>();
@@ -430,7 +430,7 @@ public partial class ShiftClaimGenerationService
             var worked = priceOn(s, windows[s.Id].Priced, zone);
             var held = priceOn(s, windows[s.Id].WithoutExtra!, zone);
             if (!worked.IsPriced) continue;   // the main loop leaves it out with the pricing reason
-            if (!held.IsPriced) { refusals[s.Id] = $"the budget could not be checked, so the extra time was left out. {Manual}"; continue; }
+            if (!held.IsPriced) { refusals[s.Id] = $"The budget could not be checked, so the extra time was left out. {Manual}"; continue; }
             var increment = ShiftPriceEstimator.PartsOf(worked)
                 .Concat(ShiftPriceEstimator.PartsOf(held).Select(p => p with { Amount = -p.Amount, Hours = -p.Hours }))
                 .GroupBy(p => (p.Date, p.PaceCategory)).Select(g => new ShiftCostPart(g.Key.Date, g.Key.PaceCategory, g.Sum(p => p.Amount), g.Sum(p => p.Hours)))
@@ -438,7 +438,7 @@ public partial class ShiftClaimGenerationService
             if (increment.Count > 0) extras.Add((s.Id, s.ServiceDate, increment));
         }
         foreach (var (shiftId, over) in await _ledger.ExtraTimeOverBudgetAsync(moneyTenantId, participant.Id, extras, ct))
-            refusals[shiftId] = $"the extra time would take {over} over its budget (hard limit). {Manual}";
+            refusals[shiftId] = $"The extra time would take {over} over its budget (hard limit). {Manual}";
         return refusals;
     }
 

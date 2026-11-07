@@ -65,7 +65,7 @@ const crop = async (page, locator, name, vp, pad = 0) => {
 }
 
 
-const reason = 'Sam Lee: the extra time would take Core for 1 Jul 2026–30 Jun 2027 over its budget (hard limit). The shift is claimed without it; add the extra time as a manual claim if the budget allows.'
+const reason = 'The extra time would take Core for 1 Jul 2026–30 Jun 2027 over its budget (hard limit). The shift is claimed without it; add the extra time as a manual claim if the budget allows.'
 const extraOnly = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's11', serviceDate: '2026-11-03', description: 'Extra time 08:40–09:00, 17:00–17:20 · 40 min', reason, extraTimeOnly: true }
 const wholeShift = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's9', serviceDate: '2026-11-02', description: 'Shift 22:00–06:00 · 8 h', reason: 'Sam Lee: it is a sleepover.' }
 const run = (leftOut) => ({ from: '2026-10-26', to: '2026-11-08', claimsMade: 0, shiftCount: 2, hours: 17.33, totalAmount: 866, participants: [{ participantId: 'p1', participantName: 'Sam Lee', shiftCount: 2, hours: 17.33, totalAmount: 866 }], leftOut, flagged: [], skipped: [] })

@@ -93,7 +93,7 @@ public class ShiftSupportTypePricingTests
         Assert.Single(preview.LineItems);
         var left = Assert.Single(preview.LeftOut);
         Assert.Equal(Thu, left.ServiceDate);
-        Assert.Equal("more than one rate matches this support type on 01/10/2026.", left.Reason); // the row already names the participant
+        Assert.Equal("More than one rate matches this support type on 01/10/2026.", left.Reason); // the row already names the participant
     }
 
     [Theory]
@@ -111,7 +111,7 @@ public class ShiftSupportTypePricingTests
         var preview = await service.PreviewAsync(person.Id, Thu, Sat, Ct);
         var left = Assert.Single(preview.LeftOut);
         Assert.Equal(held.Id, left.ShiftId);
-        Assert.Contains($"it is on {word} claim TC-REJECTED-1. Open that claim and choose Claim again.", left.Reason);
+        Assert.Contains($"It is on {word} claim TC-REJECTED-1. Open that claim and choose Claim again.", left.Reason);
         Assert.Equal((rejected.Id, "TC-REJECTED-1"), (left.HeldByClaimId, left.HeldByClaimReference));   // the screen links by these, never by the sentence
         Assert.Single(preview.LineItems);
 

@@ -34,7 +34,7 @@ describe('AddActivityModal — form labels', () => {
 
 describe('AddActivityModal — Notes fold motion', () => {
   const notesFold = () => screen.getByText('Notes').closest('details')
-  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: null, notes: 'Bring water' } as unknown as unknown as ScheduledActivityDto
+  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: null, notes: 'Bring water' } as unknown as ScheduledActivityDto
 
   it('appears at once when editing an activity that already has notes', () => {
     render(<AddActivityModal tripDayId="d1" editingActivity={editing} onClose={() => {}} />)
@@ -49,7 +49,7 @@ describe('AddActivityModal — Notes fold motion', () => {
 
 describe('AddActivityModal — Notes fold stays open once it has opened', () => {
   const notesFold = () => screen.getByText('Notes').closest('details') as HTMLDetailsElement
-  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: 'Ramp', notes: 'Bring water' } as unknown as unknown as ScheduledActivityDto
+  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: 'Ramp', notes: 'Bring water' } as unknown as ScheduledActivityDto
 
   it('opens when a note is typed and does not snap shut when the note is cleared', async () => {
     render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
