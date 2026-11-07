@@ -44,7 +44,6 @@ describe('offline queue', () => {
     expect(make().enqueue(rec('start')).ownerFirstName).toBe('Asha')
   })
 
-
   it('replay order: start, note, breaks (in tap order), tick, finish regardless of tap order', async () => {
     const q = make()
     for (const k of ['finish', 'note', 'tick', 'start', 'breakEnd', 'breakStart'] as const) q.enqueue(rec(k))

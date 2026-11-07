@@ -97,6 +97,18 @@ describe('offline store', () => {
       expect(unsentOnDevice()).toEqual({ count: 1, firstName: null })
     })
 
+    it('names nobody when two workers have queues waiting', () => {
+      localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, JSON.stringify([{ id: 'a', ownerFirstName: 'Asha' }, { id: 'b', ownerFirstName: 'Asha' }]))
+      localStorage.setItem(`${OFFLINE_PREFIX}u2:queue`, JSON.stringify([{ id: 'c', ownerFirstName: 'Ben' }]))
+      expect(unsentOnDevice()).toEqual({ count: 3, firstName: null })
+    })
+
+    it('skips a malformed queue and still counts a later one', () => {
+      localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, '{not json')
+      localStorage.setItem(`${OFFLINE_PREFIX}u2:queue`, JSON.stringify([{ id: 'a' }, { id: 'b' }]))
+      expect(unsentOnDevice()).toEqual({ count: 2, firstName: null })
+    })
+
     it('counts malformed JSON as 0 and does not throw', () => {
       localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, '{not json')
       localStorage.setItem(`${OFFLINE_PREFIX}u2:queue`, '{"a":1}')
