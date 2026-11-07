@@ -210,6 +210,30 @@ public class ComplianceEntitiesAuditTests
     }
 
     [Fact]
+    public async Task WithdrawParticipantConsent_AuditKeepsTheEarlierGrantedAsOld()
+    {
+        using var db = CreateDb(Guid.NewGuid());
+        var participant = NewParticipant();
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+        var consent = new ParticipantConsent
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id,
+            ConsentType = ConsentType.PhotoVideo, Granted = true, RecordedAt = DateTime.UtcNow, SignedByName = "Amy Ng",
+        };
+        db.ParticipantConsents.Add(consent);
+        await db.SaveChangesAsync();
+
+        consent.Granted = false;
+        consent.SignedByName = "Ben Ng";
+        await db.SaveChangesAsync();
+
+        var changes = db.AuditLogs.Single(a => a.EntityType == nameof(ParticipantConsent) && a.EntityId == consent.Id && a.Action == AuditAction.Updated).Changes;
+        Assert.Contains("{\"Field\":\"Granted\",\"Old\":\"True\",\"New\":\"False\"}", changes);
+        Assert.Contains("\"Old\":\"Amy Ng\"", changes);
+    }
+
+    [Fact]
     public async Task UpdateShiftNote_WritesAuditLogReflectingTheChange()
     {
         var actingUserId = Guid.NewGuid();

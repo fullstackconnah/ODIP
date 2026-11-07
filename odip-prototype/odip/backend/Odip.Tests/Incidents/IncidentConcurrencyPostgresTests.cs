@@ -106,7 +106,7 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task PutIncident_EchoingTheGetUpdatedAtString_Returns200_AndTheNextEchoOfTheResponseToo()
+    public async Task PutIncident_EchoingTheGetUpdatedAtString_Returns200_AndTheStaleEchoIs409_AndTheNextEchoOfTheResponseToo()
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
         var (tenantId, userId, id, _) = await SeedAsync();
@@ -164,6 +164,11 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
         put.Headers.Add("X-Test-User", userId.ToString());
         var saved = await client.SendAsync(put, Ct);
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+        // The same string is now stale: proves the echoed value is really compared (a null ExpectedUpdatedAt would skip the check and also return 200).
+        var again = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/incidents/{id}") { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
+        again.Headers.Add("X-Test-User", userId.ToString());
+        Assert.Equal(HttpStatusCode.Conflict, (await client.SendAsync(again, Ct)).StatusCode);
     }
 
     private sealed class OnlyIncidentsController : ApplicationPart, IApplicationPartTypeProvider
