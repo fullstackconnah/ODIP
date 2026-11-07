@@ -291,6 +291,103 @@ describe('a 401 on any other request', () => {
         jsdomNoise.mockRestore()
       }
     })
+
+    // A refresh answering after the logout re-sets the 7-day cookie (OdipSession.SetCookie), so the logout post waits for it (5 s at most).
+    const gatedExchange = (client: Client) => {
+      let release!: () => void
+      const gate = new Promise<void>(resolve => { release = resolve })
+      let asked = false
+      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
+      client.apiClient.defaults.adapter = async (c: InternalAxiosRequestConfig) => {
+        if (c.url === '/auth/exchange') { asked = true; await gate }
+        return answer(c)
+      }
+      return { release, asked: () => asked }
+    }
+    const logouts = (requests: Array<{ url: string }>) => requests.filter(r => r.url === '/auth/logout')
+
+    it('posts the logout only after an in-flight refresh has answered', async () => {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem('odip_token', 'the-old-token')
+        const requests = script(client, answers)
+        const exchange = gatedExchange(client)
+        const result = outcome(client.apiGet('/participants'))
+        await vi.waitFor(() => expect(exchange.asked()).toBe(true))
+        const ending = client.endSession()
+        await new Promise(resolve => setTimeout(resolve, 50))
+        expect(logouts(requests)).toHaveLength(0)
+        expect(localStorage.getItem('odip_token')).toBeNull()
+
+        exchange.release()
+        await result
+        await ending
+        expect(logouts(requests)).toHaveLength(1)
+        expect(requests.at(-1)?.url).toBe('/auth/logout')
+      } finally {
+        jsdomNoise.mockRestore()
+      }
+    })
+
+    it('posts the logout after 5 s when the refresh never answers', async () => {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem('odip_token', 'the-old-token')
+        const requests = script(client, answers)
+        const exchange = gatedExchange(client)
+        void client.apiGet('/participants').catch(() => {})
+        await vi.waitFor(() => expect(exchange.asked()).toBe(true))
+        vi.useFakeTimers()
+        const ending = client.endSession()
+        await vi.advanceTimersByTimeAsync(4900)
+        expect(logouts(requests)).toHaveLength(0)
+        await vi.advanceTimersByTimeAsync(200)
+        await ending
+        expect(logouts(requests)).toHaveLength(1)
+      } finally {
+        vi.useRealTimers()
+        jsdomNoise.mockRestore()
+      }
+    })
+
+    it('posts the logout at once when no refresh is in flight', async () => {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.useFakeTimers()
+      try {
+        const requests = script(client, answers)
+        const ending = client.endSession()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(logouts(requests)).toHaveLength(1)
+        await ending
+      } finally {
+        vi.useRealTimers()
+        jsdomNoise.mockRestore()
+      }
+    })
+
+    it('makes no exchange call when it starts while the refresh waits for Firebase', async () => {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem('odip_token', 'the-old-token')
+        const requests = script(client, answers)
+        let ready!: () => void
+        firebaseAuth.authStateReady.mockReturnValue(new Promise<void>(resolve => { ready = resolve }))
+        const result = outcome(client.apiGet('/participants'))
+        await vi.waitFor(() => expect(firebaseAuth.authStateReady).toHaveBeenCalled())
+        const ending = client.endSession()
+        ready()
+
+        expect(await result).toBe('REJECTED 401')
+        await ending
+        expect(requests.map(r => r.url)).not.toContain('/auth/exchange')
+      } finally {
+        jsdomNoise.mockRestore()
+      }
+    })
   })
 })
 

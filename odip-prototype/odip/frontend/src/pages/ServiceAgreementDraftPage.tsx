@@ -34,7 +34,7 @@ import { ShareStatus } from './agreement/ShareStatus'
 import { liveShare } from './agreement/shareRows'
 import { PopulateDialog } from './agreement/PopulateDialog'
 import { movedWords, notMovedWords } from './agreements/outcomeWords'
-import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
+import { STATES, ongoingPastCapText, planDatesOf, planPastCap, type Details } from '@/lib/agreementDetails'
 import { AgreementStep } from './agreement/AgreementStep'
 import { CheckStep } from './agreement/CheckStep'
 import { RenewalReview } from './agreement/RenewalReview'
@@ -57,8 +57,8 @@ const EMPTY_DETAILS: Details = { agreementKind: '', agreementName: '', state: 'N
 const snapshotOf = (details: Details, shifts: readonly Shift[]) => JSON.stringify({ details, shifts })
 
 /** The problems with the dates, each said next to the box that has it and once more for the Check and Save steps. */
-function dateProblems(details: Details, plan: { start: string; end: string }): { start?: string; end?: string; plan?: string } {
-  const found: { start?: string; end?: string; plan?: string } = {}
+function dateProblems(details: Details, plan: { start: string; end: string }): { start?: string; end?: string; length?: string; plan?: string } {
+  const found: { start?: string; end?: string; length?: string; plan?: string } = {}
   const real = (value: string) => isPricingDate(value)
   if (!details.agreementStartDate) found.start = 'Enter the day the agreement starts.'
   else if (!real(details.agreementStartDate)) found.start = `Use a real date, in a year from ${PRICING_FIRST_YEAR} to ${PRICING_LAST_YEAR}.`
@@ -66,6 +66,8 @@ function dateProblems(details: Details, plan: { start: string; end: string }): {
   else if (!details.agreementEndDate) found.end = 'Enter the day the agreement ends.'
   else if (!real(details.agreementEndDate)) found.end = `Use a real date, in a year from ${PRICING_FIRST_YEAR} to ${PRICING_LAST_YEAR}.`
   else if (!found.start && details.agreementEndDate < details.agreementStartDate) found.end = 'The end cannot come before the start.'
+  // Nothing flips the draft's Ongoing when the start moves later: the person is told on the Length field and chooses an end.
+  if (details.ongoing && planPastCap(details.agreementStartDate, plan.end)) found.length = ongoingPastCapText
   if (!real(plan.start) || !real(plan.end) || plan.end < plan.start) found.plan = 'The NDIS plan needs a start and an end, and cannot end before it starts.'
   return found
 }
@@ -239,12 +241,12 @@ function DraftPage() {
   })
   const issues = useMemo<AgreementIssue[]>(() => {
     const list: AgreementIssue[] = []
-    const dateText = [dates.start, dates.end, dates.plan].filter((text): text is string => !!text)
+    const dateText = [dates.start, dates.end, dates.length, dates.plan].filter((text): text is string => !!text)
     if (dateText.length > 0) list.push({ key: 'dates', tone: 'fix', title: dateText.join(' '), shiftIds: [], step: 'agreement' })
     if (!details.agreementKind) list.push({ key: 'kind', tone: 'fix', title: 'Choose the agreement type.', shiftIds: [], step: 'agreement' })
     if (shifts.length === 0) list.push({ key: 'no-shifts', tone: 'fix', title: 'Add at least one shift to the week.', shiftIds: [], step: 'week' })
     return [...list, ...agreementIssues({ shifts, groups: pricing.groups, quoteIssues: pricing.issues, limits, to: end, settings: pricing.settings })]
-  }, [dates.start, dates.end, dates.plan, details.agreementKind, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
+  }, [dates.start, dates.end, dates.length, dates.plan, details.agreementKind, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
   const blocking = issues.filter(issue => issue.tone === 'fix')
   const flagged = useMemo(() => new Set(issues.filter(issue => issue.step === 'week').flatMap(issue => issue.shiftIds)), [issues])
 
@@ -287,7 +289,7 @@ function DraftPage() {
   const next = () => {
     if (step === 'agreement') {
       setAttempted(true)
-      if (dates.start || dates.end || dates.plan) return
+      if (dates.start || dates.end || dates.length || dates.plan) return
       go('week')
     } else if (step === 'week') {
       if (shifts.length === 0) { setWeekEmpty(true); return }
@@ -545,7 +547,7 @@ function DraftPage() {
               </Callout>
               <AgreementStep
                 details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`} recordBudget={recordBudget} endedOn={endedPlan?.planEnd} planLineRef={planLineRef}
-                errors={{ ...(attempted ? { start: dates.start, end: dates.end, kind: details.agreementKind ? undefined : 'Choose the agreement type.' } : {}), ...(fieldErrors.kind && { kind: fieldErrors.kind }), ...(fieldErrors.name && { name: fieldErrors.name }) }}
+                errors={{ ...(attempted ? { start: dates.start, end: dates.end, length: dates.length, kind: details.agreementKind ? undefined : 'Choose the agreement type.' } : {}), ...(fieldErrors.kind && { kind: fieldErrors.kind }), ...(fieldErrors.name && { name: fieldErrors.name }) }}
               />
             </div>
           )}
