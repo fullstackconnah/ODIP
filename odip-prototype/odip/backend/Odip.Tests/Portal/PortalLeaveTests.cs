@@ -153,6 +153,32 @@ public class PortalLeaveTests
         Assert.IsType<ConflictObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task PostLeave_OverlapSameType_Returns409AndSavesNothing()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today.AddDays(2),
+            Status = LeaveStatus.Pending, RequestedByUserId = user.Id, RequestedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var overlap = await controller.CreateMyLeaveRequest(
+            new CreateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today.AddDays(2), EndDate = Today.AddDays(4) },
+            CancellationToken.None);
+        var conflict = Assert.IsType<ConflictObjectResult>(overlap.Result);
+        Assert.Equal("A request of this type already covers some of these dates.", Assert.Single(Assert.IsType<ApiResponse<LeaveRequestDto>>(conflict.Value).Errors));
+        Assert.Equal(1, await db.LeaveRequests.CountAsync());
+
+        var otherType = await controller.CreateMyLeaveRequest(
+            new CreateLeaveRequestDto { LeaveType = LeaveType.Sick, StartDate = Today.AddDays(2), EndDate = Today.AddDays(4) },
+            CancellationToken.None);
+        Assert.Equal(StatusCodes.Status201Created, Assert.IsType<ObjectResult>(otherType.Result).StatusCode);
+    }
+
     /// <summary>A1 ruling: a declined request being resubmitted is a legitimate flow — the duplicate check must ignore Declined rows (same as Cancelled) on the portal's own create path too.</summary>
     [Fact]
     public async Task PostLeave_AfterDeclined_SameDates_Succeeds()

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -88,6 +88,12 @@ describe('AgreementStep: Length presets and Ongoing', () => {
     render(<MemoryRouter><Harness initial={{ ...base, planOverride: { start: '2026-10-01', end: '2029-09-30' } }} /></MemoryRouter>)
     expect((screen.getByRole('option', { name: /^Ongoing/ }) as HTMLOptionElement).disabled).toBe(true)
     expect(screen.getByText('This NDIS plan runs longer than 800 days from the agreement start. Choose an end date instead of Ongoing.')).toBeTruthy()
+  })
+
+  it('drops a chosen Ongoing, and its end date, once the plan runs past the cap', () => {
+    const onEdit = vi.fn()
+    render(<MemoryRouter><AgreementStep details={{ ...base, ongoing: true }} onEdit={onEdit} recorded={{ start: '2026-10-01', end: '2029-09-30' }} plan={{ start: '2026-10-01', end: '2029-09-30' }} errors={{}} readOnly={false} fundingTab="/funding" /></MemoryRouter>)
+    expect(onEdit).toHaveBeenCalledWith({ ongoing: false, agreementEndDate: '' })
   })
 
   it('builds the 800-day hint from the cap', () => {

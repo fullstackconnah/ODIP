@@ -81,8 +81,8 @@ public class LeaveController : ControllerBase
         var userTenantId = await _db.Users.Where(u => u.Id == dto.UserId.Value && u.IsActive).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
         if (userTenantId is null)
             return BadRequest(ApiResponse<LeaveRequestDto>.Fail("Staff member not found."));
-        if (await HasDuplicateLeaveAsync(dto.UserId.Value, dto.LeaveType, dto.StartDate, dto.EndDate, ct))
-            return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
+        if (await HasDuplicateLeaveAsync(_db, dto.UserId.Value, dto.LeaveType, dto.StartDate, dto.EndDate, ct))
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("A request of this type already covers some of these dates."));
 
         var callerId = ResolveCallerId();
         if (callerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
@@ -200,8 +200,8 @@ public class LeaveController : ControllerBase
 
         var validationError = ValidateLeaveDates(dto.StartDate, dto.EndDate);
         if (validationError != null) return BadRequest(ApiResponse<LeaveApprovalResultDto>.Fail(validationError));
-        if (await HasDuplicateLeaveAsync(leave.UserId, dto.LeaveType, dto.StartDate, dto.EndDate, ct, excludeId: leave.Id))
-            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("An identical request already exists."));
+        if (await HasDuplicateLeaveAsync(_db, leave.UserId, dto.LeaveType, dto.StartDate, dto.EndDate, ct, excludeId: leave.Id))
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("A request of this type already covers some of these dates."));
 
         var updateCallerId = ResolveCallerId();
         if (updateCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
@@ -472,9 +472,9 @@ public class LeaveController : ControllerBase
         return null;
     }
 
-    private Task<bool> HasDuplicateLeaveAsync(Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct, Guid? excludeId = null) =>
-        _db.LeaveRequests.AnyAsync(l =>
-            l.UserId == userId && l.LeaveType == leaveType && l.StartDate == start && l.EndDate == end
+    internal static Task<bool> HasDuplicateLeaveAsync(OdipDbContext db, Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct, Guid? excludeId = null) =>
+        db.LeaveRequests.AnyAsync(l =>
+            l.UserId == userId && l.LeaveType == leaveType && l.StartDate <= end && l.EndDate >= start
             && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined
             && (excludeId == null || l.Id != excludeId.Value), ct);
 

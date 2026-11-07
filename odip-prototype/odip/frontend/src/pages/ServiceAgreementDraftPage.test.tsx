@@ -121,18 +121,15 @@ describe('ServiceAgreementDraftPage: the wizard', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Agreement' })).toBeInTheDocument()
   })
 
-  it('blocks Ongoing on the Length field once the start moves so the plan runs past the cap, until an end is chosen', async () => {
+  it('drops Ongoing to a chosen end once the start moves so the plan runs past the cap, and will not go on without an end', async () => {
     const user = userEvent.setup()
     renderPage()
     fireEvent.change(screen.getByLabelText('Length'), { target: { value: 'ongoing' } })
     fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2025-01-01' } })
+    expect(screen.getByLabelText('Length')).toHaveValue('custom')
+    expect(screen.getByText(`This NDIS plan runs longer than ${MAX_PERIOD_DAYS} days from the agreement start. Choose an end date instead of Ongoing.`)).toBeInTheDocument()
     await next(user)
-    const text = `This NDIS plan runs longer than ${MAX_PERIOD_DAYS} days from the agreement start. Choose an end date instead of Ongoing.`
-    expect(screen.getByText(text)).toBeInTheDocument()
-    expect(screen.getByLabelText('Length')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByRole('heading', { level: 2, name: 'Agreement' })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Length'), { target: { value: 'custom' } })
-    expect(screen.getByLabelText('Length')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
   it('will not leave an empty week', async () => {
