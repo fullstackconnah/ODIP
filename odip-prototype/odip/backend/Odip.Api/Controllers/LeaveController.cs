@@ -81,8 +81,8 @@ public class LeaveController : ControllerBase
         var userTenantId = await _db.Users.Where(u => u.Id == dto.UserId.Value && u.IsActive).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
         if (userTenantId is null)
             return BadRequest(ApiResponse<LeaveRequestDto>.Fail("Staff member not found."));
-        if (await HasDuplicateLeaveAsync(dto.UserId.Value, dto.LeaveType, dto.StartDate, dto.EndDate, ct))
-            return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
+        if (await HasDuplicateLeaveAsync(_db, dto.UserId.Value, dto.LeaveType, dto.StartDate, dto.EndDate, ct))
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("A request of this type already covers some of these dates."));
 
         var callerId = ResolveCallerId();
         if (callerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
@@ -133,6 +133,10 @@ public class LeaveController : ControllerBase
         await RaiseLeaveCoverageTasksAsync(leave, overlappingShifts, ct);
 
         try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("This request has already been decided."));
+        }
         catch (DbUpdateException ex) when (EmploymentHeroLeave.IsOutboxCollision(ex))
         {
             return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("This request has already been decided."));
@@ -171,7 +175,11 @@ public class LeaveController : ControllerBase
         // NotificationEventType.LeaveRequestDecided — same recipient rule as approve above.
         await RaiseLeaveDecidedAsync(leave, approved: false, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("This request has already been decided."));
+        }
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
 
@@ -192,12 +200,12 @@ public class LeaveController : ControllerBase
 
         var validationError = ValidateLeaveDates(dto.StartDate, dto.EndDate);
         if (validationError != null) return BadRequest(ApiResponse<LeaveApprovalResultDto>.Fail(validationError));
-        if (await HasDuplicateLeaveAsync(leave.UserId, dto.LeaveType, dto.StartDate, dto.EndDate, ct, excludeId: leave.Id))
-            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("An identical request already exists."));
+        if (await HasDuplicateLeaveAsync(_db, leave.UserId, dto.LeaveType, dto.StartDate, dto.EndDate, ct, excludeId: leave.Id))
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("A request of this type already covers some of these dates."));
 
         var updateCallerId = ResolveCallerId();
         if (updateCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
-        // Your own request changes through the Portal, where it goes back to Pending; edited here an Approved one would widen with nobody's say (D4, deep M1).
+        // Your own request is withdrawn in the Portal while Pending; once decided, another coordinator edits it (D4, deep M1).
         if (leave.UserId == updateCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.LeaveType = dto.LeaveType;
@@ -217,7 +225,11 @@ public class LeaveController : ControllerBase
         if (leave.Status == LeaveStatus.Approved)
             await RaiseLeaveCoverageTasksAsync(leave, overlappingShifts, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("This request changed while you were editing it. Reload it and try again."));
+        }
 
         var overlaps = leave.Status == LeaveStatus.Approved
             ? await BuildOverlapFindingsAsync(overlappingShifts, leave.UserId, leave.StartDate, leave.EndDate, ct)
@@ -257,6 +269,10 @@ public class LeaveController : ControllerBase
         await _obligationTasks.CompleteByLeaveAsync(leave.Id, ct);
 
         try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("This request has already been decided."));
+        }
         catch (DbUpdateException ex) when (EmploymentHeroLeave.IsOutboxCollision(ex))
         {
             return Conflict(ApiResponse<LeaveRequestDto>.Fail(AlreadyClosedMessage(LeaveStatus.Cancelled)));
@@ -456,9 +472,9 @@ public class LeaveController : ControllerBase
         return null;
     }
 
-    private Task<bool> HasDuplicateLeaveAsync(Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct, Guid? excludeId = null) =>
-        _db.LeaveRequests.AnyAsync(l =>
-            l.UserId == userId && l.LeaveType == leaveType && l.StartDate == start && l.EndDate == end
+    internal static Task<bool> HasDuplicateLeaveAsync(OdipDbContext db, Guid userId, LeaveType leaveType, DateOnly start, DateOnly end, CancellationToken ct, Guid? excludeId = null) =>
+        db.LeaveRequests.AnyAsync(l =>
+            l.UserId == userId && l.LeaveType == leaveType && l.StartDate <= end && l.EndDate >= start
             && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined
             && (excludeId == null || l.Id != excludeId.Value), ct);
 

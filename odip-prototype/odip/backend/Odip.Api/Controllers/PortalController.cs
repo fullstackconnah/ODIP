@@ -1630,10 +1630,8 @@ public class PortalController : ControllerBase
         var validationError = LeaveController.ValidateLeaveDates(dto.StartDate, dto.EndDate);
         if (validationError != null) return BadRequest(ApiResponse<LeaveRequestDto>.Fail(validationError));
 
-        var duplicate = await _db.LeaveRequests.AnyAsync(l =>
-            l.UserId == staffId.Value && l.LeaveType == dto.LeaveType && l.StartDate == dto.StartDate
-            && l.EndDate == dto.EndDate && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined, ct);
-        if (duplicate) return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
+        if (await LeaveController.HasDuplicateLeaveAsync(_db, staffId.Value, dto.LeaveType, dto.StartDate, dto.EndDate, ct))
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("A request of this type already covers some of these dates."));
 
         var staffTenantId = await StaffTenantIdAsync(staffId.Value, ct);
         var leave = new LeaveRequest
@@ -1685,7 +1683,11 @@ public class PortalController : ControllerBase
         leave.DecidedByUserId = staffId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("Only pending requests can be withdrawn."));
+        }
         return Ok(ApiResponse<LeaveRequestDto>.Ok(ToLeaveDto(leave)));
     }
 
