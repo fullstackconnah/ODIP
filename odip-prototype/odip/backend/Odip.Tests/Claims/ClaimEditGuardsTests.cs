@@ -658,4 +658,20 @@ public class ClaimEditGuardsTests
         db.ChangeTracker.Clear();
         Assert.Equal((TripClaimStatus.Draft, lineStatus), ((await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == only.Id)).Status));
     }
+
+    [Fact]
+    public async Task AZeroDollarLine_MarkedPaidWithNoAmount_SaysSoPlainly_AndNothingIsSaved()
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Submitted);
+        line.TotalAmount = 0m;
+        db.SaveChanges();
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, Ct);
+
+        Assert.Equal(400, StatusOf(result));
+        Assert.Equal("A $0.00 line can't be marked paid.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(ClaimLineItemStatus.Draft, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).Status);
+    }
 }
