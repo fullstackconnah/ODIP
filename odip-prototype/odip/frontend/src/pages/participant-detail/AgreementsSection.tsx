@@ -118,8 +118,8 @@ export function AgreementsSection({ participantId }: { participantId: string }) 
         setNotice(
           <>
             Version {r.version}{named(dialog!.group)} now ends {day(result.agreementEndDate ?? lastDay)}.
-            {left > 0 && <> {plural(left, 'shift')} after it {left === 1 ? 'is' : 'are'} still on the roster: cancel or move them. <Link className="font-medium underline" to={`/participants/${participantId}?tab=people#roster`}>Open roster</Link></>}
             {removed > 0 && <> {plural(removed, 'unfilled draft shift')} {removed === 1 ? 'was' : 'were'} removed.</>}
+            {left > 0 && <> {plural(left, 'shift')} after it {left === 1 ? 'is' : 'are'} still on the roster: cancel or move them. <Link className="font-medium underline" to={`/participants/${participantId}?tab=people#roster`}>Open roster</Link></>}
             {renewal && <> Version {renewal.version} is still approved to start on {day(renewal.start)}.</>}
           </>,
         )
