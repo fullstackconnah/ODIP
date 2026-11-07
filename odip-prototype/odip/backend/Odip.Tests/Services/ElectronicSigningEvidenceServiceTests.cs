@@ -217,6 +217,36 @@ public class ElectronicSigningEvidenceServiceTests
     }
 
     [Fact]
+    public async Task Submit_ReplayWithDifferentSignerCapacity_IsRefused_AndSavesNothing()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); var snapshot = AddSnapshotWithEvidence(db, tenantId, participant, draft);
+            await db.SaveChangesAsync();
+            var attestation = new SubmitElectronicSigningEvidenceDto { IdempotencyKey = "idem-1", SignerName = "Ada Participant", SignerCapacity = "Guardian", DocumentWasDisplayed = true, ConsentToElectronicMethod = true, IntendsToSign = true };
+            var (evidence, error) = await new ElectronicSigningEvidenceService(db).SubmitAsync(tenantId, participant.Id, snapshot.Id, attestation, CancellationToken.None);
+            Assert.Null(evidence);
+            Assert.Equal("This signing request was already used with different signer details.", error);
+            Assert.Single(db.ElectronicSigningEvidence.IgnoreQueryFilters());
+        }
+    }
+
+    [Fact]
+    public async Task Submit_ReplayWithDifferentRepresentativeFlag_IsRefused_AndSavesNothing()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); var snapshot = AddSnapshotWithEvidence(db, tenantId, participant, draft);
+            await db.SaveChangesAsync();
+            var attestation = new SubmitElectronicSigningEvidenceDto { IdempotencyKey = "idem-1", SignerName = "Ada Participant", SignerCapacity = "Participant", IsAuthorisedRepresentative = true, DocumentWasDisplayed = true, ConsentToElectronicMethod = true, IntendsToSign = true };
+            var (evidence, error) = await new ElectronicSigningEvidenceService(db).SubmitAsync(tenantId, participant.Id, snapshot.Id, attestation, CancellationToken.None);
+            Assert.Null(evidence);
+            Assert.Equal("This signing request was already used with different signer details.", error);
+            Assert.Single(db.ElectronicSigningEvidence.IgnoreQueryFilters());
+        }
+    }
+
+    [Fact]
     public async Task Submit_ReplayAfterNewerRevision_ReturnsTheStoredEvidence()
     {
         var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
