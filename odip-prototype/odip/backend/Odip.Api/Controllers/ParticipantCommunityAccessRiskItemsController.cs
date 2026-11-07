@@ -43,7 +43,7 @@ public class ParticipantCommunityAccessRiskItemsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantCommunityAccessRiskItemDto>>> Upsert(
         Guid participantId, string itemType, [FromBody] UpsertParticipantCommunityAccessRiskItemDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<CommunityAccessRiskItemType>(itemType, ignoreCase: true, out var type))
+        if (!Enum.TryParse<CommunityAccessRiskItemType>(itemType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
             return BadRequest(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Fail("Unrecognised community access risk item type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
