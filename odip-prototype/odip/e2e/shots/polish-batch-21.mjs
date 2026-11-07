@@ -137,8 +137,13 @@ try {
       await r.fulfill({ json: envelope({ ...draft, agreementEndDate: '2026-12-15', oldShiftsRemaining: { open: 2, assigned: 1, removed: 1 } }) })
     })
     await page.goto(`${BASE_URL}/participants/p-0004?tab=agreements`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-    await page.getByRole('button', { name: /Actions/ }).first().click({ timeout: 30_000 })
-    await page.getByRole('menuitem', { name: /End early/ }).or(page.getByRole('option', { name: /End early/ })).first().click()
+    await page.getByRole('button', { name: /More actions for version|^End early/ }).first().waitFor({ state: 'visible', timeout: 30_000 })
+    const direct = page.locator('button[aria-label^="End early"]:visible')
+    if (await direct.count()) await direct.first().click()
+    else {
+      await page.getByRole('button', { name: /More actions for version/ }).first().click()
+      await page.getByRole('menuitem', { name: /End early/ }).or(page.getByRole('option', { name: /End early/ })).first().click()
+    }
     const dialog = page.getByRole('alertdialog')
     const lastDay = dialog.locator('input[type=date]')
     await lastDay.fill(await lastDay.getAttribute('min'))
