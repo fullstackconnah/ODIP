@@ -174,6 +174,31 @@ public class StaffOverviewControllerTests
         new(db, new StaffAvailabilityItemsQuery(db), clock: Clock) { ControllerContext = AsRole(role) };
 
     [Theory]
+    [InlineData("SupportWorker", false, null)]
+    [InlineData("ReadOnly", false, null)]
+    [InlineData("SupportWorker", true, "Private reason")]
+    [InlineData("Coordinator", false, "Private reason")]
+    [InlineData("Admin", false, "Private reason")]
+    public async Task GetOverview_shows_the_leave_reason_only_to_managers_and_the_person_themselves(string role, bool isSelf, string? expected)
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        SeedLeave(db, tenantId, staff.Id);
+        var callerId = isSelf ? staff.Id : Guid.NewGuid();
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock)
+        {
+            ControllerContext = new() { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, role), new Claim(ClaimTypes.NameIdentifier, callerId.ToString()) }, "test")) } },
+        };
+
+        var result = await controller.GetOverview(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var item = Assert.Single(body.Data!.Availability);
+        Assert.Equal(expected, item.Notes);
+    }
+
+    [Theory]
     [InlineData("SupportWorker")]
     [InlineData("ReadOnly")]
     public async Task GetOverview_hides_a_colleagues_sign_in_facts_from_non_managers(string role)
@@ -339,6 +364,7 @@ public class StaffOverviewControllerTests
 
     private static LeaveRequest SeedLeave(OdipDbContext db, Guid tenantId, Guid userId) => Seed(db, new LeaveRequest
     {
+        Reason = "Private reason",
         Id = Guid.NewGuid(), TenantId = tenantId, UserId = userId, LeaveType = LeaveType.Annual,
         StartDate = Today.AddDays(5), EndDate = Today.AddDays(6), Status = LeaveStatus.Approved,
         RequestedByUserId = userId, RequestedAt = DateTime.UtcNow,
