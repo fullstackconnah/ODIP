@@ -132,7 +132,7 @@ public class StaffControllerTests
     public async Task Update_KeepsEmploymentTypeWhenSent_ClearsItWhenNull()
     {
         using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
-        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+        var controller = new StaffController(db, firebaseUserService: new Moq.Mock<Odip.Api.Services.IFirebaseUserService>().Object) { ControllerContext = AdminContext() };
 
         var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(
             new CreateStaffDto { FirstName = "Pia", LastName = "Doyle", Email = "pia.doyle@example.com", Position = Position.SupportWorker, IsActive = true, EmploymentType = EmploymentType.PartTime },
