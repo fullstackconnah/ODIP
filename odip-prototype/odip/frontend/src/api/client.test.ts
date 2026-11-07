@@ -7,7 +7,7 @@ import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 
 
 const { getIdToken, signOut, firebaseAuth } = vi.hoisted(() => {
   const getIdToken = vi.fn()
-  return { getIdToken, signOut: vi.fn(), firebaseAuth: { currentUser: { getIdToken } } }
+  return { getIdToken, signOut: vi.fn(), firebaseAuth: { currentUser: { getIdToken } as { getIdToken: typeof getIdToken } | null, authStateReady: vi.fn() } }
 })
 vi.mock('@/lib/firebase', () => ({ auth: firebaseAuth, devAuthEnabled: false }))
 vi.mock('firebase/auth', () => ({ signOut }))
@@ -53,6 +53,8 @@ async function freshClient(): Promise<Client> {
 
 beforeEach(() => {
   getIdToken.mockReset().mockResolvedValue('fresh-id-token')
+  firebaseAuth.currentUser = { getIdToken }
+  firebaseAuth.authStateReady.mockReset().mockResolvedValue(undefined)
   signOut.mockReset().mockResolvedValue(undefined)
   localStorage.clear()
 })
@@ -127,6 +129,94 @@ describe('a 401 on any other request', () => {
       expect(requests.map(r => r.url)[1]).toBe(method === 'microsoft' ? '/auth/microsoft/refresh' : '/auth/exchange')
       expect(timeouts[1]).toBe(15_000)
     }
+  })
+
+  // Firebase restores its user from IndexedDB after the page loads, so a reload that fires a 401 before that has currentUser null although the person is still signed in.
+  describe('when the page has only just loaded', () => {
+    const exchangeScript = (client: Client) => script(client, url => (url === '/auth/exchange'
+      ? { status: 200, data: { success: true, data: { token: 'the-new-token' } } }
+      : url === '/participants' ? { status: 200, data: { success: true, data: [] } } : { status: 200, data: { success: true } }))
+
+    it('waits for Firebase to restore its user before refreshing, instead of signing the person out', async () => {
+      const client = await freshClient()
+      localStorage.setItem('odip_token', 'the-old-token')
+      firebaseAuth.currentUser = null
+      firebaseAuth.authStateReady.mockImplementation(async () => { firebaseAuth.currentUser = { getIdToken } })
+      const requests = exchangeScript(client)
+      let first = true
+      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
+      client.apiClient.defaults.adapter = c => (c.url === '/participants' && first ? ((first = false), Promise.reject(new AxiosError('x', 'ERR_BAD_REQUEST', c, null, { data: {}, status: 401, statusText: '401', headers: {}, config: c } as AxiosResponse))) : answer(c))
+
+      await client.apiGet('/participants')
+
+      expect(requests.map(r => r.url)).toEqual(['/auth/exchange', '/participants'])
+      expect(localStorage.getItem('odip_token')).toBe('the-new-token')
+      expect(signOut).not.toHaveBeenCalled()
+    })
+
+    async function expireWith(setup: () => void) {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem('odip_token', 'the-old-token')
+        setup()
+        script(client, () => ({ status: 401, data: {} }))
+        return await outcome(client.apiGet('/participants'), 20_000)
+      } finally {
+        jsdomNoise.mockRestore()
+      }
+    }
+
+    it('still ends the session when Firebase has no user once it is ready', async () => {
+      firebaseAuth.currentUser = null
+      expect(await expireWith(() => {})).toBe('REJECTED 401')
+      expect(localStorage.getItem('odip_token')).toBeNull()
+    })
+
+    it('still ends the session when Firebase is not configured', async () => {
+      vi.resetModules()
+      vi.doMock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: false }))
+      try {
+        expect(await expireWith(() => {})).toBe('REJECTED 401')
+        expect(localStorage.getItem('odip_token')).toBeNull()
+      } finally {
+        vi.doMock('@/lib/firebase', () => ({ auth: firebaseAuth, devAuthEnabled: false }))
+      }
+    })
+
+    it('does not hang when Firebase never becomes ready: after the 15 s limit it reads the user it has', async () => {
+      vi.useFakeTimers()
+      try {
+        const client = await freshClient()
+        localStorage.setItem('odip_token', 'the-old-token')
+        firebaseAuth.authStateReady.mockReturnValue(new Promise(() => {}))
+        const requests = exchangeScript(client)
+        const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
+        let first = true
+        client.apiClient.defaults.adapter = c => (c.url === '/participants' && first ? ((first = false), Promise.reject(new AxiosError('x', 'ERR_BAD_REQUEST', c, null, { data: {}, status: 401, statusText: '401', headers: {}, config: c } as AxiosResponse))) : answer(c))
+
+        const done = client.apiGet('/participants')
+        await vi.advanceTimersByTimeAsync(15_000)
+        await done
+
+        expect(requests.map(r => r.url)).toEqual(['/auth/exchange', '/participants'])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('makes one exchange for two requests that are refused together', async () => {
+      const client = await freshClient()
+      localStorage.setItem('odip_token', 'the-old-token')
+      const requests = exchangeScript(client)
+      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
+      const refused = new Set<string>()
+      client.apiClient.defaults.adapter = c => (c.url !== '/auth/exchange' && !refused.has(String(c.url)) ? (refused.add(String(c.url)), Promise.reject(new AxiosError('x', 'ERR_BAD_REQUEST', c, null, { data: {}, status: 401, statusText: '401', headers: {}, config: c } as AxiosResponse))) : answer(c))
+
+      await Promise.all([client.apiGet('/participants'), client.apiGet('/staff')])
+
+      expect(requests.filter(r => r.url === '/auth/exchange')).toHaveLength(1)
+    })
   })
 
   it('fails and clears the session when the refresh is refused (a tenant switched off mid-session), instead of waiting on itself', async () => {

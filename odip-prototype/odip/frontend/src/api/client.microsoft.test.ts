@@ -6,7 +6,7 @@ import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 
 const { getIdToken, signOut, firebaseAuth } = vi.hoisted(() => {
   const getIdToken = vi.fn()
-  return { getIdToken, signOut: vi.fn(), firebaseAuth: { currentUser: { getIdToken } } }
+  return { getIdToken, signOut: vi.fn(), firebaseAuth: { currentUser: { getIdToken }, authStateReady: () => Promise.resolve() } }
 })
 vi.mock('@/lib/firebase', () => ({ auth: firebaseAuth, devAuthEnabled: false }))
 vi.mock('firebase/auth', () => ({ signOut }))

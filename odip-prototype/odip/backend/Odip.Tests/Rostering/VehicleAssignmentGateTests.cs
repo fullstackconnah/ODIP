@@ -299,4 +299,111 @@ public class VehicleAssignmentGateTests
         var saved = await db.VehicleAssignments.SingleAsync(x => x.Id == created.Id);
         Assert.Equal(VehicleAssignmentStatus.Cancelled, saved.Status);
     }
+
+    private static string Json(object? o) => System.Text.Json.JsonSerializer.Serialize(o, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
+    private static User SeedDriver(OdipDbContext db, bool eligible = true, DateOnly? licenceExpiry = null)
+    {
+        var u = new User
+        {
+            Id = Guid.NewGuid(), Email = Guid.NewGuid() + "@x.test", FirstName = "Dana", LastName = "Driver", IsActive = true,
+            IsDriverEligible = eligible, DriverLicenceExpiryDate = licenceExpiry,
+        };
+        db.Users.Add(u);
+        db.SaveChanges();
+        return u;
+    }
+
+    [Fact]
+    public async Task Create_ArchivedVehicle_Returns400()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var vehicle = SeedVehicle(db);
+        vehicle.IsActive = false;
+        db.SaveChanges();
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+
+        var result = await new VehicleAssignmentsController(db).Create(CreateDto(trip.Id, vehicle.Id), CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("This vehicle is archived. Choose another vehicle.", Assert.Single(Assert.IsType<ApiResponse<VehicleAssignmentDto>>(bad.Value).Errors!));
+        Assert.Empty(await db.VehicleAssignments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Update_ToAnArchivedVehicle_Returns400_ButEditingAnAssignmentWhoseVehicleWasArchivedStillSaves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var live = SeedVehicle(db);
+        var archived = SeedVehicle(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var assignment = new VehicleAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, VehicleId = live.Id, Status = VehicleAssignmentStatus.Requested };
+        db.VehicleAssignments.Add(assignment);
+        archived.IsActive = false;
+        db.SaveChanges();
+        var controller = new VehicleAssignmentsController(db);
+
+        var switched = await controller.Update(assignment.Id, new UpdateVehicleAssignmentDto { VehicleId = archived.Id, Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(switched.Result);
+        Assert.Equal("This vehicle is archived. Choose another vehicle.", Assert.Single(Assert.IsType<ApiResponse<VehicleAssignmentDto>>(bad.Value).Errors!));
+
+        live.IsActive = false;
+        db.SaveChanges();
+        var edited = await controller.Update(assignment.Id, new UpdateVehicleAssignmentDto { VehicleId = live.Id, Comments = "note", Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(edited.Result);
+    }
+
+    [Theory]
+    [InlineData(true, "2026-09-09", "Dana Driver's driver licence expires before this trip.")]
+    [InlineData(false, null, "Dana Driver isn't marked as an eligible driver.")]
+    public async Task Create_DriverNotFit_Returns422WithFinding_AndSavesWithAReason(bool eligible, string? expiry, string message)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var vehicle = SeedVehicle(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var driver = SeedDriver(db, eligible, expiry is null ? null : DateOnly.Parse(expiry));
+        var controller = new VehicleAssignmentsController(db);
+
+        var refused = await controller.Create(CreateDto(trip.Id, vehicle.Id) with { DriverStaffId = driver.Id }, CancellationToken.None);
+
+        var rejected = Assert.IsType<UnprocessableEntityObjectResult>(refused.Result);
+        Assert.Contains(message, Json(rejected.Value));
+        Assert.Contains(RosterConflictService.VehicleDriverLicence, Json(rejected.Value));
+
+        var saved = await controller.Create(CreateDto(trip.Id, vehicle.Id, "covering") with { DriverStaffId = driver.Id }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(saved.Result);
+        Assert.Contains(RosterConflictService.VehicleDriverLicence, (await db.VehicleAssignments.SingleAsync()).AcknowledgedFindingCodes!);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("2026-09-10")]
+    public async Task Create_EligibleDriverWithNoExpiryOrExpiryOnTheStartDay_HasNoFinding(string? expiry)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var vehicle = SeedVehicle(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var driver = SeedDriver(db, true, expiry is null ? null : DateOnly.Parse(expiry));
+
+        var result = await new VehicleAssignmentsController(db).Create(CreateDto(trip.Id, vehicle.Id) with { DriverStaffId = driver.Id }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Update_DriverWithExpiredLicence_Returns422()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var vehicle = SeedVehicle(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var driver = SeedDriver(db, true, new DateOnly(2026, 9, 9));
+        var assignment = new VehicleAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, VehicleId = vehicle.Id, Status = VehicleAssignmentStatus.Requested };
+        db.VehicleAssignments.Add(assignment);
+        db.SaveChanges();
+
+        var result = await new VehicleAssignmentsController(db).Update(assignment.Id,
+            new UpdateVehicleAssignmentDto { VehicleId = vehicle.Id, DriverStaffId = driver.Id, Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
+
+        Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+    }
 }
