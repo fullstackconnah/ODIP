@@ -258,7 +258,7 @@ public class ClaimPipelineTests
     public async Task Paid_outside_any_file_is_not_counted()
     {
         using var f = new BatchFixture();
-        var (claim, lines, _) = f.AddClaim(plan: PlanType.PlanManaged);
+        var (claim, lines, _) = f.AddClaim(plan: PlanType.PlanManaged, status: TripClaimStatus.Submitted);
         f.Clock.Utc = Utc(10, 28, 3);
         await Patch(f, claim, lines[0], ClaimLineItemStatus.Paid, 120m);
         Assert.NotNull(lines[0].PaidAt);
