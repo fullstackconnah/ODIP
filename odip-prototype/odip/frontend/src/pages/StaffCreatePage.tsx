@@ -436,7 +436,7 @@ export default function StaffCreatePage() {
         <Card title="Contact">
           <div className={formGrid}>
             <FormField label="Mobile" className={span.medium}>
-              <input {...register('mobile')} placeholder="e.g. 0412 345 678" />
+              <input {...register('mobile')} maxLength={20} placeholder="e.g. 0412 345 678" />
             </FormField>
 
             <FormField label="Notes" error={errors.notes?.message} className={span.long}>

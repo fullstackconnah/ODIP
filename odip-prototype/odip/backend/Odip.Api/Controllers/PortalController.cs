@@ -672,6 +672,8 @@ public class PortalController : ControllerBase
 
         var actualStart = startMoved ? askedStart!.Value : completion.ActualStart;
         var actualEnd = endMoved ? askedEnd!.Value : endStamp;
+        // A manual start may be up to 5 minutes ahead of the server clock (device skew). The worker is finishing now, so refusing would strand them: end at the start instead.
+        if (!startMoved && !endMoved && actualStart > actualEnd) actualEnd = actualStart;
         var reason = string.IsNullOrWhiteSpace(dto.TimeAdjustmentReason) ? null : dto.TimeAdjustmentReason.Trim();
         if (startMoved || endMoved)
         {
@@ -747,7 +749,16 @@ public class PortalController : ControllerBase
                 ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.ConstraintName == ShiftCompletion.ActiveIndexName)
+        {
+            // A Start (which takes no row lock) inserted the active completion first; the lock's transaction rolls back as this returns.
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                "This shift can't be finished right now.", ShiftErrorCodes.ShiftNotInProgress));
+        }
         await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }

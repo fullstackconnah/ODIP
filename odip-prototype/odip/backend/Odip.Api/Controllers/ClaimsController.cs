@@ -544,12 +544,14 @@ public class ClaimsController : ControllerBase
         var inFile = await _db.ClaimBatchLines.AsNoTracking()
             .Where(b => b.ClaimLineItemId == id && b.Outcome == ClaimBatchLineOutcome.Pending && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
             .Select(b => new { b.Batch.FileName, b.Batch.Status }).FirstOrDefaultAsync(ct);
-        if (inFile != null && (fieldEdit || (inFile.Status == ClaimBatchStatus.Built && dto.Status is ClaimLineItemStatus.Rejected or ClaimLineItemStatus.Paid)))
+        if (inFile != null && (fieldEdit || (inFile.Status == ClaimBatchStatus.Built && dto.Status is ClaimLineItemStatus.Rejected or ClaimLineItemStatus.Paid or ClaimLineItemStatus.PartiallyPaid)))
             return Conflict(ApiResponse<bool>.Fail($"This line is in {inFile.FileName}. Discard that file before changing it."));
 
-        // The NDIA has not seen a Draft or Ready claim, so none of its lines can be rejected yet.
+        // The NDIA has not seen a Draft or Ready claim, so none of its lines can be rejected or paid yet (a line already paid or part-paid can still be re-saved).
         if (dto.Status == ClaimLineItemStatus.Rejected && claim.Status is (TripClaimStatus.Draft or TripClaimStatus.Ready))
             return Conflict(ApiResponse<bool>.Fail($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as rejected."));
+        if (dto.Status is (ClaimLineItemStatus.Paid or ClaimLineItemStatus.PartiallyPaid) && item.Status != dto.Status && claim.Status is (TripClaimStatus.Draft or TripClaimStatus.Ready))
+            return Conflict(ApiResponse<bool>.Fail($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as paid."));
 
         // A rejected line gave its shift back, and another claim may hold it now: taking the line back would bill the shift twice.
         if (item.Status == ClaimLineItemStatus.Rejected && dto.Status.HasValue && dto.Status != ClaimLineItemStatus.Rejected

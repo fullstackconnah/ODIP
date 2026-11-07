@@ -195,6 +195,60 @@ public class NotificationDispatchBackgroundServiceTests
         Assert.Equal("Jo Care", sent!.OrganisationName);
     }
 
+    // H26-2: a deactivated user gets no email; the bell item stays.
+    [Fact]
+    public async Task A_deactivated_recipient_is_skipped_and_never_emailed()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        Guid rowId;
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            user.IsActive = false;
+            rowId = SeedOutboxRow(db, tenantId, user.Id).Id;
+            db.SaveChanges();
+        }
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        using var check = SeedDb(dbName);
+        var row = await check.NotificationOutbox.SingleAsync(o => o.Id == rowId);
+        Assert.Equal(NotificationOutboxStatus.Skipped, row.Status);
+        Assert.Equal("Recipient is deactivated", row.LastError);
+        channel.Verify(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // H26-3: each row is saved right after its send, so a failure on a later row of the group never re-sends an earlier one.
+    [Fact]
+    public async Task A_send_that_throws_on_the_second_row_still_persists_the_first_as_Sent()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        Guid firstId;
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            firstId = SeedOutboxRow(db, tenantId, user.Id).Id;
+            var second = SeedOutboxRow(db, tenantId, user.Id);
+            second.CreatedAt = DateTime.UtcNow;
+            db.SaveChanges();
+        }
+        var calls = 0;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Returns(() => ++calls == 2 ? throw new InvalidOperationException("boom") : Task.FromResult(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null)));
+
+        try { await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None); }
+        catch (InvalidOperationException) { }
+
+        using var check = SeedDb(dbName);
+        Assert.Equal(NotificationOutboxStatus.Sent, (await check.NotificationOutbox.SingleAsync(o => o.Id == firstId)).Status);
+    }
+
     [Fact]
     public async Task DisabledPreference_SkipsWithoutCallingSendAsync()
     {

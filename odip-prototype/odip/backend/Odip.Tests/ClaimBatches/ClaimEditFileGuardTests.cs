@@ -63,6 +63,7 @@ public class ClaimEditFileGuardTests
     [Theory]
     [InlineData(ClaimLineItemStatus.Rejected)]
     [InlineData(ClaimLineItemStatus.Paid)]
+    [InlineData(ClaimLineItemStatus.PartiallyPaid)]
     public async Task Recording_a_result_by_hand_is_refused_while_built_and_allowed_once_uploaded(ClaimLineItemStatus status)
     {
         using var f = new BatchFixture();
