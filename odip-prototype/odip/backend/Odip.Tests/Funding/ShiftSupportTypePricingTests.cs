@@ -93,7 +93,7 @@ public class ShiftSupportTypePricingTests
         Assert.Single(preview.LineItems);
         var left = Assert.Single(preview.LeftOut);
         Assert.Equal(Thu, left.ServiceDate);
-        Assert.Contains("more than one rate matches this support type on 1 Oct 2026", left.Reason);
+        Assert.Equal("more than one rate matches this support type on 01/10/2026.", left.Reason); // the row already names the participant
     }
 
     [Theory]
