@@ -726,8 +726,8 @@ public record PublicHolidayDto
 
 public record CreatePublicHolidayDto
 {
-    [Required]
-    public DateOnly Date { get; init; }
+    // Nullable so a missing date reaches the action (a DateOnly would bind to 0001-01-01 and [Required] cannot see it).
+    public DateOnly? Date { get; init; }
     [Required, StringLength(100)]
     public string Name { get; init; } = string.Empty;
     [StringLength(10)]

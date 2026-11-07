@@ -63,6 +63,35 @@ public class PublicHolidaysControllerTests
             Assert.Equal("SuperAdmin", type.GetMethod(route)!.GetCustomAttribute<AuthorizeAttribute>()?.Roles);
     }
 
+    // ── The date of a row, and the Sync range ─────────────────────────────────────
+
+    [Fact]
+    public async Task A_holiday_with_no_date_is_refused_with_a_message_and_nothing_is_stored()
+    {
+        var (db, controller) = SetUp();
+
+        var result = await controller.Create(new CreatePublicHolidayDto { Name = "Test day" }, default);
+
+        var refused = Assert.IsType<ApiResponse<PublicHolidayDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal("Enter the holiday date.", Assert.Single(refused.Errors!));
+        Assert.Empty(db.PublicHolidays);
+    }
+
+    [Theory]
+    [InlineData(1999, 2001, "fromYear must be 2000 or later.")]
+    [InlineData(2030, 2029, "toYear must be greater than or equal to fromYear.")]
+    [InlineData(2020, 2030, "Year range must be 10 years or fewer.")]
+    public async Task A_bad_Sync_year_range_is_refused_in_the_ApiResponse_shape(int from, int to, string message)
+    {
+        var (_, controller) = SetUp();
+
+        var result = await controller.Sync(new SyncHolidaysDto { FromYear = from, ToYear = to }, default);
+
+        var refused = Assert.IsType<ApiResponse<SyncResultDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.False(refused.Success);
+        Assert.Equal(message, Assert.Single(refused.Errors!));
+    }
+
     // ── The state of a row ────────────────────────────────────────────────────────
 
     [Theory]
