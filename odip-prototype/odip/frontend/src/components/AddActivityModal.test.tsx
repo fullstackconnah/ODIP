@@ -105,3 +105,21 @@ describe('AddActivityModal — footer and end-time error', () => {
     expect(end).toHaveAccessibleDescription('End time must be after start time')
   })
 })
+
+describe('AddActivityModal — unsaved text', () => {
+  it('Escape after typing asks before discarding; a clean dialog closes at once', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<AddActivityModal tripDayId="d1" onClose={onClose} />)
+    await user.click(screen.getByRole('button', { name: 'Custom' }))
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    await user.type(screen.getByLabelText(/^Title/), 'Zoo')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText(/^Title/)).toHaveValue('Zoo')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})

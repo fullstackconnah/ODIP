@@ -197,7 +197,7 @@ public class StaffControllerTests
         var staff = new User
         {
             Id = Guid.NewGuid(), TenantId = tenantId, Username = "new.starter", Email = "new.starter@example.com",
-            FirstName = "New", LastName = "Starter", Position = Position.SupportWorker, IsActive = true, EmploymentStartDate = start,
+            FirstName = "New", LastName = "Starter", Position = Position.SupportWorker, IsActive = true, Role = UserRole.SupportWorker, EmploymentStartDate = start,
         };
         db.Users.Add(staff);
         await db.SaveChangesAsync();

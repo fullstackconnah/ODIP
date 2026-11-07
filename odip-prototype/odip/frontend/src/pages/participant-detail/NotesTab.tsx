@@ -19,6 +19,7 @@ import { Callout } from '@/components/Callout'
 
 type NoteFormState = { title: string; description: string; isPinned: boolean }
 const EMPTY_FORM: NoteFormState = { title: '', description: '', isPinned: false }
+const noteToForm = (note: ParticipantNoteDto): NoteFormState => ({ title: note.title, description: note.description, isPinned: note.isPinned })
 
 function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift, onRegenerate, isDriftActionPending }: {
   note: ParticipantNoteDto
@@ -123,11 +124,14 @@ export default function NotesTab({ participantId }: { participantId: string | un
   useQuickAdd(openCreate, { enabled: canWriteNotes && !!participantId, focusRef: addRef })
 
   function openEdit(note: ParticipantNoteDto) {
-    setForm({ title: note.title, description: note.description, isPinned: note.isPinned })
+    setForm(noteToForm(note))
     setErrors({})
     setModalError(null)
     setModalState({ mode: 'edit', note })
   }
+
+  // Typed text differs from what the modal opened with (whitespace counts): Escape, the backdrop and the X ask first.
+  const dirty = !!modalState && JSON.stringify(form) !== JSON.stringify(modalState.note ? noteToForm(modalState.note) : EMPTY_FORM)
 
   function closeModal() {
     setModalState(null)
@@ -284,6 +288,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
       <Modal
         open={!!modalState}
         onClose={closeModal}
+        dirty={dirty}
         title={modalState?.mode === 'edit' ? 'Edit note' : 'New note'}
         size="md"
         footer={

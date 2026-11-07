@@ -505,6 +505,8 @@ alone. Props: `open`, `onClose`, `title`, `size` (`sm`/`md`/`lg`/`xl`), `footer`
 `children`, `className`, `role`, `initialFocusRef` (the control that takes focus on open instead of the first focusable one; the unsaved-changes prompt points it at "Keep editing"). The close button is named "Close dialog" and has the `TAP_AREA`
 44px hit area on touch (its box stays 28px).
 
+`dirty` (boolean, default false): the form inside has unsaved edits, so Escape, the backdrop and the close button ask "Discard changes?" (**Keep editing** / **Discard**) instead of closing; the prompt is the same `DiscardChangesDialog` [SlideOver](#slideover) shows. The caller passes `dirty` = any field differs from the value the dialog opened with (whitespace-only text counts). A footer Cancel that calls `onClose` itself stays an explicit discard, and a save that closes the dialog by setting `open` to false never prompts.
+
 `ConfirmDialog.tsx` is `Modal` pre-wired for the confirm/cancel shape: `title`, `message`,
 `confirmLabel`, `variant` (`'default' | 'danger'`), `loading` (button reads
 "Processing…" and disables), or a fully custom `footer` for flows with more than one

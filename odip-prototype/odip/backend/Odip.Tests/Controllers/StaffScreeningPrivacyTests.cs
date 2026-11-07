@@ -21,8 +21,8 @@ public class StaffScreeningPrivacyTests
     private static async Task<(OdipDbContext Db, Guid WorkerId, Guid OtherId)> SeedAsync()
     {
         var db = TestDb.ForTenant(Guid.NewGuid().ToString(), Guid.NewGuid());
-        var worker = new User { FirstName = "Wendy", LastName = "Worker", Email = "wendy@example.com", Position = Position.SupportWorker, IsActive = true, WorkerScreeningNumber = Number, WorkerScreeningExpiryDate = new DateOnly(2030, 1, 1) };
-        var other = new User { FirstName = "Sam", LastName = "Other", Email = "sam@example.com", Position = Position.SupportWorker, IsActive = true };
+        var worker = new User { FirstName = "Wendy", LastName = "Worker", Email = "wendy@example.com", Position = Position.SupportWorker, Role = UserRole.SupportWorker, IsActive = true, WorkerScreeningNumber = Number, WorkerScreeningExpiryDate = new DateOnly(2030, 1, 1) };
+        var other = new User { FirstName = "Sam", LastName = "Other", Email = "sam@example.com", Position = Position.SupportWorker, Role = UserRole.SupportWorker, IsActive = true };
         db.Users.AddRange(worker, other);
         await db.SaveChangesAsync();
         return (db, worker.Id, other.Id);
@@ -117,11 +117,12 @@ public class StaffScreeningPrivacyTests
     {
         var (db, workerId, _) = await SeedAsync();
 
-        await As(db, "Admin").Update(workerId, new UpdateStaffDto
+        var result = await As(db, "Admin").Update(workerId, new UpdateStaffDto
         {
             FirstName = "Wendy", LastName = "Worker", Email = "wendy@example.com", Position = Position.SupportWorker, IsActive = true,
             WorkerScreeningNumber = null, WorkerScreeningExpiryDate = new DateOnly(2031, 1, 1),
         }, default);
+        Assert.IsType<OkObjectResult>(result.Result);
 
         var saved = await db.Users.SingleAsync(u => u.Id == workerId);
         Assert.Null(saved.WorkerScreeningNumber);

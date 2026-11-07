@@ -67,7 +67,7 @@ function Qualifications({ staff }: { staff: StaffListDto }) {
 }
 
 export default function StaffPage() {
-  const { canWrite, canAccessPage, canImportData, canManageIntegrations } = usePermissions()
+  const { canWrite, isAdmin, isSuperAdmin, canAccessPage, canImportData, canManageIntegrations } = usePermissions()
   // Staff come from Employment Hero for a connected organisation: ODIP's own create and import are hidden, and the server refuses them.
   const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
@@ -125,7 +125,8 @@ export default function StaffPage() {
   // The row's actions, once: icon buttons on a mouse (revealed on hover), one ⋯ menu on the phone card. Archive is undoable (a confirm, then Inactive), so it is never red.
   const rowItems = (s: StaffListDto): RowMenuItem[] => [
     ...(canAccessLeaveApprovals ? [{ label: 'Leave & availability', icon: <CalendarOff className="w-4 h-4" />, to: `/rostering/leave?userId=${s.id}` }] : []),
-    ...(canWrite ? [
+    // Only an Admin may change an Admin row (the server refuses everyone else), so the others are not offered it.
+    ...(canWrite && (s.role !== 'Admin' || isAdmin || isSuperAdmin) ? [
       { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/staff/${s.id}/edit` },
       // The only place active status changes: the row shows it as a badge. Deactivating asks first (it takes them off rostering).
       s.isActive
