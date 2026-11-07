@@ -32,6 +32,21 @@ public class DedupeTests
     }
 
     [Fact]
+    public async Task RaiseAsync_InactiveRecipient_WritesNothing()
+    {
+        var db = CreateDb();
+        var recipient = SeedUser(db);
+        recipient.IsActive = false;
+        db.SaveChanges();
+
+        await new NotificationRaiser(db).RaiseAsync(NotificationEventType.ShiftAssigned, "Shift", Guid.NewGuid(), new[] { recipient.Id }, new { }, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(0, await db.InAppNotifications.CountAsync());
+    }
+
+    [Fact]
     public async Task RaiseAsync_SameTripleWithinFiveMinutes_YieldsOneRow()
     {
         var db = CreateDb();

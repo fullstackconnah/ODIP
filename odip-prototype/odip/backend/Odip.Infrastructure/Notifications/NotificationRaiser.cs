@@ -57,12 +57,11 @@ public sealed class NotificationRaiser : INotificationRaiser
             // and must not be treated as "not found".
             var recipientUser = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
                 .Where(u => u.Id == recipientId)
-                .Select(u => new { u.TenantId })
+                .Select(u => new { u.TenantId, u.IsActive })
                 .FirstOrDefaultAsync(ct);
-            // Recipient must resolve to a real user to know which tenant owns this outbox row —
-            // every v1 caller resolves recipientUserIds from an active Users query before
-            // calling RaiseAsync, so this is defensive, not an expected path.
-            if (recipientUser is null) continue;
+            // Recipient must resolve to a real user to know which tenant owns this outbox row, and a deactivated
+            // user gets nothing (no email, no bell): not every caller filters on IsActive, so it is skipped here once.
+            if (recipientUser is null || !recipientUser.IsActive) continue;
 
             _db.NotificationOutbox.Add(new NotificationOutbox
             {
