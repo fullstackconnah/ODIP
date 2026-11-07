@@ -52,7 +52,7 @@ public class MedicationOutcomeRacePostgresTests(PostgresFixture pg) : IClassFixt
             {
                 Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, ParticipantMedicationId = med.Id,
                 Status = status, AdministeredAt = Original, RecordedByName = "Synthetic staff",
-                PrnOutcome = outcome, PrnOutcomeAt = null, CreatedAt = Original, UpdatedAt = Original,
+                PrnReason = "Synthetic reason", PrnOutcome = outcome, PrnOutcomeAt = null, CreatedAt = Original, UpdatedAt = Original,
             };
             db.AddRange(participant, med, dose);
             await db.SaveChangesAsync();
@@ -171,7 +171,7 @@ public class MedicationOutcomeRacePostgresTests(PostgresFixture pg) : IClassFixt
         var before = await recorded.MedicationAdministrations.AsNoTracking().SingleAsync(a => a.Id == doseId);
         Assert.NotNull(before.PrnOutcomeAt);
         // A client holding the copy from before the outcome sends no outcome fields at all.
-        var stale = new UpdateAdministrationDto { AmendmentReason = MedicationAmendmentReason.WrongTime, Status = MedicationAdministrationStatus.Administered, AdministeredAt = Original, Notes = "Corrected note" };
+        var stale = new UpdateAdministrationDto { AmendmentReason = MedicationAmendmentReason.WrongTime, Status = MedicationAdministrationStatus.Administered, AdministeredAt = Original, PrnReason = "Synthetic reason", Notes = "Corrected note" };
         await using var amend = Request(tenantId);
         Assert.IsType<OkObjectResult>((await new MedicationsController(amend, Tenant(tenantId)).UpdateAdministration(doseId, stale, CancellationToken.None)).Result);
         await using var verify = Request(tenantId);
@@ -203,7 +203,7 @@ public class MedicationOutcomeRacePostgresTests(PostgresFixture pg) : IClassFixt
     {
         AmendmentReason = MedicationAmendmentReason.WrongTime,
         Status = MedicationAdministrationStatus.Administered, AdministeredAt = Original,
-        PrnOutcome = outcome, PrnOutcomeAt = at,
+        PrnReason = "Synthetic reason", PrnOutcome = outcome, PrnOutcomeAt = at,
     };
 
     [SkippableFact]
