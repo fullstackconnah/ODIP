@@ -35,14 +35,18 @@ public sealed class ElectronicSigningEvidenceService
     {
         var snapshot = await _db.ElectronicSigningSnapshots.Include(x => x.Evidence).SingleOrDefaultAsync(x => x.Id == snapshotId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (snapshot == null) return (null, "Document snapshot not found.");
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.SignerName) || string.IsNullOrWhiteSpace(request.SignerCapacity))
+            return (null, "Signer name, capacity and idempotency key are required.");
+        // A retry of a stored submit returns its stored evidence, even after a newer revision exists; the same key with other signer details is not a retry.
+        var existing = snapshot.Evidence.SingleOrDefault(x => x.IdempotencyKey == request.IdempotencyKey);
+        if (existing != null)
+            return existing.SignerName == request.SignerName.Trim() && existing.SignerCapacity == request.SignerCapacity.Trim() && existing.IsAuthorisedRepresentative == request.IsAuthorisedRepresentative
+                ? (existing, null)
+                : (null, "This signing request was already used with different signer details.");
         if (await HasNewerRevisionAsync(tenantId, participantId, snapshot.DraftId, snapshot.DraftVersion, ct)) return (null, SupersededDraftError);
         if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         if (Hash(snapshot.DocumentJson) != snapshot.DocumentHash) return (null, "Document integrity check failed.");
-        if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.SignerName) || string.IsNullOrWhiteSpace(request.SignerCapacity))
-            return (null, "Signer name, capacity and idempotency key are required.");
         if (!request.DocumentWasDisplayed || !request.ConsentToElectronicMethod || !request.IntendsToSign) return (null, "The displayed document, electronic-method consent and intention are all required.");
-        var existing = snapshot.Evidence.SingleOrDefault(x => x.IdempotencyKey == request.IdempotencyKey);
-        if (existing != null) return (existing, null);
         var previous = snapshot.Evidence.OrderByDescending(x => x.CreatedAt).FirstOrDefault()?.EvidenceHash ?? "GENESIS";
         var canonical = $"{snapshot.DocumentHash}|{previous}|{request.IdempotencyKey}|{request.SignerName.Trim()}|{request.SignerCapacity.Trim()}|{request.IsAuthorisedRepresentative}|{request.ConsentToElectronicMethod}|{request.IntendsToSign}|{request.DocumentWasDisplayed}";
         var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = tenantId, SnapshotId = snapshot.Id, IdempotencyKey = request.IdempotencyKey, SignerName = request.SignerName.Trim(), SignerCapacity = request.SignerCapacity.Trim(), IsAuthorisedRepresentative = request.IsAuthorisedRepresentative, ConsentToElectronicMethod = request.ConsentToElectronicMethod, IntendsToSign = request.IntendsToSign, DocumentWasDisplayed = request.DocumentWasDisplayed, PreviousEvidenceHash = previous, EvidenceHash = Hash(canonical) };
