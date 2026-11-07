@@ -416,8 +416,9 @@ public class StaffController : ControllerBase
         if (s.Role != UserRole.Admin || (User?.IsInRole("SuperAdmin") ?? false)) return null;
         if (archives && !(User?.IsInRole("Admin") ?? false)) return "Only an Admin can archive an Admin.";
         if (!s.IsActive || (newRole == UserRole.Admin && !archives)) return null;
+        // Only an Admin who has signed in counts, as in EmploymentHeroStaffSync: an invited Admin who never has can't yet run the organisation.
         // shortcut: two Admins archiving each other at the same moment can both pass this count; upgrade to a lock or a serializable transaction if it ever happens.
-        var otherAdmin = await _db.Users.AnyAsync(u => u.Id != s.Id && u.Role == UserRole.Admin && u.IsActive, ct);
+        var otherAdmin = await _db.Users.AnyAsync(u => u.Id != s.Id && u.Role == UserRole.Admin && u.IsActive && u.LastLoginAt != null, ct);
         return otherAdmin ? null : LastAdminMessage;
     }
 

@@ -684,3 +684,17 @@ describe('StaffDetailPage — CPR credential', () => {
     expect(screen.getByText('Expired')).toBeInTheDocument()
   })
 })
+
+describe('StaffDetailPage — Admin account', () => {
+  it('hides Edit from a Coordinator on an Admin, and shows it to an Admin', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ role: 'Admin' }) }), isLoading: false })
+    setUserRole('Coordinator')
+    const { unmount } = renderAt('staff-1')
+    expect(screen.queryByRole('link', { name: /edit/i })).not.toBeInTheDocument()
+    unmount()
+
+    setUserRole('Admin')
+    renderAt('staff-1')
+    expect(screen.getByRole('link', { name: /edit/i })).toBeInTheDocument()
+  })
+})

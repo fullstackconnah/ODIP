@@ -6,6 +6,6 @@ public static partial class WhatsNewSeed
 {
     private static readonly Entry K_2026_11_admin_account_guards = new(
     new Item("2026-11-admin-account-guards", "Admin accounts are protected",
-        "Only an Admin can change or archive an Admin, and an organisation always keeps at least one active Admin.",
+        "Only an Admin can change or archive an Admin, and an organisation always keeps at least one active Admin. Coordinators no longer see actions on an Admin they can't use.",
         Staff, false));
 }

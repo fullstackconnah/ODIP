@@ -50,13 +50,13 @@ public class StaffControllerGuardrailTests
         };
     }
 
-    private static User SeedUser(OdipDbContext db, Guid tenantId, UserRole role, string firstName = "Existing", string lastName = "User")
+    private static User SeedUser(OdipDbContext db, Guid tenantId, UserRole role, string firstName = "Existing", string lastName = "User", bool signedIn = true)
     {
         var user = new User
         {
             Id = Guid.NewGuid(), TenantId = tenantId, FirstName = firstName, LastName = lastName,
             Username = Guid.NewGuid().ToString(), Email = $"{Guid.NewGuid()}@example.com",
-            Role = role, IsActive = true,
+            Role = role, IsActive = true, LastLoginAt = signedIn ? DateTime.UtcNow : null,
         };
         db.Users.Add(user);
         db.SaveChanges();
@@ -368,6 +368,33 @@ public class StaffControllerGuardrailTests
         Assert.False((await db.Users.SingleAsync(u => u.Id == b.Id)).IsActive);
 
         Assert.Equal(LastAdminMessage, Error(await controller.Delete(a.Id, CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task SoleSignedInAdmin_WithAnInvitedAdminWhoNeverSignedIn_CannotBeDemotedOrArchived()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, tenantId, UserRole.Admin, signedIn: false);
+        var controller = MakeController(db, "Admin");
+
+        Assert.Equal(LastAdminMessage, Error(await controller.Update(admin.Id, EditOf(admin, role: UserRole.Coordinator), CancellationToken.None)));
+        Assert.Equal(LastAdminMessage, Error(await controller.Update(admin.Id, EditOf(admin, isActive: false), CancellationToken.None)));
+        Assert.Equal(LastAdminMessage, Error(await controller.Delete(admin.Id, CancellationToken.None)));
+        var row = await db.Users.SingleAsync(u => u.Id == admin.Id);
+        Assert.True(row.IsActive);
+        Assert.Equal(UserRole.Admin, row.Role);
+    }
+
+    [Fact]
+    public async Task SoleAdmin_CannotArchiveSelf_EvenWhenAnotherOrganisationHasASignedInAdmin()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        SeedUser(db, Guid.NewGuid(), UserRole.Admin);
+
+        Assert.Equal(LastAdminMessage, Error(await MakeController(db, "Admin").Delete(admin.Id, CancellationToken.None)));
+        Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
     }
 
     [Fact]
