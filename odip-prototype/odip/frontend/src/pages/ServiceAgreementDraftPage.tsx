@@ -97,6 +97,8 @@ function DraftPage() {
   const agreementParam = searchParams.get('agreement')
   const isNew = agreementParam === 'new' || (agreementParam === null && drafts.data?.length === 0)
   const agreementId = isNew ? null : agreementParam ?? drafts.data?.[0]?.agreementId ?? null
+  // The id a first save made; DraftPage is keyed by the participant, so it starts empty for each one.
+  const createdRef = useRef<string | null>(null)
   const mine = (data: ServiceAgreementDraftDto[] | undefined) => data?.filter(entry => entry.agreementId === agreementId)
   const series = useMemo(() => mine(drafts.data), [drafts.data, agreementId]) // eslint-disable-line react-hooks/exhaustive-deps
   const agreementCount = new Set(drafts.data?.map(entry => entry.agreementId)).size
@@ -232,7 +234,7 @@ function DraftPage() {
   const limits = useMemo(() => engineLimits(shifts), [shifts])
 
   const pricing = useAgreementPricing({
-    participantId: participantId ?? '', agreementId: isNew ? null : agreementId, shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
+    participantId: participantId ?? '', agreementId, shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
     canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
@@ -268,7 +270,7 @@ function DraftPage() {
   }
   if (!participantId || !participant.data) return <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   // A link for an agreement this participant does not have (deleted, or another participant's): say so, never fall back to a different one.
-  if (!isNew && !drafts.isFetching && drafts.data && series?.length === 0) {
+  if (!isNew && !drafts.isFetching && !drafts.isError && drafts.data && series?.length === 0) {
     return <EmptyState size="inline" icon={FileText} title="This agreement isn't on this participant's record" description="It may have been deleted, or the link is for another participant." action={{ label: `Back to ${participant.data.fullName}`, to: `/participants/${participantId}` }} />
   }
 
@@ -312,13 +314,14 @@ function DraftPage() {
     const data: CreateServiceAgreementDraftDto = {
       planStartDate: plan.start, planEndDate: plan.end, agreementStartDate: details.agreementStartDate, agreementEndDate: end, isOngoing: details.ongoing || undefined,
       state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, baseVersion, blocks,
-      agreementKind: details.agreementKind || undefined, agreementName: details.agreementName, ...(agreementParam === 'new' ? { newAgreement: true } : isNew ? {} : { agreementId: agreementId ?? undefined }),
+      agreementKind: details.agreementKind || undefined, agreementName: details.agreementName, ...(createdRef.current ? { agreementId: createdRef.current } : agreementParam === 'new' ? { newAgreement: true } : isNew ? {} : { agreementId: agreementId ?? undefined }),
     }
     create.mutate({ participantId, data }, {
       onSuccess: async result => {
         setBaseline(snapshotOf(details, shifts)); setSaved(true); setBaseVersion(result?.version ?? baseVersion); setConflict(null)
         // A first save makes the agreement: the address follows it, so a reload (or Back) shows this agreement and the next save is a revision of it.
         if (isNew && result?.agreementId) {
+          createdRef.current = result.agreementId // set before the wait: a Save pressed meanwhile revises this agreement, never makes a second
           await drafts.refetch() // the new agreement is on the list before the address names it
           setSearchParams(current => { const next = new URLSearchParams(current); next.set('agreement', result.agreementId); return next }, { replace: true })
         }

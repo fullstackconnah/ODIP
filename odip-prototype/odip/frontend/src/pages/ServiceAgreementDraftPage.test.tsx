@@ -996,6 +996,30 @@ describe('ServiceAgreementDraftPage: several agreements', () => {
     expect(screen.getByRole('button', { name: 'Save agreement' })).toBeInTheDocument()
   })
 
+  it('does not say the agreement is missing when the re-read of the list failed (N1)', () => {
+    drafts.mockReturnValue({ data: [draft(), trip()], isLoading: false, isError: true, refetch: refetchDrafts })
+    renderPage('/participants/p-1/agreement-draft?agreement=zzz')
+    expect(screen.queryByText("This agreement isn't on this participant's record")).toBeNull()
+  })
+
+  it('sends the created id, not a second new agreement, on a Save made while the list is re-read (N3)', async () => {
+    both()
+    refetchDrafts.mockImplementation(() => new Promise(() => {})) // the re-read after the first save stays pending
+    createMutate.mockImplementation((_request, options) => options.onSuccess({ agreementId: 'a-9', version: 1 }))
+    const user = userEvent.setup()
+    renderPage('/participants/p-1/agreement-draft?agreement=new')
+    await user.selectOptions(screen.getByLabelText(/Agreement type/), 'Night support')
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2026-10-01' } })
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    await waitFor(() => expect(refetchDrafts).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(createMutate).toHaveBeenCalledTimes(2)
+    expect(createMutate.mock.calls[0][0].data).toMatchObject({ newAgreement: true })
+    expect(createMutate.mock.calls[1][0].data).toMatchObject({ agreementId: 'a-9' })
+    expect(createMutate.mock.calls[1][0].data.newAgreement).toBeUndefined()
+  })
+
   it('drops the budget verdict from the footer when the participant has more than one agreement (M-5), and keeps it for one', async () => {
     both()
     const user = userEvent.setup()
