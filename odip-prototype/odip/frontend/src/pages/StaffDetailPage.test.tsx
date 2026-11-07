@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import StaffDetailPage from './StaffDetailPage'
@@ -181,12 +181,12 @@ describe('StaffDetailPage — summary strip', () => {
   // FactBar glance has no role of its own: its grid is the first ancestor of the "Next shift" label.
   const strip = () => screen.getByText('Next shift').closest('div.grid') as HTMLElement
 
-  it('sits above the tabs and reads All current and None booked for a person with nothing due', () => {
+  it('sits above the tabs and reads All current and None for a person with nothing due', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
     renderAt('staff-1')
 
     expect(strip()).toHaveTextContent('CredentialsAll current')
-    expect(strip()).toHaveTextContent('Next shiftNone booked')
+    expect(within(strip()).getByText('None')).toBeInTheDocument() // exact match: no "None booked"
     expect(strip().compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // Open incidents are not on the overview DTO, so the strip has two segments and fetches nothing more.
     expect(strip()).not.toHaveTextContent('Open incidents')

@@ -45,7 +45,7 @@ public static class ShiftClaimWindow
         var held = Express(s, c, EmploymentHeroTimesheets.PaidWindow(s, c, zone, ExtraTimeDecision.Pending), zone) ?? rostered;
         if (c.ExtraTime != ExtraTimeDecision.Approved || !ShiftTimeRules.HasExtraTime(c.VarianceMinutesStart, c.VarianceMinutesEnd)) return new(held);
         var approved = Express(s, c, EmploymentHeroTimesheets.PaidWindow(s, c, zone, ExtraTimeDecision.Approved), zone);
-        if (approved is null) return new(held, null, null, "the extra time runs outside the shift's own date, which a shift claim cannot price");
+        if (approved is null) return new(held, null, null, "The extra time runs outside the shift's own date, which a shift claim cannot price");
         return approved == held ? new(held) : new(approved, held, ExtraTextOf(held, approved));
     }
 
