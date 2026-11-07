@@ -52,8 +52,9 @@ async function open(browser, vp) {
 }
 
 // hideChrome drops the sticky bar and bottom nav; overlapCheck fails a crop they still cover.
-const shoot = async (page, loc, file) => {
-  const shot = await cropElement(page, loc, file, { hideChrome: true, during: async (clip) => { await page.waitForTimeout(500); return overlapCheck(loc, clip, path.basename(file)) } })
+// `before` runs inside the capture, after the chrome is hidden, so a hover-revealed control is still revealed when the pixels are taken.
+const shoot = async (page, loc, file, { pad, before } = {}) => {
+  const shot = await cropElement(page, loc, file, { pad, hideChrome: true, during: async (clip) => { await before?.(); await page.waitForTimeout(500); return overlapCheck(loc, clip, path.basename(file)) } })
   checks.push(shot.measured, checkCropHolds(shot))
 }
 
@@ -91,7 +92,16 @@ try {
       check(`${vp.name} a: icon colour is --color-destructive`, fg === destructive, `${fg} vs ${destructive}`)
       const edit = row.getByRole('link', { name: 'Edit' })
       if (await edit.count()) check(`${vp.name} a: Edit stays neutral`, (await colours(edit.first())).fg !== destructive)
-      await shoot(page, card, path.join(OUT_DIR, `agreements-row-menu-${vp.name}.png`))
+      await shoot(page, row, path.join(OUT_DIR, `agreements-row-menu-${vp.name}.png`), {
+        before: async () => {
+          await row.hover()
+          await del.hover()
+          await page.waitForTimeout(300)
+          const box = await del.boundingBox()
+          const opacity = await del.evaluate((el) => Number(getComputedStyle(el).opacity))
+          check(`${vp.name} a: Delete draft is revealed at capture (box > 0, opacity 1)`, !!box && box.width > 0 && box.height > 0 && opacity === 1, JSON.stringify({ box, opacity }))
+        },
+      })
       if (!vp.dark) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'participant-agreements-1280.png'), { touch: false })).checks)
     } else {
       check('b: pointer is coarse (touch emulation intact)', await page.evaluate(() => matchMedia('(pointer: coarse)').matches))
@@ -106,7 +116,7 @@ try {
       if (await others.count()) check('b: the other items stay neutral', (await colours(others.first())).fg !== destructive)
       const h = await opt.evaluate((el) => el.getBoundingClientRect().height)
       check('b: option height >= --tap-min (44)', h >= 43.4, h)
-      await shoot(page, opt.locator('xpath=ancestor::*[@role="listbox"][1]'), path.join(OUT_DIR, 'agreements-row-menu-touch-390.png'))
+      await shoot(page, opt.locator('xpath=ancestor::*[@role="listbox"][1]'), path.join(OUT_DIR, 'agreements-row-menu-touch-390.png'), { pad: 32 }) // pad 32 keeps the card edge and its float shadow in the crop
       await page.keyboard.press('Escape')
       const o = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
       check('b: no horizontal scroll', o <= 0, o)

@@ -62,6 +62,15 @@ describe('EditTripModal — what Save refuses', () => {
     expect(mutate.mock.calls.at(-1)![0].data.status).toBeUndefined()
   })
 
+  it('still omits status when the trip refetches with a newer one while the form is open', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<EditTripModal trip={{ ...trip, status: 'Planning' }} onClose={() => {}} />)
+    await screen.findByLabelText(/Start Date/)
+    rerender(<EditTripModal trip={{ ...trip, status: 'OpenForBookings' }} onClose={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mutate.mock.calls.at(-1)![0].data.status).toBeUndefined()
+  })
+
   it('sends status once it was changed', async () => {
     const user = await setup()
     await user.click(screen.getByLabelText('Status'))
