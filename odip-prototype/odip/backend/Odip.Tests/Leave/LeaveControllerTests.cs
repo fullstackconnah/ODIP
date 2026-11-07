@@ -213,6 +213,56 @@ public class LeaveControllerTests
     }
 
     [Fact]
+    public async Task CreateLeave_OverlappingSameType_Returns409()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Approved);
+        var result = await MakeController(db).CreateLeave(
+            new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1) },
+            CancellationToken.None);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("A request of this type already covers some of these dates.", Assert.Single(Assert.IsType<ApiResponse<LeaveRequestDto>>(conflict.Value).Errors));
+    }
+
+    [Fact]
+    public async Task CreateLeave_AdjacentDay_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Approved);
+        var result = await MakeController(db).CreateLeave(
+            new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today.AddDays(1), EndDate = Today.AddDays(2) },
+            CancellationToken.None);
+        Assert.Equal(StatusCodes.Status201Created, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateLeave_OverlapAfterDeclined_Succeeds()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Declined);
+        var result = await MakeController(db).CreateLeave(
+            new CreateLeaveRequestDto { UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1) },
+            CancellationToken.None);
+        Assert.Equal(StatusCodes.Status201Created, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateLeave_IntoOverlapWithDifferentRow_Returns409()
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db);
+        SeedLeave(db, user.Id, LeaveStatus.Approved, Today.AddDays(5), Today.AddDays(8));
+        var leave = SeedLeave(db, user.Id, LeaveStatus.Pending, Today, Today);
+        var result = await MakeController(db).UpdateLeave(
+            leave.Id, new UpdateLeaveRequestDto { LeaveType = LeaveType.Annual, StartDate = Today.AddDays(7), EndDate = Today.AddDays(9) },
+            CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
     public async Task CreateLeave_AfterDeclined_SameDates_Succeeds()
     {
         using var db = CreateDb();
