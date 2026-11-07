@@ -1,5 +1,17 @@
+using System.Net;
+using System.Reflection;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Odip.Api.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -113,6 +125,62 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
             var echoed = await Get();
             await using var db = Open(tenantId);
             Assert.IsType<OkObjectResult>((await As(db, userId).Update(id, Form(userId, $"Edit {edit}", echoed), Ct)).Result);
+        }
+    }
+
+    /// <summary>The same echo over a real pipeline: the PUT body carries the updatedAt text exactly as the GET returned it (no DateTime round trip in the test).</summary>
+    [SkippableFact]
+    public async Task PutIncident_EchoingTheGetUpdatedAtString_Returns200()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, userId, id, _) = await SeedAsync();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Logging.ClearProviders();
+        builder.Services.AddScoped(_ => Open(tenantId));
+        builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, AdminAuth>("Test", _ => { });
+        builder.Services.AddAuthorization();
+        builder.Services.AddControllers()
+            .ConfigureApplicationPartManager(m => { m.ApplicationParts.Clear(); m.ApplicationParts.Add(new OnlyIncidentsController()); })
+            .AddJsonOptions(o => ApiJsonOptions.Configure(o.JsonSerializerOptions));
+        await using var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(60) };
+        var wire = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonOptions.Configure(wire);
+
+        var get = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/incidents/{id}");
+        get.Headers.Add("X-Test-User", userId.ToString());
+        var got = await client.SendAsync(get, Ct);
+        Assert.Equal(HttpStatusCode.OK, got.StatusCode);
+        var updatedAt = JsonNode.Parse(await got.Content.ReadAsStringAsync(Ct))!["data"]!["updatedAt"]!.GetValue<string>();
+
+        var body = JsonSerializer.SerializeToNode(Form(userId, "Edited over HTTP", default), wire)!;
+        body["expectedUpdatedAt"] = updatedAt;
+        var put = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/incidents/{id}") { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
+        put.Headers.Add("X-Test-User", userId.ToString());
+        var saved = await client.SendAsync(put, Ct);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+    }
+
+    private sealed class OnlyIncidentsController : ApplicationPart, IApplicationPartTypeProvider
+    {
+        public override string Name => nameof(OnlyIncidentsController);
+        public IEnumerable<TypeInfo> Types { get; } = new[] { typeof(IncidentsController).GetTypeInfo() };
+    }
+
+    /// <summary>Signs in an Admin whose id is the X-Test-User header.</summary>
+    private sealed class AdminAuth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            if (Request.Headers["X-Test-User"].FirstOrDefault() is not { } user) return Task.FromResult(AuthenticateResult.NoResult());
+            var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, "Admin"), new Claim(ClaimTypes.NameIdentifier, user)], "Test");
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), "Test")));
         }
     }
 
