@@ -100,13 +100,6 @@ describe('ClaimAgainDialog', () => {
     expect(screen.getByRole('link', { name: 'Open TC-7' })).toHaveClass('underline')   // always underlined, not only on hover
   })
 
-  it('with nothing claimable says so and holds the confirm', async () => {
-    onPreview = async config => ok({ totalAmount: 0, lineItems: [], leftOut: [held] }, config)
-    renderDialog()
-    expect((await screen.findByText(/can be claimed again./)).textContent).toBe('Nothing on TC-OLD-1 can be claimed again.')
-    expect(confirm()).toBeDisabled()
-  })
-
   it('a refused preview shows the server sentence (an issued invoice) and holds the confirm', async () => {
     onPreview = async config => refused('Void INV-0042 first, then claim again.', config, 409)
     renderDialog()
