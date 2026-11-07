@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
-import { AgreementStep } from './AgreementStep'
+import { AgreementStep, MAX_PERIOD_DAYS } from './AgreementStep'
 import type { Details } from '@/lib/agreementDetails'
 
 const base: Details = { state: 'NSW', zone: 'Standard', agreementStartDate: '2026-11-01', agreementEndDate: '2027-02-01', ongoing: false, representative: '', planOverride: null } as unknown as Details
@@ -87,6 +87,17 @@ describe('AgreementStep: Length presets and Ongoing', () => {
     render(<MemoryRouter><Harness initial={{ ...base, planOverride: { start: '2026-10-01', end: '2029-09-30' } }} /></MemoryRouter>)
     expect((screen.getByRole('option', { name: /^Ongoing/ }) as HTMLOptionElement).disabled).toBe(true)
     expect(screen.getByText('This NDIS plan runs longer than 800 days from the agreement start. Choose an end date instead of Ongoing.')).toBeTruthy()
+  })
+
+  it('builds the 800-day hint from the cap', () => {
+    render(<MemoryRouter><Harness initial={{ ...base, planOverride: { start: '2026-10-01', end: '2029-09-30' } }} /></MemoryRouter>)
+    expect(screen.getByText(new RegExp(`longer than ${MAX_PERIOD_DAYS} days`))).toBeTruthy()
+  })
+
+  it('puts the Length error on the field, in place of the hint', () => {
+    render(<AgreementStep details={{ ...base, ongoing: true }} onEdit={() => {}} recorded={{ start: '2026-10-01', end: '2029-09-30' }} plan={{ start: '2026-10-01', end: '2029-09-30' }} errors={{ length: 'Choose an end date.' }} readOnly={false} fundingTab="/funding" />)
+    expect(screen.getByText('Choose an end date.')).toBeInTheDocument()
+    expect(length()).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('the read-only list says ongoing', () => {
