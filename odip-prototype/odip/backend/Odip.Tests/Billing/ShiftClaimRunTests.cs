@@ -276,7 +276,7 @@ public class ShiftClaimRunTests
 
         var refusal = await Assert.ThrowsAsync<NothingClaimableException>(() => Engine(kit).GenerateAsync(person.Id, From, To, Ct));
 
-        Assert.Equal("Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. No catalogue sleepover item covers this date.", refusal.Message);
+        Assert.Equal($"Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. {person.FullName}: No catalogue sleepover item covers this date.", refusal.Message);
         Assert.Single(refusal.LeftOut);
     }
 
