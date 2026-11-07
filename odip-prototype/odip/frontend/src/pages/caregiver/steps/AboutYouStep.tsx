@@ -14,10 +14,10 @@ export function AboutYouStep({ register, errors }: {
         Please tell us who you are before reviewing the information. Your name is recorded against any changes you make.
       </p>
         <FormField label="Your name" required error={errors.caregiverName?.message} className="max-w-[28rem]">
-          <input type="text" autoComplete="name" {...register('caregiverName')} />
+          <input type="text" autoComplete="name" maxLength={150} {...register('caregiverName')} />
         </FormField>
         <FormField label="Relationship to the participant" hint="For example: mother, brother, guardian" className="max-w-[28rem]">
-          <input type="text" {...register('caregiverRelationship')} />
+          <input type="text" maxLength={100} {...register('caregiverRelationship')} />
         </FormField>
     </div>
   )
