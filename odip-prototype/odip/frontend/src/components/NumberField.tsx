@@ -41,10 +41,11 @@ export function NumberField({ label, value, onChange, inputMode = 'numeric', onB
       type="number"
       inputMode={inputMode}
       value={text}
+      // `input`, not `change`: React fires no change when the box stays empty ("e" typed into an empty box, Backspace from "-").
+      onInput={event => onBadInput?.(event.currentTarget.validity.badInput)}
       onChange={event => {
         const next = event.target.value
         setText(next)
-        onBadInput?.(event.target.validity.badInput)
         const parsed = next.trim() === '' ? Number.NaN : Number(next)
         setSeen(parsed)
         onChange(parsed)
