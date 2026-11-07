@@ -772,7 +772,7 @@ public class StaffController : ControllerBase
         // Availability: shared with ScheduleController.GetScheduleOverview via
         // IStaffAvailabilityItemsQuery (pure move, connection map item 12).
         var availabilityByStaff = await _availabilityItemsQuery.GetAsync(staffIds, today, today.AddDays(90), ct);
-        var availability = availabilityByStaff[id].ToList();
+        var availability = StaffScreeningMask.Apply(availabilityByStaff[id].ToList(), User, id);
 
         var upcomingShiftStatuses = new[] { ShiftStatus.Published, ShiftStatus.InProgress, ShiftStatus.PendingReview };
         var upcomingShiftsWindowEnd = today.AddDays(14);

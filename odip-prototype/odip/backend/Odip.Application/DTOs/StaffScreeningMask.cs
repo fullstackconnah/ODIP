@@ -12,6 +12,10 @@ public static class StaffScreeningMask
         user?.IsInRole("SuperAdmin") == true || user?.IsInRole("Admin") == true || user?.IsInRole("Coordinator") == true
         || (Guid.TryParse(user?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var self) && self == staffId);
 
+    /// <summary>Leave reasons and availability notes are private the same way: managers and the person themselves see them; for everyone else the item stays (they are away) but its Notes is dropped.</summary>
+    public static List<ScheduleAvailabilityItemDto> Apply(List<ScheduleAvailabilityItemDto> items, ClaimsPrincipal? user, Guid staffId) =>
+        CanSee(user, staffId) ? items : items.Select(i => i with { Notes = null }).ToList();
+
     /// <summary>Sign-in facts (invite sent, has signed in) are for managers only; a missing principal is masked.</summary>
     public static bool CanSeeSignIn(ClaimsPrincipal? user) =>
         user?.IsInRole("SuperAdmin") == true || user?.IsInRole("Admin") == true || user?.IsInRole("Coordinator") == true;
