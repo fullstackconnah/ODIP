@@ -73,6 +73,7 @@ try {
     const col = await column.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }))
     check(vp.name, 'a: error does not overflow its box or the field column', fit.sw <= fit.cw && col.sw <= col.cw, JSON.stringify({ fit, col }))
     check(vp.name, 'a: no horizontal page overflow', await noHScroll(page))
+    await column.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
     checks.push(checkCropHolds(await cropElement(page, column, path.join(OUT_DIR, `${vp.name}-a-length-error.png`), opts)))
 
     if (vp.scheme === 'dark') { await context.close(); continue }
@@ -89,6 +90,7 @@ try {
     const token = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--color-destructive)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c })
     check(vp.name, 'b: border colour = --color-destructive', border === token, `${border} vs ${token}`)
     check(vp.name, 'b: no horizontal page overflow', await noHScroll(page))
+    await box.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
     checks.push(checkCropHolds(await cropElement(page, box.locator('xpath=..'), path.join(OUT_DIR, `${vp.name}-b-referral-duplicate.png`), opts)))
 
     // (c) History caption, 390 only.
@@ -99,7 +101,8 @@ try {
       const lines = await caption.evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
       check(vp.name, 'c: caption on one line', lines === 1, `lines=${lines}`)
       check(vp.name, 'c: no horizontal page overflow', await noHScroll(page))
-      checks.push(checkCropHolds(await cropElement(page, caption, path.join(OUT_DIR, `${vp.name}-c-history-caption.png`), opts)))
+      await caption.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
+    checks.push(checkCropHolds(await cropElement(page, caption, path.join(OUT_DIR, `${vp.name}-c-history-caption.png`), opts)))
     }
     await context.close()
   }
