@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Odip.Infrastructure.DataExport;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -98,7 +99,7 @@ public class BprCsvService(OdipDbContext db)
         {
             // AuthorisedBy, ParticipantApproved, InKindFundingProgram (cols 11-13) are legacy: always blank. The ABN (col 16) is blank for agency-managed claims.
             sb.Append(string.Join(',',
-                CsvEscape(r.Registration), CsvEscape(r.NdisNumber), r.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), r.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                CsvCell.Text(r.Registration), CsvEscape(r.NdisNumber), r.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), r.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 CsvEscape(r.SupportNumber), r.Reference,
                 r.Quantity?.ToString("0.##", CultureInfo.InvariantCulture) ?? "", r.Hours is { } h ? FormatHours(h) : "",
                 r.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture), r.Gst, "", "", "", r.ClaimType, CsvEscape(r.CancellationReason), CsvEscape(r.Abn))).Append("\r\n");

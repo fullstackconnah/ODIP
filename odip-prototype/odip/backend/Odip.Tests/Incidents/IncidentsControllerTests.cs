@@ -669,6 +669,36 @@ public class IncidentsControllerTests
         Assert.Empty(db.IncidentReports);
     }
 
+    [Fact]
+    public async Task Create_AnUnknownSeverity_ReturnsBadRequestAndWritesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var result = await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Fire) with { Severity = (IncidentSeverity)99 }, CancellationToken.None);
+
+        Assert.Contains("Unknown severity.", Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!);
+        Assert.Empty(db.IncidentReports);
+    }
+
+    [Fact]
+    public async Task Update_AnUnknownSeverity_ReturnsBadRequestAndLeavesTheStoredSeverity()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Fire), CancellationToken.None);
+        var saved = await db.IncidentReports.SingleAsync();
+        var before = saved.Severity;
+
+        var result = await controller.Update(saved.Id, AsUpdate(EmergencyDto(reporter.Id, true, EmergencyService.Fire)) with { Severity = (IncidentSeverity)99 }, CancellationToken.None);
+
+        Assert.Contains("Unknown severity.", Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!);
+        db.ChangeTracker.Clear();
+        Assert.Equal(before, (await db.IncidentReports.SingleAsync()).Severity);
+    }
+
     // ── Update: determination frozen at creation ─────────────────────────────
 
     [Fact]
