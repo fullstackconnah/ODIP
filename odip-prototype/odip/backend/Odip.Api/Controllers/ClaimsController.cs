@@ -576,7 +576,12 @@ public class ClaimsController : ControllerBase
             if (dto.Status.Value == ClaimLineItemStatus.Paid && item.Status != ClaimLineItemStatus.Paid) item.PaidAt = _clock.GetUtcNow().UtcDateTime;
             else if (dto.Status.Value != ClaimLineItemStatus.Paid) item.PaidAt = null;
             item.Status = dto.Status.Value;
-            if (dto.Status.Value == ClaimLineItemStatus.Paid) item.PaidAmount = dto.PaidAmount ?? item.TotalAmount;
+            if (dto.Status.Value == ClaimLineItemStatus.Paid)
+            {
+                var paid = dto.PaidAmount ?? item.TotalAmount;
+                if (ClaimBatchService.PaidAmountRefusal(paid, item.TotalAmount) is { } refusal) return BadRequest(ApiResponse<bool>.Fail(refusal));
+                item.PaidAmount = paid;
+            }
             if (dto.Status.Value == ClaimLineItemStatus.Rejected) item.RejectionReason = dto.RejectionReason;
         }
 
