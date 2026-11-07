@@ -69,7 +69,7 @@ const staffSchema = z.object({
   medicationCompetencyExpiryDate: z.string().optional(),
   workerScreeningNumber: z.string().optional(),
   workerScreeningExpiryDate: z.string().optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(2000, 'Notes can be up to 2,000 characters. Shorten them to save.').optional(),
 })
 
 type StaffFormData = z.infer<typeof staffSchema>
@@ -439,8 +439,8 @@ export default function StaffCreatePage() {
               <input {...register('mobile')} placeholder="e.g. 0412 345 678" />
             </FormField>
 
-            <FormField label="Notes" className={span.long}>
-              <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
+            <FormField label="Notes" error={errors.notes?.message} className={span.long}>
+              <textarea {...register('notes')} rows={3} maxLength={2000} placeholder="Any additional notes..." />
             </FormField>
           </div>
         </Card>
@@ -509,7 +509,7 @@ export default function StaffCreatePage() {
 
             <div className={`${span.medium} space-y-1`}>
               <FormField label="Worker screening number">
-                <input {...register('workerScreeningNumber')} placeholder="e.g. WWC1234567" />
+                <input {...register('workerScreeningNumber')} maxLength={50} placeholder="e.g. WWC1234567" />
               </FormField>
               <FormField label="Worker screening expiry">
                 <input type="date" {...register('workerScreeningExpiryDate')} />
