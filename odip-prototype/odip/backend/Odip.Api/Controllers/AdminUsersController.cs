@@ -184,7 +184,7 @@ public class AdminUsersController : ControllerBase
         // Validate username uniqueness across all tenants
         var usernameExists = await _db.Users
             .IgnoreQueryFilters([TenantFilter.Name])
-            .AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower(), ct);
+            .AnyAsync(u => u.Username.ToLower() == dto.Username.Trim().ToLower(), ct);
         if (usernameExists)
             return Conflict(ApiResponse<object>.Fail("A user with this username already exists"));
 
@@ -239,7 +239,7 @@ public class AdminUsersController : ControllerBase
             FirstName = dto.FirstName,
             LastName = dto.LastName,
             Email = email,
-            Username = dto.Username,
+            Username = dto.Username.Trim(),
             Role = role,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -340,7 +340,7 @@ public class AdminUsersController : ControllerBase
         // Validate username uniqueness (excluding current user)
         var usernameExists = await _db.Users
             .IgnoreQueryFilters([TenantFilter.Name])
-            .AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower() && u.Id != id, ct);
+            .AnyAsync(u => u.Username.ToLower() == dto.Username.Trim().ToLower() && u.Id != id, ct);
         if (usernameExists)
             return Conflict(ApiResponse<object>.Fail("A user with this username already exists"));
 
@@ -419,7 +419,7 @@ public class AdminUsersController : ControllerBase
         user.LastName = dto.LastName;
         user.Email = email;
         if (email != originalEmail) user.SignInAddressUnconfirmed = false;   // a SuperAdmin typed the new address: a person has decided on it
-        user.Username = dto.Username;
+        user.Username = dto.Username.Trim();
         user.Role = role;
         user.IsActive = dto.IsActive;
         // The staff profile is owned by the Staff endpoint and this form does not send it, so it is left as stored.

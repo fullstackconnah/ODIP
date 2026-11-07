@@ -34,7 +34,8 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
 
     /// <summary>The one rule for what a line is marked paid at, shared by the batch and the claim line edit: a cent to the line total, in whole cents. Null when it holds.</summary>
     public static string? PaidAmountRefusal(decimal amount, decimal lineTotal) =>
-        amount <= 0 || amount > lineTotal || decimal.Round(amount, 2) != amount ? $"Enter an amount between $0.01 and ${Money(lineTotal)}." : null;
+        lineTotal <= 0 ? "A $0.00 line can't be marked paid."
+        : amount <= 0 || amount > lineTotal || decimal.Round(amount, 2) != amount ? $"Enter an amount between $0.01 and ${Money(lineTotal)}." : null;
     private static string? Trunc(string? text, int max) => text is { Length: > 0 } && text.Length > max ? text[..max] : text;
 
     private static (Guid? Id, string? Name) Who(ClaimsPrincipal user) =>
