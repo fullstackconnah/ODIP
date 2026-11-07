@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { Ref } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { AgreementState, PlanPriceZone } from '@/api/types'
@@ -46,6 +47,9 @@ type AgreementStepProps = {
 /** Step 1: when the agreement runs and where it is delivered. The NDIS plan dates come from the participant's funding plan and are only asked for when there is none or they differ. */
 export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnly, fundingTab, recordBudget, endedOn, planLineRef }: AgreementStepProps) {
   const planFold = useStickyOpen(!!details.planOverride)
+  const planTooLong = planPastCap(details.agreementStartDate, plan.end)
+  // A picked Ongoing the plan length now refuses would stay selected but disabled; the server refuses it too.
+  useEffect(() => { if (!readOnly && details.ongoing && planTooLong) onEdit({ ongoing: false, agreementEndDate: '' }) }, [readOnly, details.ongoing, planTooLong, onEdit])
   if (readOnly) {
     return (
       <FactList items={[
@@ -61,7 +65,6 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
   const { agreementStartDate: start, agreementEndDate: end } = details
   const canPreset = !!start && addMonths(start, 1) !== ''
   const canOngoing = !!recorded || !!details.planOverride
-  const planTooLong = planPastCap(start, plan.end)
   const length = details.ongoing ? 'ongoing' : PRESET_MONTHS.find(months => !!start && end === presetEnd(start, months))?.toString() ?? 'custom'
   const chooseLength = (value: string) => {
     if (value === 'ongoing') onEdit({ ongoing: true, agreementEndDate: plan.end })

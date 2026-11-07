@@ -46,7 +46,7 @@ export function useCancelMyLeave() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiPost<LeaveRequestDto>(`/portal/leave/${id}/cancel`),
-    onSuccess: () => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
@@ -69,7 +69,7 @@ export function useCancelMyUnavailability() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiPost<RecurringUnavailabilityDto>(`/portal/unavailability/${id}/cancel`),
-    onSuccess: () => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
     },
