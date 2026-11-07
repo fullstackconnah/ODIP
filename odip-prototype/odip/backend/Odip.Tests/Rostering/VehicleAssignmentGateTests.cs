@@ -406,4 +406,25 @@ public class VehicleAssignmentGateTests
 
         Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
     }
+
+    [Fact]
+    public async Task Update_StatusCancelled_OnAnArchivedVehicleWithAnIneligibleDriver_StillCancels()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var vehicle = SeedVehicle(db);
+        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
+        var driver = SeedDriver(db, true, new DateOnly(2026, 9, 9));   // licence expires before the trip: a live edit would be refused
+        var assignment = new VehicleAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, VehicleId = vehicle.Id, DriverUserId = driver.Id, Status = VehicleAssignmentStatus.Requested };
+        db.VehicleAssignments.Add(assignment);
+        vehicle.IsActive = false;
+        db.SaveChanges();
+
+        var result = await new VehicleAssignmentsController(db).Update(assignment.Id,
+            new UpdateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = vehicle.Id, DriverStaffId = driver.Id, Status = VehicleAssignmentStatus.Cancelled }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.VehicleAssignments.SingleAsync();
+        Assert.Equal(VehicleAssignmentStatus.Cancelled, saved.Status);
+        Assert.Equal(driver.Id, saved.DriverUserId);
+    }
 }
