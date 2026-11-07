@@ -2588,7 +2588,7 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>Roster drag and drop (2026-10-14), decision 8: a shift that has started, waits for review, is finished or is cancelled keeps its worker; only its completion endpoints move it on.</summary>
-    private static bool IsLockedForStaffChange(ShiftStatus status) =>
+    internal static bool IsLockedForStaffChange(ShiftStatus status) =>
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";

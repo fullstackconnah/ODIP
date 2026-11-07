@@ -25,6 +25,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         var shifts = await db.Shifts
             .Where(s => s.ServiceDate >= first && s.ServiceDate <= last && ((s.UserId != null && userIds.Contains(s.UserId.Value)) || participantIds.Contains(s.ParticipantId)))
             .ToListAsync(ct);
+        shifts.AddRange(await ActivityStaffBusyAsync(db, userIds, first, last, ct));
         var trips = await db.StaffAssignments
             .Where(a => userIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled && a.AssignmentStart <= last && a.AssignmentEnd >= first)
             .ToListAsync(ct);
@@ -34,6 +35,23 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
         return new Snapshot(staff, participants, shifts, trips, windows, compatibility, await PublicHolidaysAsync(from, to, ct),
             await WeeklyHoursAsync(db, staff.Select(u => u.TenantId), ct));
+    }
+
+    /// <summary>
+    /// The workers' parts of group activities (group activities D7) as transient, never-saved shifts, so DOUBLE_BOOKED_SHIFT, OVER_HOURS and the casual fortnight rule see a staff row as a busy period with no rule change.
+    /// ParticipantId is Guid.Empty (no participant is on it) and Id is the staff row's. Cancelled activities do not count. AsNoTracking: these must never be saved by an unrelated SaveChanges.
+    /// </summary>
+    public static async Task<List<Shift>> ActivityStaffBusyAsync(OdipDbContext db, IReadOnlyList<Guid> userIds, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var rows = await db.GroupActivityStaff.AsNoTracking()
+            .Where(r => userIds.Contains(r.UserId) && r.GroupActivity!.Status != ShiftStatus.Cancelled && r.GroupActivity.ServiceDate >= from && r.GroupActivity.ServiceDate <= to)
+            .Select(r => new { r.Id, r.TenantId, r.UserId, r.StartTime, r.EndTime, r.EndsNextDay, r.GroupActivityId, r.GroupActivity!.ServiceDate, r.GroupActivity.Status })
+            .ToListAsync(ct);
+        return rows.Select(r => new Shift
+        {
+            Id = r.Id, TenantId = r.TenantId, ParticipantId = Guid.Empty, UserId = r.UserId, ServiceDate = r.ServiceDate, StartTime = r.StartTime, EndTime = r.EndTime,
+            EndsNextDay = r.EndsNextDay, Ratio = SupportRatio.OneToOne, Status = r.Status, GroupActivityId = r.GroupActivityId
+        }).ToList();
     }
 
     private static DateOnly Min(DateOnly a, DateOnly b) => a < b ? a : b;
@@ -154,6 +172,9 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
 
         /// <summary>A shift placed in this batch: later checks see the worker as booked.</summary>
         public void Add(Shift shift) => _shifts.Add(shift);
+
+        /// <summary>A participant who is not saved (an activity with nobody on it yet): the rules need one to judge a worker against.</summary>
+        public void AddParticipant(Participant participant) => _participants[participant.Id] = participant;
 
         private List<RosterFinding> CheckCore(Shift candidate, Guid? excludeShiftId, Guid? leavingShiftId, bool liveOnly, bool? callerIsAdmin)
         {
