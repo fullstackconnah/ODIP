@@ -73,7 +73,7 @@ public static class NdiaResultsFile
             var amountText = Cell(r, "amount").Replace("$", "").Replace(",", "");
             if (amountText.Length > 0)
             {
-                if (decimal.TryParse(amountText, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)) amount = parsed;
+                if (decimal.TryParse(amountText, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) && IsStorable(parsed)) amount = parsed;
                 else unread.Add(new UnreadRow(number, Cell(r, "amount"), "The amount couldn't be read; the result still applies."));
             }
             var code = Cell(r, "code");
@@ -81,6 +81,9 @@ public static class NdiaResultsFile
             rows.Add(new ResultRow(number, reference, outcome, code.Length == 0 ? null : code, message.Length == 0 ? null : message, amount));
         }
         return new ResultsParse(rows, unread, null);
+
+        // numeric(18,2) is the ResultAmount column: anything outside it, negative, or finer than cents would fail the whole import at save.
+        static bool IsStorable(decimal v) => v >= 0 && v <= 9_999_999_999_999_999.99m && decimal.Round(v, 2) == v;
 
         static ResultsParse Refuse(string error) => new([], [], error);
     }

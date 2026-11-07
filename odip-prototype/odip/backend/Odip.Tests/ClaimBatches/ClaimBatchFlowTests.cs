@@ -231,6 +231,26 @@ public class ClaimBatchFlowTests
         Assert.Equal(("A1", ClaimBatchLineOutcome.Rejected, "e1", "why"), (row.Reference, row.Outcome, row.Code, row.Message));
     }
 
+    [Theory]
+    [InlineData("99999999999999999999")]
+    [InlineData("-5")]
+    [InlineData("12.345")]
+    public void An_unusable_amount_reads_as_null_and_the_row_still_applies(string amount)
+    {
+        var parsed = NdiaResultsFile.Parse(Encoding.UTF8.GetBytes($"Reference,Result,Code,Paid Amount\nA1,Rejected,e1,{amount}\n"));
+        var row = Assert.Single(parsed.Rows);
+        Assert.Null(row.Amount);
+        Assert.Equal("The amount couldn't be read; the result still applies.", Assert.Single(parsed.Unread).Note);
+    }
+
+    [Fact]
+    public void A_grouped_two_decimal_amount_and_a_blank_one_read_as_before()
+    {
+        var parsed = NdiaResultsFile.Parse(Encoding.UTF8.GetBytes("Reference,Result,Code,Paid Amount\nA1,Successful,,\"1,234.50\"\nA2,Successful,,\n"));
+        Assert.Equal(new decimal?[] { 1234.50m, null }, parsed.Rows.Select(r => r.Amount).ToArray());
+        Assert.Empty(parsed.Unread);
+    }
+
     [Fact]
     public void A_missing_or_repeated_column_refuses_the_whole_file()
     {
