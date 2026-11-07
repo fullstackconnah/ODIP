@@ -62,6 +62,23 @@ export function wipeOffline(opts: { keepQueue?: boolean; exceptUser?: string }):
   } catch { /* ignore */ }
 }
 
+/** Unsent changes any worker left on this phone, and the first name kept with them (null when none was kept). For the sign-in page: a different sign-in deletes them. */
+export function unsentOnDevice(): { count: number; firstName: string | null } {
+  let count = 0
+  let firstName: string | null = null
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k || !k.startsWith(OFFLINE_PREFIX) || !k.endsWith(':queue')) continue
+      const list: unknown = JSON.parse(localStorage.getItem(k) ?? '[]')
+      if (!Array.isArray(list)) continue
+      count += list.length
+      firstName ??= list.find((r) => typeof r?.ownerFirstName === 'string' && r.ownerFirstName)?.ownerFirstName ?? null
+    }
+  } catch { /* unreadable or malformed: count what we have */ }
+  return { count, firstName }
+}
+
 /** Reads every saved copy once, so any past 48 h is removed even if nobody opens that shift again. The queue and the replay lease are not saved copies. */
 export function sweepExpired(): void {
   try {

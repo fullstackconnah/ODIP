@@ -9,6 +9,8 @@
  */
 import { apiClient } from '@/api/client'
 import { apiErrorCode, apiErrorData, apiErrorStatus } from '@/lib/shiftPackageErrors'
+import { firstNameOf } from '@/lib/greeting'
+import { currentProfile } from '@/lib/viewAs'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { OFFLINE_PREFIX, readSaved, readSession, writeSaved, wipeOffline, type OfflineSession } from './store'
 
@@ -18,6 +20,8 @@ export interface QueueRecord {
   /** newCompletionRequestId(); doubles as the break id / note id. */
   id: string
   userId: string
+  /** The worker's first name, kept so the sign-in page can say whose changes wait (the session record is gone by then). Absent on older records. */
+  ownerFirstName?: string
   viewAsTenant: string | null
   viewAsUser: string | null
   shiftId: string
@@ -194,6 +198,7 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
       ...input,
       id: input.id ?? deps.newId(),
       userId: s.userId ?? '',
+      ownerFirstName: firstNameOf(String(currentProfile().fullName ?? '')) || undefined,
       viewAsTenant: s.viewAsTenant,
       viewAsUser: s.viewAsUser,
       clientTime: new Date(t).toISOString(),
