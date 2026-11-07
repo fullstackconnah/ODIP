@@ -258,3 +258,67 @@ describe('Modal enter motion', () => {
     expect(withoutNoPreference).not.toMatch(/\.modal-scrim\s*\{/)
   })
 })
+
+describe('Modal dirty', () => {
+  const Dirty = ({ onClose, dirty = true }: { onClose: () => void; dirty?: boolean }) => (
+    <Modal open onClose={onClose} title="Example" dirty={dirty}>
+      <label>Notes<input /></label>
+    </Modal>
+  )
+
+  it('a clean dialog closes at once on Escape, the backdrop and the X: no prompt', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<Dirty onClose={onClose} dirty={false} />)
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('dialog').parentElement!)
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    expect(onClose).toHaveBeenCalledTimes(3)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('Escape, the backdrop and the X each ask "Discard changes?" and do not close', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<Dirty onClose={onClose} />)
+    for (const act of [
+      () => user.keyboard('{Escape}'),
+      () => user.click(screen.getByRole('dialog', { name: 'Example' }).parentElement!),
+      () => user.click(screen.getByRole('button', { name: 'Close dialog' })),
+    ]) {
+      await act()
+      expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    }
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Example' })).toBeInTheDocument()
+  })
+
+  it('"Discard" calls onClose', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<Dirty onClose={onClose} />)
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('the footer Cancel stays an explicit discard: no prompt', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<Modal open onClose={onClose} title="Example" dirty footer={<button onClick={onClose}>Cancel</button>}><p>Body</p></Modal>)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('a prompt left up when the caller closes the dialog is gone on the next open', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Dirty onClose={() => {}} />)
+    await user.keyboard('{Escape}')
+    rerender(<Modal open={false} onClose={() => {}} title="Example" dirty><p>x</p></Modal>)
+    rerender(<Modal open onClose={() => {}} title="Example" dirty><p>x</p></Modal>)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+})

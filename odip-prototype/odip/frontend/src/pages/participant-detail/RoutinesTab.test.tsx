@@ -551,3 +551,20 @@ describe('Quick add from the Overview (?add=1)', () => {
     expect(screen.getByTestId('where')).not.toHaveTextContent('add=1')
   })
 })
+
+describe('RoutinesTab — unsaved text', () => {
+  it('Escape after typing asks before discarding and Keep editing keeps the text', async () => {
+    const user = userEvent.setup()
+    render(<RoutinesTab participantId="participant-1" />, { wrapper: MemoryRouter })
+    await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+    await user.type(screen.getByLabelText(/title/i), 'Morning meds')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText(/title/i)).toHaveValue('Morning meds')
+  })
+})
