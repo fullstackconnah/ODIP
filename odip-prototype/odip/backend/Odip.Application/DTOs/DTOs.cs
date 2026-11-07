@@ -1518,7 +1518,8 @@ public record AppSettingsDto
 
 public record UpdateSecuritySettingsDto
 {
-    /// <summary>Null = no limit.</summary>
+    /// <summary>Null = no limit. The key must be present: a body without it is a 400, never read as no limit.</summary>
+    [System.Text.Json.Serialization.JsonRequired]
     [System.ComponentModel.DataAnnotations.Range(15, 480)]
     public int? SessionLengthMinutes { get; init; }
 }
