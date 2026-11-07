@@ -152,6 +152,7 @@ public sealed class ShiftBreakService
     {
         // Same shift row lock as Start Break and Finish, so an edit cannot land after Finish has read the breaks.
         await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
+        if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
         var breaks = await LoadAsync(completion.Id, ct);
         var target = breaks.FirstOrDefault(b => b.Id == breakId);
         if (target is null) return new ShiftBreakResult(ShiftBreakOutcome.NotFound);
@@ -180,6 +181,7 @@ public sealed class ShiftBreakService
     public async Task<ShiftBreakResult> DeleteAsync(ShiftCompletion completion, Guid breakId, CancellationToken ct)
     {
         await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
+        if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
         var target = await _db.ShiftBreaks.FirstOrDefaultAsync(b => b.Id == breakId && b.ShiftCompletionId == completion.Id, ct);
         if (target is null) return new ShiftBreakResult(ShiftBreakOutcome.NotFound);
 

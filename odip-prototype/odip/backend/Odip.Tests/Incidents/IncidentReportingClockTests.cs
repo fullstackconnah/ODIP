@@ -497,4 +497,19 @@ public class IncidentReportingClockTests
 
         Assert.Equal(kept, (await db.IncidentReports.SingleAsync()).ResolvedAt != null);
     }
+
+    [Fact]
+    public async Task Update_RestoringAClosedIncidentToDraft_ClearsResolvedAt()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var created = await CreateCriticalAsync(db, controller, reporter.Id);
+        await controller.Update(created.Id, UpdateDto(created) with { Status = IncidentStatus.Resolved }, CancellationToken.None);
+        await controller.Update(created.Id, UpdateDto(created) with { Status = IncidentStatus.Closed }, CancellationToken.None);
+        Assert.NotNull((await db.IncidentReports.SingleAsync()).ResolvedAt);
+
+        await controller.Update(created.Id, UpdateDto(created) with { Status = IncidentStatus.Draft }, CancellationToken.None);
+
+        Assert.Null((await db.IncidentReports.SingleAsync()).ResolvedAt);
+    }
 }

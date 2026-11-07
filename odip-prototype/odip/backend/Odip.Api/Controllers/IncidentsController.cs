@@ -845,7 +845,7 @@ public class IncidentsController : ControllerBase
         i.UnapprovedRestrictivePracticeDetails = string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails)
             ? null : dto.UnapprovedRestrictivePracticeDetails.Trim();
         i.Severity = dto.Severity;
-        if (i.Status == IncidentStatus.Resolved && dto.Status != IncidentStatus.Resolved && dto.Status != IncidentStatus.Closed) i.ResolvedAt = null;
+        if (dto.Status != IncidentStatus.Resolved && dto.Status != IncidentStatus.Closed) i.ResolvedAt = null;
         i.Status = dto.Status;
         i.Title = dto.Title;
         i.Description = dto.Description;
@@ -1015,7 +1015,7 @@ public class IncidentsController : ControllerBase
         i.ReviewedAt = now;
         i.ReviewNotes = notes;
         i.CorrectiveActions = string.IsNullOrWhiteSpace(dto.CorrectiveActions) ? null : dto.CorrectiveActions.Trim();
-        if (i.Status == IncidentStatus.Resolved && dto.Status != IncidentStatus.Resolved && dto.Status != IncidentStatus.Closed) i.ResolvedAt = null;
+        if (dto.Status != IncidentStatus.Resolved && dto.Status != IncidentStatus.Closed) i.ResolvedAt = null;
         i.Status = dto.Status;
         if (dto.Status == IncidentStatus.Resolved && i.ResolvedAt == null) i.ResolvedAt = now;
         i.UpdatedAt = now;
