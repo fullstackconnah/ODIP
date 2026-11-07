@@ -4,7 +4,7 @@
 // caption on one line, no horizontal page overflow. mock-api has no audit route, so GET /audit/** is fixtured here.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { prepareOutDir, cropElement, checkCropHolds, writeChecks, AU_CONTEXT } from '../shots/lib/capture.mjs'
+import { prepareOutDir, cropElement, checkCropHolds, overlapCheck, writeChecks, AU_CONTEXT } from '../shots/lib/capture.mjs'
 
 let chromium
 try {
@@ -35,6 +35,11 @@ const browser = await chromium.launch({ headless: true })
 const checks = []
 const check = (vp, name, ok, detail = '') => { checks.push({ name: `${vp} ${name}`, pass: !!ok, detail }); console.log(`[polish-batch-20] ${ok ? 'PASS' : 'FAIL'} ${vp} ${name}${detail ? ` (${detail})` : ''}`) }
 const noHScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+// hideChrome drops the sticky bar and bottom nav (their transition-all keeps visibility:hidden pending, hence the wait); overlapCheck fails a crop they still cover.
+const shoot = async (page, loc, file) => {
+  const shot = await cropElement(page, loc, file, { hideChrome: true, during: async (clip) => { await page.waitForTimeout(500); return overlapCheck(loc, clip, path.basename(file)) } })
+  checks.push(shot.measured, checkCropHolds(shot))
+}
 const go = (page, url) => page.goto(`${BASE_URL}${url}`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
 
 try {
@@ -49,7 +54,6 @@ try {
     await signIn.waitFor({ state: 'visible', timeout: 60_000 })
     await signIn.click()
     await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 60_000 })
-    const opts = { touch: vp.touch }
     if (vp.touch) check(vp.name, 'pointer is coarse (touch emulation intact)', await page.evaluate(() => matchMedia('(pointer: coarse)').matches))
 
     // (a) Agreement step: Ongoing chosen inside the cap, then the plan end moves past it.
@@ -73,8 +77,7 @@ try {
     const col = await column.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }))
     check(vp.name, 'a: error does not overflow its box or the field column', fit.sw <= fit.cw && col.sw <= col.cw, JSON.stringify({ fit, col }))
     check(vp.name, 'a: no horizontal page overflow', await noHScroll(page))
-    await column.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
-    checks.push(checkCropHolds(await cropElement(page, column, path.join(OUT_DIR, `${vp.name}-a-length-error.png`), opts)))
+    await shoot(page, column, path.join(OUT_DIR, `${vp.name}-a-length-error.png`))
 
     if (vp.scheme === 'dark') { await context.close(); continue }
 
@@ -90,8 +93,7 @@ try {
     const token = await page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--color-destructive)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c })
     check(vp.name, 'b: border colour = --color-destructive', border === token, `${border} vs ${token}`)
     check(vp.name, 'b: no horizontal page overflow', await noHScroll(page))
-    await box.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
-    checks.push(checkCropHolds(await cropElement(page, box.locator('xpath=..'), path.join(OUT_DIR, `${vp.name}-b-referral-duplicate.png`), opts)))
+    await shoot(page, box.locator('xpath=..'), path.join(OUT_DIR, `${vp.name}-b-referral-duplicate.png`))
 
     // (c) History caption, 390 only.
     if (vp.touch) {
@@ -101,8 +103,7 @@ try {
       const lines = await caption.evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
       check(vp.name, 'c: caption on one line', lines === 1, `lines=${lines}`)
       check(vp.name, 'c: no horizontal page overflow', await noHScroll(page))
-      await caption.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }))
-    checks.push(checkCropHolds(await cropElement(page, caption, path.join(OUT_DIR, `${vp.name}-c-history-caption.png`), opts)))
+    await shoot(page, caption, path.join(OUT_DIR, `${vp.name}-c-history-caption.png`))
     }
     await context.close()
   }
