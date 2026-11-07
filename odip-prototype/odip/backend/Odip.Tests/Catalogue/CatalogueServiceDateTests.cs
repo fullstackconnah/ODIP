@@ -179,7 +179,7 @@ public class CatalogueServiceDateTests
         var refusal = await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             new ShiftClaimGenerationService(db).PreviewAsync(participant.Id, new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)));
 
-        Assert.Equal("Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. No catalogue rate covers this date.", refusal.Message);
+        Assert.Equal($"Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. {participant.FullName}: No catalogue rate covers this date.", refusal.Message);
     }
 
     // ── Trip claims ───────────────────────────────────────────────────────────────
