@@ -347,7 +347,8 @@ public class ClaimEditGuardsTests
 
         Assert.Equal(200, StatusOf(result));
         db.ChangeTracker.Clear();
-        // Only Paid takes the amount; a part-paid line keeps the one it had.        Assert.Equal(status == ClaimLineItemStatus.Paid ? 80m : 75m, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).PaidAmount);
+        // Only Paid takes the amount; a part-paid line keeps the one it had.
+        Assert.Equal(status == ClaimLineItemStatus.Paid ? 80m : 75m, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).PaidAmount);
     }
 
     // ── Acceptance: boundaries, the whole status matrix, and the total across a sequence ─────
