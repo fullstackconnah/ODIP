@@ -657,4 +657,20 @@ public class StaffControllerGuardrailTests
         firebase.Verify(f => f.UpdateUserByEmailAsync(email, $"Renamed {last}", false, It.IsAny<CancellationToken>()), Times.Once);
         firebase.Verify(f => f.UpdateUserByEmailAsync(email, original, false, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Update_RenamingAndArchiving_WhenTheSaveThrows_PutsBackTheDisabledValueAndTheOriginalName()
+    {
+        var (db, tenantId, breakSave) = CreateBreakableDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+        var controller = MakeController(db, "Admin", firebase);
+        var (email, original, last) = (worker.Email, $"{worker.FirstName} {worker.LastName}", worker.LastName);
+        breakSave();
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.Update(worker.Id, EditOf(worker, isActive: false) with { FirstName = "Renamed" }, CancellationToken.None));
+
+        firebase.Verify(f => f.UpdateUserByEmailAsync(email, $"Renamed {last}", true, It.IsAny<CancellationToken>()), Times.Once);
+        firebase.Verify(f => f.UpdateUserByEmailAsync(email, original, false, It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
