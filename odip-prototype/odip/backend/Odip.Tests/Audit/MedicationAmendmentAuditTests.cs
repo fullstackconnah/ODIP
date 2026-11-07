@@ -87,6 +87,22 @@ public class MedicationAmendmentAuditTests
     }
 
     [Fact]
+    public async Task SecondAmendmentWithAnotherReason_AuditKeepsTheFirstReasonAsOld()
+    {
+        var (db, admin) = await SeedAsync();
+        Amend(admin, DateTime.UtcNow);
+        await db.SaveChangesAsync();
+        admin.AmendmentReason = MedicationAmendmentReason.WrongDose;
+        admin.AmendmentNote = "Gave 1 tablet";
+        admin.AmendedAt = DateTime.UtcNow.AddMinutes(5);
+        await db.SaveChangesAsync();
+
+        var second = Updates(db, admin.Id).Last().Changes;
+        Assert.Contains("{\"Field\":\"AmendmentReason\",\"Old\":\"WrongTime\",\"New\":\"WrongDose\"}", second);
+        Assert.Contains("\"Old\":\"Gave at 9\"", second);
+    }
+
+    [Fact]
     public async Task NonAmendUpdate_WritesNoAmendmentFields()
     {
         var (db, admin) = await SeedAsync();

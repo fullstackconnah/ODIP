@@ -39,6 +39,11 @@ beforeEach(() => {
 })
 
 describe('offline queue', () => {
+  it('keeps the worker’s first name on the record, so the sign-in page can name whose changes wait', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1', fullName: 'Asha Patel' }))
+    expect(make().enqueue(rec('start')).ownerFirstName).toBe('Asha')
+  })
+
   it('replay order: start, note, breaks (in tap order), tick, finish regardless of tap order', async () => {
     const q = make()
     for (const k of ['finish', 'note', 'tick', 'start', 'breakEnd', 'breakStart'] as const) q.enqueue(rec(k))
