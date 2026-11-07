@@ -59,6 +59,7 @@ public class ParticipantRiskEntriesController : ControllerBase
         {
             Id = Guid.NewGuid(),
             ParticipantId = participantId,
+            TenantId = participant.TenantId,
             AtRiskParty = dto.AtRiskParty,
             Description = dto.Description.Trim(),
             MitigationNotes = string.IsNullOrWhiteSpace(dto.MitigationNotes) ? null : dto.MitigationNotes.Trim(),

@@ -1489,12 +1489,14 @@ public record CreateStaffDto
     public bool IsManualHandlingCompetent { get; init; }
     public bool IsOvernightEligible { get; init; }
     public bool IsActive { get; init; } = true;
+    [StringLength(2000)]
     public string? Notes { get; init; }
     public DateOnly? FirstAidExpiryDate { get; init; }
     public DateOnly? CprExpiryDate { get; init; }
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    [StringLength(50)]
     public string? WorkerScreeningNumber { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
 }
@@ -1517,7 +1519,8 @@ public record AppSettingsDto
 
 public record UpdateSecuritySettingsDto
 {
-    /// <summary>Null = no limit.</summary>
+    /// <summary>Null = no limit. The key must be present: a body without it is a 400, never read as no limit.</summary>
+    [System.Text.Json.Serialization.JsonRequired]
     [System.ComponentModel.DataAnnotations.Range(15, 480)]
     public int? SessionLengthMinutes { get; init; }
 }

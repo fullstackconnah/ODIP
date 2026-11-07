@@ -56,6 +56,7 @@ public class ParticipantRoutinesController : ControllerBase
         {
             Id = Guid.NewGuid(),
             ParticipantId = participantId,
+            TenantId = participant.TenantId,
             Title = dto.Title,
             Description = dto.Description,
             Category = dto.Category,
