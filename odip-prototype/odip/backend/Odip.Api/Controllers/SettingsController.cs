@@ -46,17 +46,24 @@ public class SettingsController : ControllerBase
         var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {
-            s = new AppSettings();   // a field left out takes the entity default
+            s = new AppSettings { Id = Guid.NewGuid() };   // a field left out takes the entity default
             _db.AppSettings.Add(s);
         }
         // Presence-based: a field left out keeps the stored value, so each Settings section saves only its own.
-        if (dto.QualificationWarningDays is { } days) s.QualificationWarningDays = days;
-        if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
-        if (dto.VarianceReviewMinutes is { } minutes) s.VarianceReviewMinutes = minutes;
-        if (dto.PlanExpiryWarningDays is { } planDays) s.PlanExpiryWarningDays = planDays;
-        if (dto.AutoRosterReach is { } reach) s.AutoRosterReach = reach;
+        if (dto.QualificationWarningDays is { } days) { AuditChange(s, nameof(AppSettings.QualificationWarningDays), s.QualificationWarningDays, days); s.QualificationWarningDays = days; }
+        if (dto.WeeklyHoursWarning is { } hours) { AuditChange(s, nameof(AppSettings.WeeklyHoursWarning), s.WeeklyHoursWarning, hours); s.WeeklyHoursWarning = hours; }
+        if (dto.VarianceReviewMinutes is { } minutes) { AuditChange(s, nameof(AppSettings.VarianceReviewMinutes), s.VarianceReviewMinutes, minutes); s.VarianceReviewMinutes = minutes; }
+        if (dto.PlanExpiryWarningDays is { } planDays) { AuditChange(s, nameof(AppSettings.PlanExpiryWarningDays), s.PlanExpiryWarningDays, planDays); s.PlanExpiryWarningDays = planDays; }
+        if (dto.AutoRosterReach is { } reach) { AuditChange(s, nameof(AppSettings.AutoRosterReach), s.AutoRosterReach, reach); s.AutoRosterReach = reach; }
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
+    }
+
+    // One audit row per field whose value changed, as module-visibility writes.
+    private void AuditChange(AppSettings s, string field, int? oldValue, int? newValue)
+    {
+        if (oldValue != newValue)
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(AppSettings), s.Id, field, oldValue?.ToString(), newValue?.ToString(), User));
     }
 
     private static AppSettingsDto ToDto(AppSettings? s) => new()
@@ -79,13 +86,11 @@ public class SettingsController : ControllerBase
         var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {
-            s = new AppSettings { SessionLengthMinutes = dto.SessionLengthMinutes };
+            s = new AppSettings { Id = Guid.NewGuid() };
             _db.AppSettings.Add(s);
         }
-        else
-        {
-            s.SessionLengthMinutes = dto.SessionLengthMinutes;
-        }
+        AuditChange(s, nameof(AppSettings.SessionLengthMinutes), s.SessionLengthMinutes, dto.SessionLengthMinutes);
+        s.SessionLengthMinutes = dto.SessionLengthMinutes;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
     }

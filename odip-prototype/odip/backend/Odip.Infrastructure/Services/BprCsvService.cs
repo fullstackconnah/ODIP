@@ -102,7 +102,7 @@ public class BprCsvService(OdipDbContext db)
                 CsvCell.Text(r.Registration), CsvEscape(r.NdisNumber), r.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), r.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 CsvEscape(r.SupportNumber), r.Reference,
                 r.Quantity?.ToString("0.##", CultureInfo.InvariantCulture) ?? "", r.Hours is { } h ? FormatHours(h) : "",
-                r.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture), r.Gst, "", "", "", r.ClaimType, CsvEscape(r.CancellationReason), CsvEscape(r.Abn))).Append("\r\n");
+                r.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture), r.Gst, "", "", "", r.ClaimType, CsvEscape(r.CancellationReason), CsvCell.Text(r.Abn))).Append("\r\n");
         }
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
