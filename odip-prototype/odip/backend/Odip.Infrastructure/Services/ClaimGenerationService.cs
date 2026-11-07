@@ -110,6 +110,11 @@ public class ClaimGenerationService
         if (await _db.TripClaims.AnyAsync(c => c.TripInstanceId == tripInstanceId && c.Status != TripClaimStatus.Rejected, ct))
             throw new InvalidOperationException("An active claim already exists for this trip.");
 
+        // A shift claim for a booked participant takes their lock, so a trip claim and a shift claim for the same day cannot both read "nothing live" and both save. Trip first, then participants ascending (no cycle).
+        // The locks join the trip lock's transaction and go with it.
+        foreach (var participantId in trip.Bookings.Where(b => b.BookingStatus == BookingStatus.Confirmed).Select(b => b.ParticipantId).Distinct().Order())
+            await RosterGenerationLock.AcquireAsync(_db, participantId, ct, scope: "claim-generate");
+
         var (lineItems, context) = await CalculateClaimInternalAsync(trip, previewOverrides, ct);
 
         // A claim with no lines is never saved. The preview still returns the empty list (it shows what the engine would do), but a Draft claim with no lines and
@@ -270,7 +275,7 @@ public class ClaimGenerationService
 
         // A day is claimed once: a participant with a live shift claim line on any day of the trip is left out whole (the same rule as the ledger, so a Rejected or Cancelled claim frees the day),
         // and the reason names that claim and the dates.
-        // shortcut: this reads once per calculation and does not lock against ShiftClaimGenerationService, so a shift claim made at the same moment can still land; upgrade is the per-participant RosterGenerationLock taken here too.
+        // Saving a claim holds each booked participant's "claim-generate" lock (the one the shift claim takes), so a shift claim made at the same moment waits and then sees this one.
         var bookedIds = confirmedBookings.Select(b => b.ParticipantId).ToList();
         var shiftClaimsOnTripDays = (await _db.ClaimLineItems.AsNoTracking()
                 .Where(BudgetLedgerService.ClaimLineStillCounts)
