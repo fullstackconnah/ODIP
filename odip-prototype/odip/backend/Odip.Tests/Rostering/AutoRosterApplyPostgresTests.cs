@@ -103,29 +103,48 @@ public class AutoRosterApplyPostgresTests : IClassFixture<PostgresFixture>
         Assert.All(await WorkersOn(tenantId, shifts), Assert.Null);
     }
 
+    // Two shifts at the same hour, on two participants: no shift row is shared, so only the organisation's board lock keeps one worker from taking both. Several pairs, so one lucky ordering cannot pass.
     [SkippableFact]
-    public async Task ApplyAndADropOnTheSameShiftAtOnce_LetExactlyOneWin()
+    public async Task ApplyAndADropOfOneWorkerOnTwoOverlappingShiftsAtOnce_LetExactlyOneWin()
     {
         RequirePostgres();
         var tenantId = await NewOrganisationAsync();
-        Guid sam, lee, shiftId;
+        const int pairs = 6;
+        var cases = new List<(Guid Worker, Guid Applied, Guid Dropped)>();
         await using (var db = Open(tenantId))
         {
-            (sam, lee) = (Worker(db, "Sam").Id, Worker(db, "Lee").Id);
             var mia = db.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
-            shiftId = OpenShift(db, mia.Id, 0).Id;
+            var zed = db.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "Zed", LastName = "Test", IsActive = true }).Entity;
+            for (var day = 0; day < pairs; day++) cases.Add((Worker(db, $"Sam{day}").Id, OpenShift(db, mia.Id, day).Id, OpenShift(db, zed.Id, day).Id));
             await db.SaveChangesAsync();
         }
 
-        await using var applyDb = Open(tenantId);
-        await using var dropDb = Open(tenantId);
-        var apply = Controller(applyDb, tenantId).AutoRosterApply(Monday, Rows(sam, shiftId), default);
-        var drop = Controller(dropDb, tenantId).AssignShift(shiftId, new AssignShiftDto { StaffId = lee, ExpectedStaffId = null }, default);   // the board showed the shift open
-        await Task.WhenAll(apply, drop);
+        var contexts = new List<OdipDbContext>();
+        try
+        {
+            var calls = cases.SelectMany(c =>
+            {
+                var applyDb = Open(tenantId);
+                var dropDb = Open(tenantId);
+                contexts.Add(applyDb);
+                contexts.Add(dropDb);
+                return new[]
+                {
+                    (Task)Controller(applyDb, tenantId).AutoRosterApply(Monday, Rows(c.Worker, c.Applied), default),
+                    Controller(dropDb, tenantId).AssignShift(c.Dropped, new AssignShiftDto { StaffId = c.Worker, ExpectedStaffId = null }, default),
+                };
+            }).ToList();
+            await Task.WhenAll(calls);
 
-        var applied = Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(Assert.IsType<OkObjectResult>((await apply).Result).Value).Data!.Applied.Count;
-        var dropped = (await drop).Result is OkObjectResult ? 1 : 0;
-        Assert.Equal(1, applied + dropped);
-        Assert.Equal(applied == 1 ? sam : lee, Assert.Single(await WorkersOn(tenantId, shiftId)));
+            for (var i = 0; i < pairs; i++)
+            {
+                var applied = Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(Assert.IsType<OkObjectResult>(((Task<ActionResult<ApiResponse<AutoRosterApplyResultDto>>>)calls[2 * i]).Result.Result).Value).Data!.Applied.Count;
+                var dropped = ((Task<ActionResult<ApiResponse<ShiftDto>>>)calls[2 * i + 1]).Result.Result is OkObjectResult ? 1 : 0;
+                Assert.Equal(1, applied + dropped);
+                var (worker, appliedShift, droppedShift) = cases[i];
+                Assert.Equal(1, (await WorkersOn(tenantId, appliedShift, droppedShift)).Count(w => w == worker));
+            }
+        }
+        finally { foreach (var c in contexts) await c.DisposeAsync(); }
     }
 }
