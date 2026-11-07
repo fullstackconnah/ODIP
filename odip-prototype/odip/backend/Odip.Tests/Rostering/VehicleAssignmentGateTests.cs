@@ -300,6 +300,8 @@ public class VehicleAssignmentGateTests
         Assert.Equal(VehicleAssignmentStatus.Cancelled, saved.Status);
     }
 
+    private static string Json(object? o) => System.Text.Json.JsonSerializer.Serialize(o, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
     private static User SeedDriver(OdipDbContext db, bool eligible = true, DateOnly? licenceExpiry = null)
     {
         var u = new User
@@ -324,7 +326,7 @@ public class VehicleAssignmentGateTests
         var result = await new VehicleAssignmentsController(db).Create(CreateDto(trip.Id, vehicle.Id), CancellationToken.None);
 
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal("This vehicle is archived. Choose another vehicle.", Assert.IsType<ApiResponse<VehicleAssignmentDto>>(bad.Value).Message);
+        Assert.Equal("This vehicle is archived. Choose another vehicle.", Assert.Single(Assert.IsType<ApiResponse<VehicleAssignmentDto>>(bad.Value).Errors!));
         Assert.Empty(await db.VehicleAssignments.ToListAsync());
     }
 
@@ -343,7 +345,7 @@ public class VehicleAssignmentGateTests
 
         var switched = await controller.Update(assignment.Id, new UpdateVehicleAssignmentDto { VehicleId = archived.Id, Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
         var bad = Assert.IsType<BadRequestObjectResult>(switched.Result);
-        Assert.Equal("This vehicle is archived. Choose another vehicle.", Assert.IsType<ApiResponse<VehicleAssignmentDto>>(bad.Value).Message);
+        Assert.Equal("This vehicle is archived. Choose another vehicle.", Assert.Single(Assert.IsType<ApiResponse<VehicleAssignmentDto>>(bad.Value).Errors!));
 
         live.IsActive = false;
         db.SaveChanges();
@@ -365,8 +367,8 @@ public class VehicleAssignmentGateTests
         var refused = await controller.Create(CreateDto(trip.Id, vehicle.Id) with { DriverStaffId = driver.Id }, CancellationToken.None);
 
         var rejected = Assert.IsType<UnprocessableEntityObjectResult>(refused.Result);
-        Assert.Contains(message, System.Text.Json.JsonSerializer.Serialize(rejected.Value));
-        Assert.Contains(RosterConflictService.VehicleDriverLicence, System.Text.Json.JsonSerializer.Serialize(rejected.Value));
+        Assert.Contains(message, Json(rejected.Value));
+        Assert.Contains(RosterConflictService.VehicleDriverLicence, Json(rejected.Value));
 
         var saved = await controller.Create(CreateDto(trip.Id, vehicle.Id, "covering") with { DriverStaffId = driver.Id }, CancellationToken.None);
         Assert.IsType<OkObjectResult>(saved.Result);
