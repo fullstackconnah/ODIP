@@ -2,7 +2,7 @@
 // Run through the runner: bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <absolute path to this script> <outdir>
 // Trip t-0001 (14 to 17 Aug 2026) comes from the mock API; the property list and the trip's reservations are routed here.
 import path from 'node:path'
-import { AU_CONTEXT, cropElement, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, cropElement, fullPage, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -26,11 +26,16 @@ const reservations = [{ id: 'r1', tripInstanceId: 't-0001', tripName: 'Sunshine 
 const STATES = [
   { name: 'add-390', width: 390, form: 'add' },
   { name: 'add-1280', width: 1280, form: 'add' },
+  { name: 'edit-archived-390', width: 390, form: 'edit' },
   { name: 'edit-archived-1280', width: 1280, form: 'edit' },
 ]
 
 const checks = []
 const add = (name, detail, pass) => checks.push({ name, detail, pass: !!pass })
+
+// Every scrolled element in the dialog plus the window scroll: the add-390 crop once started mid-dialog because the body had scrolled to the focused field.
+const scrollState = (dialog) => dialog.evaluate((d) => ({ win: scrollY, scrolled: [d, ...d.querySelectorAll('*')].filter((e) => e.scrollTop).map((e) => ({ tag: e.tagName, top: e.scrollTop })) }))
+const resetScroll = (dialog) => dialog.evaluate((d) => { for (const e of [d, ...d.querySelectorAll('*')]) e.scrollTop = 0 })
 
 const browser = await chromium.launch({ headless: true })
 try {
@@ -58,23 +63,51 @@ try {
     else await page.getByRole('button', { name: 'Edit reservation' }).first().click({ timeout: 60_000 })
     const dialog = page.getByRole('dialog')
     await dialog.waitFor({ timeout: 30_000 })
-    await dialog.getByRole('combobox').first().click()
+    const picker = dialog.getByRole('combobox').first()
+    await picker.click()
+    const listbox = page.getByRole('listbox')
+    await listbox.waitFor({ timeout: 30_000 })
     const options = await page.getByRole('option').allTextContents()
     const checkOut = dialog.getByLabel('Check-out')
     const checkIn = await dialog.getByLabel('Check-in').inputValue()
     const min = await checkOut.getAttribute('min')
     const nextDay = new Date(Date.parse(`${checkIn}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)
     add(`check-out min is the day after check-in [${st.name}]`, { checkIn, min }, min === nextDay)
+    const crop = async (locator, file, label) => {
+      const r = await cropElement(page, locator, path.join(OUT_DIR, file), { hideChrome: true })
+      add(r.overlap ? `crop holds the whole ${label} [${file}]` : `crop [${file}]`, { clip: r.clip, box: r.box }, r.overlap?.pass ?? true)
+      return r
+    }
+    const closePicker = async () => { if (await listbox.count()) await page.keyboard.press('Escape'); await listbox.waitFor({ state: 'detached', timeout: 10_000 }); await dialog.waitFor({ timeout: 10_000 }) }
     if (st.form === 'add') {
       add(`archived property is not an add option [${st.name}]`, options, !options.some((o) => o.includes('Old Lodge Archived')) && options.some((o) => o.includes('Sunshine Beach Retreat')))
+      await closePicker()
+      add(`dialog scroll state before reset [${st.name}]`, { box: await dialog.boundingBox(), ...(await scrollState(dialog)) }, true)
+      await resetScroll(dialog)
+      const title = dialog.getByRole('heading').first(), label = dialog.getByText('Property', { exact: true }).first()
+      const r = await cropElement(page, dialog, path.join(OUT_DIR, `${st.name}.png`), { hideChrome: true, during: async (clip) => ({
+        title: await title.evaluate((e) => e.getBoundingClientRect().top), label: await label.evaluate((e) => e.getBoundingClientRect().top), clipY: clip.y, clipBottom: clip.y + clip.height }) })
+      add(r.overlap ? `crop holds the whole dialog [${st.name}]` : `crop [${st.name}]`, { clip: r.clip, box: r.box }, r.overlap?.pass ?? true)
+      const m = r.measured
+      add(`dialog title and Property label top are in view and inside the crop [${st.name}]`, m, m.title >= 0 && m.title >= m.clipY && m.label >= m.clipY && m.label < m.clipBottom)
+      const f = await fullPage(page, path.join(OUT_DIR, 'full', `${st.name}.png`))
+      for (const c of f.checks) add(c.name, c.detail, c.pass)
     } else {
       const own = options.find((o) => o.includes('Old Lodge Archived'))
       add(`edit option for the archived own property ends with (archived) [${st.name}]`, options, !!own && own.endsWith('(archived)'))
       add(`edit picker lists active properties too [${st.name}]`, options, options.some((o) => o.includes('Harbour View Cabins')))
+      await closePicker()
+      await resetScroll(dialog)
+      const t = await picker.evaluate((e) => ({ value: e.value, scrollWidth: e.scrollWidth, clientWidth: e.clientWidth }))
+      add(`closed picker text ends with (archived) and is not truncated [${st.name}]`, t, t.value.endsWith('(archived)') && t.scrollWidth <= t.clientWidth)
+      await crop(dialog, `${st.name.replace('archived', 'archived-closed')}.png`, 'dialog')
+      await picker.click()
+      await listbox.waitFor({ timeout: 30_000 })
+      const vp = page.viewportSize()
+      const ob = await page.getByRole('option').filter({ hasText: '(archived)' }).boundingBox()
+      add(`archived option is inside the viewport [${st.name}]`, { ob, vp }, !!ob && ob.x >= 0 && ob.y >= 0 && ob.x + ob.width <= vp.width && ob.y + ob.height <= vp.height)
+      await crop(listbox, `${st.name.replace('archived', 'archived-open')}.png`, 'list')
     }
-    // The open listbox is part of the shot; crop the dialog (cropElement fails a crop that sticky or fixed chrome covers).
-    const r = await cropElement(page, dialog, path.join(OUT_DIR, `${st.name}.png`), { hideChrome: true })
-    add(r.overlap ? `crop holds the whole dialog [${st.name}]` : `crop [${st.name}]`, { clip: r.clip, box: r.box }, r.overlap?.pass ?? true)
     await context.close()
   }
 } finally {
