@@ -109,29 +109,35 @@ public class SuperAdminNoTenantWriteTests
         await AssertAllInTenantA<ParticipantConsent>(w.Db);
     }
 
-    [Fact]
-    public async Task ContactRole_Create_NewPerson_TakesParticipantTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ContactRole_Create_NewPerson_TakesParticipantTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         var dto = new CreateParticipantContactRoleDto { NewPersonFirstName = "Karen", NewPersonLastName = "Johnson", RoleType = ContactRoleType.NextOfKin, IsPrimary = true };
         Assert.IsType<OkObjectResult>((await new ParticipantContactRolesController(w.Db).Create(w.P.Id, dto, CancellationToken.None)).Result);
         await AssertAllInTenantA<Person>(w.Db);
         await AssertAllInTenantA<ParticipantContactRole>(w.Db);
     }
 
-    [Fact]
-    public async Task Note_Create_TakesParticipantTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Note_Create_TakesParticipantTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         var dto = new CreateParticipantNoteDto { Title = "Handover", Description = "Settled well." };
         Assert.IsType<OkObjectResult>((await new ParticipantNotesController(w.Db, new SafetyNoteSyncService(w.Db)).Create(w.P.Id, dto, CancellationToken.None)).Result);
         await AssertAllInTenantA<ParticipantNote>(w.Db);
     }
 
-    [Fact]
-    public async Task IntakeGridRows_TakeParticipantTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task IntakeGridRows_TakeParticipantTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         await ParticipantPatchApplier.UpsertConsentsAsync(w.Db, w.P.Id, [new CreateParticipantConsentDto { ConsentType = ConsentType.PhotoVideo, Granted = true }], CancellationToken.None);
         await ParticipantPatchApplier.UpsertHealthConditionsAsync(w.Db, w.P.Id, [new CreateParticipantHealthConditionDto { ConditionType = Enum.GetValues<HealthConditionType>().First(), Has = true }], CancellationToken.None);
         await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(w.Db, w.P.Id, [new CreateParticipantAdlAssessmentDto { AdlType = AdlType.Bathing, Level = AdlLevel.Supervision }], CancellationToken.None);
@@ -145,19 +151,23 @@ public class SuperAdminNoTenantWriteTests
         await AssertAllInTenantA<ParticipantCommunityAccessRiskItem>(w.Db);
     }
 
-    [Fact]
-    public async Task PreferredStaffAutoLink_TakesParticipantTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PreferredStaffAutoLink_TakesParticipantTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         await new StaffCompatibilityLinkService(w.Db).SyncFromParticipantPreferredStaffAsync(w.P.Id, null, w.Staff.Id, CancellationToken.None);
         await w.Db.SaveChangesAsync();
         await AssertAllInTenantA<StaffParticipantCompatibility>(w.Db);
     }
 
-    [Fact]
-    public async Task NotificationPreference_Update_TakesCallerTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task NotificationPreference_Update_TakesCallerTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         var controller = new NotificationsController(w.Db)
         {
             ControllerContext = new ControllerContext
@@ -183,10 +193,12 @@ public class SuperAdminNoTenantWriteTests
         await AssertAllInTenantA<LeaveRequest>(w.Db);
     }
 
-    [Fact]
-    public async Task Unavailability_Create_TakesUserTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Unavailability_Create_TakesUserTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         var dto = new CreateRecurringUnavailabilityDto { UserId = w.Staff.Id, DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = new DateOnly(2026, 11, 2) };
         Assert.Equal(201, Assert.IsType<ObjectResult>((await Leave(w.Db, Guid.NewGuid()).CreateUnavailability(dto, CancellationToken.None)).Result).StatusCode);
         await AssertAllInTenantA<RecurringUnavailability>(w.Db);
@@ -227,18 +239,22 @@ public class SuperAdminNoTenantWriteTests
         await AssertAllInTenantA<Shift>(w.Db);
     }
 
-    [Fact]
-    public async Task ShiftPattern_Create_TakesParticipantTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ShiftPattern_Create_TakesParticipantTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         Assert.IsType<CreatedAtActionResult>((await Rostering(w.Db).CreatePattern(PatternDto(w.P.Id), CancellationToken.None)).Result);
         await AssertAllInTenantA<ShiftPattern>(w.Db);
     }
 
-    [Fact]
-    public async Task Compatibility_Upsert_TakesParticipantTenant()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Compatibility_Upsert_TakesParticipantTenant(bool superAdmin)
     {
-        var w = Setup();
+        var w = Setup(superAdmin);
         var dto = new UpsertCompatibilityDto { StaffId = w.Staff.Id, ParticipantId = w.P.Id, Level = CompatibilityLevel.Allowed };
         Assert.IsType<OkObjectResult>((await Rostering(w.Db).UpsertCompatibility(dto, CancellationToken.None)).Result);
         await AssertAllInTenantA<StaffParticipantCompatibility>(w.Db);
@@ -338,5 +354,47 @@ public class SuperAdminNoTenantWriteTests
         var dto = new CreateTripDto { TripName = "Beach Trip", StartDate = new DateOnly(2026, 9, 1), DurationDays = 3 };
         Assert.IsType<CreatedAtActionResult>((await new TripsController(w.Db, NullLogger<TripsController>.Instance, tenant: w.Tenant).Create(dto, CancellationToken.None)).Result);
         await AssertAllInTenantA<TripInstance>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Accommodation_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        Assert.IsType<CreatedAtActionResult>((await new AccommodationController(w.Db, w.Tenant).Create(new CreateAccommodationDto { PropertyName = "Beach House" }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<AccommodationProperty>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_EventTemplate_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        Assert.IsType<OkObjectResult>((await new EventTemplatesController(w.Db, w.Tenant).Create(new CreateEventTemplateDto { EventName = "Beach" }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<EventTemplate>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Person_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        Assert.IsType<CreatedAtActionResult>((await new PersonsController(w.Db, w.Tenant).Create(new CreatePersonDto { FirstName = "Karen", LastName = "Johnson" }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<Person>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Participant_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        var controller = new ParticipantsController(w.Db, new StaffCompatibilityLinkService(w.Db), new ParticipantDocumentService(w.Db), new SafetyNoteSyncService(w.Db), tenant: w.Tenant);
+        Assert.IsType<CreatedAtActionResult>((await controller.Create(new CreateParticipantDto { FirstName = "Dana", LastName = "Lee", IsDraft = true }, CancellationToken.None)).Result);
+        await AssertAllInTenantA<Participant>(w.Db);
+    }
+
+    [Fact]
+    public async Task TenantUser_Staff_Create_KeepsTenant()
+    {
+        var w = Setup(superAdmin: false);
+        var dto = new CreateStaffDto { FirstName = "Jane", LastName = "Doe", Email = "jane.doe@example.com", Position = Position.SupportWorker, IsActive = true, AddressConfirmed = true };
+        Assert.IsType<CreatedAtActionResult>((await new StaffController(w.Db, currentTenant: w.Tenant).Create(dto, CancellationToken.None)).Result);
+        await AssertAllInTenantA<User>(w.Db);
     }
 }
