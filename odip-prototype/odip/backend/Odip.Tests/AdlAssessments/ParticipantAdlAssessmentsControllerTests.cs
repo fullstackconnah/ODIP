@@ -164,6 +164,28 @@ public class ParticipantAdlAssessmentsControllerTests
         Assert.Equal(tenantId, saved.TenantId);
     }
 
+    [Fact]
+    public async Task Upsert_TenantScoped_UpdateKeepsTenantId()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+        var controller = new ParticipantAdlAssessmentsController(db);
+
+        await controller.Upsert(participant.Id, nameof(AdlType.Kitchen), new UpsertParticipantAdlAssessmentDto { Level = AdlLevel.Independent, Notes = "First." }, CancellationToken.None);
+        await controller.Upsert(participant.Id, nameof(AdlType.Kitchen), new UpsertParticipantAdlAssessmentDto { Level = AdlLevel.Assistance, Notes = "Second." }, CancellationToken.None);
+
+        var saved = await db.ParticipantAdlAssessments.IgnoreQueryFilters().SingleAsync(a => a.ParticipantId == participant.Id);
+        Assert.Equal(tenantId, saved.TenantId);
+        Assert.Equal(AdlLevel.Assistance, saved.Level);
+        Assert.Equal("Second.", saved.Notes);
+    }
+
     /// <summary>INTAKE-03 — HowToHelpNotes round-trip: set via create, confirm it persists and
     /// round-trips via GET.</summary>
     [Fact]
