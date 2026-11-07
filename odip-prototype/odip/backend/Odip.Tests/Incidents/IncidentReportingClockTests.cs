@@ -209,6 +209,51 @@ public class IncidentReportingClockTests
     }
 
     [Fact]
+    public async Task Update_SeverityRaisedWithClassOmitted_FollowsTheNewDefaultAndDeadline()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        await controller.Create(Dto(reporter.Id, IncidentSeverity.Low), CancellationToken.None);
+        var created = await db.IncidentReports.SingleAsync();
+        Assert.Equal(ReportableClass.None, created.ReportableClass);
+
+        await controller.Update(created.Id, UpdateDto(created) with { Severity = IncidentSeverity.Critical }, CancellationToken.None);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(ReportableClass.Within24h, saved.ReportableClass);
+        Assert.Equal(Now.UtcDateTime.AddHours(24), saved.NotifyDueAt);
+    }
+
+    [Fact]
+    public async Task Update_SeverityRaisedWithAnExplicitClass_KeepsTheExplicitClass()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        await controller.Create(Dto(reporter.Id, IncidentSeverity.Low), CancellationToken.None);
+        var created = await db.IncidentReports.SingleAsync();
+
+        await controller.Update(created.Id, UpdateDto(created) with { Severity = IncidentSeverity.Critical, ReportableClass = ReportableClass.None, ReportableClassReason = "Not reportable." }, CancellationToken.None);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(ReportableClass.None, saved.ReportableClass);
+        Assert.Null(saved.NotifyDueAt);
+    }
+
+    [Fact]
+    public async Task Update_SeverityRaisedWithAHandChosenClass_KeepsTheChosenClass()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        await controller.Create(Dto(reporter.Id, IncidentSeverity.Low), CancellationToken.None);
+        var created = await db.IncidentReports.SingleAsync();
+        await controller.Update(created.Id, UpdateDto(created) with { ReportableClass = ReportableClass.Within5BusinessDays, ReportableClassReason = "Agreed with the Commission." }, CancellationToken.None);
+
+        await controller.Update(created.Id, UpdateDto(created) with { Severity = IncidentSeverity.Critical }, CancellationToken.None);
+
+        Assert.Equal(ReportableClass.Within5BusinessDays, (await db.IncidentReports.SingleAsync()).ReportableClass);
+    }
+
+    [Fact]
     public async Task Update_OmittedClassAndAwareAt_KeepsWhatIsStored()
     {
         var (db, controller, reporter) = Arrange();

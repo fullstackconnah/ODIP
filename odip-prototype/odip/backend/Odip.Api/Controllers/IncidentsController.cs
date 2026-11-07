@@ -813,6 +813,7 @@ public class IncidentsController : ControllerBase
         // Before severity, type and the determination change below: the class this incident would have started with, to tell an untouched default from a chosen override.
         var oldAuth = i.IsRestrictivePracticeAuthorised;
         var oldDefault = QscReporting.DefaultClass(i.Severity, i.IncidentType, oldAuth, i.RestrictivePracticeUseVaried);
+        var oldSeverity = i.Severity;
         i.TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
         var clock = await ProviderClockAsync(i.TenantId, ct);
         var zone = clock.Tz.Zone;
@@ -873,6 +874,8 @@ public class IncidentsController : ControllerBase
         // This edit lowered an authorised use to unauthorised and the class still sits at the untouched default (the form re-sends the stored one): move it to the new default.
         var rederive = oldAuth == true && i.IsRestrictivePracticeAuthorised == false
             && (dto.ReportableClass ?? storedClass) == storedClass && storedClass == oldDefault;
+        // A severity raise with the class omitted (a direct API edit; the form re-sends the new default itself): an untouched default follows the severity, a chosen class stays.
+        rederive |= dto.ReportableClass is null && dto.Severity != oldSeverity && storedClass == oldDefault;
         var newDefault = QscReporting.DefaultClass(dto.Severity, dto.IncidentType, i.IsRestrictivePracticeAuthorised, i.RestrictivePracticeUseVaried);
         if (rederive && newDefault != storedClass)
         {
