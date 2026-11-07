@@ -15,6 +15,10 @@ public static class AuditedEntities
         typeof(ParticipantOnboarding),
         typeof(ParticipantBooking),
         typeof(IncidentReport),
+        // An incident is a compliance record, and its injuries are replaced by delete and re-insert on every edit while an omitted witness is deleted with their statement,
+        // so an edit shows as removed and added rows here.
+        typeof(IncidentInjury),
+        typeof(IncidentWitness),
         // Its Summary, actions and outcome are edited over weeks, so who changed what, and when, must be recoverable (read only by Admin through AuditController).
         typeof(Complaint),
         typeof(User),

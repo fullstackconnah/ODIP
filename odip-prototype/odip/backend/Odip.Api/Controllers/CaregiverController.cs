@@ -45,7 +45,7 @@ public class CaregiverController : ControllerBase
     /// <summary>The one lookup. Existence, liveness, expiry and participant presence all in one query.</summary>
     private async Task<(CaregiverProfileSubmission sub, Participant p)?> ResolveLiveAsync(string token, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(token)) return null;
+        if (string.IsNullOrWhiteSpace(token) || token.Length > CaregiverTokenService.MaxRawTokenLength) return null;
         var hash = CaregiverTokenService.Hash(token);
         var now = DateTime.UtcNow;
         var sub = await _db.CaregiverProfileSubmissions
@@ -120,6 +120,11 @@ public class CaregiverController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(body.CaregiverName))
             return BadRequest(ApiResponse<object>.Fail("Please enter your name before continuing."));
+        // The columns hold 300 and 100, and the audit actor `caregiver:{name}` goes into a 200-character column: refuse before any write (a long name was a 500 and a lost draft).
+        if (body.CaregiverName.Trim().Length > 150)
+            return BadRequest(ApiResponse<object>.Fail("Your name can be up to 150 characters."));
+        if (body.CaregiverRelationship?.Trim().Length > 100)
+            return BadRequest(ApiResponse<object>.Fail("Relationship can be up to 100 characters."));
         if (sub.Status != CaregiverSubmissionStatus.Draft)
             return Conflict(ApiResponse<object>.Fail("This form has already been submitted and is awaiting review."));
 

@@ -61,9 +61,12 @@ public class CaregiverSubmissionsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId, ct);
         if (p == null) return NotFound(ApiResponse<CaregiverLinkDto>.Fail("Participant not found"));
 
+        // A new link would revoke the pending answers (they drop off the review list and Accept returns 409): make the reviewer decide first.
+        if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
+            return Conflict(ApiResponse<CaregiverLinkDto>.Fail("A caregiver form is waiting for review. Accept or decline it before sending a new link."));
+
         var active = await _db.CaregiverProfileSubmissions
-            .Where(s => s.ParticipantId == participantId
-                && (s.Status == CaregiverSubmissionStatus.Draft || s.Status == CaregiverSubmissionStatus.Submitted))
+            .Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
             .ToListAsync(ct);
         foreach (var a in active) a.Status = CaregiverSubmissionStatus.Revoked;
 

@@ -1584,6 +1584,20 @@ describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
 
     expect(screen.getByText('Participant has no consent on file.')).toBeInTheDocument()
   })
+
+  // H29-3: the API refuses a new link while a submitted form waits for review (409, text in errors[0]); the line shows it.
+  it('shows the pending-review refusal the API sends in errors', async () => {
+    setUserRole('Admin')
+    const message = 'A caregiver form is waiting for review. Accept or decline it before sending a new link.'
+    const refused = { response: { status: 409, data: { success: false, errors: [message] } } }
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValue(refused), isPending: false, isError: true, error: refused } as ReturnType<typeof mockUseGenerateCaregiverLink>)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    await chooseFromDocuments(/generate caregiver link/i)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+  })
 })
 
 // VD1 design review: a one-row scrolling strip hid Funding, Rostering and History at 1440 with no cue on macOS or iPad. From md up
