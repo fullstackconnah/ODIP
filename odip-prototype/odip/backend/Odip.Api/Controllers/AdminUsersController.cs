@@ -9,6 +9,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -20,6 +21,7 @@ public class AdminUsersController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ILogger<AdminUsersController> _logger;
     private readonly IFirebaseUserService _firebaseUserService;
+    private readonly IConfiguration? _config;
 
     // IFirebaseUserService is intentionally NOT registered in Program.cs — ActivatorUtilities
     // (used by ASP.NET Core's default controller activator) falls back to a parameter's default
@@ -28,11 +30,13 @@ public class AdminUsersController : ControllerBase
     public AdminUsersController(
         OdipDbContext db,
         ILogger<AdminUsersController> logger,
-        IFirebaseUserService? firebaseUserService = null)
+        IFirebaseUserService? firebaseUserService = null,
+        IConfiguration? config = null)
     {
         _db = db;
         _logger = logger;
         _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
+        _config = config;
     }
 
     // GET api/v1/admin/users?tenantId=&role=&status=&search=&page=1&pageSize=20
@@ -168,6 +172,7 @@ public class AdminUsersController : ControllerBase
         // The address in the one form ODIP stores and compares (see EmailIdentity): the uniqueness check, Firebase and the row all see
         // the same value, so the exchange can find the row from the lower-case address Firebase puts in a token.
         var email = EmailIdentity.Normalise(dto.Email);
+        if (OnSuperAdminDomain(email)) return BadRequest(ApiResponse<object>.Fail(SuperAdminDomainMessage));
 
         // Validate email uniqueness across all tenants
         var emailExists = await _db.Users
@@ -286,6 +291,25 @@ public class AdminUsersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, ApiResponse<AdminUserDto>.Ok(created));
     }
 
+    private const string SuperAdminDomainMessage = "Accounts at this email domain are always SuperAdmins. Use a different email for this role.";
+
+    // Every role this form can assign is a non-SuperAdmin one, and the sign-in exchange makes an address on the SuperAdmin domain a SuperAdmin session anyway.
+    private bool OnSuperAdminDomain(string normalisedEmail) => SuperAdminDomain.Covers(normalisedEmail, SuperAdminDomain.From(_config));
+
+    /// <summary>The refusal when this edit would deactivate or re-role the caller, the last active SuperAdmin, or a tenant's last Admin; else null.</summary>
+    private async Task<string?> LastActiveGuardErrorAsync(User user, UserRole newRole, bool newActive, CancellationToken ct)
+    {
+        var leaves = user.IsActive && !newActive;
+        var roleChanges = newRole != user.Role;
+        if (user.Id.ToString() == User?.FindFirst(ClaimTypes.NameIdentifier)?.Value && (leaves || roleChanges))
+            return "You can't deactivate or change the role of your own account. Ask another SuperAdmin.";
+        if (!user.IsActive || !(leaves || roleChanges)) return null;
+        if (user.Role == UserRole.SuperAdmin
+            && !await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id != user.Id && u.Role == UserRole.SuperAdmin && u.IsActive, ct))
+            return "Add another SuperAdmin first. Bunya Support needs at least one active SuperAdmin.";
+        return user.Role == UserRole.Admin ? await StaffController.LastAdminErrorAsync(_db, user, ct) : null;
+    }
+
     // PUT api/v1/admin/users/{id}
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAdminUserDto dto, CancellationToken ct)
@@ -304,6 +328,7 @@ public class AdminUsersController : ControllerBase
 
         // The address in the one form ODIP stores and compares (see EmailIdentity). Saving also repairs a row stored as typed.
         var email = EmailIdentity.Normalise(dto.Email);
+        if (OnSuperAdminDomain(email)) return BadRequest(ApiResponse<object>.Fail(SuperAdminDomainMessage));
 
         // Validate email uniqueness (excluding current user)
         var emailExists = await _db.Users
@@ -333,6 +358,11 @@ public class AdminUsersController : ControllerBase
         // is touched, so a refused edit changes nothing anywhere.
         if (email != originalEmail && !dto.AddressConfirmed && AddressConfirmation.Needed(email, user.Tenant?.EmailDomain))
             return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(email, user.Tenant?.EmailDomain), AddressConfirmation.Code));
+
+        // Nobody takes themselves, the platform's last SuperAdmin or a tenant's last Admin out of service from this form. Like the address check above, these
+        // run before Firebase is touched (IsActive false disables the Firebase account), so a refused edit changes nothing anywhere.
+        if (await LastActiveGuardErrorAsync(user, role, dto.IsActive, ct) is { } guardError)
+            return Conflict(ApiResponse<object>.Fail(guardError));
 
         // Sync changes to Firebase Auth FIRST, before persisting DB changes. This is the fix for
         // a confirmed data-integrity bug: previously the DB save happened first, so a Firebase
