@@ -201,4 +201,29 @@ public class TripAccommodationListTests
         Assert.IsType<OkObjectResult>((await c.Update(id, Edit(active.Id, 10, 14, "late arrival"), CancellationToken.None)).Result);
         Assert.Equal("late arrival", db.AccommodationReservations.Single().Comments);
     }
+
+    [Fact]
+    public async Task AnUnscopedCaller_CannotPairATripWithAnotherOrganisationsProperty_OnCreateOrUpdate()
+    {
+        var (db, c, trip, active, _) = CheckRig();
+        using var _ = db;
+        var (orgA, orgB) = (Guid.NewGuid(), Guid.NewGuid());
+        trip.TenantId = orgA; active.TenantId = orgA;
+        var foreign = new AccommodationProperty { Id = Guid.NewGuid(), TenantId = orgB, PropertyName = "Other org lodge" };
+        db.AccommodationProperties.Add(foreign);
+        db.SaveChanges();
+
+        AssertRefused(await c.Create(NewReservation(trip, foreign, 10, 14), CancellationToken.None), "Accommodation not found.");
+        Assert.Empty(db.AccommodationReservations);
+
+        Assert.IsType<OkObjectResult>((await c.Create(NewReservation(trip, active, 10, 14), CancellationToken.None)).Result);
+        var id = db.AccommodationReservations.Single().Id;
+        var move = new UpdateReservationDto
+        {
+            TripInstanceId = trip.Id, AccommodationPropertyId = foreign.Id, CheckInDate = new DateOnly(2026, 10, 10), CheckOutDate = new DateOnly(2026, 10, 14),
+            ReservationStatus = ReservationStatus.Booked,
+        };
+        AssertRefused(await c.Update(id, move, CancellationToken.None), "Accommodation not found.");
+        Assert.Equal(active.Id, db.AccommodationReservations.Single().AccommodationPropertyId);
+    }
 }

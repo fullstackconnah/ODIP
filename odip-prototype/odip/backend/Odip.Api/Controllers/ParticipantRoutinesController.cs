@@ -48,6 +48,8 @@ public class ParticipantRoutinesController : ControllerBase
     {
         if (dto.Days.Count == 0)
             return BadRequest(ApiResponse<ParticipantRoutineDto>.Fail("At least one day is required"));
+        if (!Enum.IsDefined(dto.Category))
+            return BadRequest(ApiResponse<ParticipantRoutineDto>.Fail("Unrecognised category."));
 
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
         if (participant == null) return NotFound(ApiResponse<ParticipantRoutineDto>.Fail("Participant not found"));
@@ -79,6 +81,8 @@ public class ParticipantRoutinesController : ControllerBase
     {
         if (dto.Days.Count == 0)
             return BadRequest(ApiResponse<ParticipantRoutineDto>.Fail("At least one day is required"));
+        if (!Enum.IsDefined(dto.Category))
+            return BadRequest(ApiResponse<ParticipantRoutineDto>.Fail("Unrecognised category."));
 
         var routine = await _db.ParticipantRoutines.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (routine == null) return NotFound(ApiResponse<ParticipantRoutineDto>.Fail("Routine not found"));

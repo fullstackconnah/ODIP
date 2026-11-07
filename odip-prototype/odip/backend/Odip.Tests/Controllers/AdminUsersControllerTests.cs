@@ -427,4 +427,33 @@ public class AdminUsersControllerTests
         var reloaded = await verifyDb.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == user.Id);
         Assert.Equal("Original", reloaded.FirstName);
     }
+
+    [Fact]
+    public async Task Username_IsCheckedAndStoredTrimmed_OnCreateAndUpdate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenant = SeedTenant(db);
+        SeedUser(db, tenant.Id, "jo@test.example.com", "jo");
+        var other = SeedUser(db, tenant.Id, "kim@test.example.com", "kim");
+        var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, new Mock<IFirebaseUserService>().Object);
+
+        var create = await controller.Create(new CreateAdminUserDto
+        {
+            FirstName = "New", LastName = "User", Email = "new.user@test.example.com", Username = " jo ", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1234!",
+        }, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(create);
+
+        var update = await controller.Update(other.Id, new UpdateAdminUserDto
+        {
+            FirstName = "Kim", LastName = "User", Email = "kim@test.example.com", Username = " jo ", Role = "Coordinator", IsActive = true,
+        }, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(update);
+
+        var renamed = await controller.Update(other.Id, new UpdateAdminUserDto
+        {
+            FirstName = "Kim", LastName = "User", Email = "kim@test.example.com", Username = " kimmy ", Role = "Coordinator", IsActive = true,
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(renamed);
+        Assert.Equal("kimmy", (await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == other.Id)).Username);
+    }
 }

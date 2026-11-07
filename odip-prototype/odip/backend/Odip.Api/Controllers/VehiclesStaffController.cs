@@ -647,9 +647,12 @@ public class StaffController : ControllerBase
 
         // Only when Active flips, and after every refusal above, so a refused edit changes nothing anywhere. Firebase first, as AdminUsers does:
         // a failure then never leaves the row saved and the sign-in account out of step.
-        if (s.IsActive != dto.IsActive)
+        var flipped = s.IsActive != dto.IsActive;
+        var (storedName, storedEmail, storedActive) = ($"{s.FirstName} {s.LastName}".Trim(), s.Email, s.IsActive);
+        if (flipped)
         {
-            var syncError = await SyncFirebaseDisabledAsync(s, !dto.IsActive, addressChanged, ct);
+            // The new name goes with the flip: this branch is the only Firebase call of the edit, so a rename made together with it would be skipped.
+            var syncError = await SyncFirebaseDisabledAsync(s, !dto.IsActive, addressChanged, ct, $"{dto.FirstName} {dto.LastName}".Trim());
             if (syncError is { } failed) return StatusCode(failed.Status, ApiResponse<StaffDetailDto>.Fail(failed.Message));
         }
 
@@ -670,7 +673,8 @@ public class StaffController : ControllerBase
         s.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
         s.UpdatedAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch when (flipped) { await RevertFirebaseDisabledAsync(storedEmail, storedName, !storedActive, ct); throw; }
         // The address is the whole of this person's sign-in, so a change leaves a trace: who changed whose, never the addresses themselves.
         if (addressChanged)
             _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was changed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
@@ -715,8 +719,10 @@ public class StaffController : ControllerBase
             if (syncError is { } failed) return StatusCode(failed.Status, ApiResponse<bool>.Fail(failed.Message));
         }
 
+        var wasActive = s.IsActive;
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch when (wasActive) { await RevertFirebaseDisabledAsync(s.Email, $"{s.FirstName} {s.LastName}".Trim(), false, ct); throw; }
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
     }
 
@@ -725,12 +731,12 @@ public class StaffController : ControllerBase
     /// account yet is skipped (the sign-in-account route creates it), an address Firebase refuses is a 400 to correct, anything else a 502.
     /// Looked up by the address the row holds now. Returns null when the save may go on.
     /// </summary>
-    private async Task<(int Status, string Message)?> SyncFirebaseDisabledAsync(User s, bool disabled, bool addressChanging, CancellationToken ct)
+    private async Task<(int Status, string Message)?> SyncFirebaseDisabledAsync(User s, bool disabled, bool addressChanging, CancellationToken ct, string? displayName = null)
     {
         var email = EmailIdentity.Normalise(s.Email);
         try
         {
-            await _firebaseUserService.UpdateUserByEmailAsync(email, $"{s.FirstName} {s.LastName}".Trim(), disabled, ct);
+            await _firebaseUserService.UpdateUserByEmailAsync(email, displayName ?? $"{s.FirstName} {s.LastName}".Trim(), disabled, ct);
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
         {
@@ -753,6 +759,13 @@ public class StaffController : ControllerBase
             return (StatusCodes.Status502BadGateway, "Unable to sync the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project.");
         }
         return null;
+    }
+
+    /// <summary>The database save failed after the Firebase flip: put the account back, as AdminUsersController does. Best effort, so a failure here is logged and the save's exception still surfaces.</summary>
+    private async Task RevertFirebaseDisabledAsync(string email, string displayName, bool disabled, CancellationToken ct)
+    {
+        try { await _firebaseUserService.UpdateUserByEmailAsync(EmailIdentity.Normalise(email), displayName, disabled, ct); }
+        catch (Exception ex) { _logger?.LogError(ex, "Failed to revert Firebase Auth user {Email} after DB save failure", email); }
     }
 
     /// <summary>

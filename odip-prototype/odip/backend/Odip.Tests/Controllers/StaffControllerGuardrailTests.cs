@@ -504,4 +504,56 @@ public class StaffControllerGuardrailTests
         Assert.Equal(502, delete.StatusCode);
         Assert.True((await db.Users.SingleAsync(u => u.Id == worker.Id)).IsActive);
     }
+
+    // ── A database failure after the Firebase flip undoes the flip (as AdminUsers does) ──
+
+    private sealed class SaveThrowsDb(DbContextOptions<OdipDbContext> options, ICurrentTenant tenant, Func<bool> fail) : OdipDbContext(options, tenant)
+    {
+        public override Task<int> SaveChangesAsync(CancellationToken ct = default) =>
+            fail() ? throw new DbUpdateException("simulated save failure") : base.SaveChangesAsync(ct);
+    }
+
+    private static (SaveThrowsDb Db, Guid TenantId, Action Break) CreateBreakableDb()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var broken = false;
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        return (new SaveThrowsDb(options, tenant.Object, () => broken), tenantId, () => broken = true);
+    }
+
+    [Fact]
+    public async Task Archiving_WhenTheDatabaseSaveThrows_PutsTheFirebaseAccountBack()
+    {
+        var (db, tenantId, breakSave) = CreateBreakableDb();
+        var (edited, deleted) = (SeedUser(db, tenantId, UserRole.SupportWorker), SeedUser(db, tenantId, UserRole.SupportWorker));
+        var firebase = new Mock<IFirebaseUserService>();
+        var controller = MakeController(db, "Admin", firebase);
+        breakSave();
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.Update(edited.Id, EditOf(edited, isActive: false), CancellationToken.None));
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.Delete(deleted.Id, CancellationToken.None));
+
+        foreach (var worker in new[] { edited, deleted })
+        {
+            var name = $"{worker.FirstName} {worker.LastName}";
+            firebase.Verify(f => f.UpdateUserByEmailAsync(worker.Email, name, true, It.IsAny<CancellationToken>()), Times.Once);
+            firebase.Verify(f => f.UpdateUserByEmailAsync(worker.Email, name, false, It.IsAny<CancellationToken>()), Times.Once);
+        }
+    }
+
+    [Fact]
+    public async Task Update_RenamingAndArchivingTogether_GivesFirebaseTheNewDisplayName()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var result = await MakeController(db, "Admin", firebase).Update(worker.Id, EditOf(worker, isActive: false) with { FirstName = "Renamed" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        firebase.Verify(f => f.UpdateUserByEmailAsync(worker.Email, $"Renamed {worker.LastName}", true, It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
