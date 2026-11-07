@@ -271,7 +271,7 @@ public class StaffControllerGuardrailTests
         SeedUser(db, tenantId, UserRole.Admin);
         var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, role: UserRole.Coordinator), CancellationToken.None);
 
-        Assert.Equal("Only an Admin can change an Admin's role.", Error(result));
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
         Assert.Equal(UserRole.Admin, (await db.Users.SingleAsync(u => u.Id == admin.Id)).Role);
     }
 
@@ -283,19 +283,32 @@ public class StaffControllerGuardrailTests
         SeedUser(db, tenantId, UserRole.Admin);
         var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, isActive: false), CancellationToken.None);
 
-        Assert.Equal("Only an Admin can archive an Admin.", Error(result));
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
         Assert.True((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
     }
 
     [Fact]
-    public async Task Update_CoordinatorChangesOnlyAdminsPhone_Succeeds()
+    public async Task Update_CoordinatorRestoresArchivedAdmin_IsRefused_StaysArchived()
+    {
+        var (db, tenantId) = CreateDb();
+        var admin = SeedUser(db, tenantId, UserRole.Admin);
+        admin.IsActive = false;
+        db.SaveChanges();
+        var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, isActive: true), CancellationToken.None);
+
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
+        Assert.False((await db.Users.SingleAsync(u => u.Id == admin.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_CoordinatorChangesOnlyAdminsPhone_IsRefused()
     {
         var (db, tenantId) = CreateDb();
         var admin = SeedUser(db, tenantId, UserRole.Admin);
         var result = await MakeController(db, "Coordinator").Update(admin.Id, EditOf(admin, mobile: "0400 000 000"), CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result.Result);
-        Assert.Equal("0400 000 000", (await db.Users.SingleAsync(u => u.Id == admin.Id)).Mobile);
+        Assert.Equal("Only an Admin can edit an Admin account.", Error(result));
+        Assert.NotEqual("0400 000 000", (await db.Users.SingleAsync(u => u.Id == admin.Id)).Mobile);
     }
 
     [Fact]

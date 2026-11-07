@@ -648,11 +648,11 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
 
-        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
-        if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
-
         var adminRowError = await AdminRowChangeErrorAsync(s, s.Role, archives: true, ct);
         if (adminRowError != null) return BadRequest(ApiResponse<bool>.Fail(adminRowError));
+
+        var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
+        if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
 
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
