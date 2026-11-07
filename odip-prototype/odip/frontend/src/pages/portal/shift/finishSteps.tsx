@@ -235,16 +235,17 @@ export function ReportStep({ shift, answer, onYes, onNo }: {
 }
 
 /** Notes and handover. The notes stay in the Notes panel, mounted behind the flow, so a note half-typed there is never lost or doubled. */
-export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
-  noteCount: number; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; onEditNotes: () => void
+export function HandoverStep({ loading = false, noteCount, draft, set, onEditNotes }: {
+  /** The notes are still loading: say nothing about their count yet. */
+  loading?: boolean; noteCount: number; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; onEditNotes: () => void
 }) {
   return (
     <div className="space-y-4">
       <section aria-labelledby="finish-notes" className="space-y-2">
         <h3 id="finish-notes" className="text-sm font-semibold">Your notes</h3>
-        <p className="text-sm">{noteCount > 0 ? `${plural(noteCount, 'note')} on this shift.` : 'No notes yet.'}</p>
+        {!loading && <p className="text-sm">{noteCount > 0 ? `${plural(noteCount, 'note')} on this shift.` : 'No notes yet.'}</p>}
         <Button id="finish-add-notes" variant="secondary" size="md" onClick={onEditNotes}>Add or edit notes</Button>
-        {noteCount === 0 && (
+        {!loading && noteCount === 0 && (
           <label className="flex items-center gap-2 text-sm min-h-[44px]">
             <input type="checkbox" checked={draft.nothingToNote} onChange={e => set({ nothingToNote: e.target.checked })} />
             Nothing to note
