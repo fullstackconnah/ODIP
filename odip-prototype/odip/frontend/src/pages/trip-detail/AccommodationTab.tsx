@@ -25,6 +25,7 @@ import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import { toUpdateReservationDto, type ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
+import { addDays } from '@/lib/planQuote'
 import { extractErrorMessage, formatCurrency } from '@/lib/utils'
 import { FormField, labelClass } from '@/components/FormField'
 import { modalGrid } from '@/lib/formGrid'
@@ -85,10 +86,13 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
   const [newPropertyForm, setNewPropertyForm] = useState({ propertyName: '', location: '', region: '', bedroomCount: '', bedCount: '', maxCapacity: '' })
 
   const resetAccommForm = () => {
+    const start = trip?.startDate?.split('T')[0] ?? ''
+    const end = trip?.endDate?.split('T')[0] ?? ''
     setAccommForm({
       accommodationPropertyId: '',
-      checkInDate: trip?.startDate?.split('T')[0] ?? '',
-      checkOutDate: trip?.endDate?.split('T')[0] ?? '',
+      checkInDate: start,
+      // A one-day trip has start = end; the server refuses zero nights, so open on the next day.
+      checkOutDate: end > start ? end : addDays(start, 1),
       bedroomsReserved: '',
       bedsReserved: '',
       cost: '',
@@ -210,6 +214,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     return { totalNights, coveredNights: totalNights - uncoveredNights.length, uncoveredNights, allCovered: uncoveredNights.length === 0 }
   }, [accommodation, trip?.startDate, trip?.endDate])
 
+  const propertyItem = (a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}${a.isActive ? '' : ' (archived)'}` })
   const property = (r: ReservationDto) => allAccommodation.find((a: AccommodationListDto) => a.id === r.accommodationPropertyId)
   const nightsOf = (r: ReservationDto) => {
     const checkIn = parseDateOnly(r.checkInDate)
@@ -448,7 +453,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                   value={accommForm.accommodationPropertyId}
                   onChange={val => setAccommForm({ ...accommForm, accommodationPropertyId: val })}
                   placeholder="Select property..."
-                  items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
+                  items={allAccommodation.filter((a: AccommodationListDto) => a.isActive).map(propertyItem)}
                 />
               )}
             </div>
@@ -456,7 +461,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             {/* Dates */}
             <div className={modalGrid}>
               <FormField label="Check-in"><input type="date" value={accommForm.checkInDate} onChange={e => setAccommForm({ ...accommForm, checkInDate: e.target.value })} /></FormField>
-              <FormField label="Check-out"><input type="date" value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })} /></FormField>
+              <FormField label="Check-out"><input type="date" min={addDays(accommForm.checkInDate, 1)} value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })} /></FormField>
             </div>
 
             {/* Bedrooms / Beds */}
@@ -511,13 +516,13 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <FormField label="Property"><SearchableSelect
                 value={editReservationForm.accommodationPropertyId}
                 onChange={val => setEditReservationForm({ ...editReservationForm, accommodationPropertyId: val })}
-                items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
+                items={allAccommodation.filter((a: AccommodationListDto) => a.isActive || a.id === editingReservation?.accommodationPropertyId).map(propertyItem)}
               /></FormField>
 
             {/* Dates */}
             <div className={modalGrid}>
               <FormField label="Check-in"><input type="date" value={editReservationForm.checkInDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkInDate: e.target.value })} /></FormField>
-              <FormField label="Check-out"><input type="date" value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })} /></FormField>
+              <FormField label="Check-out"><input type="date" min={addDays(editReservationForm.checkInDate, 1)} value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })} /></FormField>
             </div>
 
             {/* Bedrooms / Beds / Cost */}

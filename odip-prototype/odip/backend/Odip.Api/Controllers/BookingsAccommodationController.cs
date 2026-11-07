@@ -542,12 +542,21 @@ public class ReservationsController : ControllerBase
         return Ok(ApiResponse<List<ReservationDto>>.Ok(items));
     }
 
+    /// <summary>Why a reservation cannot be saved, or null. A property archived since stays valid for a reservation already on it (<paramref name="storedPropertyId"/>); only a move or a new booking onto it is refused.</summary>
+    private async Task<string?> CheckReservationAsync(Guid propertyId, DateOnly checkIn, DateOnly checkOut, Guid? storedPropertyId, CancellationToken ct)
+    {
+        var active = await _db.AccommodationProperties.Where(p => p.Id == propertyId).Select(p => (bool?)p.IsActive).FirstOrDefaultAsync(ct);
+        if (active is null) return "Accommodation not found.";
+        if (active == false && propertyId != storedPropertyId) return "This property is archived. Choose an active property.";
+        return checkOut <= checkIn ? "Check-out must be after check-in." : null;
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ReservationDto>>> Create([FromBody] CreateReservationDto dto, CancellationToken ct)
     {
         if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return NotFound(ApiResponse<ReservationDto>.Fail("Trip not found"));
-        if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
+        if (await CheckReservationAsync(dto.AccommodationPropertyId, dto.CheckInDate, dto.CheckOutDate, null, ct) is { } refusal) return BadRequest(ApiResponse<ReservationDto>.Fail(refusal));
 
         var reservation = new AccommodationReservation
         {
@@ -582,7 +591,7 @@ public class ReservationsController : ControllerBase
     {
         var r = await TenantReservations().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound(ApiResponse<ReservationDto>.Fail("Reservation not found"));
-        if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
+        if (await CheckReservationAsync(dto.AccommodationPropertyId, dto.CheckInDate, dto.CheckOutDate, r.AccommodationPropertyId, ct) is { } refusal) return BadRequest(ApiResponse<ReservationDto>.Fail(refusal));
 
         var oldPropertyId = r.AccommodationPropertyId;
         r.AccommodationPropertyId = dto.AccommodationPropertyId; r.RequestSentDate = dto.RequestSentDate;
