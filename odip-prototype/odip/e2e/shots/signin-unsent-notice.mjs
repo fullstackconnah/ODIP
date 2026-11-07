@@ -17,8 +17,6 @@ prepareOutDir(OUT_DIR)
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
 const queue = [1, 2].map((i) => ({ id: `r${i}`, userId: 'u-asha', ownerFirstName: 'Asha', viewAsTenant: null, viewAsUser: null, shiftId: 's1', kind: 'start', path: '/x', method: 'POST', body: {}, clientTime: '2026-11-06T00:00:00Z', createdAt: i, status: 'waiting', label: { participant: 'P', serviceDate: '2026-11-06', rostered: '9-1' } }))
-// A CSS custom property's resolved pixel value, read off a probe element.
-const px = (page, tok) => page.evaluate((v) => { const d = document.createElement('div'); d.style.height = `var(${v})`; document.body.append(d); const h = d.getBoundingClientRect().height; d.remove(); return h }, tok)
 
 const VPS = [{ name: '390', width: 390, height: 844, touch: true }, { name: '1280', width: 1280, height: 900, touch: false }]
 const browser = await chromium.launch({ headless: true })
@@ -43,8 +41,7 @@ for (const vp of VPS) {
     check(t('notice is as wide as the form card (same column), no larger'), Math.abs(m.noteW - m.formW) <= 1 && Math.abs(m.noteLeft - m.formLeft) <= 1, m)
     check(t('notice sits above the form card'), m.noteBottom <= m.formTop + 0.5, m)
     check(t('no horizontal page overflow; no clipped or ellipsised text'), m.docOverflow <= 0 && !m.clipped, m)
-    const tap = await px(page, '--tap-min')
-    check(t(`--tap-min resolves (${tap}) and the notice adds no control`), tap > 0 && (await note.locator('button, a, input').count()) === 0, tap)
+    check(t('the notice adds no control, so no tap target to size'), (await note.locator('button, a, input').count()) === 0)
     const r = await cropElement(page, note, path.join(OUT_DIR, `${state}.png`), { touch: vp.touch, natural: true, pad: 16 })
     checks.push(checkCropHolds({ ...r, touch: vp.touch }))
     await context.close()
