@@ -1685,7 +1685,11 @@ public class PortalController : ControllerBase
         leave.DecidedByUserId = staffId.Value;
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail("Only pending requests can be withdrawn."));
+        }
         return Ok(ApiResponse<LeaveRequestDto>.Ok(ToLeaveDto(leave)));
     }
 
