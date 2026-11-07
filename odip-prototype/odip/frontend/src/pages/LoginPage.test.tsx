@@ -614,4 +614,34 @@ describe('LoginPage: one field treatment, one primary', () => {
     expect(forgot).toHaveClass('text-sm', 'min-h-[var(--tap-min)]')
     expect(forgot).not.toHaveClass('text-xs')
   })
+
+  describe('unsent changes on the phone', () => {
+    const queue = (names: (string | undefined)[]) =>
+      localStorage.setItem('odip_offline:u1:queue', JSON.stringify(names.map((n, i) => ({ id: 'r' + i, ownerFirstName: n }))))
+
+    it('warns, with the count and the first name, before another sign-in deletes the queue', () => {
+      queue(['Asha', 'Asha'])
+      renderPage()
+      const note = screen.getByText('2 unsent changes from Asha are on this phone.').closest('div') as HTMLElement
+      expect(note).toHaveTextContent('Sign in as Asha to send them. Signing in as anyone else deletes them.')
+    })
+
+    it('says 1 unsent change in the singular', () => {
+      queue(['Asha'])
+      renderPage()
+      expect(screen.getByText('1 unsent change from Asha is on this phone.')).toBeInTheDocument()
+    })
+
+    it('words it without a name when none was kept', () => {
+      queue([undefined, undefined])
+      renderPage()
+      expect(screen.getByText('2 unsent changes are on this phone.')).toBeInTheDocument()
+      expect(screen.getByText(/Sign in as the worker who made them to send them/)).toBeInTheDocument()
+    })
+
+    it('shows nothing when the phone holds no unsent changes', () => {
+      renderPage()
+      expect(screen.queryByText(/unsent change/)).toBeNull()
+    })
+  })
 })
