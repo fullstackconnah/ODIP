@@ -214,7 +214,22 @@ public class ShiftClaimAgainTests
         Assert.Contains("changed", preview.LeftOut.Single(l => l.ShiftId == shifts[0].Id).Reason);
         Assert.Contains("moved", preview.LeftOut.Single(l => l.ShiftId == shifts[1].Id).Reason);
         Assert.Equal(2, made.LeftOut.Count);
+        Assert.All(made.LeftOut, l => Assert.True(char.IsUpper(l.Reason[0]) && !l.Reason.Contains(": "), l.Reason)); // a sentence, and the dialog is for one claim
     }
+
+    [Fact]
+    public async Task WhenEveryShiftChanged_TheRefusalReadsAsSentences()
+    {
+        var (kit, engine, old, _, shifts) = await RejectedAsync(1);
+        using var _ = kit;
+        shifts[0].Status = ShiftStatus.Published;
+        kit.Db.SaveChanges();
+
+        var refused = await Assert.ThrowsAsync<ClaimAgainRefusedException>(() => engine.ClaimAgainAsync(old.Id, kit.TenantId, Now, Ct));
+
+        Assert.StartsWith("Nothing on this claim can be claimed again. This shift changed since it was claimed", refused.Message);
+    }
+
 
     [Fact]
     public async Task AnIssuedInvoice_Refuses_WithTheExistingSentence_AndNothingIsDeleted()

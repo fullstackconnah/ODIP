@@ -78,6 +78,31 @@ describe('a Microsoft session', () => {
     expect(localStorage.getItem('odip_token')).toBe('the-new-token')
   })
 
+  it('writes no token back when Sign out starts while the Microsoft refresh is in flight, and the request is rejected', async () => {
+    const client = await freshClient()
+    signInAsMicrosoft()
+    script(client, url => (url === '/auth/microsoft/refresh'
+      ? { status: 200, data: { success: true, data: { token: 'the-new-token' } } }
+      : url === '/participants' ? { status: 401, data: {} } : { status: 200, data: { success: true } }))
+    let refreshAsked = false
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<never>
+    client.apiClient.defaults.adapter = async (c: InternalAxiosRequestConfig) => {
+      if (c.url === '/auth/microsoft/refresh') { refreshAsked = true; await gate }
+      return answer(c)
+    }
+
+    const result = outcome(client.apiGet('/participants'))
+    await vi.waitFor(() => expect(refreshAsked).toBe(true))
+    const ending = client.endSession()
+    release()
+
+    expect(await result).toBe('REJECTED 401')
+    await ending
+    expect(localStorage.getItem('odip_token')).toBeNull()
+  })
+
   it('a refused Microsoft refresh ends the session at /login?microsoft=MicrosoftSessionEnded and removes odip_sign_in_method', async () => {
     const client = await freshClient()
     signInAsMicrosoft()

@@ -238,6 +238,60 @@ describe('a 401 on any other request', () => {
       jsdomNoise.mockRestore()
     }
   })
+
+  // Sign out clears the keys and then awaits Firebase and the logout post. A refresh that answers in that window must not write the token back, or the next
+  // person on a shared computer lands signed in.
+  describe('when Sign out starts', () => {
+    const answers = (url: string) => (url === '/auth/exchange'
+      ? { status: 200, data: { success: true, data: { token: 'the-new-token' } } }
+      : url === '/participants' ? { status: 401, data: {} } : { status: 200, data: { success: true } })
+
+    it('writes no token back when the refresh answers after it, and the request is rejected', async () => {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem('odip_token', 'the-old-token')
+        script(client, answers)
+        let exchangeAsked = false
+        let release!: () => void
+        const gate = new Promise<void>(resolve => { release = resolve })
+        const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
+        client.apiClient.defaults.adapter = async (c: InternalAxiosRequestConfig) => {
+          if (c.url === '/auth/exchange') { exchangeAsked = true; await gate }
+          return answer(c)
+        }
+
+        const result = outcome(client.apiGet('/participants'))
+        await vi.waitFor(() => expect(exchangeAsked).toBe(true))
+        const ending = client.endSession()
+        release()
+
+        expect(await result).toBe('REJECTED 401')
+        await ending
+        expect(localStorage.getItem('odip_token')).toBeNull()
+      } finally {
+        jsdomNoise.mockRestore()
+      }
+    })
+
+    it('makes no exchange call for a 401 that arrives after it', async () => {
+      const client = await freshClient()
+      const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        localStorage.setItem('odip_token', 'the-old-token')
+        const requests = script(client, answers)
+        const ending = client.endSession()
+
+        expect(await outcome(client.apiGet('/participants'))).toBe('REJECTED 401')
+        await ending
+        expect(requests.map(r => r.url)).not.toContain('/auth/exchange')
+        expect(requests.filter(r => r.url === '/auth/logout')).toHaveLength(1)
+        expect(getIdToken).not.toHaveBeenCalled()
+      } finally {
+        jsdomNoise.mockRestore()
+      }
+    })
+  })
 })
 
 // Sign-in sets a 7-day cookie that the API accepts when no token is sent, and only POST /auth/logout deletes it. The Sign Out button used to clear the browser
