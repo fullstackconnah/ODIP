@@ -217,7 +217,15 @@ public class RosteringController : ControllerBase
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
         var weeklyHours = await RosterAvailability.WeeklyHoursAsync(_db, activeStaff.Select(u => u.TenantId), ct);
-        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours, otherWeekShifts);
+        // Workers on group activities are busy too (group activities D7): their staff rows go in as transient shifts, so the snapshot sees them but weekShifts (and so the board) never does.
+        var staffBusy = await RosterAvailability.ActivityStaffBusyAsync(_db, staffIds, fortnightStart, fortnightStart.AddDays(13), ct);   // the fortnight always holds the week
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts.Concat(staffBusy.Where(b => b.ServiceDate >= start && b.ServiceDate <= end)).ToList(), weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours,
+            otherWeekShifts.Concat(staffBusy.Where(b => (b.ServiceDate < start || b.ServiceDate > end) && casualIds.Contains(b.UserId!.Value))).ToList());
+
+        // Group activities (PR1): while the switch is off the board carries none, so a stray row never shows. Cancelled activities are not listed.
+        var groupActivitiesEnabled = _tenant?.TenantId is { } boardTenant
+            && await _db.AppSettings.AsNoTracking().Where(s => s.TenantId == boardTenant).Select(s => s.GroupActivitiesEnabled).FirstOrDefaultAsync(ct);
+        var groupActivities = groupActivitiesEnabled ? await new GroupActivityReader(_db, _availability).ForWeekAsync(start, end, ct) : new List<GroupActivityDto>();
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
@@ -265,6 +273,7 @@ public class RosteringController : ControllerBase
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
@@ -381,6 +390,7 @@ public class RosteringController : ControllerBase
             {
                 WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Participant,
                 ParticipantRows = participantRows, Exceptions = exceptions, StaffAvailableDays = availableDays,
+                GroupActivities = groupActivities, GroupActivitiesEnabled = groupActivitiesEnabled,
                 PendingAgreements = await PendingAgreementsAsync(ct),
                 // The leave the findings already loaded (weekWindows): leave requests only; recurring and legacy unavailability stay findings of the assign.
                 StaffLeave = weekWindows
@@ -450,7 +460,8 @@ public class RosteringController : ControllerBase
             board = new RosterBoardDto
             {
                 WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Staff,
-                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions, StaffAvailableDays = availableDays
+                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions, StaffAvailableDays = availableDays,
+                GroupActivities = groupActivities, GroupActivitiesEnabled = groupActivitiesEnabled
             };
         }
 
@@ -1067,6 +1078,19 @@ public class RosteringController : ControllerBase
                 published.Add(shift);
             }
 
+            // Group activities (PR1): publishing the whole week publishes its Draft activities too, and a published activity brings its Draft participant shifts out with it (they have no worker, so the loop above skips them). Publishing a chosen list leaves activities alone: publish those from the activity.
+            var weekActivities = await _db.GroupActivities.Where(a => a.TenantId == tenantId && a.ServiceDate >= start && a.ServiceDate <= end).ToListAsync(ct);
+            if (chosen == null)
+                foreach (var activity in weekActivities.Where(a => a.Status == ShiftStatus.Draft))
+                    (activity.Status, activity.UpdatedAt) = (ShiftStatus.Published, DateTime.UtcNow);
+            var publishedActivityIds = weekActivities.Where(a => a.Status == ShiftStatus.Published).Select(a => a.Id).ToHashSet();
+            foreach (var shift in drafts.Where(s => s.GroupActivityId is { } activityId && s.UserId is null && publishedActivityIds.Contains(activityId)))
+            {
+                shift.Status = ShiftStatus.Published;
+                shift.UpdatedAt = DateTime.UtcNow;
+                published.Add(shift);
+            }
+
             // One notice per worker, listing every shift of theirs this publish put out, earliest first (fix round 1). A shift whose day has gone is published for the
             // record, but nobody is told about it now.
             var toTell = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).GroupBy(s => s.UserId!.Value).ToList();
@@ -1094,7 +1118,7 @@ public class RosteringController : ControllerBase
             {
                 Published = published.Count,
                 Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
-                Unfilled = drafts.Count(s => s.UserId is null),
+                Unfilled = drafts.Count(s => s.UserId is null && s.GroupActivityId is null),
                 Skipped = skipped,
             }));
         }
@@ -2489,6 +2513,7 @@ public class RosteringController : ControllerBase
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
             ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
