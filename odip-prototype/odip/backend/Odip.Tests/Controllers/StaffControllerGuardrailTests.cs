@@ -628,4 +628,33 @@ public class StaffControllerGuardrailTests
 
         VerifyFirebaseCalls(firebase, 2);   // the two skipped forward attempts, nothing sent back
     }
+
+    [Fact]
+    public async Task Update_RenamingOnly_GivesFirebaseTheNewDisplayName()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var result = await MakeController(db, "Admin", firebase).Update(worker.Id, EditOf(worker) with { FirstName = "Renamed" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        firebase.Verify(f => f.UpdateUserByEmailAsync(worker.Email, $"Renamed {worker.LastName}", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Update_RenamingOnly_WhenTheSaveThrows_PutsTheOldNameBack()
+    {
+        var (db, tenantId, breakSave) = CreateBreakableDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var firebase = new Mock<IFirebaseUserService>();
+        var controller = MakeController(db, "Admin", firebase);
+        var (email, original, last) = (worker.Email, $"{worker.FirstName} {worker.LastName}", worker.LastName);
+        breakSave();
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.Update(worker.Id, EditOf(worker) with { FirstName = "Renamed" }, CancellationToken.None));
+
+        firebase.Verify(f => f.UpdateUserByEmailAsync(email, $"Renamed {last}", false, It.IsAny<CancellationToken>()), Times.Once);
+        firebase.Verify(f => f.UpdateUserByEmailAsync(email, original, false, It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
