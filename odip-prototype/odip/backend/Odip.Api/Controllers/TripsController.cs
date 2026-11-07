@@ -137,6 +137,9 @@ public class TripsController : ControllerBase
         }));
     }
 
+    private const string MaxBelowMinMessage = "Maximum participants can't be less than the minimum.";
+    private static bool MaxBelowMin(CreateTripDto d) => d.MinParticipants is { } min && d.MaxParticipants is { } max && max < min;
+
     /// <summary>Create a new trip instance.</summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -146,6 +149,7 @@ public class TripsController : ControllerBase
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
         if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
+        if (MaxBelowMin(dto)) return BadRequest(ApiResponse<TripDetailDto>.Fail(MaxBelowMinMessage));
 
         var trip = new TripInstance
         {
@@ -206,6 +210,7 @@ public class TripsController : ControllerBase
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
         if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
+        if (MaxBelowMin(dto)) return BadRequest(ApiResponse<TripDetailDto>.Fail(MaxBelowMinMessage));
         if (dto.Status is { } status)
         {
             var statusError = await ApplyStatusChangeAsync(t, status, ct);
