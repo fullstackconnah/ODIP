@@ -84,7 +84,9 @@ public class ParticipantFundingController : ControllerBase
     [EnableRateLimiting("api")]
     public async Task<ActionResult<ApiResponse<FundingPlanDto>>> SetMyProvider(Guid participantId, Guid planId, [FromBody] SetMyProviderDto dto, CancellationToken ct)
     {
-        var result = await _service.SetMyProviderAsync(_tenant.TenantId!.Value, participantId, planId, dto, Actor(), ct);
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<FundingPlanDto>.Fail(ChooseOrganisation));
+
+        var result = await _service.SetMyProviderAsync(tenantId, participantId, planId, dto, Actor(), ct);
         return result.Plan is { } plan ? Ok(ApiResponse<FundingPlanDto>.Ok(plan)) : Refusal(result);
     }
 

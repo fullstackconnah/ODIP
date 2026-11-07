@@ -73,7 +73,7 @@ public class AgreementRenewalServiceTests
 
         var v2 = await StoredAsync(f, outcome.Draft!.Id);
         Assert.False(v2.IsOngoing);
-        Assert.True(v2.AgreementEndDate <= Nov23.AddDays(799));
+        Assert.Equal(Jan3, v2.AgreementEndDate);                               // the same-length end (42 days); the cap and the plan end are both later
     }
 
     [Fact]

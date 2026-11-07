@@ -126,7 +126,7 @@ public class TripAccommodationListTests
         Assert.False(Flag(db, second));
     }
 
-    [Fact(Skip = "Real bug, run 20261107-203432-6571: ReservationsController.Update leaves HasOverlapConflict true on the moved reservation and on the old property's other one (RefreshOverlapFlagsAsync reads the moved row under its old DB property with its new tracked property). Unskip once fixed.")]
+    [Fact]
     public async Task MovingAReservationToAnotherProperty_ClearsTheFlagOnTheOldPropertysOtherReservation()
     {
         using var db = CreateDb();
