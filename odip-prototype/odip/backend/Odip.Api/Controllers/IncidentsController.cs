@@ -238,6 +238,8 @@ public class IncidentsController : ControllerBase
         // The converter also takes a bare int, so a value no enum member names must not reach the int column.
         if (!Enum.IsDefined(dto.IncidentType))
             return "Unknown incident type.";
+        if (!Enum.IsDefined(dto.Severity))
+            return "Unknown severity.";
         if (((dto.EmergencyServices ?? EmergencyService.None) & ~(EmergencyService.Police | EmergencyService.Ambulance | EmergencyService.Fire)) != 0)
             return "Unknown emergency service.";
         if (dto.ServiceType == ServiceStreams.Trip && dto.TripInstanceId == null)
