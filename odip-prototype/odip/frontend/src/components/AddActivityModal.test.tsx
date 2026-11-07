@@ -4,9 +4,15 @@ import userEvent from '@testing-library/user-event'
 import AddActivityModal from './AddActivityModal'
 import type { ScheduledActivityDto } from '@/api/types/activities'
 
-const { mutation, failure } = vi.hoisted(() => {
+const { mutation, failure, dirtySeen } = vi.hoisted(() => {
   const failure = { error: null as unknown }
-  return { failure, mutation: () => ({ mutate: () => undefined, isPending: false, isError: failure.error !== null, error: failure.error }) }
+  return { failure, dirtySeen: [] as boolean[], mutation: () => ({ mutate: () => undefined, isPending: false, isError: failure.error !== null, error: failure.error }) }
+})
+
+// Records the dirty flag of every render, so the very first one can be checked.
+vi.mock('@/components/Modal', async (orig) => {
+  const real = await orig<typeof import('@/components/Modal')>()
+  return { ...real, Modal: (p: Parameters<typeof real.Modal>[0]) => { dirtySeen.push(!!p.dirty); return real.Modal(p) } }
 })
 
 vi.mock('@/api/hooks', () => ({
@@ -28,7 +34,7 @@ describe('AddActivityModal — form labels', () => {
 
 describe('AddActivityModal — Notes fold motion', () => {
   const notesFold = () => screen.getByText('Notes').closest('details')
-  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: null, notes: 'Bring water' } as unknown as ScheduledActivityDto
+  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: null, notes: 'Bring water' } as unknown as unknown as ScheduledActivityDto
 
   it('appears at once when editing an activity that already has notes', () => {
     render(<AddActivityModal tripDayId="d1" editingActivity={editing} onClose={() => {}} />)
@@ -43,7 +49,7 @@ describe('AddActivityModal — Notes fold motion', () => {
 
 describe('AddActivityModal — Notes fold stays open once it has opened', () => {
   const notesFold = () => screen.getByText('Notes').closest('details') as HTMLDetailsElement
-  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: 'Ramp', notes: 'Bring water' } as unknown as ScheduledActivityDto
+  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: 'Ramp', notes: 'Bring water' } as unknown as unknown as ScheduledActivityDto
 
   it('opens when a note is typed and does not snap shut when the note is cleared', async () => {
     render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
@@ -120,6 +126,21 @@ describe('AddActivityModal — unsaved text', () => {
     expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     expect(screen.getByLabelText(/^Title/)).toHaveValue('Zoo')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AddActivityModal — editing then closing at once', () => {
+  it('Escape straight after opening an edit closes without a discard prompt', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    dirtySeen.length = 0
+    const editing = { id: 'a1', title: 'Zoo', notes: 'Bring a hat', status: 'Booked' } as unknown as ScheduledActivityDto
+    render(<AddActivityModal tripDayId="d1" editingActivity={editing} onClose={onClose} />)
+    expect(dirtySeen.at(0)).toBe(false) // the first render already matches the activity, not empty seeds
+    expect(dirtySeen.every((d) => !d)).toBe(true)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
