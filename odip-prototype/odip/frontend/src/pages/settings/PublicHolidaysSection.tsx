@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AxiosError } from 'axios'
 import { Lock } from 'lucide-react'
 import { inputClass } from '@/components/FormField'
 import { useCreatePublicHoliday, useDeletePublicHoliday, usePublicHolidays, useSyncHolidays } from '@/api/hooks'
@@ -10,6 +9,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { formatServiceDate, plural } from '@/lib/format'
+import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { unbroken } from '@/lib/intakeBooking'
 import { retryingAfterError } from '@/lib/queryPhase'
 
@@ -61,8 +61,7 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
           syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000)
         },
         onError: (error: Error) => {
-          const err = error as AxiosError<{ message?: string }>
-          const msg = err?.response?.data?.message || err?.message || 'Sync failed. Please try again.'
+          const msg = apiErrorMessages(error)[0] || error?.message || 'Sync failed. Please try again.'
           setSyncMessage({ type: 'error', text: msg })
         },
       }

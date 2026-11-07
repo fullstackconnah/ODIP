@@ -168,6 +168,7 @@ public class BookingsController : ControllerBase
             _db.BookingTasks.Add(new BookingTask
             {
                 Id = Guid.NewGuid(),
+                TenantId = participant.TenantId,
                 TripInstanceId = dto.TripInstanceId,
                 ParticipantBookingId = booking.Id,
                 TaskType = TaskType.InsuranceConfirmation,
@@ -336,7 +337,16 @@ public class BookingsController : ControllerBase
 public class AccommodationController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public AccommodationController(OdipDbContext db) => _db = db;
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a property belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public AccommodationController(OdipDbContext db, ICurrentTenant? tenant = null)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<AccommodationListDto>>>> GetAll(
@@ -385,6 +395,7 @@ public class AccommodationController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AccommodationDetailDto>>> Create([FromBody] CreateAccommodationDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<AccommodationDetailDto>.Fail(ChooseOrganisation));
         var prop = new AccommodationProperty
         {
             Id = Guid.NewGuid(), PropertyName = dto.PropertyName, ProviderOwner = dto.ProviderOwner,

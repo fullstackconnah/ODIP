@@ -46,6 +46,9 @@ public class PublicHolidaysController : ControllerBase
     public async Task<ActionResult<ApiResponse<PublicHolidayDto>>> Create(
         [FromBody] CreatePublicHolidayDto dto, CancellationToken ct)
     {
+        if (dto.Date is not { } date)
+            return BadRequest(ApiResponse<PublicHolidayDto>.Fail("Enter the holiday date."));
+
         // A row only prices a day if its state is one the engine can match: one of the eight codes, in capitals (no state is a holiday in every state).
         string? state = null;
         if (dto.State is not null)
@@ -56,7 +59,7 @@ public class PublicHolidaysController : ControllerBase
                     $"State must be one of {string.Join(", ", HolidayCalendar.StateCodes)}, or left out for a holiday in every state."));
         }
 
-        var holiday = new PublicHoliday { Id = Guid.NewGuid(), Date = dto.Date, Name = dto.Name, State = state };
+        var holiday = new PublicHoliday { Id = Guid.NewGuid(), Date = date, Name = dto.Name, State = state };
         _db.PublicHolidays.Add(holiday);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PublicHolidayDto>.Ok(
@@ -83,11 +86,11 @@ public class PublicHolidaysController : ControllerBase
         var toYear = dto.ToYear ?? DateTime.UtcNow.Year + 1;
 
         if (fromYear < 2000)
-            return BadRequest(new { message = "fromYear must be 2000 or later." });
+            return BadRequest(ApiResponse<SyncResultDto>.Fail("fromYear must be 2000 or later."));
         if (toYear < fromYear)
-            return BadRequest(new { message = "toYear must be greater than or equal to fromYear." });
+            return BadRequest(ApiResponse<SyncResultDto>.Fail("toYear must be greater than or equal to fromYear."));
         if (toYear - fromYear > 9)
-            return BadRequest(new { message = "Year range must be 10 years or fewer." });
+            return BadRequest(ApiResponse<SyncResultDto>.Fail("Year range must be 10 years or fewer."));
 
         var result = await _syncService.SyncAsync(fromYear, toYear, ct);
 

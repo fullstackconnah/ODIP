@@ -315,6 +315,10 @@ public static class ParticipantPatchApplier
             ? db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    // The participant is already tracked here (loaded, or staged by Create), so no query. A new participant's TenantId is still unset and SaveChanges stamps it; a SuperAdmin with no organisation has no ambient tenant to stamp, so the child takes its participant's.
+    private static Guid TenantOf(OdipDbContext db, Guid participantId) =>
+        db.Participants.Local.FirstOrDefault(p => p.Id == participantId)?.TenantId ?? default;
+
     /// <summary>
     /// INTAKE sub-wave B — upserts every consent row submitted with a create/update payload, keyed
     /// by <see cref="Domain.Enums.ConsentType"/>. Moved verbatim from ParticipantsController; see
@@ -330,7 +334,7 @@ public static class ParticipantPatchApplier
         {
             if (!byType.TryGetValue(dto.ConsentType, out var row))
             {
-                row = new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = participantId, ConsentType = dto.ConsentType };
+                row = new ParticipantConsent { Id = Guid.NewGuid(), TenantId = TenantOf(db, participantId), ParticipantId = participantId, ConsentType = dto.ConsentType };
                 db.ParticipantConsents.Add(row);
                 byType[dto.ConsentType] = row;
             }
@@ -352,7 +356,7 @@ public static class ParticipantPatchApplier
         {
             if (!byType.TryGetValue(dto.ConditionType, out var row))
             {
-                row = new ParticipantHealthCondition { Id = Guid.NewGuid(), ParticipantId = participantId, ConditionType = dto.ConditionType };
+                row = new ParticipantHealthCondition { Id = Guid.NewGuid(), TenantId = TenantOf(db, participantId), ParticipantId = participantId, ConditionType = dto.ConditionType };
                 db.ParticipantHealthConditions.Add(row);
                 byType[dto.ConditionType] = row;
             }
@@ -376,7 +380,7 @@ public static class ParticipantPatchApplier
             if (!byType.TryGetValue(dto.AdlType, out var row))
             {
                 if (dto.Level is null && string.IsNullOrWhiteSpace(dto.Notes) && string.IsNullOrWhiteSpace(dto.HowToHelpNotes)) continue;
-                row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, AdlType = dto.AdlType };
+                row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), TenantId = TenantOf(db, participantId), ParticipantId = participantId, AdlType = dto.AdlType };
                 db.ParticipantAdlAssessments.Add(row);
                 byType[dto.AdlType] = row;
             }
@@ -400,7 +404,7 @@ public static class ParticipantPatchApplier
             if (!byType.TryGetValue(dto.ItemType, out var row))
             {
                 if (dto.Value is null && string.IsNullOrWhiteSpace(dto.Notes)) continue;
-                row = new ParticipantChecklistItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
+                row = new ParticipantChecklistItem { Id = Guid.NewGuid(), TenantId = TenantOf(db, participantId), ParticipantId = participantId, ItemType = dto.ItemType };
                 db.ParticipantChecklistItems.Add(row);
                 byType[dto.ItemType] = row;
             }
@@ -435,7 +439,7 @@ public static class ParticipantPatchApplier
                 // answer whatsoever; a dto that clears an EXISTING row to null still falls through
                 // to ParticipantGridRules.ApplyAnswer below and keeps the row.
                 if (dto.Rating is null && string.IsNullOrWhiteSpace(dto.StrategyNotes)) continue;
-                row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
+                row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), TenantId = TenantOf(db, participantId), ParticipantId = participantId, ItemType = dto.ItemType };
                 db.ParticipantCommunityAccessRiskItems.Add(row);
                 byType[dto.ItemType] = row;
             }
