@@ -5,6 +5,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 
@@ -22,11 +23,17 @@ public class TripsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ILogger<TripsController> _logger;
     private readonly TimeProvider _clock;
-    public TripsController(OdipDbContext db, ILogger<TripsController> logger, TimeProvider? clock = null)
+    private readonly ICurrentTenant? _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: a trip belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public TripsController(OdipDbContext db, ILogger<TripsController> logger, TimeProvider? clock = null, ICurrentTenant? tenant = null)
     {
         _db = db;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
+        _tenant = tenant;
     }
 
     /// <summary>
@@ -142,6 +149,7 @@ public class TripsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDetailDto>>> Create([FromBody] CreateTripDto dto, CancellationToken ct)
     {
+        if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<TripDetailDto>.Fail(ChooseOrganisation));
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
         if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
@@ -296,6 +304,7 @@ public class TripsController : ControllerBase
                 _db.BookingTasks.Add(new BookingTask
                 {
                     Id = Guid.NewGuid(),
+                    TenantId = t.TenantId,
                     TripInstanceId = id,
                     TaskType = TaskType.GenerateNdisClaims,
                     Title = taskTitle,

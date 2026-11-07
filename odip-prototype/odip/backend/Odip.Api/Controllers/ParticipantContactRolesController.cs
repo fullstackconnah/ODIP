@@ -81,7 +81,7 @@ public class ParticipantContactRolesController : ControllerBase
             if (nameError != null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail(nameError));
             person = new Person
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.NewGuid(), TenantId = participant.TenantId,
                 FirstName = (dto.NewPersonFirstName ?? "").Trim(), LastName = (dto.NewPersonLastName ?? "").Trim(),
                 Phone = dto.NewPersonPhone, Mobile = dto.NewPersonMobile, Email = dto.NewPersonEmail,
                 Organisation = dto.NewPersonOrganisation,
@@ -95,7 +95,7 @@ public class ParticipantContactRolesController : ControllerBase
             _db.People.Add(person);
         }
 
-        var role = new ParticipantContactRole { Id = Guid.NewGuid(), ParticipantId = participantId, PersonId = person.Id, Person = person };
+        var role = new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participantId, PersonId = person.Id, Person = person };
         ContactRoleFields.Apply(role, dto);
         _db.ParticipantContactRoles.Add(role);
         await _db.SaveChangesAsync(ct);

@@ -78,7 +78,8 @@ public class LeaveController : ControllerBase
             return BadRequest(ApiResponse<LeaveRequestDto>.Fail("A staff member is required."));
         var validationError = ValidateLeaveDates(dto.StartDate, dto.EndDate);
         if (validationError != null) return BadRequest(ApiResponse<LeaveRequestDto>.Fail(validationError));
-        if (!await _db.Users.AnyAsync(u => u.Id == dto.UserId.Value && u.IsActive, ct))
+        var userTenantId = await _db.Users.Where(u => u.Id == dto.UserId.Value && u.IsActive).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
+        if (userTenantId is null)
             return BadRequest(ApiResponse<LeaveRequestDto>.Fail("Staff member not found."));
         if (await HasDuplicateLeaveAsync(dto.UserId.Value, dto.LeaveType, dto.StartDate, dto.EndDate, ct))
             return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
@@ -89,7 +90,7 @@ public class LeaveController : ControllerBase
         if (dto.UserId.Value == callerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveRequestDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
         var leave = new LeaveRequest
         {
-            Id = Guid.NewGuid(), UserId = dto.UserId.Value, LeaveType = dto.LeaveType,
+            Id = Guid.NewGuid(), TenantId = userTenantId.Value, UserId = dto.UserId.Value, LeaveType = dto.LeaveType,
             StartDate = dto.StartDate, EndDate = dto.EndDate, Reason = dto.Reason,
             Status = LeaveStatus.Approved, RequestedByUserId = callerId.Value, RequestedAt = _clock.GetUtcNow().UtcDateTime,
             DecidedByUserId = callerId.Value, DecidedAt = _clock.GetUtcNow().UtcDateTime,
@@ -287,7 +288,8 @@ public class LeaveController : ControllerBase
             return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail("A staff member is required."));
         var validationError = ValidateRecurringWindow(dto.StartTime, dto.EndTime, dto.EffectiveFrom, dto.EffectiveTo);
         if (validationError != null) return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail(validationError));
-        if (!await _db.Users.AnyAsync(u => u.Id == dto.UserId.Value && u.IsActive, ct))
+        var userTenantId = await _db.Users.Where(u => u.Id == dto.UserId.Value && u.IsActive).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
+        if (userTenantId is null)
             return BadRequest(ApiResponse<RecurringUnavailabilityDto>.Fail("Staff member not found."));
         if (await HasDuplicateUnavailabilityAsync(dto.UserId.Value, dto.DayOfWeek, dto.StartTime, dto.EndTime, dto.EffectiveFrom, dto.EffectiveTo, ct))
             return Conflict(ApiResponse<RecurringUnavailabilityDto>.Fail("An identical request already exists."));
@@ -298,7 +300,7 @@ public class LeaveController : ControllerBase
         if (dto.UserId.Value == callerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
         var rule = new RecurringUnavailability
         {
-            Id = Guid.NewGuid(), UserId = dto.UserId.Value, DayOfWeek = dto.DayOfWeek,
+            Id = Guid.NewGuid(), TenantId = userTenantId.Value, UserId = dto.UserId.Value, DayOfWeek = dto.DayOfWeek,
             StartTime = dto.StartTime, EndTime = dto.EndTime, EffectiveFrom = dto.EffectiveFrom,
             EffectiveTo = dto.EffectiveTo, Notes = dto.Notes,
             Status = LeaveStatus.Approved, RequestedByUserId = callerId.Value, RequestedAt = DateTime.UtcNow,
