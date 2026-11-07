@@ -112,6 +112,7 @@ public sealed class RosterConflictService
     public const string VehicleDoubleBooked = "VEHICLE_DOUBLE_BOOKED";
     public const string VehicleOverSeats = "VEHICLE_OVER_SEATS";
     public const string VehicleOverWheelchair = "VEHICLE_OVER_WHEELCHAIR";
+    public const string VehicleDriverLicence = "VEHICLE_DRIVER_LICENCE";
     public const string PublicHoliday = "PUBLIC_HOLIDAY";
     public const string StaffNotStarted = "STAFF_NOT_STARTED";
 

@@ -383,4 +383,13 @@ public class CaregiverControllerTests
         var attrs = typeof(CaregiverController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true);
         Assert.Empty(attrs);
     }
+
+    [Theory]
+    [InlineData(nameof(CaregiverController.SaveDraft))]
+    [InlineData(nameof(CaregiverController.Submit))]
+    public void The_public_write_routes_cap_the_request_body(string action)
+    {
+        var attr = typeof(CaregiverController).GetMethod(action)!.GetCustomAttributes(typeof(RequestSizeLimitAttribute), false);
+        Assert.Single(attr);
+    }
 }

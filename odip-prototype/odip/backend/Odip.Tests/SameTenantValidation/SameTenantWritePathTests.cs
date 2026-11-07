@@ -277,6 +277,8 @@ public class SameTenantWritePathTests
     {
         var (db, tenantAId, tenantBId) = CreateDbWithTwoTenants();
         var ownDriver = SeedUserInTenant(db, tenantAId, "Own", "Driver");
+        ownDriver.IsDriverEligible = true; ownDriver.DriverLicenceExpiryDate = new DateOnly(2099, 1, 1); // else VEHICLE_DRIVER_LICENCE refuses the setup Create
+        db.SaveChanges();
         var foreignDriver = SeedUserInTenant(db, tenantBId, "Foreign", "Driver");
         var trip = SeedTrip(db, tenantAId);
         var vehicle = new Vehicle { Id = Guid.NewGuid(), TenantId = tenantAId, VehicleName = "Van 1", VehicleType = VehicleType.Van, TotalSeats = 8, IsActive = true };
