@@ -46,13 +46,13 @@ public class ParticipantAdlAssessmentsController : ControllerBase
         if (!Enum.TryParse<AdlType>(adlType, ignoreCase: true, out var type))
             return BadRequest(ApiResponse<ParticipantAdlAssessmentDto>.Fail("Unrecognised ADL type."));
 
-        var participant = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
-        if (!participant) return NotFound(ApiResponse<ParticipantAdlAssessmentDto>.Fail("Participant not found"));
+        var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
+        if (tenantId == null) return NotFound(ApiResponse<ParticipantAdlAssessmentDto>.Fail("Participant not found"));
 
         var row = await _db.ParticipantAdlAssessments.FirstOrDefaultAsync(a => a.ParticipantId == participantId && a.AdlType == type, ct);
         if (row == null)
         {
-            row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, AdlType = type };
+            row = new ParticipantAdlAssessment { Id = Guid.NewGuid(), ParticipantId = participantId, TenantId = tenantId.Value, AdlType = type };
             _db.ParticipantAdlAssessments.Add(row);
         }
 

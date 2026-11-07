@@ -46,13 +46,13 @@ public class ParticipantCommunityAccessRiskItemsController : ControllerBase
         if (!Enum.TryParse<CommunityAccessRiskItemType>(itemType, ignoreCase: true, out var type))
             return BadRequest(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Fail("Unrecognised community access risk item type."));
 
-        var participant = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
-        if (!participant) return NotFound(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Fail("Participant not found"));
+        var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
+        if (tenantId == null) return NotFound(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Fail("Participant not found"));
 
         var row = await _db.ParticipantCommunityAccessRiskItems.FirstOrDefaultAsync(a => a.ParticipantId == participantId && a.ItemType == type, ct);
         if (row == null)
         {
-            row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = type };
+            row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, TenantId = tenantId.Value, ItemType = type };
             _db.ParticipantCommunityAccessRiskItems.Add(row);
         }
 

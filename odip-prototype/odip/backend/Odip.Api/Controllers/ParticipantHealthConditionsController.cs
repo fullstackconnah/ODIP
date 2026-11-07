@@ -46,13 +46,13 @@ public class ParticipantHealthConditionsController : ControllerBase
         if (!Enum.TryParse<HealthConditionType>(conditionType, ignoreCase: true, out var type))
             return BadRequest(ApiResponse<ParticipantHealthConditionDto>.Fail("Unrecognised health condition type."));
 
-        var participant = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
-        if (!participant) return NotFound(ApiResponse<ParticipantHealthConditionDto>.Fail("Participant not found"));
+        var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
+        if (tenantId == null) return NotFound(ApiResponse<ParticipantHealthConditionDto>.Fail("Participant not found"));
 
         var row = await _db.ParticipantHealthConditions.FirstOrDefaultAsync(c => c.ParticipantId == participantId && c.ConditionType == type, ct);
         if (row == null)
         {
-            row = new ParticipantHealthCondition { Id = Guid.NewGuid(), ParticipantId = participantId, ConditionType = type };
+            row = new ParticipantHealthCondition { Id = Guid.NewGuid(), ParticipantId = participantId, TenantId = tenantId.Value, ConditionType = type };
             _db.ParticipantHealthConditions.Add(row);
         }
 
