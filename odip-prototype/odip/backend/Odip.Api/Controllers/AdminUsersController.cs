@@ -304,6 +304,7 @@ public class AdminUsersController : ControllerBase
         if (user.Id.ToString() == User?.FindFirst(ClaimTypes.NameIdentifier)?.Value && (leaves || roleChanges))
             return "You can't deactivate or change the role of your own account. Ask another SuperAdmin.";
         if (!user.IsActive || !(leaves || roleChanges)) return null;
+        // shortcut: two SuperAdmins demoting each other at the same moment can both pass this count, and domain-email accounts are not counted; upgrade to a row lock if it ever matters.
         if (user.Role == UserRole.SuperAdmin
             && !await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id != user.Id && u.Role == UserRole.SuperAdmin && u.IsActive, ct))
             return "Add another SuperAdmin first. Bunya Support needs at least one active SuperAdmin.";
@@ -328,7 +329,6 @@ public class AdminUsersController : ControllerBase
 
         // The address in the one form ODIP stores and compares (see EmailIdentity). Saving also repairs a row stored as typed.
         var email = EmailIdentity.Normalise(dto.Email);
-        if (OnSuperAdminDomain(email)) return BadRequest(ApiResponse<object>.Fail(SuperAdminDomainMessage));
 
         // Validate email uniqueness (excluding current user)
         var emailExists = await _db.Users
@@ -352,6 +352,12 @@ public class AdminUsersController : ControllerBase
         var originalEmail = EmailIdentity.Normalise(user.Email);
         var originalDisplayName = user.FullName;
         var originalDisabled = !user.IsActive;
+
+        // An address on the SuperAdmin domain is a SuperAdmin session, so this form never gives one access: no new domain address, no reactivation, no role change.
+        // Removing access (deactivating) and editing other fields of an existing domain account stay allowed, as on the Staff screen (ReservedRowChangeError).
+        if ((OnSuperAdminDomain(email) && email != originalEmail)
+            || ((OnSuperAdminDomain(email) || OnSuperAdminDomain(originalEmail)) && ((!user.IsActive && dto.IsActive) || role != user.Role)))
+            return BadRequest(ApiResponse<object>.Fail(SuperAdminDomainMessage));
 
         // A NEW address at neither the user's tenant's own domain nor a common provider needs a confirmation, as on create (see AddressConfirmation):
         // it is a live login for whoever owns it. An address the row already holds never asks, so legacy rows stay editable. This comes before Firebase

@@ -144,6 +144,52 @@ public class AdminUsersGuardTests
     }
 
     [Fact]
+    public async Task Update_DomainAccountUnchangedEmail_CanBeDeactivated()
+    {
+        var t = SeedTenant();
+        var u = SeedUser(t.Id, UserRole.Coordinator, email: "pat@platform.example");
+
+        Assert.IsType<OkObjectResult>(await Controller().Update(u.Id, Edit(u, "Coordinator", false), default));
+
+        Assert.False(_db.Users.IgnoreQueryFilters().Single(x => x.Id == u.Id).IsActive);
+        _firebase.Verify(f => f.UpdateUserByEmailAsync("pat@platform.example", It.IsAny<string>(), true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Update_DomainAccountUnchangedEmail_NameOnlyEditSaves()
+    {
+        var t = SeedTenant();
+        var u = SeedUser(t.Id, UserRole.Coordinator, email: "pat@platform.example");
+        var dto = Edit(u, "Coordinator", true) with { FirstName = "Renamed" };
+
+        Assert.IsType<OkObjectResult>(await Controller().Update(u.Id, dto, default));
+
+        Assert.Equal("Renamed", _db.Users.IgnoreQueryFilters().Single(x => x.Id == u.Id).FirstName);
+    }
+
+    [Fact]
+    public async Task Update_ChangingEmailToDomainEmail_RefusesAndSavesNothing()
+    {
+        var t = SeedTenant();
+        var u = SeedUser(t.Id, UserRole.Coordinator);
+        var dto = Edit(u, "Coordinator", true) with { Email = "pat@platform.example" };
+
+        var r = await Controller().Update(u.Id, dto, default);
+
+        AssertRefused(r, 400, Reserved, u, true, UserRole.Coordinator);
+        Assert.NotEqual("pat@platform.example", _db.Users.IgnoreQueryFilters().Single(x => x.Id == u.Id).Email);
+    }
+
+    [Fact]
+    public async Task Update_ReactivatingDomainAccount_RefusesAndSavesNothing()
+    {
+        var t = SeedTenant();
+        var u = SeedUser(t.Id, UserRole.Coordinator, active: false, email: "pat@platform.example");
+
+        AssertRefused(await Controller().Update(u.Id, Edit(u, "Coordinator", true), default), 400, Reserved, u, false, UserRole.Coordinator);
+    }
+
+    [Fact]
     public async Task Create_SuperAdminDomainEmail_RefusesAnyOtherRoleAndSavesNothing()
     {
         var t = SeedTenant();
