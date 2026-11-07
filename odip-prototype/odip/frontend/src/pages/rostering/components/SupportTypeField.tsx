@@ -52,7 +52,7 @@ export function SupportTypeField({ value, onChange, date, canWrite, claimReferen
       ? `${name} has no hourly rate on ${formatServiceDate(date).replace(/ /g, ' ')}. Choose another support type, or import the catalogue for that date.`
       : undefined
   const line = locked
-    ? `On claim ${claimReference}. Delete that claim to change the support type.`
+    ? `On claim ${claimReference}. Delete that claim to change these.`
     : loading ? undefined : groups && listed.length === 0 ? EMPTY_CATALOGUE : hint
 
   return (

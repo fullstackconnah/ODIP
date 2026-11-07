@@ -144,7 +144,7 @@ export function FormField({ label, required, error, hint, descriptionId, keepHin
         {label}{required && ' *'}
       </label>
       {enhanced}
-      {showHint && <p id={hintId} className="text-xs text-[var(--color-muted-foreground)] mt-1">{hint}</p>}
+      {showHint && <p id={hintId} className="text-xs text-pretty text-[var(--color-muted-foreground)] mt-1">{hint}</p>}
       {showError && <p id={errorId} role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{error}</p>}
       {keepHint && !showError && <p aria-hidden="true" className="text-xs mt-1">&nbsp;</p>}
     </div>

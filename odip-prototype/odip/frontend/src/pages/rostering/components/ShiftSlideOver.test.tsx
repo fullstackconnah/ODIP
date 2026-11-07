@@ -2159,6 +2159,16 @@ describe('ShiftSlideOver support type', () => {
     const field = screen.getByRole('combobox', { name: 'Support type' })
     expect(field).toBeDisabled()
     expect(field).toHaveValue('Art therapy')
-    expect(screen.getByText('On claim CLM-0042. Delete that claim to change the support type.')).toBeInTheDocument()
+    expect(screen.getByText('On claim CLM-0042. Delete that claim to change these.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Ratio/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Night type/ })).toBeDisabled()
+  })
+
+  it('a shift on no claim keeps its ratio, night type and support type open', () => {
+    open(makeShift({ supportGroupCode: 'GRP_ART', claimReference: undefined }))
+    expect(screen.getByRole('button', { name: /Ratio/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Night type/ })).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: 'Support type' })).toBeEnabled()
+    expect(screen.queryByText(/Delete that claim/)).not.toBeInTheDocument()
   })
 })
