@@ -1003,7 +1003,8 @@ public record CreateTripDto : IValidatableObject
 
 public record UpdateTripDto : CreateTripDto
 {
-    public TripStatus Status { get; init; } = TripStatus.Draft;
+    /// <summary>Null leaves the stored status alone.</summary>
+    public TripStatus? Status { get; init; }
     public TimeOnly? DepartureTime { get; init; }
     public TimeOnly? ReturnTime { get; init; }
 }
@@ -2502,11 +2503,11 @@ public record TenantDto(
     DateTime CreatedAt);
 
 public record CreateTenantDto(
-    string Name,
+    [Required(ErrorMessage = "Enter the organisation name."), StringLength(200)] string Name,
     string? EmailDomain);
 
 public record UpdateTenantDto(
-    string Name,
+    [Required(ErrorMessage = "Enter the organisation name."), StringLength(200)] string Name,
     string? EmailDomain,
     bool IsActive);
 
