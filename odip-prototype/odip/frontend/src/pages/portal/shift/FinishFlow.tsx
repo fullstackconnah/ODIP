@@ -78,7 +78,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
   const save = useSaveFinishDetails()
   const records = useQueueRecords()
   const { id: currentUserId } = usePermissions()
-  const { data: notes } = useShiftNotes(shift.id)
+  const { data: notes, isLoading: notesLoading } = useShiftNotes(shift.id)
   const noteCount = notes?.length ?? 0
   const [mountedAt] = useState(() => new Date().toISOString())
   const [d, setD] = useState<EndDraft>(() => openDraft(shift))
@@ -99,7 +99,8 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
   const tapped = tappedEnd(shift, d)
   const end = effectiveEnd(shift, d)
   const asks = end ? timeQuestions(shift, d, end) : { start: null, finish: null }
-  const missing = missingNow(shift, d, noteCount)
+  // While the notes load, the count is unknown: do not call Notes missing (an errored query still counts, as offline does).
+  const missing = missingNow(shift, d, noteCount).filter(k => !(notesLoading && k === 'notes'))
   const complete = missing.length === 0
   const busy = submitting || ending
   const doseBlockers = online ? shift.finishBlockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length : 0
@@ -242,7 +243,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
       />
       <section aria-labelledby="finish-handover-card" className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 lg:p-5 space-y-3">
         <h2 id="finish-handover-card" className="font-semibold text-lg">Notes and handover</h2>
-        <HandoverStep noteCount={noteCount} draft={d} set={set} onEditNotes={editNotes} />
+        <HandoverStep loading={notesLoading} noteCount={noteCount} draft={d} set={set} onEditNotes={editNotes} />
       </section>
       <section aria-labelledby="finish-report" className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 lg:p-5 space-y-3">
         <h2 id="finish-report" className="font-semibold text-lg">Anything to report?</h2>
