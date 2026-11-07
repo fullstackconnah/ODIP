@@ -137,6 +137,20 @@ public class NotificationsControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task PutPreferences_UndefinedNumericEventTypeAndChannel_Return400_AndSaveNothing()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, _) = CreateDb(tenantId);
+        var user = SeedUser(db, tenantId);
+        var controller = MakeController(db, user.Id);
+
+        foreach (var dto in new[] { new UpdateNotificationPreferenceDto { EventType = "99", Channel = "Email", Enabled = true }, new UpdateNotificationPreferenceDto { EventType = "ShiftAssigned", Channel = "99", Enabled = true } })
+            Assert.IsType<BadRequestObjectResult>((await controller.UpdatePreferences(new List<UpdateNotificationPreferenceDto> { dto }, CancellationToken.None)).Result);
+
+        Assert.Empty(await db.NotificationPreferences.IgnoreQueryFilters().ToListAsync());
+    }
+
     /// <summary>Mandatory cross-tenant negative test: tenant B's user setting their own preference must never be visible from, or overwritten by, tenant A's caller.</summary>
     [Fact]
     public async Task Preferences_AreScopedPerUser_TenantBsCustomisationNeverLeaksToTenantA()

@@ -230,6 +230,28 @@ public class AdminUsersControllerTests
     // ── Update ──────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task Create_UndefinedRole_ReturnsBadRequest_AndSavesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenant = SeedTenant(db);
+        var firebase = new Mock<IFirebaseUserService>();
+        var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
+
+        foreach (var role in new[] { "99", "SupportWorker,SuperAdmin" })
+        {
+            var dto = new CreateAdminUserDto
+            {
+                FirstName = "New", LastName = "User", Email = "new.user@test.example.com",
+                Username = "newuser", Role = role, TenantId = tenant.Id, Password = "P@ssword1234!",
+            };
+            Assert.IsType<BadRequestObjectResult>(await controller.Create(dto, CancellationToken.None));
+        }
+
+        Assert.Empty(await db.Users.IgnoreQueryFilters().ToListAsync());
+        firebase.Verify(f => f.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Update_FirebaseSucceeds_PersistsChanges()
     {
         var dbName = Guid.NewGuid().ToString();
@@ -257,6 +279,27 @@ public class AdminUsersControllerTests
         Assert.Equal("Updated", reloaded.FirstName);
 
         firebase.Verify(f => f.UpdateUserByEmailAsync("existing@test.example.com", "Updated Name", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Update_UndefinedRole_ReturnsBadRequest_AndKeepsTheRole()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenant = SeedTenant(db);
+        var user = SeedUser(db, tenant.Id, "existing@test.example.com", "existinguser");
+        var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, new Mock<IFirebaseUserService>().Object);
+
+        foreach (var role in new[] { "99", "SupportWorker,SuperAdmin" })
+        {
+            var dto = new UpdateAdminUserDto
+            {
+                FirstName = "Updated", LastName = "Name", Email = "existing@test.example.com",
+                Username = "existinguser", Role = role, IsActive = true,
+            };
+            Assert.IsType<BadRequestObjectResult>(await controller.Update(user.Id, dto, CancellationToken.None));
+        }
+
+        Assert.Equal(Odip.Domain.Enums.UserRole.Coordinator, (await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == user.Id)).Role);
     }
 
     [Fact]

@@ -120,6 +120,21 @@ public class FirebaseAccountOutcomeTests
     }
 
     [Fact]
+    public async Task Tenant_create_refuses_an_undefined_first_user_role_and_saves_no_user()
+    {
+        var firebase = new Mock<IFirebaseUserService>();
+
+        foreach (var role in new[] { "99", "SupportWorker,SuperAdmin" })
+        {
+            using var db = SuperAdminDb(ignoreInMemoryTransactions: true);
+            var dto = new CreateTenantWithSetupDto("Brightside Care", "brightside.example.com", new TenantSetupProviderDto { State = "VIC" },
+                new CreateInitialUserDto("Jane", "Smith", "jane.smith@brightside.example.com", "jane.smith", role, null));
+            Assert.IsType<BadRequestObjectResult>(await new TenantsController(db, firebase.Object).CreateWithSetup(dto, CancellationToken.None));
+            Assert.Empty(await db.Users.IgnoreQueryFilters().ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task Tenant_create_says_created_and_names_the_first_user_when_the_app_made_the_account()
     {
         var firebase = new Mock<IFirebaseUserService>();
