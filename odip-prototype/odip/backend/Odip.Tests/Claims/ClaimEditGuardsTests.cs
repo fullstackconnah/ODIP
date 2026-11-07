@@ -312,15 +312,17 @@ public class ClaimEditGuardsTests
     }
 
     [Theory]
-    [InlineData(TripClaimStatus.Draft)]
-    [InlineData(TripClaimStatus.Ready)]
-    public async Task ALineCannotBePaid_WhileItsClaimIsNotYetSubmitted_AndNothingIsWritten(TripClaimStatus status)
+    [InlineData(TripClaimStatus.Draft, ClaimLineItemStatus.Paid)]
+    [InlineData(TripClaimStatus.Draft, ClaimLineItemStatus.PartiallyPaid)]
+    [InlineData(TripClaimStatus.Ready, ClaimLineItemStatus.Paid)]
+    [InlineData(TripClaimStatus.Ready, ClaimLineItemStatus.PartiallyPaid)]
+    public async Task ALineCannotBePaid_WhileItsClaimIsNotYetSubmitted_AndNothingIsWritten(TripClaimStatus status, ClaimLineItemStatus target)
     {
         var (db, controller) = Create();
         var (claim, line, _) = Seed(db, status);
         var lineStatus = line.Status;
 
-        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = 10m }, Ct);
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = target, PaidAmount = 10m }, Ct);
 
         Assert.Equal(409, StatusOf(result));
         Assert.Equal($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as paid.", RefusalOf(result));
