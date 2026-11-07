@@ -13,6 +13,8 @@ import { SignInRefused, describeMicrosoftOutcome, describeSignInRefusal, type Re
 import { VERIFICATION_HOLD_MS, holdLeftMs, readVerificationSend, writeVerificationSend, type VerificationSendRecord } from '@/lib/verificationSend'
 import { Eye, EyeOff } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
+import { plural } from '@/lib/format'
+import { unsentOnDevice } from '@/lib/offline/store'
 
 /** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
 type Problem = RefusalWords & { tone?: CalloutTone }
@@ -30,6 +32,8 @@ export default function LoginPage() {
   // Set when the exchange refused an unverified email: what was typed (so "Send it again" uses it), and how the resend is going. The refused sign-in ended
   // its Firebase session, so sending again signs in once more with these.
   const [unverified, setUnverified] = useState<{ email: string; password: string } | null>(null)
+  // Read once on load: a sign-in as anyone else deletes these, and the page leaves on success.
+  const [unsent] = useState(unsentOnDevice)
   const [resend, setResend] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
   const [resendHeld, setResendHeld] = useState(false)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -214,6 +218,19 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <h1><Wordmark size={32} /></h1>
           </div>
+
+          {unsent.count > 0 && (
+            <Callout
+              tone="warning"
+              polite
+              className="mb-4"
+              title={`${plural(unsent.count, 'unsent change')}${unsent.firstName ? ` from ${unsent.firstName}` : ''} ${unsent.count === 1 ? 'is' : 'are'} on this phone.`}
+            >
+              <p>
+                {unsent.firstName ? `Sign in as ${unsent.firstName}` : 'Sign in as the worker who made them'} to send them. Signing in as anyone else deletes them.
+              </p>
+            </Callout>
+          )}
 
           {!config.isPending && (
           <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]">
