@@ -161,6 +161,8 @@ public class VehicleAssignmentsController : ControllerBase
     /// assigned yet), otherwise the id must resolve to an active User — same-tenant scoping comes
     /// for free from _db.Users' ambient OdipDbContext query filter.
     /// </summary>
+    private const string ArchivedVehicleMessage = "This vehicle is archived. Choose another vehicle.";
+
     private Task<bool> IsValidDriverRefAsync(Guid? driverUserId, CancellationToken ct) =>
         driverUserId.HasValue
             ? _db.Users.AnyAsync(u => u.Id == driverUserId.Value && u.IsActive, ct)
@@ -175,7 +177,7 @@ public class VehicleAssignmentsController : ControllerBase
     /// the vehicle or trip can't be resolved — the caller's own NotFound checks handle that case.
     /// </summary>
     private async Task<List<RosterFinding>> CheckAsync(
-        Guid vehicleId, Guid tripInstanceId, Guid excludeAssignmentId, CancellationToken ct)
+        Guid vehicleId, Guid tripInstanceId, Guid excludeAssignmentId, CancellationToken ct, Guid? driverUserId = null)
     {
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == vehicleId, ct);
         var trip = await _db.TripInstances.FirstOrDefaultAsync(t => t.Id == tripInstanceId, ct);
@@ -199,7 +201,20 @@ public class VehicleAssignmentsController : ControllerBase
 
         var ctx = new VehicleCheckContext(vehicle, otherAssignments, participantCount, wheelchairCount);
 
-        return _conflictService.CheckVehicleAssignment(tripStart, tripEnd, excludeAssignmentId, ctx).ToList();
+        var findings = _conflictService.CheckVehicleAssignment(tripStart, tripEnd, excludeAssignmentId, ctx).ToList();
+
+        // A null expiry on an eligible driver is not a finding, as in the staff list flag.
+        var driver = driverUserId.HasValue ? await _db.Users.FirstOrDefaultAsync(u => u.Id == driverUserId.Value, ct) : null;
+        if (driver != null)
+        {
+            if (!driver.IsDriverEligible)
+                findings.Add(new RosterFinding(RosterConflictService.VehicleDriverLicence, RosterFindingSeverity.Warning,
+                    $"{driver.FullName} isn't marked as an eligible driver.", RequiresReason: true));
+            else if (driver.DriverLicenceExpiryDate is { } expiry && expiry < tripStart)
+                findings.Add(new RosterFinding(RosterConflictService.VehicleDriverLicence, RosterFindingSeverity.Warning,
+                    $"{driver.FullName}'s driver licence expires before this trip.", RequiresReason: true));
+        }
+        return findings;
     }
 
     /// <summary>Dry-run findings for a candidate vehicle assignment. Never writes — mirrors POST /staff-assignments/check.</summary>
@@ -221,12 +236,15 @@ public class VehicleAssignmentsController : ControllerBase
         var trip = await _db.TripInstances.FirstOrDefaultAsync(t => t.Id == dto.TripInstanceId, ct);
         if (trip == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Trip not found"));
 
-        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+        var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == dto.VehicleId, ct);
+        if (vehicle == null)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
+        if (!vehicle.IsActive)
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail(ArchivedVehicleMessage));
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
-        var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, Guid.Empty, ct);
+        var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, Guid.Empty, ct, dto.DriverStaffId);
         var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "vehicle assignment");
         if (rejection != null) return UnprocessableEntity(rejection);
 
@@ -273,8 +291,12 @@ public class VehicleAssignmentsController : ControllerBase
         var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
-        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+        var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == dto.VehicleId, ct);
+        if (vehicle == null)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
+        // Only a switch to an archived vehicle is refused: an assignment of a since-archived one can still be edited or cancelled.
+        if (!vehicle.IsActive && vehicle.Id != a.VehicleId)
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail(ArchivedVehicleMessage));
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
@@ -286,7 +308,7 @@ public class VehicleAssignmentsController : ControllerBase
 
         if (!isCancelling)
         {
-            var findings = await CheckAsync(dto.VehicleId, a.TripInstanceId, a.Id, ct);
+            var findings = await CheckAsync(dto.VehicleId, a.TripInstanceId, a.Id, ct, dto.DriverStaffId);
             var rejection = RosterGate.EvaluateFindings(findings, dto.OverrideReason, "vehicle assignment");
             if (rejection != null) return UnprocessableEntity(rejection);
 

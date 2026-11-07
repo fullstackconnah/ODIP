@@ -295,6 +295,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const statusLocked = !!existing && !isCoordinatorSettable(existing.status)
   // Where the type came from, said once; a change on a shift made from a pattern is for this shift only.
   const copiedFrom = existing?.fromAgreement ? "the service agreement's pattern" : existing?.shiftPatternId ? 'its pattern' : null
+  // A shift on a claim keeps its support type, ratio and night type: the claim priced them.
+  const claimed = !!existing?.claimReference
   const supportHint = copiedFrom
     ? `Copied from ${copiedFrom}.${canWrite ? ' A change here is for this shift only.' : ''}`
     : "Claims use its rate for this shift's day."
@@ -571,7 +573,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               variant="form"
               value={ratio}
               onChange={v => setRatio(v as SupportRatio)}
-              disabled={!canWrite}
+              disabled={!canWrite || claimed}
               items={SUPPORT_RATIOS.map(r => ({ value: r, label: RATIO_LABELS[r] ?? r }))}
             />
           </FormField>
@@ -580,7 +582,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               variant="form"
               value={nightType}
               onChange={v => setNightType(v as SleepoverType)}
-              disabled={!canWrite}
+              disabled={!canWrite || claimed}
               items={SLEEPOVER_TYPES.map(n => ({ value: n, label: NIGHT_TYPE_LABELS[n] ?? n }))}
             />
           </FormField>

@@ -252,7 +252,7 @@ function Checks({ line, heldBack }: { line: HubLineDto; heldBack: boolean }) {
   if (!heldBack) return <PassMark warning={warns || undefined} />
   if (!blocks.length) {
     return (
-      <span id={reasonId(line)} className="block text-[var(--color-muted-foreground)] md:max-w-[14rem] md:truncate" title={`Another line on ${line.claimReference} needs fixing first. A claim is sent whole.`}>
+      <span id={reasonId(line)} className="block text-[var(--color-muted-foreground)] md:max-w-[20rem] md:whitespace-normal md:line-clamp-2" title={`Another line on ${line.claimReference} needs fixing first. A claim is sent whole.`}>
         Another line on {line.claimReference} needs fixing first. A claim is sent whole.
       </span>
     )
@@ -260,8 +260,8 @@ function Checks({ line, heldBack }: { line: HubLineDto; heldBack: boolean }) {
   const fix = fixLink(line, blocks[0].rule)
   const all = blocks.map(p => p.message).join('. ')
   return (
-    <span className="inline-flex items-center md:max-w-[14rem] gap-2 max-md:flex-wrap" title={all}>
-      <span id={reasonId(line)} className={`truncate max-md:whitespace-normal ${TONE.danger.ink}`}>
+    <span className="inline-flex items-center md:max-w-[20rem] gap-2 max-md:flex-wrap" title={all}>
+      <span id={reasonId(line)} className={`md:whitespace-normal md:line-clamp-2 ${TONE.danger.ink}`}>
         {blocks[0].message}
         {blocks.length > 1 && <span className="md:hidden">. {blocks.slice(1).map(p => p.message).join('. ')}</span>}
       </span>
