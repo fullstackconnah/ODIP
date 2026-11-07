@@ -143,7 +143,7 @@ public class ProblemReportSendBackgroundService : BackgroundService
         limit.CancelAfter(PerSendLimit);
         try
         {
-            return await sender.TrySendAsync(row, limit.Token);
+            return await sender.TrySendAsync(row, limit.Token, isRetry: true);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
         {
