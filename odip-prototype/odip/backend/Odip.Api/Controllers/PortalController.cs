@@ -1769,7 +1769,7 @@ public class PortalController : ControllerBase
         var userId = _currentTenant.ViewAsUserId ?? ownUserId;
         if (userId is null) return null;
 
-        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
+        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct);
         return exists ? userId : null;
     }
 
