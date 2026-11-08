@@ -11,6 +11,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Xunit;
 using Odip.Tests.Support;
@@ -2589,5 +2590,144 @@ public class IncidentsControllerTests
         var result = await controller.Update(incident.Id, StaleCheckDto(reporter.Id, null), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // ── A retried submit (same IdempotencyKey) never makes a second incident ──
+
+    private static CreateIncidentDto Keyed(Guid reporterId, string? key) => PropertyDamageDto(reporterId) with { IdempotencyKey = key };
+
+    private static async Task<IncidentListDto> DataOf(Task<ActionResult<ApiResponse<IncidentListDto>>> call) =>
+        Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<OkObjectResult>((await call).Result).Value).Data!;
+
+    [Fact]
+    public async Task Create_SameKeyTwiceBySameReporter_ReplaysTheFirstIncident_WithNoSecondAuditRowNotificationOrTask()
+    {
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext());
+        var tenantMock = new Mock<ICurrentTenant>();
+        tenantMock.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenantMock.Setup(t => t.IsSuperAdmin).Returns(true);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new AuditInterceptor(accessor.Object)).Options, tenantMock.Object);
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var first = await DataOf(controller.Create(Keyed(reporter.Id, "key-1"), CancellationToken.None));
+        var audits = await db.AuditLogs.CountAsync(a => a.EntityId == first.Id);
+        var outbox = await db.NotificationOutbox.CountAsync();
+        var tasks = await db.BookingTasks.CountAsync();
+        var second = await DataOf(controller.Create(Keyed(reporter.Id, "key-1"), CancellationToken.None));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(1, await db.IncidentReports.CountAsync());
+        Assert.True(audits > 0);
+        Assert.Equal(audits, await db.AuditLogs.CountAsync(a => a.EntityId == first.Id));
+        Assert.Equal(outbox, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(tasks, await db.BookingTasks.CountAsync());
+    }
+
+    [Fact]
+    public async Task Create_SameKeyByAnotherReporterInTheTenant_Returns409WithTheCode_AndWritesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var other = SeedUser(db, reporter.TenantId, "Cora", "Colleague");
+        var controller = new IncidentsController(db);
+        await controller.Create(Keyed(reporter.Id, "key-1"), CancellationToken.None);
+
+        var result = await controller.Create(Keyed(other.Id, "key-1"), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+        Assert.Equal(IncidentErrorCodes.IncidentIdempotencyKeyReused, body.Code);
+        Assert.Null(body.Data);
+        Assert.Equal(1, await db.IncidentReports.CountAsync());
+    }
+
+    [Fact]
+    public async Task Create_SameKeyInAnotherTenant_MakesItsOwnIncident_EvenForASuperAdmin()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString()); // a SuperAdmin context: the tenant filter passes every row
+        var a = SeedUser(db);
+        var b = SeedUser(db, firstName: "Bea", lastName: "Other");
+        Assert.NotEqual(a.TenantId, b.TenantId);
+        var controller = new IncidentsController(db);
+        var first = await DataOf(controller.Create(Keyed(a.Id, "key-1"), CancellationToken.None));
+
+        var second = await DataOf(controller.Create(Keyed(b.Id, "key-1"), CancellationToken.None));
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(new[] { a.TenantId, b.TenantId }.Order(), (await db.IncidentReports.Select(i => i.TenantId!.Value).ToListAsync()).Order());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task Create_NoOrBlankKeyTwice_MakesTwoIncidents_AndStoresNoKey(string? key)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        await controller.Create(Keyed(reporter.Id, key), CancellationToken.None);
+        await controller.Create(Keyed(reporter.Id, key), CancellationToken.None);
+
+        var rows = await db.IncidentReports.ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.Null(r.IdempotencyKey));
+    }
+
+    [Fact]
+    public void Dto_AKeyOver100Characters_FailsValidation_AndOneOf100Passes()
+    {
+        static bool Valid(string key) => System.ComponentModel.DataAnnotations.Validator.TryValidateProperty(key,
+            new System.ComponentModel.DataAnnotations.ValidationContext(new CreateIncidentDto()) { MemberName = nameof(CreateIncidentDto.IdempotencyKey) },
+            new List<System.ComponentModel.DataAnnotations.ValidationResult>());
+        Assert.False(Valid(new string('k', 101)));
+        Assert.True(Valid(new string('k', 100)));
+    }
+
+    [Fact]
+    public async Task Create_AKeyWithSpacesAroundIt_IsStoredTrimmed_AndAnUntrimmedRetryMatchesIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        var first = await DataOf(controller.Create(Keyed(reporter.Id, " key-1"), CancellationToken.None));
+        Assert.Equal("key-1", (await db.IncidentReports.SingleAsync()).IdempotencyKey);
+
+        var second = await DataOf(controller.Create(Keyed(reporter.Id, "  key-1 "), CancellationToken.None));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(1, await db.IncidentReports.CountAsync());
+    }
+
+    [Fact]
+    public async Task Create_RetryAfterTheFirstIncidentWasDeactivated_StillReplaysIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        var first = await DataOf(controller.Create(Keyed(reporter.Id, "key-1"), CancellationToken.None));
+        (await db.IncidentReports.SingleAsync()).IsActive = false;
+        await db.SaveChangesAsync();
+
+        var second = await DataOf(controller.Create(Keyed(reporter.Id, "key-1"), CancellationToken.None));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(1, await db.IncidentReports.CountAsync());
+    }
+
+    [Fact]
+    public async Task Update_LeavesTheIdempotencyKeyAsItWas()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        var first = await DataOf(controller.Create(Keyed(reporter.Id, "key-1"), CancellationToken.None));
+
+        var result = await controller.Update(first.Id, StaleCheckDto(reporter.Id, null), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("key-1", (await db.IncidentReports.SingleAsync()).IdempotencyKey);
     }
 }
