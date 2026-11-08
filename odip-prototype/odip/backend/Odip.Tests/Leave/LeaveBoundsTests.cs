@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
@@ -10,7 +11,7 @@ using Xunit;
 
 namespace Odip.Tests.Leave;
 
-/// <summary>H41-2: leave and availability dates stay within 5 years of the start.</summary>
+/// <summary>H41-2 and H41-3: leave and availability dates stay within 5 years of the start, and the free-text fields refuse more than their 2000-character columns.</summary>
 public class LeaveBoundsTests
 {
     private static readonly DateOnly Start = new(2026, 11, 10);
@@ -47,5 +48,21 @@ public class LeaveBoundsTests
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Empty(await db.LeaveRequests.ToListAsync());
+    }
+
+    private static bool Valid(object dto) => Validator.TryValidateObject(dto, new ValidationContext(dto), [], validateAllProperties: true);
+
+    [Fact]
+    public void FreeText_Over2000_FailsModelValidation_And2000Passes()
+    {
+        var ok = new string('x', 2000);
+        var long2001 = new string('x', 2001);
+        Assert.True(Valid(new CreateLeaveRequestDto { Reason = ok }));
+        Assert.False(Valid(new CreateLeaveRequestDto { Reason = long2001 }));
+        Assert.False(Valid(new UpdateLeaveRequestDto { Reason = long2001 }));
+        Assert.False(Valid(new CreateRecurringUnavailabilityDto { Notes = long2001 }));
+        Assert.False(Valid(new UpdateRecurringUnavailabilityDto { Notes = long2001 }));
+        Assert.False(Valid(new LeaveDecisionDto { DecisionNote = long2001 }));
+        Assert.True(Valid(new LeaveDecisionDto { DecisionNote = ok }));
     }
 }
