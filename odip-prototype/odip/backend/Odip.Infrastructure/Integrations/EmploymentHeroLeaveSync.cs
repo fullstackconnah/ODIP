@@ -175,8 +175,9 @@ public sealed class EmploymentHeroLeaveSync
 
         string Id(int n) => n.ToString(CultureInfo.InvariantCulture);
         var ids = listed.Select(r => Id(r.Id)).ToList();
-        var linked = await db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).Select(u => new { u.Id, Payroll = u.ExternalPayrollId! }).ToListAsync(ct);
+        var linked = await db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).Select(u => new { u.Id, Payroll = u.ExternalPayrollId!, u.IsActive }).ToListAsync(ct);
         var userByPayroll = linked.GroupBy(u => u.Payroll).ToDictionary(g => g.Key, g => g.First().Id);
+        var activeIds = linked.Where(u => u.IsActive).Select(u => u.Id).ToHashSet();   // an archived worker gets no new leave (rule 5)
         var payrollByUser = linked.GroupBy(u => u.Id).ToDictionary(g => g.Key, g => g.First().Payroll);
         var known = await db.LeaveRequests.Where(l => l.TenantId == tenantId && l.ExternalLeaveId != null && ids.Contains(l.ExternalLeaveId)).ToListAsync(ct);
         // A leave this context loaded earlier comes back as its stale tracked copy, with no EH id even though another run has linked it since.
@@ -213,7 +214,7 @@ public sealed class EmploymentHeroLeaveSync
 
             if (knownById.TryGetValue(eh, out var leave))                                    // rule 1
             {
-                if (leave.Status != LeaveStatus.Approved || Skipped(leave)) continue;
+                if (leave.Status != LeaveStatus.Approved || Skipped(leave) || (userId is { } listedFor && listedFor != leave.UserId)) continue;   // an id listed under another employee is not this leave
                 if (Verdict(r.Status) is { } to2) closures.Add((leave, to2));
                 else if (leave.Source == LeaveSource.EmploymentHero && approved)
                 {
@@ -231,7 +232,7 @@ public sealed class EmploymentHeroLeaveSync
                 if (marked.TryGetValue(markedId, out var mine) && mine.ExternalLeaveId is null && !knownById.ContainsKey(eh)) { mine.ExternalLeaveId = eh; knownById[eh] = mine; unlinked.Remove(mine); }
                 continue;
             }
-            if (!approved || userId is not { } owner) continue;
+            if (!approved || userId is not { } owner || !activeIds.Contains(owner)) continue;
             var twin = unlinked.FirstOrDefault(l => l.UserId == owner && l.StartDate == from && l.EndDate == to && !rows.ContainsKey(l.Id));   // rule 3
             twin ??= unlinked.FirstOrDefault(l => l.UserId == owner && l.StartDate == from && l.EndDate == to                                    // rule 4
                 && rows.TryGetValue(l.Id, out var sending) && sending.ExternalId is null && sending.Attempts > 0

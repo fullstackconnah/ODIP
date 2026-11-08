@@ -310,4 +310,33 @@ public class EmploymentHeroLeavePullTests
 
         Assert.Empty(await db.LeaveRequests.ToListAsync());
     }
+
+    [Fact]
+    public async Task An_archived_worker_gets_no_imported_leave_and_an_active_one_still_does()
+    {
+        var (db, tenant, _, clock, archived, monday) = await OrgAsync();
+        await using var _ = db;
+        var active = await EhTimesheetFixture.WorkerAsync(db, tenant, "43");
+        archived.IsActive = false;
+        await db.SaveChangesAsync();
+        var eh = Listing(Req(9100, 42, 5, monday, monday.AddDays(4)), Req(9101, 43, 5, monday, monday.AddDays(4)));
+
+        await Pull(eh, clock, db, tenant);
+
+        Assert.Equal(active.Id, (await db.LeaveRequests.SingleAsync()).UserId);
+    }
+
+    [Fact]
+    public async Task A_known_leave_id_listed_under_another_employee_changes_nothing()
+    {
+        var (db, tenant, _, clock, worker, monday) = await OrgAsync();
+        await using var _ = db;
+        await EhTimesheetFixture.WorkerAsync(db, tenant, "43");
+        await Pull(Listing(Req(9100, 42, 5, monday, monday.AddDays(4))), clock, db, tenant);
+
+        await Pull(Listing(Req(9100, 43, 8, monday, monday.AddDays(2)), Req(9100, 43, 5, monday, monday, "Cancelled")), clock, db, tenant);
+
+        var leave = await db.LeaveRequests.SingleAsync();
+        Assert.Equal((worker.Id, LeaveStatus.Approved, LeaveType.Annual, monday.AddDays(4)), (leave.UserId, leave.Status, leave.LeaveType, leave.EndDate));
+    }
 }
