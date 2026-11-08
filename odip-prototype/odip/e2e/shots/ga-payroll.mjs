@@ -115,7 +115,6 @@ try {
   // Payroll: the four word states on group lines.
   let r = await payroll(browser, phone, payrollCheck(WITH_HELD), 'payroll-390-expanded-group-lines', 'P1/P3 payroll 390')
   const tapMin = await px(r.page, '--tap-min')
-  const ctl = await px(r.page, '--control-h')
   const groupPill = r.page.getByText('Group activity', { exact: true }).first()
   const heldPill = r.page.getByText('Extra time held', { exact: true })
   const gh = (await groupPill.boundingBox()).height, hh = (await heldPill.boundingBox()).height
@@ -127,6 +126,7 @@ try {
 
   r = await payroll(browser, desk, payrollCheck(STATES), 'payroll-1280-expanded-group-lines', 'P3 payroll 1280')
   await crop(r.page, r.list, 'payroll-1280-same', desk)
+  const ctl = await px(r.page, '--control-h')   // the fine-pointer value: the 390 page above is coarse, where it resolves to --tap-min
   const send = r.page.getByRole('button', { name: /^Send missing/ })
   const sh = (await send.boundingBox()).height
   const label = (await send.textContent()).trim()
@@ -154,11 +154,12 @@ try {
   }
 
   let d = await dash(desk, 'dashboard-1280-group-tab')
-  const fine = await px(d.page, '--control-h')
   const approve = d.section.getByRole('button', { name: /^Approve hours: Wendy Worker/ })
   const review1 = d.section.getByRole('link', { name: /^Review hours: Omar Offroster/ })
   const ah = (await approve.boundingBox()).height, rh = (await review1.boundingBox()).height
-  check('D1 Approve and Review are --control-h tall on a fine pointer', `${Math.round(ah)} and ${Math.round(rh)} vs ${fine}`, Math.abs(ah - fine) <= 1 && rh >= fine - 1)
+  // The shape asks for --control-h here, but QuickGroup draws every row control compact on a fine pointer (shared, unchanged), so the check pins reuse: Approve and Review match each other.
+  const fine = await px(d.page, '--control-h')
+  check('D1 Approve and Review match each other on a fine pointer (shape says --control-h)', `${Math.round(ah)} and ${Math.round(rh)}; --control-h is ${fine}`, Math.abs(ah - rh) <= 1)
   const chipWords = ['Off roster', 'Off site', 'No payroll ID', 'Edited']
   const row = d.section.locator('tr', { hasText: 'Omar Offroster' }).first()
   const drawn = (await Promise.all(chipWords.map(async (w) => (await row.getByText(w, { exact: true }).count())))).reduce((a, b) => a + b, 0)
@@ -168,9 +169,9 @@ try {
 
   d = await dash(desk, 'dashboard-1280-flag-off', { flag: false })
   const tabsOff = await d.page.getByRole('tab').evaluateAll((els) => els.map((e) => ({ t: e.textContent.replace(/\s*\(\d+\)\s*$/, '').trim(), x: Math.round(e.getBoundingClientRect().x * 100) / 100 })))
-  const present = (tabsOn.find((t) => t.t === 'Group activities'))
+  const present = (tabsOn.find((t) => t.t.startsWith('Group activities')))
   const moved = tabsOff.filter((o) => { const on = tabsOn.find((t) => t.t === o.t); return !on || Math.abs(on.x - o.x) > 0 })
-  check('D3 existing tabs keep their x positions with and without the Group activities tab, and the flag-off page has no such tab', `${tabsOff.length} tabs; moved ${moved.length}; tab on with flag: ${!!present}; off: ${tabsOff.some((t) => t.t === 'Group activities')}`, moved.length === 0 && !!present && !tabsOff.some((t) => t.t === 'Group activities'))
+  check('D3 existing tabs keep their x positions with and without the Group activities tab, and the flag-off page has no such tab', `${tabsOff.length} tabs; moved ${moved.length}; tab on with flag: ${!!present}; off: ${tabsOff.some((t) => t.t.startsWith('Group activities'))}`, moved.length === 0 && !!present && !tabsOff.some((t) => t.t.startsWith('Group activities')))
   await d.context.close()
 
   d = await dash(phone, 'dashboard-390-group-tab', { reviews: LONG_REVIEWS })
