@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { RosterDayCell, type RosterDayCellProps } from './RosterDayCell'
-import { makeShift } from '../test-fixtures'
+import { makeShift, makeActivity } from '../test-fixtures'
+import { ActivityContext } from '../lib/groupActivities'
 
 // What dnd-kit says is carried. Null (nothing) for every test that does not set it.
 const dnd = vi.hoisted(() => ({ active: null as null | { id: string } }))
@@ -183,5 +184,33 @@ describe('RosterDayCell — the new-shift slot while a person is carried (the br
     const day = screen.getByRole('button', { name: ADD_LABEL })
     expect(day).toHaveClass('text-muted-foreground')
     expect(day).not.toHaveClass('text-transparent')
+  })
+})
+
+describe('RosterDayCell: group activity cards (flag on)', () => {
+  const activity = makeActivity({ id: 'act-1', startTime: '11:00:00', endTime: '15:00:00' })
+  const board = { byId: new Map([[activity.id, activity]]), open: vi.fn(), removePerson: noop, addShift: noop, busyIds: new Set<string>() }
+  const cell = (shifts: ReturnType<typeof makeShift>[], context: 'participant' | 'staff', on = true) => render(
+    <MemoryRouter>
+      <ActivityContext.Provider value={on ? board : null}>
+        <RosterDayCell day="2026-08-17" dayIndex={0} canWrite addLabel={ADD_LABEL} shifts={shifts} chipContext={context} onAdd={noop} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />
+      </ActivityContext.Provider>
+    </MemoryRouter>,
+  )
+  const attached = [makeShift({ id: 's1', groupActivityId: 'act-1', startTime: '11:00:00' }), makeShift({ id: 's2', groupActivityId: 'act-1', startTime: '11:00:00' })]
+
+  it('draws an attached shift as the activity card (a 2:1 pair once) beside the plain chips, ordered by start time', () => {
+    const { container } = cell([makeShift({ id: 'late', startTime: '16:00:00' }), ...attached, makeShift({ id: 'early', startTime: '08:00:00' })], 'participant')
+    expect(container.querySelectorAll('[data-activity-card]')).toHaveLength(1)
+    const order = [...container.querySelectorAll('[data-activity-card], [data-shift-chip]')].map(el => el.getAttribute('data-activity-card') ?? 'chip')
+    expect(order).toEqual(['chip', 'act-1', 'chip'])
+  })
+
+  it('keeps plain chips in the Staff view and with the flag off', () => {
+    const { container, unmount } = cell(attached, 'staff')
+    expect(container.querySelector('[data-activity-card]')).toBeNull()
+    unmount()
+    const off = cell(attached, 'participant', false)
+    expect(off.container.querySelector('[data-activity-card]')).toBeNull()
   })
 })

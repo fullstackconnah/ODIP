@@ -126,6 +126,8 @@ describe('light palette unchanged (dark-mode-2026-10)', () => {
     'chart-filled': '#6b8f3e',
     'chart-open': '#6b7160',
     'chart-other': '#7a8070',
+    'activity-container': '#dccff7',
+    'on-activity-container': '#553591',
   }
 
   it('keeps every light value, and adds the three dark-mode tokens the four chart tokens (budget-graph-2026-10) the two roster fill chart tokens and the incidents chart remainder', () => {
