@@ -1350,6 +1350,8 @@ public class RosteringController : ControllerBase
 
         if (from.HasValue) query = query.Where(n => n.Shift!.ServiceDate >= from.Value);
         if (to.HasValue) query = query.Where(n => n.Shift!.ServiceDate <= to.Value);
+        // Same predicate as GetIncidentIdsByShiftNoteIdsAsync: an active incident filed against the note.
+        if (withoutIncident == true) query = query.Where(n => !_db.IncidentReports.Any(i => i.IsActive && i.ShiftNoteId == n.Id));
 
         var notes = await query.OrderBy(n => n.CreatedAt).ToListAsync(ct);
 
@@ -1374,9 +1376,6 @@ public class RosteringController : ControllerBase
             CreatedAt = n.CreatedAt,
             IncidentId = LookupIncidentId(incidentIds, n.Id),
         }).ToList();
-
-        if (withoutIncident == true)
-            items = items.Where(i => i.IncidentId == null).ToList();
 
         return Ok(ApiResponse<List<FlaggedShiftNoteDto>>.Ok(items));
     }

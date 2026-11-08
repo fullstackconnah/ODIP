@@ -164,7 +164,7 @@ public sealed class ShiftBudgetCheck
 
         // The saved version only counts when it is this participant's and in the ledger (a Cancelled one is not).
         var oldCounts = saved is { Status: ShiftStatus.Draft or ShiftStatus.Published } s && s.ParticipantId == request.ParticipantId;
-        var specs = new List<ShiftSpec> { new(request.ServiceDate, request.StartTime, request.EndTime, request.EndsNextDay, request.Ratio, request.NightType, request.SupportGroupCode, oldCounts ? saved!.ShiftPatternId : null, oldCounts ? request.ExistingShiftId : null, oldCounts ? saved!.GroupActivityId : null) };
+        var specs = new List<ShiftSpec> { new(request.ServiceDate, request.StartTime, request.EndTime, request.EndsNextDay, request.Ratio, request.NightType, request.SupportGroupCode, oldCounts ? saved!.ShiftPatternId : null, oldCounts ? request.ExistingShiftId : null, saved?.GroupActivityId) };
         if (oldCounts) specs.Add(new ShiftSpec(saved!.ServiceDate, saved.StartTime, saved.EndTime, saved.EndsNextDay, saved.Ratio, saved.NightType, saved.SupportGroupCode, saved.ShiftPatternId, request.ExistingShiftId, saved.GroupActivityId));
         var estimates = await _costs.EstimateAsync(request.TenantId, request.ParticipantId, specs, ct);
 

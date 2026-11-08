@@ -9,12 +9,15 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Surfaces the server's ApiResponse error message (first validation error, else the top-level
- * message, else the caller's fallback) for display in a form/banner. Shared here so the many
+ * message, else the caller's fallback) for display in a form/banner. `errors` is an array on an ApiResponse and an object
+ * ({ Field: [message] }) on ASP.NET's default validation 400, whose `title` is generic and never shown. Shared here so the many
  * call sites across the app use one implementation instead of copy-pasted drift.
  */
 export function extractErrorMessage(err: unknown, fallback: string): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || fallback
+  const data = (err as AxiosError<{ message?: string; errors?: string[] | Record<string, string[]> }>)?.response?.data
+  const errors = data?.errors
+  const first = Array.isArray(errors) ? errors[0] : errors && Object.values(errors).find(messages => messages?.[0])?.[0]
+  return first || data?.message || fallback
 }
 
 export function maskNdisNumber(ndis: string | null | undefined): string {

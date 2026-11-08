@@ -211,7 +211,7 @@ describe('Organisation profile', () => {
     expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St', state: 'WA', timeZoneId: 'Australia/Perth' })
   })
 
-  it('says which fields the server needs when it refuses a blank one without a message', async () => {
+  it('says which fields the server needs when its 400 names a field in an errors object', async () => {
     const user = userEvent.setup()
     mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { errors: { ABN: ['The ABN field is required.'] } } } })
     renderSection('organisation')
@@ -219,6 +219,30 @@ describe('Organisation profile', () => {
     await user.click(saveButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Fill in the registration number, ABN, legal name and address.')
+    expect(screen.getByLabelText('ABN')).toHaveValue('')
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('says which fields the server needs when it refuses a blank one without a message', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: {} } })
+    renderSection('organisation')
+    await user.clear(await screen.findByLabelText('ABN'))
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Fill in the registration number, ABN, legal name and address.')
+    expect(screen.getByLabelText('ABN')).toHaveValue('')
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('shows the server message when a 400 carries one', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { message: 'Enter a full email address, like office@example.com.au.' } } })
+    renderSection('organisation')
+    await user.clear(await screen.findByLabelText('ABN'))
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Enter a full email address, like office@example.com.au.')
     expect(screen.getByLabelText('ABN')).toHaveValue('')
     expect(saveButton()).toBeEnabled()
   })

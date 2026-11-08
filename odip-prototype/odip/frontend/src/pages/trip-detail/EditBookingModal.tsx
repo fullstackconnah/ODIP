@@ -58,12 +58,20 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
   // Initialised once, when the detail first arrives; a later background refetch must not overwrite what the person has typed.
   // The stale-edit token is the updatedAt the form was built from: a later refetch brings a newer one the typed edits know nothing about.
   const [formUpdatedAt, setFormUpdatedAt] = useState<string | undefined>()
+  const [loadedForm, setLoadedForm] = useState<EditForm | null>(null)
   if (detail && !editForm) {
+    setLoadedForm(formFrom(detail))
     setEditForm(formFrom(detail))
     setFormUpdatedAt(detail.updatedAt)
   }
   const bodyRef = useRef<HTMLDivElement>(null)
   const hasForm = !!editForm
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const saveFailed = updateBooking.isError
+  // The dialog scrolls as a whole and the sticky footer covers its bottom edge: bring a refused save's message into view, clear of the footer (jsdom lacks scrollIntoView).
+  useEffect(() => {
+    if (saveFailed) errorRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [saveFailed])
   // The form replaces a state that held focus (the dialog, or the Try again button that just unmounted): put focus on its first control.
   useEffect(() => {
     if (hasForm) bodyRef.current?.querySelector<HTMLElement>('button, input, textarea, select')?.focus()
@@ -101,15 +109,21 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
   }
 
   const phase = queryPhase(query)
+  // A pending save still lands and its budget notice (onSaved) must show, so nothing closes the dialog meanwhile (as ReportProblemDialog).
+  const saving = updateBooking.isPending
+  const close = saving ? () => {} : onClose
+  const dirty = !saving && editForm !== null && JSON.stringify(editForm) !== JSON.stringify(loadedForm)
   return (
     <Modal
       stickyFooter
       open
-      onClose={onClose}
+      onClose={close}
+      hideClose={saving}
+      dirty={dirty}
       title={`Edit Booking — ${booking.participantName}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={close}>
             Cancel
           </Button>
           <Button onClick={handleUpdateBooking} disabled={!editForm || updateBooking.isPending}>
@@ -177,7 +191,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
             <label className="block text-sm font-medium mb-1">Booking Notes</label>
             <textarea value={editForm.bookingNotes} onChange={e => setEditForm({ ...editForm, bookingNotes: e.target.value })} rows={3}
               className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-              placeholder="Optional notes..." />
+              placeholder="Optional notes..." maxLength={4000} />
           </div>
 
           {/* Insurance */}
@@ -206,13 +220,13 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
                       <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
                       <input type="text" value={editForm.insuranceProvider} onChange={e => setEditForm({ ...editForm, insuranceProvider: e.target.value })}
                         className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                        placeholder="e.g. Allianz" />
+                        placeholder="e.g. Allianz" maxLength={200} />
                     </div>
                     <div>
                       <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
                       <input type="text" value={editForm.insurancePolicyNumber} onChange={e => setEditForm({ ...editForm, insurancePolicyNumber: e.target.value })}
                         className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                        placeholder="e.g. POL-12345" />
+                        placeholder="e.g. POL-12345" maxLength={100} />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -234,7 +248,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
 
           {/* Error */}
           {updateBooking.isError && (
-            <p className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(updateBooking.error, "Couldn't update this booking. Check your connection and try again.")}</p>
+            <p ref={errorRef} role="alert" style={{ scrollMarginBottom: '4.5rem' }} className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(updateBooking.error, "Couldn't update this booking. Check your connection and try again.")}</p>
           )}
         </div>
       )}
