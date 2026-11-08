@@ -481,7 +481,6 @@ public class ParticipantInquiriesController : ControllerBase
     private static readonly Regex PhonePattern = new(@"^\+?[\d\s\-()]{6,20}$", RegexOptions.CultureInvariant);
 
     private static readonly HashSet<string> AuStates = new(StringComparer.Ordinal) { "NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT" };
-    private static readonly Regex NineDigits = new(@"^[0-9]{9}$", RegexOptions.CultureInvariant);
     private static string? NdisDigits(string? value) => Blank(value)?.Replace(" ", "", StringComparison.Ordinal);
 
     /// <summary>
@@ -510,12 +509,11 @@ public class ParticipantInquiriesController : ControllerBase
         var recheck = stored is null || (dto.ContactIsParticipant == true && !stored.ContactIsParticipant);
         if (Blank(dto.Phone) is { } phone && (recheck || phone != stored!.Phone) && !PhonePattern.IsMatch(phone)) errors["phone"] = ["Enter a phone number, like 0412 345 678."];
         if (Blank(dto.Email) is { } email && (recheck || email != stored!.Email) && !IntakeBookingsController.IsSendable(email)) errors["email"] = ["Enter a full email address, like name@example.com."];
-        if (NdisDigits(dto.NdisNumber) is { } ndis && !NineDigits.IsMatch(ndis)) errors["ndisNumber"] = ["Enter the 9-digit NDIS number, like 430 123 456."];
-        if (dto.DateOfBirth > today) errors["dateOfBirth"] = ["The date of birth can't be in the future."];
-        else if (dto.DateOfBirth < today.AddYears(-120)) errors["dateOfBirth"] = ["Check the year: that's more than 120 years ago."];
+        if (ParticipantPatchApplier.ValidateNdisNumber(dto.NdisNumber) is { } ndis) errors["ndisNumber"] = [ndis];
+        if (ParticipantPatchApplier.ValidateDateOfBirthRange(dto.DateOfBirth, today) is { } dobError) errors["dateOfBirth"] = [dobError];
         if (Blank(dto.AddressState) is { } state && !AuStates.Contains(state)) errors["addressState"] = ["Choose a state from the list."];
         if (ParticipantPatchApplier.ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = Blank(dto.AddressPostcode) }) is { } postcode) errors["addressPostcode"] = [postcode];
-        if (dto.PlanEndDate < dto.PlanStartDate) errors["planEndDate"] = ["The plan end can't be before the plan start."];
+        if (ParticipantPatchApplier.ValidatePlanDates(dto.PlanStartDate, dto.PlanEndDate) is { } planError) errors["planEndDate"] = [planError];
         if (dto.PlanType is { } type && !Enum.IsDefined(type)) errors["planType"] = ["Choose how the plan is managed."];
         if (dto.ContactIsParticipant == false && RoleError(dto.ContactRole, plan, dto.DateOfBirth, today, required: false) is { } role) errors["contactRole"] = [role];
         return errors;

@@ -46,7 +46,7 @@ public class ParticipantsControllerPatchTests
         {
             MiddleName = "Jane",
             PreferredName = "Soph",
-            NdisNumber = "NDIS12345",
+            NdisNumber = "430123456",
             PlanType = PlanType.SelfManaged,
             FundingSource = ParticipantFundingSource.Ndis,
             AddressStreet = "1 Example St",
@@ -178,7 +178,7 @@ public class ParticipantsControllerPatchTests
         Assert.Equal("Sophia", detail.FirstName);
 
         // At least three other groups' fields survive untouched.
-        Assert.Equal("NDIS12345", detail.NdisNumber); // ndisPlan
+        Assert.Equal("430123456", detail.NdisNumber); // ndisPlan
         Assert.Equal(60m, detail.WeightKg); // keyIdentifiers
         Assert.Equal("Epilepsy", detail.PrimaryDiagnosis); // medical
         Assert.Equal("1 Example St", detail.AddressStreet); // address
@@ -206,7 +206,7 @@ public class ParticipantsControllerPatchTests
         Assert.Equal(62m, detail.WeightKg);
         Assert.Equal("Jane", detail.MiddleName);
         Assert.Equal("Soph", detail.PreferredName);
-        Assert.Equal("NDIS12345", detail.NdisNumber);
+        Assert.Equal("430123456", detail.NdisNumber);
         Assert.Equal("1 Example St", detail.AddressStreet);
         Assert.Equal("Epilepsy", detail.PrimaryDiagnosis);
         Assert.Equal("Stable.", detail.MedicalSummary);
@@ -232,7 +232,7 @@ public class ParticipantsControllerPatchTests
         Assert.Null(detail.MiddleName);
         Assert.Null(detail.PreferredName);
         // Unrelated groups still untouched.
-        Assert.Equal("NDIS12345", detail.NdisNumber);
+        Assert.Equal("430123456", detail.NdisNumber);
     }
 
     [Fact]
