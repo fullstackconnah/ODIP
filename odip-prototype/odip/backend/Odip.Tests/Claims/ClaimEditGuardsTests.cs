@@ -674,4 +674,18 @@ public class ClaimEditGuardsTests
         db.ChangeTracker.Clear();
         Assert.Equal(ClaimLineItemStatus.Draft, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).Status);
     }
+
+    [Fact]
+    public async Task ANegativeLine_MarkedPaid_KeepsTheRangeMessage_NotTheZeroDollarOne()
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Submitted);
+        line.TotalAmount = -5m;
+        db.SaveChanges();
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, Ct);
+
+        Assert.Equal(400, StatusOf(result));
+        Assert.StartsWith("Enter an amount between $0.01 and", RefusalOf(result));
+    }
 }

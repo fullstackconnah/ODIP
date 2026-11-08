@@ -645,15 +645,16 @@ public class StaffController : ControllerBase
                 return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
         }
 
-        // Only when Active flips, and after every refusal above, so a refused edit changes nothing anywhere. Firebase first, as AdminUsers does:
-        // a failure then never leaves the row saved and the sign-in account out of step.
-        var flipped = s.IsActive != dto.IsActive;
+        // Only when Active flips or the name changes, and after every refusal above, so a refused edit changes nothing anywhere. Firebase first, as
+        // AdminUsers does: a failure then never leaves the row saved and the sign-in account out of step.
         var (storedName, storedEmail, storedActive) = ($"{s.FirstName} {s.LastName}".Trim(), s.Email, s.IsActive);
-        if (flipped)
+        var newName = $"{dto.FirstName} {dto.LastName}".Trim();
+        var sent = false;
+        if (s.IsActive != dto.IsActive || newName != storedName)
         {
-            // The new name goes with the flip: this branch is the only Firebase call of the edit, so a rename made together with it would be skipped.
-            var syncError = await SyncFirebaseDisabledAsync(s, !dto.IsActive, addressChanged, ct, $"{dto.FirstName} {dto.LastName}".Trim());
+            var (wasSent, syncError) = await SyncFirebaseDisabledAsync(s, !dto.IsActive, addressChanged, ct, newName);
             if (syncError is { } failed) return StatusCode(failed.Status, ApiResponse<StaffDetailDto>.Fail(failed.Message));
+            sent = wasSent;
         }
 
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.EmploymentType = dto.EmploymentType; s.GoalWeeklyHours = dto.GoalWeeklyHours; s.Role = dto.Role;
@@ -674,7 +675,7 @@ public class StaffController : ControllerBase
         s.UpdatedAt = DateTime.UtcNow;
 
         try { await _db.SaveChangesAsync(ct); }
-        catch when (flipped) { await RevertFirebaseDisabledAsync(storedEmail, storedName, !storedActive, ct); throw; }
+        catch when (sent) { await RevertFirebaseDisabledAsync(storedEmail, storedName, !storedActive, ct); throw; }
         // The address is the whole of this person's sign-in, so a change leaves a trace: who changed whose, never the addresses themselves.
         if (addressChanged)
             _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was changed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
@@ -713,30 +714,34 @@ public class StaffController : ControllerBase
         var guardError = ValidateRoleGuardrails(s.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<bool>.Fail(guardError));
 
+        var sent = false;
         if (s.IsActive)
         {
-            var syncError = await SyncFirebaseDisabledAsync(s, true, addressChanging: false, ct);
+            var (wasSent, syncError) = await SyncFirebaseDisabledAsync(s, true, addressChanging: false, ct);
             if (syncError is { } failed) return StatusCode(failed.Status, ApiResponse<bool>.Fail(failed.Message));
+            sent = wasSent;
         }
 
-        var wasActive = s.IsActive;
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         try { await _db.SaveChangesAsync(ct); }
-        catch when (wasActive) { await RevertFirebaseDisabledAsync(s.Email, $"{s.FirstName} {s.LastName}".Trim(), false, ct); throw; }
+        catch when (sent) { await RevertFirebaseDisabledAsync(s.Email, $"{s.FirstName} {s.LastName}".Trim(), false, ct); throw; }
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
     }
 
     /// <summary>
     /// Sets the Disabled flag of this member's Firebase account to match Active, with the failure handling of AdminUsersController's update: no
     /// account yet is skipped (the sign-in-account route creates it), an address Firebase refuses is a 400 to correct, anything else a 502.
-    /// Looked up by the address the row holds now. Returns null when the save may go on.
+    /// Looked up by the address the row holds now. Error is null when the save may go on; Sent is true only when Firebase took the change, so a
+    /// failed save undoes only what was really sent.
     /// </summary>
-    private async Task<(int Status, string Message)?> SyncFirebaseDisabledAsync(User s, bool disabled, bool addressChanging, CancellationToken ct, string? displayName = null)
+    private async Task<(bool Sent, (int Status, string Message)? Error)> SyncFirebaseDisabledAsync(User s, bool disabled, bool addressChanging, CancellationToken ct, string? displayName = null)
     {
         var email = EmailIdentity.Normalise(s.Email);
+        var sent = false;
         try
         {
             await _firebaseUserService.UpdateUserByEmailAsync(email, displayName ?? $"{s.FirstName} {s.LastName}".Trim(), disabled, ct);
+            sent = true;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
         {
@@ -750,15 +755,15 @@ public class StaffController : ControllerBase
         catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
         {
             _logger?.LogWarning("Firebase refused the stored address of user {UserId} as invalid", s.Id);
-            return (StatusCodes.Status400BadRequest, "That doesn't look like a valid email address. Correct it first.");
+            return (false, (StatusCodes.Status400BadRequest, "That doesn't look like a valid email address. Correct it first."));
         }
         catch (Exception ex)
         {
             // Deliberately broad: the confirmed failure (TokenResponseException) is not a FirebaseAuthException.
             _logger?.LogError(ex, "Failed to sync user {Email} to Firebase Auth", email);
-            return (StatusCodes.Status502BadGateway, "Unable to sync the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project.");
+            return (false, (StatusCodes.Status502BadGateway, "Unable to sync the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
         }
-        return null;
+        return (sent, null);
     }
 
     /// <summary>The database save failed after the Firebase flip: put the account back, as AdminUsersController does. Best effort, so a failure here is logged and the save's exception still surfaces.</summary>

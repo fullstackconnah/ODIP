@@ -98,6 +98,24 @@ public class GroupActivityShiftGuardTests
     }
 
     [Fact]
+    public async Task AutoRosterApply_SplitOfAnAttachedShift_IsRefused_AndTheShiftIsUnchanged()
+    {
+        var (fx, attached, _, worker) = await Seeded();
+        var second = fx.AddUser("Sam");
+        var split = new AutoRosterApplySplitDto
+        {
+            ShiftId = attached.Id, StartTime = attached.StartTime, EndTime = attached.EndTime, CutAt = new TimeOnly(11, 0), FirstStaffId = worker.Id, SecondStaffId = second.Id,
+        };
+        var ok = Assert.IsType<OkObjectResult>((await Rostering(fx).AutoRosterApply(GroupActivityFixture.Day, new AutoRosterApplyDto { Splits = [split] }, default)).Result);
+        var result = Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(ok.Value).Data!;
+        Assert.Empty(result.Applied);
+        Assert.Equal("This shift is part of a group activity.", Assert.Single(result.Skipped).Message);
+        var saved = await fx.Seed.Shifts.AsNoTracking().SingleAsync(s => s.Id == attached.Id);
+        Assert.Equal((null, attached.StartTime, attached.EndTime, attached.GroupActivityId), (saved.UserId, saved.StartTime, saved.EndTime, saved.GroupActivityId));
+        Assert.Equal(2, await fx.Seed.Shifts.CountAsync());
+    }
+
+    [Fact]
     public async Task StaffView_UnfilledLane_LeavesOutAttachedShifts()
     {
         var (fx, attached, plain, _) = await Seeded();

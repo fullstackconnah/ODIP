@@ -128,6 +128,20 @@ public class ParticipantConsentsControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task Upsert_CommaJoinedConsentTypes_ReturnsBadRequest_AndSavesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantConsentsController(db);
+
+        // Alcohol (1) | OtcMedication (2) = 3, the defined EmergencyMedical.
+        var result = await controller.Upsert(participant.Id, "Alcohol,OtcMedication", new UpsertParticipantConsentDto { Granted = true }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantConsents.ToListAsync());
+    }
+
     [Theory]
     [InlineData("99")]
     [InlineData("-1")]

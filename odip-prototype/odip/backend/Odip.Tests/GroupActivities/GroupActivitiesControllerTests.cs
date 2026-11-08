@@ -277,6 +277,45 @@ public class GroupActivitiesControllerTests
         Assert.Equal(1, await fx.Seed.GroupActivityStaff.CountAsync());
     }
 
+    private static UpdateGroupActivityDto Put(GroupActivity a, ShiftStatus status) => new()
+    {
+        ServiceDate = a.ServiceDate, StartTime = a.StartTime, EndTime = a.EndTime, Title = a.Title, Status = status,
+    };
+
+    [Fact]
+    public async Task Update_DraftToPublished_PublishesAttachedDraftShifts_ButNotCancelledOnes_AndBackToDraftLeavesThem()
+    {
+        var fx = new GroupActivityFixture();
+        var a = fx.AddActivity();
+        var draft = fx.AddShift(fx.AddParticipant());
+        var cancelled = fx.AddShift(fx.AddParticipant("Quinn"), status: ShiftStatus.Cancelled);
+        draft.GroupActivityId = cancelled.GroupActivityId = a.Id;
+        await fx.Seed.SaveChangesAsync();
+
+        GroupActivityFixture.Body(await fx.Controller().Update(a.Id, Put(a, ShiftStatus.Published), default), 200);
+        var shifts = await fx.Seed.Shifts.AsNoTracking().ToDictionaryAsync(s => s.Id);
+        Assert.Equal(ShiftStatus.Published, shifts[draft.Id].Status);
+        Assert.Equal(ShiftStatus.Cancelled, shifts[cancelled.Id].Status);
+
+        GroupActivityFixture.Body(await fx.Controller().Update(a.Id, Put(a, ShiftStatus.Draft), default), 200);
+        Assert.Equal(ShiftStatus.Draft, (await fx.Seed.GroupActivities.AsNoTracking().SingleAsync()).Status);
+        Assert.Equal(ShiftStatus.Published, (await fx.Seed.Shifts.AsNoTracking().SingleAsync(s => s.Id == draft.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Get_IgnoresCancelledAttachedShifts_ForParticipantsAndStaffNeeded()
+    {
+        var fx = new GroupActivityFixture();
+        var a = fx.AddActivity();
+        var live = fx.AddShift(fx.AddParticipant());
+        var cancelled = fx.AddShift(fx.AddParticipant("Quinn"), status: ShiftStatus.Cancelled);
+        live.GroupActivityId = cancelled.GroupActivityId = a.Id;
+        await fx.Seed.SaveChangesAsync();
+        var dto = GroupActivityFixture.Body(await fx.Controller().Get(a.Id, default), 200);
+        Assert.Single(dto.Participants);
+        Assert.Equal(1, dto.StaffNeeded);
+    }
+
     [Fact]
     public async Task AddStaff_OneTimeWithoutTheOther_400()
     {

@@ -1,3 +1,4 @@
+using Odip.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,7 @@ public class ParticipantAdlAssessmentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantAdlAssessmentDto>>> Upsert(
         Guid participantId, string adlType, [FromBody] UpsertParticipantAdlAssessmentDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<AdlType>(adlType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
+        if (!EnumInput.TryParseDefined<AdlType>(adlType, out var type))
             return BadRequest(ApiResponse<ParticipantAdlAssessmentDto>.Fail("Unrecognised ADL type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);

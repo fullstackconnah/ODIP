@@ -1,3 +1,4 @@
+using Odip.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,7 @@ public class ParticipantHealthConditionsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantHealthConditionDto>>> Upsert(
         Guid participantId, string conditionType, [FromBody] UpsertParticipantHealthConditionDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<HealthConditionType>(conditionType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
+        if (!EnumInput.TryParseDefined<HealthConditionType>(conditionType, out var type))
             return BadRequest(ApiResponse<ParticipantHealthConditionDto>.Fail("Unrecognised health condition type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
