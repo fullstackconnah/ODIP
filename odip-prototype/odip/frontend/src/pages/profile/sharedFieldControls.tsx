@@ -48,15 +48,15 @@ export function PersonalInformationFields({ register, errors }: { register: Reg;
   return (
     <>
       <FormField label="First Name" required error={errors.firstName?.message} className={span.medium}>
-        <input id="firstName" {...register('firstName')} placeholder="e.g. John" />
+        <input id="firstName" {...register('firstName')} maxLength={100} placeholder="e.g. John" />
       </FormField>
 
       <FormField label="Last Name" required error={errors.lastName?.message} className={span.medium}>
-        <input id="lastName" {...register('lastName')} placeholder="e.g. Smith" />
+        <input id="lastName" {...register('lastName')} maxLength={100} placeholder="e.g. Smith" />
       </FormField>
 
       <FormField label="Preferred Name" className={span.medium}>
-        <input id="preferredName" {...register('preferredName')} placeholder="e.g. Johnny" />
+        <input id="preferredName" {...register('preferredName')} maxLength={100} placeholder="e.g. Johnny" />
       </FormField>
 
       <FormField label="Date of Birth" className={span.date}>
@@ -64,11 +64,11 @@ export function PersonalInformationFields({ register, errors }: { register: Reg;
       </FormField>
 
       <FormField label="Phone" error={errors.phone?.message} className={span.medium}>
-        <input id="phone" type="tel" {...register('phone')} placeholder="e.g. 0400 000 000" />
+        <input id="phone" type="tel" {...register('phone')} maxLength={30} placeholder="e.g. 0400 000 000" />
       </FormField>
 
       <FormField label="Email" error={errors.email?.message} className={span.medium}>
-        <input id="email" type="email" {...register('email')} placeholder="e.g. name@example.com" />
+        <input id="email" type="email" {...register('email')} maxLength={200} placeholder="e.g. name@example.com" />
       </FormField>
     </>
   )
@@ -83,7 +83,7 @@ export function AddressFields({ control, register, setValue, errors }: { control
       </FormField>
 
       <FormField label="Suburb" className={span.medium}>
-        <input id="addressSuburb" {...register('addressSuburb')} placeholder="e.g. Fortitude Valley" />
+        <input id="addressSuburb" {...register('addressSuburb')} maxLength={100} placeholder="e.g. Fortitude Valley" />
       </FormField>
 
       <FormField label="State" className={span.short}>

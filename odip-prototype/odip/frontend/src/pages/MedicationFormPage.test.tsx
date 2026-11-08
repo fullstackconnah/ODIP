@@ -49,15 +49,15 @@ beforeEach(() => {
 })
 
 describe('MedicationFormPage field limits', () => {
-  it('stops the Pharmacy phone field at the 30 characters the server accepts', async () => {
+  it('stops the Name field at the 200 characters the server accepts', async () => {
     const user = userEvent.setup()
     renderCreatePage()
 
-    const phone = await screen.findByLabelText(/pharmacy phone/i)
-    await user.click(phone)
-    await user.paste('9'.repeat(45))
+    const field = await screen.findByLabelText(/^name/i)
+    await user.click(field)
+    await user.paste('9'.repeat(250))
 
-    expect(phone).toHaveValue('9'.repeat(30))
+    expect(field).toHaveValue('9'.repeat(200))
   })
 })
 
