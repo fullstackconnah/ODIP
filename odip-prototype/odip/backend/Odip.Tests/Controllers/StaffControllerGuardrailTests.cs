@@ -643,6 +643,19 @@ public class StaffControllerGuardrailTests
     }
 
     [Fact]
+    public async Task Update_RenamingOnly_AMemberWithNoFirebaseAccountYet_StillSavesTheName()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker, signedIn: false);
+        var controller = MakeController(db, "Admin", FirebaseThrowing(FirebaseTestExceptions.WithCode(AuthErrorCode.UserNotFound)));
+
+        var result = await controller.Update(worker.Id, EditOf(worker) with { FirstName = "Renamed" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Renamed", (await db.Users.SingleAsync(u => u.Id == worker.Id)).FirstName);
+    }
+
+    [Fact]
     public async Task Update_RenamingOnly_WhenTheSaveThrows_PutsTheOldNameBack()
     {
         var (db, tenantId, breakSave) = CreateBreakableDb();
