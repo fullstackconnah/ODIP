@@ -124,7 +124,7 @@ export function makeActivity(overrides: Partial<GroupActivityDto> = {}): GroupAc
     status: 'Published',
     staffNeeded: 1,
     staffAssigned: 1,
-    participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'OneToOne', shiftIds: ['shift-1'], timesDiffer: false }],
+    participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'OneToOne', shiftIds: ['shift-1'], timesDiffer: false, didNotAttend: false }],
     staff: [{ id: 'row-1', staffId: 'staff-1', staffName: 'Alex Rivera', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, findings: [] }],
     findings: [],
     ...overrides,

@@ -41,7 +41,7 @@ describe('GroupActivityCard', () => {
   })
 
   it('shows the times-differ glyph only when this participant differs', () => {
-    const differs = makeActivity({ participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'OneToOne', shiftIds: ['s'], timesDiffer: true }] })
+    const differs = makeActivity({ participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'OneToOne', shiftIds: ['s'], timesDiffer: true, didNotAttend: false }] })
     const { container, unmount } = card(differs)
     expect(container.querySelector('[data-times-differ]')).not.toBeNull()
     expect(screen.getByRole('button', { name: /times differ from agreement/ })).toBeInTheDocument()

@@ -726,6 +726,10 @@ public class RosteringController : ControllerBase
         if (shift.GroupActivityId is not null && (dto.Ratio != shift.Ratio || dto.ParticipantId != shift.ParticipantId || dto.StaffId != shift.UserId || dto.ServiceDate != shift.ServiceDate
                 || dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
             return Conflict(ApiResponse<ShiftDto>.Fail(ShiftOnGroupActivityMessage, GroupActivityOnShiftCode));
+        // Attendance is final once the activity is Completed or Cancelled: a status change here would reopen or cancel a shift the activity has settled.
+        if (shift.GroupActivityId is { } ownerId && dto.Status != shift.Status
+            && await _db.GroupActivities.AsNoTracking().Where(a => a.Id == ownerId).Select(a => a.Status).FirstOrDefaultAsync(ct) is ShiftStatus.Completed or ShiftStatus.Cancelled)
+            return Conflict(ApiResponse<ShiftDto>.Fail(AttendanceClosedMessage, GroupActivityOnShiftCode));
         if (dto.HasServiceLocationId && dto.ServiceLocationId is { } newPlaceId && !await ServiceLocationUsableAsync(newPlaceId, shift.TenantId, shift.ServiceLocationId, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail(ServiceLocationRefusedMessage));
         if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
@@ -832,10 +836,9 @@ public class RosteringController : ControllerBase
         shift.ServiceDate = dto.ServiceDate; shift.StartTime = dto.StartTime; shift.EndTime = dto.EndTime;
         shift.EndsNextDay = dto.EndsNextDay; shift.Ratio = dto.Ratio; shift.NightType = dto.NightType;
         // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
-        shift.Notes = dto.Notes; shift.Status = dto.Status;
+        shift.Notes = dto.Notes;
         // The cancel time is the notice a short-notice cancellation claim measures. Only a shift that was Published had been promised to anyone; a Draft cancel stays null, and an edit of a cancelled shift keeps its time.
-        if (dto.Status != ShiftStatus.Cancelled) shift.CancelledAt = null;
-        else if (previousStatus == ShiftStatus.Published) shift.CancelledAt = _clock.GetUtcNow().UtcDateTime;
+        ApplyStatus(shift, dto.Status, _clock.GetUtcNow().UtcDateTime);
         if (dto.HasLocation) shift.Location = location;
         if (dto.HasServiceLocationId) shift.ServiceLocationId = dto.ServiceLocationId;
         shift.SupportGroupCode = supportCode;
@@ -2632,6 +2635,16 @@ public class RosteringController : ControllerBase
     internal static bool IsLockedForStaffChange(ShiftStatus status) =>
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
+    /// <summary>Sets a shift's status and keeps the cancel-notice clock: only a shift that was Published had been promised to anyone, so only it gets a CancelledAt, and leaving Cancelled clears it. The shift PUT and the group attendance mark both use it.</summary>
+    internal static void ApplyStatus(Shift shift, ShiftStatus next, DateTime utcNow)
+    {
+        var previous = shift.Status;
+        shift.Status = next;
+        if (next != ShiftStatus.Cancelled) shift.CancelledAt = null;
+        else if (previous == ShiftStatus.Published) shift.CancelledAt = utcNow;
+    }
+
+    internal const string AttendanceClosedMessage = "Attendance is final once every staff shift is approved.";
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
     // Group activities (PR1): a shift on an activity is changed from the activity, so the board's writes refuse the fields the activity owns.
     private const string GroupActivityOnShiftCode = "GA_ON_ACTIVITY";
