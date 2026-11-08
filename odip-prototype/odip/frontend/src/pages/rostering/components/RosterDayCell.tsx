@@ -1,8 +1,11 @@
+import { useContext } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { Plus } from 'lucide-react'
 import type { ShiftDto } from '@/api/types'
 import type { DayTarget } from '../lib/rosterDrag'
 import { ShiftChip, type ShiftChipContext } from './ShiftChip'
+import { GroupActivityCard } from './GroupActivityCard'
+import { ActivityContext, dayItems } from '../lib/groupActivities'
 import { isToday } from '../lib/roster'
 
 export type RosterDayCellProps = {
@@ -41,6 +44,9 @@ export type RosterDayCellProps = {
  */
 export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipContext, draggable, dayTarget, onAdd, onOpen, onAssignTo, onUnassign, onDelete, onSetRegular }: RosterDayCellProps) {
   const style = { gridColumn: dayIndex + 1, gridRow: 1 }
+  // Group activities (flag on, a participant's row only; the Staff view keeps plain chips): a shift attached to an activity draws as the activity's card, a 2:1 pair once.
+  const activities = useContext(ActivityContext)
+  const items = dayItems(shifts, chipContext === 'participant' ? activities?.byId : undefined)
   // One target per day (the brief, section 7): the whole of an empty cell, as before; on a day that has pucks, the new-shift slot below, which exists only while a person is carried.
   // The chips stay targets of their own, so a drop on a chip keeps its outcome.
   const { setNodeRef, isOver, active } = useDroppable({
@@ -73,12 +79,14 @@ export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipC
   const carrying = Boolean(dayTarget) && canWrite && Boolean(active)
   return (
     <div style={style} className={`${base} relative ${carrying ? 'pr-[calc(var(--control-h-sm)_+_4px)]' : ''}`}>
-      {shifts.map(shift => (
+      {items.map(item => item.kind === 'activity' ? (
+        <GroupActivityCard key={`activity:${item.activity.id}:${item.participantId}`} activity={item.activity} participantId={item.participantId} canWrite={canWrite} draggable={draggable} onOpen={activities!.open} />
+      ) : (
         <ShiftChip
-          key={shift.id}
-          shift={shift}
+          key={item.shift.id}
+          shift={item.shift}
           canWrite={canWrite}
-          dashed={!shift.staffId}
+          dashed={!item.shift.staffId}
           context={chipContext}
           draggable={draggable}
           onOpen={onOpen}

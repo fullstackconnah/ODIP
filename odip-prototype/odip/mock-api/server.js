@@ -1886,6 +1886,8 @@ function rosterBoard(searchParams) {
   if (monday !== BOARD_FIXTURE_WEEK) { board.participantRows = []; board.exceptions = [] }
   // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
   board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
+  board.groupActivitiesEnabled = true // group activities are flag-on in the mock (R2); the flag-flip PR owns the real switch
+  board.groupActivities = []
   board.weekStart = monday
   board.weekStarted = startedWeeks.has(monday)
   board.days = days

@@ -168,6 +168,27 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task GetAll_SameName_PagesByIdSoNoParticipantRepeatsOrVanishes()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        // Inserted in descending Id order, so an unstable tie falls back to insertion order and fails.
+        var ids = new[] { 3, 2, 1 }.Select(n => Guid.Parse($"00000000-0000-0000-0000-00000000000{n}")).ToList();
+        db.Participants.AddRange(ids.Select(id => new Participant { Id = id, FirstName = "Sam", LastName = "Smith", IsActive = true }));
+        db.SaveChanges();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var seen = new List<Guid>();
+        foreach (var page in new[] { 1, 2, 3 })
+        {
+            var result = await controller.GetAll(null, null, null, null, null, null, page, 1, CancellationToken.None);
+            var body = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+            seen.Add(Assert.Single(body.Data!.Items).Id);
+        }
+
+        Assert.Equal(ids.OrderBy(i => i), seen);
+    }
+
+    [Fact]
     public async Task GetAll_OperationalOnly_HidesNewIncompleteNonDraftButRetainsLegacyAndIgnoresForeignOnboarding()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
