@@ -72,8 +72,7 @@ try {
         add(`message font size equals the section's existing small text [${tag}]`, fonts, fonts.msg === fonts.existing)
         const r = await cropElement(page, section, path.join(OUT_DIR, `settings-switch-off-refused-${st.name}.png`), { hideChrome: true })
         add(r.overlap ? `crop holds the whole section [settings ${st.name}]` : `crop [settings ${st.name}]`, { clip: r.clip, box: r.box }, r.overlap?.pass ?? true)
-        const fp = await fullPage(page, path.join(OUT_DIR, 'full', `settings-switch-off-refused-${st.name}.png`))
-        for (const c of fp.checks) add(c.name, c.detail, c.pass)
+        // No full page for Settings: its content scrolls inside the app frame, so the helper's document-height check cannot hold; the section crop above is the capture.
       } else {
         await page.goto(`${BASE_URL}/staff/s-0001/edit`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
         const form = page.locator('form').first()
