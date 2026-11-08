@@ -467,7 +467,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
                 of the footer. Without the wrap the row ran past the panel and the panel's own
                 scrollWidth exceeded its clientWidth (13px at 195 CSS px, measured). */}
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <Button variant="ghost" onClick={onClose} className="whitespace-nowrap">
+              <Button variant="ghost" onClick={onClose} disabled={isBusy} className="whitespace-nowrap">
                 Cancel
               </Button>
               <Button data-shift-save onClick={handleSave} disabled={isBusy || saveWithheld} aria-describedby={saveWithheld && refusalShown ? refusalId : undefined} className="whitespace-nowrap">

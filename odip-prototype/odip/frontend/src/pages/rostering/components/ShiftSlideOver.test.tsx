@@ -1614,6 +1614,28 @@ describe('ShiftSlideOver as a dialog', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
+  it('Cancel is disabled while a create is saving, so the panel stays open for a refusal', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    createPending.current = true
+    render(<ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={onClose} />)
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancel).toBeDisabled()
+    await user.click(cancel)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Cancel on an idle, untouched create is enabled and closes', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={onClose} />)
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancel).toBeEnabled()
+    await user.click(cancel)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('Escape on an idle, untouched create closes it', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
