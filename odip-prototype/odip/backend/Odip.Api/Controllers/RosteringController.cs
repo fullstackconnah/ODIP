@@ -1985,6 +1985,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
+        // An end before the start would save a pattern that makes nothing.
+        if (dto.EffectiveTo < dto.EffectiveFrom) return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Choose an end date on or after the start date."));
         // A pattern makes shifts, so it needs a length like one (phase 3 review, N2): a pattern with none would make shifts the budget cannot price.
         if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
@@ -2020,6 +2022,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> UpdatePattern(
         Guid id, [FromBody] UpdateShiftPatternDto dto, CancellationToken ct)
     {
+        if (dto.EffectiveTo < dto.EffectiveFrom) return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Choose an end date on or after the start date."));
         var participantId = await _db.ShiftPatterns.Where(p => p.Id == id).Select(p => (Guid?)p.ParticipantId).FirstOrDefaultAsync(ct);
         if (participantId is null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
         // REV281B: the regular is a concurrency token, so a change must not commit between a generation's load and its save: queue behind the participant's generation lock, as the generators do.
@@ -2107,6 +2110,9 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<GeneratePatternResultDto>>> GeneratePattern(
         Guid id, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
     {
+        // A mistyped year would build hundreds of thousands of shifts under the board lock: refuse before the load and any lock.
+        if (to < from) return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail("Choose an end date on or after the start date."));
+        if (to.DayNumber - from.DayNumber > 400) return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail("Choose a date range of 400 days or less."));
         // Not tracked: the generator takes the participant lock and then loads the pattern tracked, and a tracked copy read here would be returned to it stale (a SetRegular committing in between would make its save a concurrency 500).
         var pattern = await _db.ShiftPatterns.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<GeneratePatternResultDto>.Fail("Pattern not found."));

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
@@ -552,7 +553,7 @@ public record CreateShiftPatternDto
     public DateOnly EffectiveFrom { get; init; }
     public DateOnly? EffectiveTo { get; init; }
     public bool IsActive { get; init; } = true;
-    public string? Notes { get; init; }
+    [StringLength(2000)] public string? Notes { get; init; }
     /// <summary>The pattern's support type (a catalogue group code); blank is null, which is community access. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>); a POST treats both as none.</summary>
     public string? SupportGroupCode { get; init { field = value; HasSupportGroupCode = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasSupportGroupCode { get; private init; }
