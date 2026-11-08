@@ -134,7 +134,7 @@ public class GroupShiftClaimTests
         var saved = await kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == line.ShiftId, Ct);
         var n = AgreementPatternMapperShape(saved.Ratio);
 
-        Assert.Equal(Math.Floor(row.PriceLimit_NSW!.Value * 100m / n) / 100m, line.UnitPrice);   // the audit path: the item's price on that date over N from the shift's own ratio
+        Assert.Equal(Math.Floor(row.PriceLimit_NSW * 100m / n) / 100m, line.UnitPrice);   // the audit path: the item's price on that date over N from the shift's own ratio
     }
 
     private static int AgreementPatternMapperShape(SupportRatio ratio) => Odip.Infrastructure.Rostering.AgreementPatternMapper.ShapeOf(ratio)!.Value.ParticipantsPresent;
