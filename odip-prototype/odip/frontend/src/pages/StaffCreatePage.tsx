@@ -21,6 +21,7 @@ import { usePermissions } from '@/lib/permissions'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
+import { httpStatusOf } from '@/lib/httpStatus'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
@@ -315,7 +316,7 @@ export default function StaffCreatePage() {
       </div>
 
       {mutation.isError && (
-        <Callout tone="error">
+        <Callout tone={httpStatusOf(mutation.error) === 409 ? 'warning' : 'error'}>
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} staff member. Please check your input and try again.`)}
         </Callout>
       )}
