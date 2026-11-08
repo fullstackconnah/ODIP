@@ -128,6 +128,10 @@ export interface ShiftDto {
   isRegular?: boolean
   /** True when the pattern this shift was generated from was made by an agreement revision; omitted for any other shift. With `sourceDraftVersion` it is what the shift panel says ("From agreement v2"): no read of the pattern is needed. */
   fromAgreement?: boolean
+  /** The group activity this shift is part of (PR1); absent on an ordinary shift. */
+  groupActivityId?: string | null
+  /** True on a group-support-line shift: the chip menu offers "Add to an activity…". */
+  isGroupLine?: boolean
   /** The version of that revision. */
   sourceDraftVersion?: number
   /** What is still missing for this shift's participant (e.g. "Intake not complete"), shown verbatim as a
@@ -527,6 +531,10 @@ export type RosterBoardDto =
       weekStarted?: boolean
       /** True while Start would still add agreement shifts here (no row, no agreement shift). A hand-made week is started yet can start; absent reads as false. */
       canStart?: boolean
+      /** The week's non-cancelled group activities (PR1); empty while the feature is off. */
+      groupActivities?: GroupActivityDto[]
+      /** Whether this organisation has group activities on: every entry point and card hides while false or absent. */
+      groupActivitiesEnabled?: boolean
     }
   | {
       groupBy: 'Staff'
@@ -833,4 +841,71 @@ export interface AutoRosterApplyDto {
 export interface AutoRosterApplyResultDto {
   applied: string[]
   skipped: { shiftId: string; message: string }[]
+}
+
+// ── Group activities (PR1 API; PR2 board UI) ───────────────
+export interface GroupActivityParticipantDto {
+  participantId: string
+  participantName: string
+  ratio: SupportRatio
+  shiftIds: string[]
+  timesDiffer: boolean
+  agreementStartTime?: string | null
+  agreementEndTime?: string | null
+}
+
+export interface GroupActivityStaffDto {
+  id: string
+  staffId: string
+  staffName: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  role?: string | null
+  findings: RosterFindingDto[]
+}
+
+export interface GroupActivityDto {
+  id: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  title: string
+  activityId?: string | null
+  activityName?: string | null
+  location?: string | null
+  serviceLocationId?: string | null
+  notes?: string | null
+  minStaffRequired?: number | null
+  status: ShiftStatus
+  staffNeeded: number
+  staffAssigned: number
+  participants: GroupActivityParticipantDto[]
+  staff: GroupActivityStaffDto[]
+  findings: RosterFindingDto[]
+}
+
+/** The body of create (POST) and update (PUT; status Draft or Published). Blank optionals go as null. */
+export interface GroupActivityFormDto {
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  title: string
+  activityId: string | null
+  location: string | null
+  serviceLocationId: string | null
+  notes: string | null
+  minStaffRequired: number | null
+}
+
+export interface AddGroupStaffDto {
+  staffId: string
+  startTime?: string | null
+  endTime?: string | null
+  endsNextDay?: boolean
+  role?: string | null
+  overrideReason?: string | null
+  acknowledgedFindingCodes?: string[]
 }

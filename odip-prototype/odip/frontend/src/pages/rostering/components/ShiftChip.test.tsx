@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { ShiftChip, type ShiftChipProps } from './ShiftChip'
 import { formatShiftTimeRange } from '../lib/roster'
 import { DropStateContext, type DropState } from '../lib/rosterDrag'
+import { ActivityContext } from '../lib/groupActivities'
 import { makeShift, makeFinding, makeUnfilledShift } from '../test-fixtures'
 import { ON_TINT } from '@/lib/tone'
 import type { ShiftDto } from '@/api/types'
@@ -1272,5 +1273,37 @@ describe('ShiftChip in select mode (R3: publish several)', () => {
     cleanup()
     chipSelecting(makeUnfilledShift({ status: 'Draft' }), [], [])
     expect(document.querySelector('[data-shift-plus]')).toBeNull()
+  })
+})
+
+describe('ShiftChip menu: Add to an activity', () => {
+  const board = { byId: new Map(), open: noop, removePerson: noop, addShift: vi.fn(), busyIds: new Set<string>() }
+  const open = async (shift: ReturnType<typeof makeShift>, flagOn: boolean) => {
+    const user = userEvent.setup()
+    renderChip(
+      <ActivityContext.Provider value={flagOn ? board : null}>
+        <ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />
+      </ActivityContext.Provider>,
+    )
+    await user.click(screen.getByRole('button', { name: /actions for/i }))
+    return user
+  }
+
+  it('is offered for a group-line shift with the flag on, and calls addShift', async () => {
+    const shift = makeShift({ isGroupLine: true })
+    const user = await open(shift, true)
+    await user.click(screen.getByRole('option', { name: 'Add to an activity…' }))
+    expect(board.addShift).toHaveBeenCalledWith(shift)
+  })
+
+  it('is absent with the flag off, for a non-group shift and for an attached shift', async () => {
+    await open(makeShift({ isGroupLine: true }), false)
+    expect(screen.queryByRole('option', { name: 'Add to an activity…' })).not.toBeInTheDocument()
+    cleanup()
+    await open(makeShift({ isGroupLine: false }), true)
+    expect(screen.queryByRole('option', { name: 'Add to an activity…' })).not.toBeInTheDocument()
+    cleanup()
+    await open(makeShift({ isGroupLine: true, groupActivityId: 'a' }), true)
+    expect(screen.queryByRole('option', { name: 'Add to an activity…' })).not.toBeInTheDocument()
   })
 })

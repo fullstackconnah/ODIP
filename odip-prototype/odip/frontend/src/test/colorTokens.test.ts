@@ -48,7 +48,7 @@ describe('dark theme block', () => {
   it('re-points exactly the tokens @theme defines: none missing, none extra', () => {
     const light = names(css.slice(themeStart, css.indexOf('}', themeStart)))
     const dark = names(css.slice(darkStart, css.indexOf('}', darkStart)))
-    expect(light).toHaveLength(58)
+    expect(light).toHaveLength(60)
     expect([...dark].sort()).toEqual([...light].sort())
   })
 
