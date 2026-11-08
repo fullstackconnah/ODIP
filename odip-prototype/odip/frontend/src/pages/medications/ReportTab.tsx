@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FileClock } from 'lucide-react'
 import { useAdministrationsReport, useParticipants } from '@/api/hooks'
+import { participantsCutNote } from '@/api/hooks/pagedList'
 import { SERVICES_BEGUN } from '@/api/types/participants'
 import { fieldSurface } from '@/components/FormField'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -36,6 +37,7 @@ export default function ReportTab() {
   })
   const { data: report, isLoading, isError, refetch } = pageQuery
 
+  const participantsNote = participantsCutNote(participants)
   const participantItems = useMemo(() => [
     { value: '', label: 'All participants' },
     ...participants.map(p => ({ value: p.id, label: p.fullName })),
@@ -89,6 +91,7 @@ export default function ReportTab() {
         <div className="w-full sm:w-64">
           <label className="block text-xs font-medium mb-1 text-[var(--color-muted-foreground)]" htmlFor="report-participant">Participant</label>
           <Dropdown id="report-participant" variant="form" value={participantId} onChange={setParticipantId} items={participantItems} searchable label="All participants" />
+          {participantsNote && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{participantsNote}</p>}
         </div>
         <div>
           <label className="block text-xs font-medium mb-1 text-[var(--color-muted-foreground)]" htmlFor="report-from">From</label>

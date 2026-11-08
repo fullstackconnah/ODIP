@@ -37,3 +37,9 @@ export function fetchPagedList<T>(
 ): Promise<TruncatableList<T>> {
   return apiGet<PagedResult<T>>(url, params).then(toTruncatableList)
 }
+
+/** The line a picker shows under a participant list the server cut at its page-size ceiling, or null when the list is whole. */
+export function participantsCutNote(list: unknown[]): string | null {
+  const { isTruncated = false, totalCount = 0 } = list as Partial<TruncatableList<unknown>>
+  return isTruncated ? `Showing the first ${list.length} of ${totalCount} participants.` : null
+}

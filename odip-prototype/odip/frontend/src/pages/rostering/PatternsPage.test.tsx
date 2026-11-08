@@ -8,8 +8,9 @@ import { MemoryRouter } from 'react-router-dom'
 // Activating and deactivating a pattern is a PUT the readiness gate can refuse. In Enforce mode the API answers 400
 // "Participant is not ready for booking or rostering."; the page used to swallow it (the activate had no error handler at all and
 // the deactivate was an unhandled rejection), so the click simply seemed to do nothing.
-const { mockUsePatterns, mockUpdateMutate, mockUpdateMutateAsync, permissions } = vi.hoisted(() => ({
+const { mockUsePatterns, mockUpdateMutate, mockUpdateMutateAsync, permissions, participantsResult } = vi.hoisted(() => ({
   permissions: { canWrite: true },
+  participantsResult: { data: [] as unknown[] },
   mockUsePatterns: vi.fn(),
   mockUpdateMutate: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
@@ -24,7 +25,7 @@ vi.mock('@/api/hooks', () => ({
   useSupportCatalogue: () => ({ data: [], isLoading: false, isError: false }),
   usePatterns: mockUsePatterns,
   useUpdatePattern: () => ({ mutate: mockUpdateMutate, mutateAsync: mockUpdateMutateAsync, isPending: false }),
-  useParticipants: () => ({ data: [{ id: 'participant-1', fullName: 'Mia Chen' }] }),
+  useParticipants: () => participantsResult,
   useStaff: () => ({ data: [{ id: 'staff-1', fullName: 'Alex Rivera' }] }),
   useCreatePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeletePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -79,6 +80,7 @@ function badRequest(...errors: string[]) {
 }
 
 beforeEach(() => {
+  participantsResult.data = [{ id: 'participant-1', fullName: 'Mia Chen' }]
   permissions.canWrite = true
   mockUsePatterns.mockReset()
   mockUpdateMutate.mockReset()
@@ -365,5 +367,30 @@ describe('PatternsPage — row actions keep their touch areas apart', () => {
     mockUsePatterns.mockReturnValue({ data: [makePattern()], isLoading: false, isError: false, refetch: vi.fn() })
     render(<MemoryRouter><PatternsPage /></MemoryRouter>)
     expect(screen.queryByRole('columnheader', { name: 'Source' })).not.toBeInTheDocument()
+  })
+})
+
+describe('PatternsPage — participant list cut at the ceiling', () => {
+  it('says so in the new-pattern panel when the list was truncated, and says nothing when it was whole', async () => {
+    const user = userEvent.setup()
+    mockUsePatterns.mockReturnValue({ data: [makePattern()], isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: /new pattern/i }))
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument()
+    unmount()
+
+    participantsResult.data = Object.assign([{ id: 'participant-1', fullName: 'Mia Chen' }, { id: 'participant-2', fullName: 'Ben Ode' }], { isTruncated: true, totalCount: 250 })
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: /new pattern/i }))
+    expect(screen.getByText('Showing the first 2 of 250 participants.')).toBeInTheDocument()
+  })
+
+  it('still names the participant of a pattern being edited when the cut list lacks them', async () => {
+    const user = userEvent.setup()
+    participantsResult.data = Object.assign([{ id: 'participant-2', fullName: 'Ben Ode' }], { isTruncated: true, totalCount: 250 })
+    mockUsePatterns.mockReturnValue({ data: [makePattern({ participantName: 'Mia Chen' })], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: /edit mia chen/i }))
+    expect(within(screen.getByRole('dialog')).getByText('Mia Chen')).toBeInTheDocument()
   })
 })

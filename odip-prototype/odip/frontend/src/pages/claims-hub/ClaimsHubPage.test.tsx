@@ -2,6 +2,7 @@ import { TONE } from '@/lib/tone'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, ManagedClaimDto, PipelineDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
 import { ClaimFileError } from '@/api/hooks/claimHub'
@@ -294,6 +295,46 @@ describe('ClaimsHubPage: files', () => {
     await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
     await user.click(screen.getByTestId('file-next-action'))
     expect(await screen.findByText(/None of the lines in this file belong to BPR261030001/)).toBeInTheDocument()
+  })
+
+  // H62B-3 / H62B-4: a results file over 5 MB is refused with the size message before any request, and a 413 from the server says the same.
+  const SIZE_MESSAGE = 'This file is over 5 MB. Choose a smaller results file.'
+  const sized = (bytes: number) => Object.defineProperty(new File(['a'], 'big.csv', { type: 'text/csv' }), 'size', { value: bytes })
+
+  it('refuses a results file over 5 MB when it is chosen, sends nothing, and lets the same file be chosen again', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    renderPage('/claims?file=b-1')
+    const input = screen.getByLabelText('Results file (.csv)')
+    await user.upload(input, sized(5 * 1024 * 1024 + 1))
+    expect(screen.getByText(SIZE_MESSAGE)).toBeInTheDocument()
+    expect(screen.getByTestId('file-next-action')).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByTestId('file-next-action'))
+    expect(m.importResults).not.toHaveBeenCalled()
+    expect((input as HTMLInputElement).value).toBe('')
+  })
+
+  it('sends a results file exactly at 5 MB', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    renderPage('/claims?file=b-1')
+    const file = sized(5 * 1024 * 1024)
+    await user.upload(screen.getByLabelText('Results file (.csv)'), file)
+    await user.click(screen.getByTestId('file-next-action'))
+    expect(screen.queryByText(SIZE_MESSAGE)).not.toBeInTheDocument()
+    expect(m.importResults).toHaveBeenCalledWith({ batchId: 'b-1', file }, expect.anything())
+  })
+
+  it('says the file is too big, not that the connection failed, when the server answers 413', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    const config = { headers: {} } as InternalAxiosRequestConfig
+    m.importResults.mockImplementation((_v, o) => o.onError(new AxiosError('too big', 'ERR_BAD_REQUEST', config, null, { data: null, status: 413, statusText: '', headers: {}, config } as AxiosResponse)))
+    renderPage('/claims?file=b-1')
+    await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
+    await user.click(screen.getByTestId('file-next-action'))
+    expect(await screen.findByText(SIZE_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText(/Check your connection/)).not.toBeInTheDocument()
   })
 })
 
