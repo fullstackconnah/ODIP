@@ -116,7 +116,7 @@ public class PortalPayslipsController : ControllerBase
         if (conn is null) return (PortalPayslipsDto.NotConnected, null, null);
         var staffId = await ResolveCurrentStaffIdAsync(ct);
         var payrollId = staffId is null ? null
-            : await _db.Users.Where(u => u.Id == staffId && u.TenantId == tenantId).Select(u => u.ExternalPayrollId).FirstOrDefaultAsync(ct);
+            : await _db.Users.Where(u => u.Id == staffId && u.TenantId == tenantId && u.IsActive).Select(u => u.ExternalPayrollId).FirstOrDefaultAsync(ct);
         if (string.IsNullOrEmpty(payrollId)) return (PortalPayslipsDto.NotLinked, null, null);
         return (PortalPayslipsDto.Ready, payrollId, _keys.Unprotect(conn.ApiKeyCiphertext, conn.ApiKeyNonce, tenantId));
     }
@@ -128,7 +128,7 @@ public class PortalPayslipsController : ControllerBase
     private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
         if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId)) return null;
-        return await _db.Users.AnyAsync(u => u.Id == userId, ct) ? userId : null;
+        return await _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct) ? userId : null;
     }
 
     private static DateOnly? ToDate(DateTime? v) => v is { } d ? DateOnly.FromDateTime(d) : null;

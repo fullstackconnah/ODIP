@@ -53,7 +53,7 @@ public class PortalActivityShiftsController : ControllerBase
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         Guid? own = Guid.TryParse(claim, out var parsed) ? parsed : null;
         var userId = _tenant.ViewAsUserId ?? own;
-        return userId is { } id && await _db.Users.AnyAsync(u => u.Id == id, ct) ? id : null;
+        return userId is { } id && await _db.Users.AnyAsync(u => u.Id == id && u.IsActive, ct) ? id : null;
     }
 
     private Task<GroupActivityStaff?> LoadRowAsync(Guid rowId, Guid staffId, CancellationToken ct) =>

@@ -38,9 +38,10 @@ const entryToForm = (entry: ParticipantRiskEntryDto): RiskEntryFormState => ({
   isActive: entry.isActive,
 })
 
-function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
+function RiskEntryRow({ entry, canWrite, canDelete, onEdit, onDelete }: {
   entry: ParticipantRiskEntryDto
   canWrite: boolean
+  canDelete: boolean
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -55,9 +56,11 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
             <Button variant="ghost" size="sm" onClick={onEdit}>
               Edit
             </Button>
-            <Button variant="ghost-danger" size="sm" onClick={onDelete}>
-              Delete
-            </Button>
+            {canDelete && (
+              <Button variant="ghost-danger" size="sm" onClick={onDelete}>
+                Delete
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -85,7 +88,7 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
  * this section is the only write path from here on.
  */
 export default function RiskEntriesSection({ participantId }: { participantId: string | undefined }) {
-  const { canWriteRisks } = usePermissions()
+  const { canWriteRisks, canDeleteRisks } = usePermissions()
   const entriesQuery = useParticipantRiskEntries(participantId, true)
   const entries = entriesQuery.data ?? NO_ENTRIES
   // A failed or paused request is not an empty list: "No risks recorded" is only for one that succeeded and came back empty.
@@ -212,7 +215,7 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
         <div ref={activeRef} className="space-y-3">
           {activeEntries.slice(0, showAll.limit).map(entry => (
             <div key={entry.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
-            <RiskEntryRow entry={entry} canWrite={canWriteRisks} onEdit={() => openEdit(entry)} onDelete={() => setDeletingEntry(entry)} />
+            <RiskEntryRow entry={entry} canWrite={canWriteRisks} canDelete={canDeleteRisks} onEdit={() => openEdit(entry)} onDelete={() => setDeletingEntry(entry)} />
             </div>
           ))}
         </div>
@@ -226,7 +229,7 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
           {showInactive && (
             <div id="risks-inactive-list" className="space-y-3 mt-3">
               {inactiveEntries.map(entry => (
-                <RiskEntryRow key={entry.id} entry={entry} canWrite={canWriteRisks} onEdit={() => openEdit(entry)} onDelete={() => setDeletingEntry(entry)} />
+                <RiskEntryRow key={entry.id} entry={entry} canWrite={canWriteRisks} canDelete={canDeleteRisks} onEdit={() => openEdit(entry)} onDelete={() => setDeletingEntry(entry)} />
               ))}
             </div>
           )}
