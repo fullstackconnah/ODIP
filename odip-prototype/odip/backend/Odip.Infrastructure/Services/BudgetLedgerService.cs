@@ -371,11 +371,12 @@ public sealed class BudgetLedgerService
     private async Task<List<ShiftRow>> LoadShiftsAsync(Guid tenantId, List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
         await ShiftsQuery(tenantId, participantIds, from, to).ToListAsync(ct);
 
+    // shortcut: a completed group activity shift is left out (the claim run leaves it out too, so it is never billed) until GA PR4 prices it
     public IQueryable<ShiftRow> ShiftsQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly from, DateOnly to) =>
         _db.Shifts.AsNoTracking()
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
-                    || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
+                    || (s.Status == ShiftStatus.Completed && s.GroupActivityId == null && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
             .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType, s.SupportGroupCode, s.ShiftPatternId, s.ServiceLocationId));
 
     /// <summary>

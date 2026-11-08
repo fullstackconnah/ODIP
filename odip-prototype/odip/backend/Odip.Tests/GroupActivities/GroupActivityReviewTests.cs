@@ -274,7 +274,7 @@ public class GroupActivityReviewTests
         var rig = new Rig();
         var a = rig.Activity();
         var approved = rig.Row(a, outcome: ReviewOutcome.Approved);
-        var open = rig.Row(a);
+        var open = rig.Row(a, finished: false);
         var shift = rig.Participant(a);
 
         Assert.Equal("GA_STAFF_APPROVED", ErrorCode(await rig.Controller().RemoveStaff(a.Id, approved.Id, default), 409));
@@ -283,6 +283,52 @@ public class GroupActivityReviewTests
         GroupActivityFixture.Body(await rig.Controller().RemoveStaff(a.Id, open.Id, default), 200);
         Assert.Equal(ShiftStatus.Completed, await rig.ActivityStatusAsync(a.Id));
         Assert.Equal(ShiftStatus.Completed, await rig.ShiftStatusAsync(shift.Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RemoveStaff_StartedOrFinishedRow_409GaStaffStarted_RowAndTimesStay(bool finished)
+    {
+        var rig = new Rig();
+        var a = rig.Activity();
+        var row = rig.Row(a, finished: true);
+        if (!finished)
+        {
+            var tracked = rig.Fx.Seed.GroupActivityStaff.Single(r => r.Id == row.Id);
+            tracked.SubmittedAt = null;
+            tracked.ActualEnd = null;
+            rig.Fx.Seed.SaveChanges();
+        }
+        var before = await rig.SavedAsync(row.Id);
+
+        Assert.Equal("GA_STAFF_STARTED", ErrorCode(await rig.Controller().RemoveStaff(a.Id, row.Id, default), 409));
+
+        var after = await rig.SavedAsync(row.Id);
+        Assert.Equal(before.ActualStart, after.ActualStart);
+        Assert.Equal(before.ActualEnd, after.ActualEnd);
+        Assert.Equal(before.SubmittedAt, after.SubmittedAt);
+        Assert.Equal(ShiftStatus.InProgress, await rig.ActivityStatusAsync(a.Id));
+    }
+
+    [Fact]
+    public async Task Review_NotStartedRow_CarriesTheZoneTheServerWillStamp()
+    {
+        var rig = new Rig();
+        rig.Fx.Seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = rig.Fx.TenantId, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = "Test", Address = "1 Test St", State = "QLD", TimeZoneId = "Australia/Brisbane" });
+        rig.Fx.Seed.SaveChanges();
+        var a = rig.Activity(ShiftStatus.Published, daysAgo: 0);
+        var row = rig.Row(a, finished: false);
+        var tracked = rig.Fx.Seed.GroupActivityStaff.Single(r => r.Id == row.Id);
+        tracked.TimeZoneId = null;
+        rig.Fx.Seed.SaveChanges();
+
+        var list = GroupActivityFixture.Body(await rig.Controller().StaffReviews(null, null, default), 200);
+
+        Assert.Equal("Australia/Brisbane", list.Rows.Single(r => r.RowId == row.Id).TimeZoneId);
+        var one = GroupActivityFixture.Body(await rig.Controller().SetStaffActuals(a.Id, row.Id, Times(), default), 200);
+        Assert.Equal("Australia/Brisbane", one.TimeZoneId);
+        Assert.Equal("Australia/Brisbane", (await rig.SavedAsync(row.Id)).TimeZoneId);
     }
 
     // ── C3 ──

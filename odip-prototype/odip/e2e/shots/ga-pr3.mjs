@@ -1,6 +1,6 @@
 // Group activities PR3 shots: the worker's activity card (Start, Finish, the finish sheet) and the coordinator's "Group activity staff" review section.
 // States: worker 390 - card-not-started, card-started, finish-sheet-break, finish-sheet-break-error, card-finished, card-approved, participants-open, offline-disabled;
-// coordinator 1280 and 390 - review-mixed, record-times-error, approve-confirm, approve-partial. Numeric checks N1 to N6. Exit 1 on any failure.
+// coordinator 1280 and 390 - review-mixed, record-times-error, approve-confirm, approve-partial. Numeric checks N1 to N7. Exit 1 on any failure.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/ga-pr3.mjs <outdir>
 // Everything the pages call is stubbed with page.route. The clock (NOW), the theme (light), the zone (Sydney) and the dates are pinned, so every run paints the same.
 import path from 'node:path'
@@ -181,6 +181,11 @@ async function coordinator(browser, vp) {
   await crop(page, section, 'review-mixed', vp, 12)
   const o = await section.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
   check(`coordinator section does not overflow (${vp.name})`, JSON.stringify(o), o.sw <= o.cw + 1)
+  if (vp.touch) {
+    const tapMin = await px(page, '--tap-min')
+    const heights = await section.getByRole('button', { name: /^(Record times for|Approve) / }).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))
+    check('N7 each row action is at least --tap-min tall at 390 coarse', `${heights.map(Math.round).join(',')} vs ${tapMin}`, heights.length > 0 && heights.every((h) => h >= tapMin - 0.5))
+  }
   const order = await section.locator('thead th, [role="columnheader"]').allTextContents()
   if (!vp.touch) check('columns are in the design order', order.join('|'), ['Date', 'Activity', 'Staff', 'Planned', 'Actual', 'State', 'Flags', 'Actions'].every((n, i) => (order[i + 1] ?? order[i]).includes(n) || order.some((t) => t.includes(n))))
 

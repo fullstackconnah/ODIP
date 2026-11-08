@@ -82,6 +82,7 @@ public partial class GroupActivitiesController : ControllerBase
         ["GA_STAFF_ROW_NOT_FOUND"] = (404, "Staff row not found."),
         ["GA_STAFF_NOT_FINISHED"] = (409, "Record times before approving."),
         ["GA_STAFF_APPROVED"] = (409, "This shift is approved and can't be changed."),
+        ["GA_STAFF_STARTED"] = (409, "This staff member has started, so they can't be removed. Record their times instead."),
         ["GA_NOT_PUBLISHED"] = (409, "Publish the activity first."),
         ["GA_BATCH_SIZE"] = (400, "Choose between 1 and 100 shifts."),
         ["GA_REASON"] = (400, "Enter a reason."),
@@ -498,6 +499,7 @@ public partial class GroupActivitiesController : ControllerBase
             await using var rowLock = await GroupStaffRowLock.AcquireAsync(_db, row.Id, token);
             await _db.Entry(row).ReloadAsync(token);   // re-check under the row lock: an approval or a Finish may have landed first
             if (row.State == GroupStaffRowState.Approved) throw Deny("GA_STAFF_APPROVED");
+            if (row.State != GroupStaffRowState.NotStarted) throw Deny("GA_STAFF_STARTED");   // a row with times stays; record its times instead
             var now = DateTime.UtcNow;
             _db.GroupActivityStaff.Remove(row);
             activity.UpdatedAt = now;

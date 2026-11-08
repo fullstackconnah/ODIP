@@ -39,17 +39,17 @@ public partial class GroupActivitiesController
         Id = r.Id, TenantId = r.TenantId, ServiceDate = a.ServiceDate, StartTime = r.StartTime, EndTime = r.EndTime, EndsNextDay = r.EndsNextDay, ServiceLocationId = a.ServiceLocationId,
     };
 
-    private static GroupStaffReviewDto ToReview(GroupActivity a, GroupActivityStaff r, string staffName, string? payrollId, int participants, string orgZoneId)
+    private static GroupStaffReviewDto ToReview(GroupActivity a, GroupActivityStaff r, string staffName, string? payrollId, int participants, string rowZoneId)
     {
         var offRoster = false;
         if (r.ActualStart is { } start && r.ActualEnd is { } end)
         {
-            var (rosteredStart, rosteredEnd) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(RowShift(a, r), r.TimeZoneId ?? orgZoneId);
+            var (rosteredStart, rosteredEnd) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(RowShift(a, r), r.TimeZoneId ?? rowZoneId);
             offRoster = ShiftTimeRules.IsOffRoster(ShiftVarianceCalculator.VarianceMinutes(start, rosteredStart)) || ShiftTimeRules.IsOffRoster(ShiftVarianceCalculator.VarianceMinutes(end, rosteredEnd));
         }
         return new GroupStaffReviewDto(
             r.Id, a.Id, a.Title, a.ServiceDate, r.UserId, staffName, r.Role, r.StartTime, r.EndTime, r.EndsNextDay,
-            r.ActualStart, r.ActualEnd, r.BreakStartedAt, r.BreakEndedAt, r.TimeZoneId,
+            r.ActualStart, r.ActualEnd, r.BreakStartedAt, r.BreakEndedAt, r.TimeZoneId ?? rowZoneId,
             r.State.ToString(), r.LocationCheck, offRoster, r.AdjustmentReason, !string.IsNullOrWhiteSpace(payrollId), participants);
     }
 
@@ -57,7 +57,7 @@ public partial class GroupActivitiesController
     {
         var user = await _db.Users.AsNoTracking().Where(u => u.Id == r.UserId).Select(u => new { u.FirstName, u.LastName, u.ExternalPayrollId }).FirstOrDefaultAsync(ct);
         var participants = await _db.Shifts.AsNoTracking().CountAsync(s => s.GroupActivityId == a.Id && s.Status != ShiftStatus.Cancelled, ct);
-        var zone = await ProviderTimeZoneResolver.ResolveAsync(_db, a.TenantId, ct);
+        var zone = await ProviderTimeZoneResolver.ForShiftAsync(_db, RowShift(a, r), ct);   // the zone the row is stamped with when it starts
         return ToReview(a, r, $"{user?.FirstName} {user?.LastName}".Trim(), user?.ExternalPayrollId, participants, zone.Id);
     }
 
@@ -85,7 +85,9 @@ public partial class GroupActivitiesController
         var activityIds = rows.Select(r => r.GroupActivityId).Distinct().ToList();
         var counts = (await _db.Shifts.AsNoTracking().Where(s => s.GroupActivityId != null && activityIds.Contains(s.GroupActivityId.Value) && s.Status != ShiftStatus.Cancelled)
             .GroupBy(s => s.GroupActivityId!.Value).Select(g => new { Id = g.Key, N = g.Count() }).ToListAsync(ct)).ToDictionary(g => g.Id, g => g.N);
-        var dtos = rows.Select(r => ToReview(r.GroupActivity!, r, $"{r.User?.FirstName} {r.User?.LastName}".Trim(), r.User?.ExternalPayrollId, counts.GetValueOrDefault(r.GroupActivityId), zone.Id)).ToList();
+        var byLocation = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, rows.Select(r => r.GroupActivity!.ServiceLocationId), ct);
+        var dtos = rows.Select(r => ToReview(r.GroupActivity!, r, $"{r.User?.FirstName} {r.User?.LastName}".Trim(), r.User?.ExternalPayrollId, counts.GetValueOrDefault(r.GroupActivityId),
+            ProviderTimeZoneResolver.ZoneOf(r.GroupActivity!.ServiceLocationId, byLocation, zone.Zone).Id)).ToList();
         return Ok(ApiResponse<GroupStaffReviewListDto>.Ok(new GroupStaffReviewListDto(dtos, total)));
     }
 

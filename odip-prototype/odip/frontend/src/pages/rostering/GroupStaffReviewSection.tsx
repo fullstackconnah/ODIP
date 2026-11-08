@@ -4,7 +4,6 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
-import { PageState } from '@/components/PageState'
 import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { fieldSurface } from '@/components/FormField'
@@ -140,16 +139,6 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
   const [error, setError] = useState<string | null>(null)
 
   const rows = data?.rows ?? []
-  if (isLoading) return <PageState kind="loading" noun="group activity staff" />
-  if (isError) {
-    return (
-      <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
-        Couldn't load group activity staff. Check your connection and try again.
-      </Callout>
-    )
-  }
-  if (rows.length === 0) return null
-
   const run = (ids: string[], done: () => void) => {
     setError(null)
     approve.mutate(ids, {
@@ -189,14 +178,31 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
     ...(canReview ? [{
       key: 'actions', header: 'Actions', render: (r: GroupStaffReviewDto) => (
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setRecording(r)} aria-label={`Record times for ${r.staffName} on ${r.activityTitle}`}>Record times</Button>
+          <Button variant="secondary" size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" onClick={() => setRecording(r)} aria-label={`Record times for ${r.staffName} on ${r.activityTitle}`}>Record times</Button>
           {r.state === 'Finished' && (
-            <Button size="sm" disabled={approve.isPending} onClick={() => run([r.rowId], () => {})} aria-label={`Approve ${r.staffName} on ${r.activityTitle}`}>Approve</Button>
+            <Button size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" disabled={approve.isPending} onClick={() => run([r.rowId], () => {})} aria-label={`Approve ${r.staffName} on ${r.activityTitle}`}>Approve</Button>
           )}
         </div>
       ),
     }] : []),
   ]
+
+  if (isLoading) {
+    return (
+      <section aria-labelledby="group-staff-heading" className="space-y-3">
+        <h2 id="group-staff-heading" className="text-base font-semibold">Group activity staff</h2>
+        <DataTable data={[]} columns={columns} keyField="rowId" loading />
+      </section>
+    )
+  }
+  if (isError) {
+    return (
+      <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+        Couldn't load group activity staff. Check your connection and try again.
+      </Callout>
+    )
+  }
+  if (rows.length === 0) return null
 
   return (
     <section aria-labelledby="group-staff-heading" className="space-y-3">

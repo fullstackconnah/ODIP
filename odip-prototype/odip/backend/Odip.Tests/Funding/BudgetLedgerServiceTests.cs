@@ -187,6 +187,21 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
+    public async Task ACompletedGroupActivityShift_AddsNothingUntilItIsClaimed()
+    {
+        var (kit, person, _) = Arrange();
+        kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+        var group = kit.SeedShift(person, new DateOnly(2026, 10, 3), ShiftStatus.Completed);
+        kit.Db.Shifts.Single(s => s.Id == group.Id).GroupActivityId = Guid.NewGuid();
+        kit.Db.SaveChanges();
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+
+        Assert.Equal(480m, q2.Pending);   // the Thursday shift only
+        Assert.Single(q2.Items);
+    }
+
+    [Fact]
     public async Task ACompletedShiftThatHasAClaimLineIsCountedOnceThroughTheLine_NotAgainAsAShift()
     {
         var (kit, person, _) = Arrange();

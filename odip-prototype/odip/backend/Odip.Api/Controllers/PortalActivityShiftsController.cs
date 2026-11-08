@@ -90,6 +90,7 @@ public class PortalActivityShiftsController : ControllerBase
             await using var board = await RosterGenerationLock.AcquireAsync(_db, row!.TenantId, ct, RosterGenerationLock.DefaultWait, scope: "roster-board");
             await using var rowLock = await GroupStaffRowLock.AcquireAsync(_db, row.Id, ct);
             await _db.Entry(row).ReloadAsync(ct);
+            if (_db.Entry(row).State == EntityState.Detached) return Refuse(404, ShiftNotFoundMessage);   // removed while we waited for the lock
             await _db.Entry(row.GroupActivity!).ReloadAsync(ct);
             (early, replay) = await GateAsync(row, finishing: false, ct);
             if (early is not null) return early;
@@ -149,6 +150,7 @@ public class PortalActivityShiftsController : ControllerBase
                 : null;
             await using var rowLock = await GroupStaffRowLock.AcquireAsync(_db, row.Id, ct);
             await _db.Entry(row).ReloadAsync(ct);
+            if (_db.Entry(row).State == EntityState.Detached) return Refuse(404, ShiftNotFoundMessage);   // removed while we waited for the lock
             await _db.Entry(row.GroupActivity!).ReloadAsync(ct);
             (early, replay) = await GateAsync(row, finishing: true, ct);
             if (early is not null) return early;
