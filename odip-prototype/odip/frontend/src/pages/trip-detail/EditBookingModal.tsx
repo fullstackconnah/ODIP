@@ -66,6 +66,12 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
   }
   const bodyRef = useRef<HTMLDivElement>(null)
   const hasForm = !!editForm
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const saveFailed = updateBooking.isError
+  // The dialog scrolls as a whole and the sticky footer covers its bottom edge: bring a refused save's message into view, clear of the footer (jsdom lacks scrollIntoView).
+  useEffect(() => {
+    if (saveFailed) errorRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [saveFailed])
   // The form replaces a state that held focus (the dialog, or the Try again button that just unmounted): put focus on its first control.
   useEffect(() => {
     if (hasForm) bodyRef.current?.querySelector<HTMLElement>('button, input, textarea, select')?.focus()
@@ -242,7 +248,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
 
           {/* Error */}
           {updateBooking.isError && (
-            <p className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(updateBooking.error, "Couldn't update this booking. Check your connection and try again.")}</p>
+            <p ref={errorRef} role="alert" style={{ scrollMarginBottom: '4.5rem' }} className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(updateBooking.error, "Couldn't update this booking. Check your connection and try again.")}</p>
           )}
         </div>
       )}

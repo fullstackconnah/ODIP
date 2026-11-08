@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -140,6 +140,23 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
 
     expect(await screen.findByText("Couldn't update this booking. Check your connection and try again.")).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Changed note')
+  })
+
+  it('a refused save announces the error and scrolls it into view', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    putFails = true
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    await user.type(await screen.findByPlaceholderText('Optional notes...'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("Couldn't update this booking")
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' }))
+    expect(scrollIntoView.mock.contexts[0]).toBe(alert)
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
   })
 
   it('sends the updatedAt it loaded, and a stale-edit 409 shows the server message, keeps the modal open and leaves Save enabled', async () => {
