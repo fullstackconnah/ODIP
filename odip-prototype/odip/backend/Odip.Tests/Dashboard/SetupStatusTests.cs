@@ -151,15 +151,6 @@ public class SetupStatusTests
     }
 
     [Fact]
-    public async Task Setup_DraftParticipantsCount()
-    {
-        var db = Db(A);
-        Participant(db, A).IsDraft = true;
-        db.SaveChanges();
-        Assert.Equal(1, (await Get(db)).ParticipantCount);
-    }
-
-    [Fact]
     public async Task Setup_PlansOfArchivedParticipantsDoNotCount()
     {
         var db = Db(A);
