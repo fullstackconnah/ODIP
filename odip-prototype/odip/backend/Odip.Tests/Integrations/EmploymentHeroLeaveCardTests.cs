@@ -116,6 +116,25 @@ public class EmploymentHeroLeaveCardTests
     }
 
     [Fact]
+    public async Task Status_counts_a_long_sent_history_without_listing_it()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant);
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenant);
+        var longAgo = Today.AddDays(-365);
+        for (var i = 0; i < 500; i++)
+            db.EmploymentHeroOutbox.Add(Row(tenant, await LeaveAsync(db, tenant, worker, longAgo, longAgo), EmploymentHeroOutboxKind.Leave, EmploymentHeroOutboxStatus.Sent, 1));
+        db.EmploymentHeroOutbox.Add(Row(tenant, await LeaveAsync(db, tenant, worker, Today, Today), EmploymentHeroOutboxKind.Leave, EmploymentHeroOutboxStatus.Failed, 3, "Employment Hero refused it."));
+        await db.SaveChangesAsync();
+
+        var status = Data(await Controller(db, tenant, new StubHttpHandler()).Status(CancellationToken.None));
+
+        Assert.Equal((500, 0), (status.LeaveSent, status.LeaveWaiting));
+        Assert.Single(status.LeaveProblems);
+    }
+
+    [Fact]
     public async Task Leave_categories_are_saved_audited_and_requeue_waiting_leave()
     {
         var tenant = Guid.NewGuid();
