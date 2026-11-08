@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { participantsCutNote } from '@/api/hooks/pagedList'
 import { useCreateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS } from '@/api/hooks'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
@@ -220,6 +221,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 placeholder="Select a participant..."
                 items={availableParticipants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName }))}
               /></FormField>
+              {participantsCutNote(participants) && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{participantsCutNote(participants)}</p>}
               {availableParticipants.length === 0 && (
                 <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All active participants are already booked on this trip.</p>
               )}

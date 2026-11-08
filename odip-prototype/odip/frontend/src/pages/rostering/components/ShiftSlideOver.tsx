@@ -505,7 +505,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               disabled={!canWrite || isEdit}
               searchable
               label="Select a participant"
-              items={participantOptions}
+              // A shift being edited whose participant is past the list's cut keeps its name (the picker is disabled on edit).
+              items={existing && !participantOptions.some(o => o.value === existing.participantId) ? [{ value: existing.participantId, label: existing.participantName }, ...participantOptions] : participantOptions}
             />}
           </FormField>
           <ReadinessNote issues={readinessIssues} className="mt-1.5" />
