@@ -415,7 +415,7 @@ await scene('touch-390', async () => {
   await dlg.evaluate((el) => el.scrollTo?.(0, 0))
   await shot(page, dlg, 'modal-390.png', { touch: true, natural: true })
   await shot(page, dlg.locator('section[aria-label="Participants"]'), 'modal-390-participants.png', { touch: true, natural: true })
-  await shot(page, dlg.locator('section[aria-label="Staff"]'), 'modal-390-staff.png', { touch: true, natural: true })
+  await shot(page, dlg.locator('section[aria-label="Staff"]'), 'modal-390-staff.png', { touch: true, natural: true, hideChrome: true })
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'modal-390.png'), { touch: true })).checks)
   })
   await context.close()
