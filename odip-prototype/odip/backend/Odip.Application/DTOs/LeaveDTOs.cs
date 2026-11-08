@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Odip.Domain.Rostering;
 
 namespace Odip.Application.DTOs;
@@ -37,7 +38,7 @@ public record CreateLeaveRequestDto
     public LeaveType LeaveType { get; init; }
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
-    public string? Reason { get; init; }
+    [MaxLength(2000)] public string? Reason { get; init; }
     /// <summary>Ignored on the portal path (always the caller's own id). Required on POST /leave — 400 if missing.</summary>
     public Guid? UserId { get; init; }
 }
@@ -45,7 +46,7 @@ public record CreateLeaveRequestDto
 public record LeaveDecisionDto
 {
     /// <summary>Optional on decline — a coordinator may record why, but it's never required. Unused on approve/cancel.</summary>
-    public string? DecisionNote { get; init; }
+    [MaxLength(2000)] public string? DecisionNote { get; init; }
 }
 
 /// <summary>PUT api/v1/leave/{id} body — editable only while Pending or Approved. UserId, Status, RequestedBy*, DecidedBy* are not changeable via this endpoint.</summary>
@@ -54,7 +55,7 @@ public record UpdateLeaveRequestDto
     public LeaveType LeaveType { get; init; }
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
-    public string? Reason { get; init; }
+    [MaxLength(2000)] public string? Reason { get; init; }
 }
 
 public record RecurringUnavailabilityDto
@@ -83,7 +84,7 @@ public record CreateRecurringUnavailabilityDto
     public TimeOnly EndTime { get; init; }
     public DateOnly EffectiveFrom { get; init; }
     public DateOnly? EffectiveTo { get; init; }
-    public string? Notes { get; init; }
+    [MaxLength(2000)] public string? Notes { get; init; }
     /// <summary>Ignored on the portal path (always the caller's own id). Required on POST /leave/unavailability — 400 if missing.</summary>
     public Guid? UserId { get; init; }
 }
@@ -96,7 +97,7 @@ public record UpdateRecurringUnavailabilityDto
     public TimeOnly EndTime { get; init; }
     public DateOnly EffectiveFrom { get; init; }
     public DateOnly? EffectiveTo { get; init; }
-    public string? Notes { get; init; }
+    [MaxLength(2000)] public string? Notes { get; init; }
 }
 
 /// <summary>
