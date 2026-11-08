@@ -71,7 +71,7 @@ try {
       add(`compatibility keeps the unlisted participant's row [${st.name}]`, { rows: nRows }, nRows === 1)
       const fit = await overflow(page)
       add(`no horizontal overflow on compatibility [${st.name}]`, fit, fit.scrollWidth <= fit.clientWidth)
-      const c1 = await cropElement(page, notice, path.join(OUT_DIR, `compatibility-truncated-${st.name}.png`), { touch: mobile, hideChrome: true, also: nav })
+      const c1 = await cropElement(page, notice, path.join(OUT_DIR, `compatibility-truncated-${st.name}.png`), { touch: mobile, hideChrome: true, ...(mobile ? { pad: 48 } : { also: nav }) })
       add(`crop [compatibility-truncated-${st.name}]`, { clip: c1.clip, box: c1.box }, c1.overlap?.pass ?? true)
 
       // MAR filter
