@@ -50,7 +50,7 @@ export interface StaffListDto {
  * `hasSignedIn`: the person has ever signed in (the server sends the fact, not their sign-in time). `signInAddressUnconfirmed`: the Employment Hero sync brought an
  * unusual address and an Admin has yet to confirm it, so the person cannot sign in (null for roles that cannot see sign-in facts).
  */
-export type StaffDetailDto = StaffListDto & { signInInviteSentAt?: string | null; hasSignedIn?: boolean | null; signInAddressUnconfirmed?: boolean | null }
+export type StaffDetailDto = StaffListDto & { updatedAt?: string; signInInviteSentAt?: string | null; hasSignedIn?: boolean | null; signInAddressUnconfirmed?: boolean | null }
 
 export interface CreateStaffDto {
   firstName: string
@@ -82,7 +82,8 @@ export interface CreateStaffDto {
   workerScreeningExpiryDate?: string
 }
 
-export type UpdateStaffDto = CreateStaffDto
+/** expectedUpdatedAt: the detail's updatedAt as loaded; the server answers 409 if the row changed since. */
+export type UpdateStaffDto = CreateStaffDto & { expectedUpdatedAt?: string }
 
 export interface StaffAvailabilityDto {
   id: string
@@ -225,5 +226,5 @@ export function toUpdateStaffDto(row: StaffListDto, patch: Partial<UpdateStaffDt
     workerScreeningExpiryDate: row.workerScreeningExpiryDate ?? undefined,
     goalWeeklyHours: row.goalWeeklyHours,
     ...patch,
-  } satisfies Record<Exclude<keyof UpdateStaffDto, 'addressConfirmed'>, unknown> // a field added to the type and missed here is a type error (addressConfirmed is create-only)
+  } satisfies Record<Exclude<keyof UpdateStaffDto, 'addressConfirmed' | 'expectedUpdatedAt'>, unknown> // a field added to the type and missed here is a type error (addressConfirmed is create-only; expectedUpdatedAt is only sent by the edit form)
 }

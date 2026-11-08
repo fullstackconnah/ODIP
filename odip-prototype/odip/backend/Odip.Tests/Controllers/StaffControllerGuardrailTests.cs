@@ -258,6 +258,34 @@ public class StaffControllerGuardrailTests
         Role = role ?? u.Role, Position = Position.SupportWorker, IsActive = isActive ?? u.IsActive,
     };
 
+    [Fact]
+    public async Task Update_WithAStaleToken_Is409_AndAnArchivedWorkerStaysArchived()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+        var loadedAt = worker.UpdatedAt;
+        Assert.IsType<OkObjectResult>((await MakeController(db, "Admin").Update(worker.Id, EditOf(worker, isActive: false), CancellationToken.None)).Result);
+
+        var stale = EditOf(worker, isActive: true) with { ExpectedUpdatedAt = loadedAt.AddMinutes(-1) };
+        var result = await MakeController(db, "Admin").Update(worker.Id, stale, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.False((await db.Users.SingleAsync(u => u.Id == worker.Id)).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_WithTheCurrentToken_Saves_AndWithNoToken_SavesAsBefore()
+    {
+        var (db, tenantId) = CreateDb();
+        var worker = SeedUser(db, tenantId, UserRole.SupportWorker);
+
+        var fresh = EditOf(worker, mobile: "0400 000 001") with { ExpectedUpdatedAt = worker.UpdatedAt };
+        Assert.IsType<OkObjectResult>((await MakeController(db, "Admin").Update(worker.Id, fresh, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await MakeController(db, "Admin").Update(worker.Id, EditOf(worker, mobile: "0400 000 002"), CancellationToken.None)).Result);
+
+        Assert.Equal("0400 000 002", (await db.Users.SingleAsync(u => u.Id == worker.Id)).Mobile);
+    }
+
     private static string Error<T>(ActionResult<ApiResponse<T>> result)
     {
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
