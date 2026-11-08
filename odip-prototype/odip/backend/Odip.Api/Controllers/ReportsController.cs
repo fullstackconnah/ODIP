@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 
 namespace Odip.Api.Controllers;
 
@@ -91,6 +92,22 @@ public class ReportsController : ControllerBase
             perWorker[c.SubmittedByUserId] = c.Awaiting
                 ? (cur.Shifts, cur.Approved, cur.Awaiting + paid)
                 : (cur.Shifts + 1, cur.Approved + paid, cur.Awaiting);
+        }
+
+        // Group activity staff rows: approved ones are hours, finished and unreviewed ones are awaiting. A started or unstarted row is neither. Actual times, else the rostered ones.
+        var groupRows = await _db.GroupActivityStaff.AsNoTracking().Include(r => r.GroupActivity)
+            .Where(r => r.TenantId == tid && r.GroupActivity!.ServiceDate >= f && r.GroupActivity.ServiceDate <= t
+                && (r.ReviewOutcome == ReviewOutcome.Approved || (r.SubmittedAt != null && r.ReviewOutcome == null && r.GroupActivity.Status != ShiftStatus.Draft && r.GroupActivity.Status != ShiftStatus.Cancelled)))
+            .ToListAsync(ct);   // shortcut: one read per range; page it if a tenant's group rows pass a few thousand
+        foreach (var g in groupRows)
+        {
+            var (shift, completion, shiftBreaks) = EmploymentHeroTimesheets.ForStaffRow(g.GroupActivity!, g)
+                ?? (new Shift { StartTime = g.StartTime, EndTime = g.EndTime, EndsNextDay = g.EndsNextDay }, new ShiftCompletion(), new List<ShiftBreak>());
+            var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks).PaidMinutes;
+            var cur = perWorker.GetValueOrDefault(g.UserId);
+            perWorker[g.UserId] = g.ReviewOutcome == ReviewOutcome.Approved
+                ? (cur.Shifts + 1, cur.Approved + paid, cur.Awaiting)
+                : (cur.Shifts, cur.Approved, cur.Awaiting + paid);
         }
 
         var names = await NamesAsync(tid, perWorker.Keys, ct);

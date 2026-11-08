@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -118,6 +119,7 @@ public class PortalActivityShiftsController : ControllerBase
             row.LocationCheck = check.Status;
             row.LocationDistanceMetres = check.DistanceMetres;
             if (activity.Status == ShiftStatus.Published) { activity.Status = ShiftStatus.InProgress; activity.UpdatedAt = now; }
+            await RaiseFinishedAsync(row, activity, ct);
             await _db.SaveChangesAsync(ct);
             await board.CommitAsync(ct);
             return await AnswerAsync(row, ct);
@@ -186,6 +188,16 @@ public class PortalActivityShiftsController : ControllerBase
             _db.ChangeTracker.Clear();
             return Refuse(409, RosterGenerationLock.RosterBoardBusyMessage);
         }
+    }
+
+    /// <summary>Tells every active Admin and Coordinator of the organisation the hours are ready for review, in the Finish's own save (the audience and event of a shift's Finish).</summary>
+    private async Task RaiseFinishedAsync(GroupActivityStaff row, GroupActivity activity, CancellationToken ct)
+    {
+        var workerName = await _db.Users.Where(u => u.Id == row.UserId).Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var recipients = await _db.Users.Where(u => u.TenantId == row.TenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator)).ToListAsync(ct);
+        foreach (var recipient in recipients)
+            await _notificationRaiser.RaiseAsync(Odip.Domain.Notifications.NotificationEventType.ShiftCompletionPendingReview, "GroupActivityStaff", row.Id, new[] { recipient.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftCompletionPendingReviewPayload(recipient.Email, workerName, activity.Title, activity.ServiceDate, activity.Title), ct);
     }
 
     /// <summary>A transient shift with the row's own planned times at the activity's place, for the zone and the rostered window. Never attached to the context.</summary>
