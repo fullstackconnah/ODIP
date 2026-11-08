@@ -114,6 +114,7 @@ public sealed class EmploymentHeroTimesheetSender
         if (collided > 0) _logger.LogInformation("Employment Hero timesheet scan for organisation {TenantId} collided with another run on {Collided} shifts", tenantId, collided);
     }
 
+    // group staff rows are frozen at approval (GA PR3 decision 14), so they are never re-checked here: this stays Timesheet-only
     /// <summary>Re-builds sent rows from today's data: an edit puts the row back in the queue, and a Changed row whose data matches what was sent again is Sent. Group staff rows are not rebuilt: they are frozen at approval (GA PR3 decision 14).</summary>
     private async Task CheckChangesAsync(OdipDbContext db, Guid tenantId, EmploymentHeroTimesheets.TimesheetMapping map, TimeZoneInfo zone, DateTime now, CancellationToken ct)
     {

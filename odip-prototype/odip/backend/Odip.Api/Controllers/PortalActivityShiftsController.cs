@@ -61,6 +61,7 @@ public class PortalActivityShiftsController : ControllerBase
     {
         if (row?.GroupActivity is not { } activity || activity.Status == ShiftStatus.Draft) return (Refuse(404, ShiftNotFoundMessage), false);
         if (!await GroupActivitiesController.FlagOnAsync(_db, row.TenantId, ct)) return (Refuse(409, GroupActivitiesController.DisabledMessage, "GA_DISABLED"), false);
+        // The flag is read on every write: do not turn it off while an activity is InProgress, its staff could not Finish until it is back on (GA PR3).
         if (activity.Status == ShiftStatus.Cancelled) return (Refuse(409, "This group activity is cancelled.", "GA_CANCELLED"), false);
         return row.State switch
         {
@@ -106,6 +107,7 @@ public class PortalActivityShiftsController : ControllerBase
             var place = activity.ServiceLocationId is { } placeId
                 ? await _db.ServiceLocations.AsNoTracking().FirstOrDefaultAsync(l => l.Id == placeId && l.TenantId == row.TenantId, ct)
                 : null;
+            // shortcut: no reason prompt after an off-site Start; add one if coordinators ask why
             var check = LocationCheck.Evaluate(place, dto.Latitude, dto.Longitude, dto.AccuracyMetres, dto.GeolocationDeclined, queued: false);
             row.ActualStart = now;
             row.StartedAt = now;
