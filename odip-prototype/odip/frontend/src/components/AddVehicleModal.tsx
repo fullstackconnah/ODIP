@@ -256,6 +256,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
           <div className={modalGrid}>
             <FormField label="Vehicle name" required className={modalSpan.full}><input
                 type="text"
+                maxLength={100}
                 value={vehicleName}
                 onChange={e => setVehicleName(e.target.value)}
                 disabled={!!newVehicleId}

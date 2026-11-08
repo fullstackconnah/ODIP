@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import { useState } from 'react'
 import { render, cleanup, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RosterGateFields } from './RosterGateFields'
@@ -128,5 +129,21 @@ describe('nothing else about the block changed', () => {
     await user.type(screen.getByLabelText(/reason for override/i), 'a')
 
     expect(onChange).toHaveBeenCalledWith('a')
+  })
+})
+
+describe('the reason box length', () => {
+  it('stops at the 2,000-character column cap when text is pasted past it', async () => {
+    function Stateful() {
+      const [reason, setReason] = useState('')
+      return <Gate findings={[reasonRequired]} overrideReason={reason} onOverrideReasonChange={setReason} />
+    }
+    render(<Stateful />)
+    const box = screen.getByLabelText(/reason for override/i)
+    await userEvent.setup().click(box)
+    await userEvent.setup().paste('x'.repeat(2010))
+
+    expect(box).toHaveAttribute('maxlength', '2000')
+    expect((box as HTMLTextAreaElement).value).toHaveLength(2000)
   })
 })

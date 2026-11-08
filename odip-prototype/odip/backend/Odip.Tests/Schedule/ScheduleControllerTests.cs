@@ -51,6 +51,29 @@ public class ScheduleControllerTests
     private static List<ScheduleAvailabilityItemDto> AvailabilityFor(ApiResponse<ScheduleOverviewDto> body, Guid staffId) =>
         body.Data!.Staff.Single(s => s.Id == staffId).Availability;
 
+    [Theory]
+    [InlineData(2016, 1, 1, 2026, 1, 1, false)]   // ten years
+    [InlineData(2026, 1, 1, 2027, 12, 31, true)]  // 730 days
+    [InlineData(2026, 1, 1, 2028, 1, 1, true)]    // 731 days
+    [InlineData(2026, 1, 1, 2028, 1, 2, false)]   // 732 days
+    [InlineData(2026, 3, 1, 2026, 2, 1, false)]   // ends before it starts
+    public async Task WindowOverSevenHundredAndThirtyOneDays_Or_Backwards_Is400(int fy, int fm, int fd, int ty, int tm, int td, bool accepted)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        var result = await controller.GetScheduleOverview(new DateOnly(fy, fm, fd), new DateOnly(ty, tm, td), CancellationToken.None);
+        if (accepted) Assert.IsType<OkObjectResult>(result.Result);
+        else Assert.Contains("731 days", Assert.Single(Assert.IsType<ApiResponse<ScheduleOverviewDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!));
+    }
+
+    [Fact]
+    public async Task DefaultWindow_IsAccepted()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ScheduleController(db, new StaffUnavailabilityQuery(db), new StaffAvailabilityItemsQuery(db));
+        Assert.IsType<OkObjectResult>((await controller.GetScheduleOverview(null, null, CancellationToken.None)).Result);
+    }
+
     [Fact]
     public async Task PendingLeaveOverlappingTrip_StatusIsTentative()
     {

@@ -203,4 +203,15 @@ describe('AddVehicleModal — form labels and search', () => {
     await user.type(screen.getByRole('textbox', { name: 'Search by name or rego...' }), 'zzz')
     expect(screen.getByText('No vehicles found')).toBeInTheDocument()
   })
+
+  it('stops a new vehicle name at the 100-character column cap', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await user.click(screen.getByRole('button', { name: 'Add New Vehicle' }))
+    const name = screen.getByPlaceholderText('e.g. Toyota HiAce')
+    await user.click(name)
+    await user.paste('x'.repeat(110))
+    expect(name).toHaveAttribute('maxlength', '100')
+    expect((name as HTMLInputElement).value).toHaveLength(100)
+  })
 })

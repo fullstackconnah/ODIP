@@ -16,9 +16,11 @@ const PARTICIPANTS = [
   { id: 'p1', fullName: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera' },
   { id: 'p2', fullName: 'Jamie Chen', firstName: 'Jamie', lastName: 'Chen' },
 ]
+// The truncated case swaps in a TruncatableList (pagedList.ts): a plain array carrying totalCount and isTruncated.
+let participantsData: unknown = PARTICIPANTS
 vi.mock('@/api/hooks', async orig => ({
   ...(await orig<object>()),
-  useParticipants: () => ({ data: PARTICIPANTS, isLoading: false, isError: false, refetch: vi.fn() }),
+  useParticipants: () => ({ data: participantsData, isLoading: false, isError: false, refetch: vi.fn() }),
   useStaff: () => ({
     data: [
       { id: 's1', fullName: 'Sam Taylor', isActive: true },
@@ -49,6 +51,7 @@ function renderPage(url = '/rostering/compatibility?view=table') {
 }
 
 beforeEach(() => {
+  participantsData = PARTICIPANTS
   perms.canWrite = true
   perms.isAdmin = false
   narrow.value = false
@@ -337,5 +340,25 @@ describe('CompatibilityPage: the participant board', () => {
     const scroller = nav.querySelector('ul') as HTMLElement
     expect(scroller.className).toContain('lg:overflow-y-auto')
     expect(scroller).not.toContainElement(within(nav).getByRole('textbox', { name: 'Search participants' }))
+  })
+})
+
+describe('CompatibilityPage: a participant list cut at the server ceiling', () => {
+  const truncated = () => Object.assign([...PARTICIPANTS], { totalCount: 250, isTruncated: true })
+
+  it('says the list is cut and keeps the restriction of a participant who is not in it', async () => {
+    participantsData = truncated()
+    renderPage('/rostering/compatibility?view=table')
+    expect(await screen.findByRole('grid')).toBeInTheDocument()
+    expect(screen.getByText(/Showing the first 2 of 250 participants/)).toBeInTheDocument()
+    expect(screen.getAllByRole('rowheader')).toHaveLength(3)
+    expect(screen.getByRole('rowheader', { name: /Exited Person/ })).toBeInTheDocument()
+  })
+
+  it('shows no notice and drops unlisted participants when the list is whole', async () => {
+    renderPage('/rostering/compatibility?view=table')
+    expect(await screen.findByRole('grid')).toBeInTheDocument()
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('rowheader')).toHaveLength(2)
   })
 })

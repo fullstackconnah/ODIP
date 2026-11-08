@@ -967,7 +967,7 @@ public record CreateTripDto : IValidatableObject
 {
     [Required, StringLength(200, MinimumLength = 1)]
     public string TripName { get; init; } = string.Empty;
-    [StringLength(50)]
+    [StringLength(20)]
     public string? TripCode { get; init; }
     public Guid? EventTemplateId { get; init; }
     [StringLength(200)]
@@ -1275,7 +1275,7 @@ public record VehicleDetailDto : VehicleListDto
 
 public record CreateVehicleDto
 {
-    [Required, StringLength(200, MinimumLength = 1)]
+    [Required, StringLength(100, MinimumLength = 1)]
     public string VehicleName { get; init; } = string.Empty;
     [StringLength(20)]
     public string? Registration { get; init; }
@@ -1333,6 +1333,7 @@ public record CreateVehicleAssignmentDto
     public string? PickupTravelNotes { get; init; }
     public string? Comments { get; init; }
     /// <summary>Required when the candidate carries a RequiresReason finding; ignored (never enough) for a Blocking finding.</summary>
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
     public List<string>? AcknowledgedFindingCodes { get; init; }
@@ -1640,6 +1641,7 @@ public record CreateStaffAssignmentDto
     public SleepoverType SleepoverType { get; init; } = SleepoverType.None;
     public string? ShiftNotes { get; init; }
     /// <summary>Required when the candidate carries a RequiresReason finding; ignored (never enough) for a Blocking finding.</summary>
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
     public List<string>? AcknowledgedFindingCodes { get; init; }
@@ -1707,7 +1709,7 @@ public record ScheduledActivityDto
 public record CreateScheduledActivityDto
 {
     public Guid? ActivityId { get; init; }
-    [Required, StringLength(300, MinimumLength = 1)]
+    [Required, StringLength(200, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;
     public TimeOnly? StartTime { get; init; }
     public TimeOnly? EndTime { get; init; }
@@ -1737,6 +1739,7 @@ public record CreateScheduledActivityDto
 public record UpdateScheduledActivityDto
 {
     public Guid? ActivityId { get; init; }
+    [StringLength(200)]
     public string Title { get; init; } = string.Empty;
     public TimeOnly? StartTime { get; init; }
     public TimeOnly? EndTime { get; init; }
@@ -1745,10 +1748,15 @@ public record UpdateScheduledActivityDto
     public string? Notes { get; init; }
     public int SortOrder { get; init; }
     public ScheduledActivityStatus Status { get; init; }
+    [StringLength(200)]
     public string? BookingReference { get; init; }
+    [StringLength(200)]
     public string? ProviderName { get; init; }
+    [StringLength(50)]
     public string? ProviderPhone { get; init; }
+    [StringLength(200)]
     public string? ProviderEmail { get; init; }
+    [StringLength(500)]
     public string? ProviderWebsite { get; init; }
     public decimal? EstimatedCost { get; init; }
 }
@@ -1847,6 +1855,7 @@ public record CreateActivityDto
     [Required, StringLength(200, MinimumLength = 1)]
     public string ActivityName { get; init; } = string.Empty;
     public ActivityCategory Category { get; init; }
+    [StringLength(200)]
     public string? Location { get; init; }
     public string? AccessibilityNotes { get; init; }
     public string? SuitabilityNotes { get; init; }
@@ -2580,9 +2589,13 @@ public record AdminUserDto
 
 public record CreateAdminUserDto
 {
+    [StringLength(100)]
     public string FirstName { get; init; } = string.Empty;
+    [StringLength(100)]
     public string LastName { get; init; } = string.Empty;
+    [StringLength(200)]
     public string Email { get; init; } = string.Empty;
+    [StringLength(100)]
     public string Username { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
     public Guid TenantId { get; init; }
@@ -2595,6 +2608,7 @@ public record CreateAdminUserDto
     public Position? Position { get; init; }
     [StringLength(20, ErrorMessage = "Mobile can be up to 20 characters.")]
     public string? Mobile { get; init; }
+    [StringLength(100)]
     public string? Region { get; init; }
     public bool IsDriverEligible { get; init; }
     public bool IsFirstAidQualified { get; init; }
@@ -2607,16 +2621,22 @@ public record CreateAdminUserDto
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    [StringLength(50)]
     public string? WorkerScreeningNumber { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
+    [StringLength(2000)]
     public string? Notes { get; init; }
 }
 
 public record UpdateAdminUserDto
 {
+    [StringLength(100)]
     public string FirstName { get; init; } = string.Empty;
+    [StringLength(100)]
     public string LastName { get; init; } = string.Empty;
+    [StringLength(200)]
     public string Email { get; init; } = string.Empty;
+    [StringLength(100)]
     public string Username { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
     public bool IsActive { get; init; }
