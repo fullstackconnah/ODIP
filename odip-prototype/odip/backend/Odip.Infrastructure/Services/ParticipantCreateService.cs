@@ -47,6 +47,7 @@ public sealed class ParticipantCreateService
     /// <returns>The tracked, unsaved participant; or the 400 message, in the order the controller checked them.</returns>
     public async Task<(Participant? Participant, string? Error)> StageAsync(CreateParticipantDto dto, string actor, CancellationToken ct)
     {
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var error = ParticipantPatchApplier.ValidateNames(dto)
             ?? InvalidMobilityOptions(dto)
             ?? ParticipantPatchApplier.ValidateGender(dto)
@@ -58,7 +59,10 @@ public sealed class ParticipantCreateService
             ?? ParticipantPatchApplier.ValidateWeight(dto)
             ?? ParticipantPatchApplier.ValidateHeight(dto)
             ?? ParticipantPatchApplier.ValidateDiagnoses(dto)
-            ?? ValidateContactRoles(dto, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
+            ?? ParticipantPatchApplier.ValidateNdisNumber(dto.NdisNumber)
+            ?? ParticipantPatchApplier.ValidateDateOfBirthRange(dto.DateOfBirth, today)
+            ?? ParticipantPatchApplier.ValidatePlanDates(dto.PlanStartDate, dto.PlanEndDate)
+            ?? ValidateContactRoles(dto, today);
         if (error != null) return (null, error);
 
         if (!await ParticipantPatchApplier.IsValidPreferredUserRefAsync(_db, dto.PreferredStaffId, ct))
@@ -274,6 +278,9 @@ public sealed class ParticipantCreateService
                 if (dto.IsDraft) continue;
                 return "Each contact needs either an existing person or a new person's name.";
             }
+
+            // A new person is held to the Persons page's email and date-of-birth rules; an existing one is already stored.
+            if (role.PersonId is null && ParticipantPatchApplier.ValidatePersonContact(role.NewPersonEmail, role.NewPersonDateOfBirth, null, null, asOf) is { } personError) return personError;
 
             var gateError = ContactRoleRules.Validate(role.RoleType, dto.PlanType, dto.DateOfBirth, role.RegisteredProviderFlag, asOf);
             if (gateError != null) return gateError;
