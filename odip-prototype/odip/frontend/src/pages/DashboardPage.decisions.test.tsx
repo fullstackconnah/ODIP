@@ -10,7 +10,7 @@ vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (awai
 installDashboardDefaults()
 
 const NOUNS: Record<GroupKey, string> = {
-  completions: 'shift completions', leave: 'leave requests', incidents: 'open incidents', compliance: 'staff credentials to update', tasks: 'tasks due',
+  completions: 'shift completions', leave: 'leave requests', incidents: 'open incidents', compliance: 'staff credentials to update', tasks: 'tasks due', groupStaff: 'group activity hours',
 }
 const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, facts: [], flags: [], actions: [] })
 const group = (key: GroupKey, o: Partial<GroupModel> = {}): GroupModel => ({
