@@ -91,7 +91,7 @@ public class TripsController : ControllerBase
         // The claim guard (GenerateDraftClaimAsync) refuses a trip while any claim on it is not Rejected, so "unclaimed" is exactly the trips it would let through.
         if (unclaimed) query = query.Where(t => !_db.TripClaims.Any(c => c.TripInstanceId == t.Id && c.Status != TripClaimStatus.Rejected));
 
-        var projectedQuery = query.OrderByDescending(t => t.StartDate)
+        var projectedQuery = query.OrderByDescending(t => t.StartDate).ThenBy(t => t.Id)
             .Select(t => new TripListDto
             {
                 Id = t.Id, TripName = t.TripName, TripCode = t.TripCode, Destination = t.Destination,
