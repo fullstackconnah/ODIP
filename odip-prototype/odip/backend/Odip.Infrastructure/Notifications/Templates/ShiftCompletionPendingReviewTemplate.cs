@@ -18,9 +18,7 @@ public static class ShiftCompletionPendingReviewTemplate
             RecipientAddress: p.RecipientEmail,
             Subject: $"Group activity ready for review: {p.WorkerName} / {title}",
             PlainTextBody: $"{p.WorkerName}'s hours for {title} on {Html.Date(p.ServiceDate)} " +
-                           $"have been submitted and are awaiting review.
-
-Review it: {baseUrl}/rostering/completions",
+                           $"have been submitted and are awaiting review.\n\nReview it: {baseUrl}/rostering/completions",
             HtmlBody: $"<p>{Html.E(p.WorkerName)}'s hours for {Html.E(title)} on {Html.Date(p.ServiceDate)} " +
                       $"have been submitted and are awaiting review.</p>" +
                       $"<p><a href=\"{Html.Attr(baseUrl)}/rostering/completions\">Review it</a></p>")

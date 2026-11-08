@@ -125,9 +125,7 @@ public class TemplateRenderingTests
 
         Assert.Equal("Group activity ready for review: Ben Turner / Bowling", message.Subject);
         Assert.Contains("Ben Turner's hours for Bowling on ", message.PlainTextBody);
-        Assert.Contains("have been submitted and are awaiting review.
-
-Review it: https://odip.test/rostering/completions", message.PlainTextBody);
+        Assert.Contains("have been submitted and are awaiting review.\n\nReview it: https://odip.test/rostering/completions", message.PlainTextBody);
         Assert.Contains("https://odip.test/rostering/completions", message.HtmlBody);
     }
 
