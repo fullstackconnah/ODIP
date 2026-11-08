@@ -6719,6 +6719,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Title")
+                        .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
@@ -8843,8 +8844,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Activity");
 
                     b.Navigation("ServiceLocation");
-
-                    b.Navigation("Staff");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.GroupActivityStaff", b =>
@@ -9240,6 +9239,11 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Funding.FundingPool", b =>
                 {
                     b.Navigation("Periods");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivity", b =>
+                {
+                    b.Navigation("Staff");
                 });
 #pragma warning restore 612, 618
         }
