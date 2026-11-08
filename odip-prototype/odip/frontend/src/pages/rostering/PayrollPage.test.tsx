@@ -154,6 +154,13 @@ describe('PayrollPage', () => {
     expect(document.body.textContent).toMatch(/paid 9:00[^a-z]{1,2}am.{1,5}5:00[^a-z]{1,2}pm/)
   })
 
+  it('tags a group activity line with a "Group activity" pill, and a plain shift with none', async () => {
+    setup(check({ workers: [worker({ shifts: [shift({ shiftId: 'g', participantName: 'Bowling', isGroupActivity: true }), shift({ shiftId: 'plain' })] })] }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show shifts: Sam Support' }))
+    expect(screen.getAllByText('Group activity')).toHaveLength(1)
+    expect(screen.getByText(/Bowling/)).toBeInTheDocument()
+  })
+
   it('says the break minutes are unpaid ones (a break with the participant is not deducted)', async () => {
     setup(check())
     await userEvent.click(screen.getByRole('button', { name: 'Show shifts: Sam Support' }))

@@ -7,9 +7,13 @@ using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Notifications;
+using Odip.Infrastructure.Notifications.Templates;
 using Xunit;
 
 namespace Odip.Tests.GroupActivities;
@@ -48,7 +52,8 @@ public class GroupActivityWorkPortalTests
         {
             var tenant = new Mock<ICurrentTenant>();
             tenant.Setup(t => t.TenantId).Returns(tenantId ?? Fx.TenantId);
-            var c = new PortalActivityShiftsController(Fx.Fresh(), tenant.Object, new Clock(now));
+            var db = Fx.Fresh();
+            var c = new PortalActivityShiftsController(db, tenant.Object, new Clock(now), new NotificationRaiser(db));
             c.ControllerContext = new ControllerContext
             {
                 HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, (as_ ?? Worker.Id).ToString())], "test")) },
@@ -335,4 +340,91 @@ public class GroupActivityWorkPortalTests
 
     private static Task<List<PortalActivityShiftDto>> PortalActivityShiftsLookup(Rig rig, Guid staffId) =>
         Odip.Api.Rostering.PortalActivityShifts.ListAsync(rig.Fx.Fresh(), staffId, GroupActivityFixture.Day.AddDays(-7), GroupActivityFixture.Day.AddDays(7), GroupActivityFixture.Day, default);
+
+    // ---- finish notice to coordinators (GA payroll) ----
+
+    private static User StaffOf(Rig rig, UserRole role, bool active = true, Guid? tenantId = null)
+    {
+        var u = rig.Fx.AddUser("Cora", active, tenantId);
+        var tracked = rig.Fx.Seed.Users.IgnoreQueryFilters().Single(x => x.Id == u.Id);
+        tracked.Role = role;
+        rig.Fx.Seed.SaveChanges();
+        return tracked;
+    }
+
+    private static Task<List<NotificationOutbox>> NoticesAsync(Rig rig) =>
+        rig.Fx.Fresh().NotificationOutbox.IgnoreQueryFilters().AsNoTracking().Where(o => o.EventType == NotificationEventType.ShiftCompletionPendingReview).ToListAsync();
+
+    [Fact]
+    public async Task Finish_RaisesPendingReview_ToActiveAdminsAndCoordinatorsOfTenant()
+    {
+        var rig = new Rig();
+        var admin = StaffOf(rig, UserRole.Admin);
+        var coordinator = StaffOf(rig, UserRole.Coordinator);
+        StaffOf(rig, UserRole.Coordinator, active: false);
+        StaffOf(rig, UserRole.SupportWorker);
+        StaffOf(rig, UserRole.Coordinator, tenantId: Guid.NewGuid());
+        await rig.Controller(During).Start(rig.Row.Id, NoLocation, default);
+
+        GroupActivityFixture.Body(await rig.Controller(During.AddHours(3)).Finish(rig.Row.Id, new FinishActivityShiftDto(), default), 200);
+
+        var notices = await NoticesAsync(rig);
+        Assert.Equal(new[] { admin.Id, coordinator.Id }.Order(), notices.Select(n => n.RecipientUserId).Order());
+        Assert.All(notices, n => Assert.Equal(("GroupActivityStaff", rig.Row.Id), (n.EntityType, n.EntityId)));
+        var payload = System.Text.Json.JsonSerializer.Deserialize<ShiftCompletionPendingReviewPayload>(notices[0].PayloadJson)!;
+        Assert.Equal(("Wendy Worker", rig.Activity.Title), (payload.WorkerName, payload.ActivityTitle));
+    }
+
+    [Fact]
+    public async Task Finish_Replay_RaisesNothingMore()
+    {
+        var rig = new Rig();
+        StaffOf(rig, UserRole.Coordinator);
+        await rig.Controller(During).Start(rig.Row.Id, NoLocation, default);
+        await rig.Controller(During.AddHours(3)).Finish(rig.Row.Id, new FinishActivityShiftDto(), default);
+
+        await rig.Controller(During.AddHours(3.1)).Finish(rig.Row.Id, new FinishActivityShiftDto(), default);
+
+        Assert.Single(await NoticesAsync(rig));
+    }
+
+    [Fact]
+    public async Task Start_RaisesNothing()
+    {
+        var rig = new Rig();
+        StaffOf(rig, UserRole.Admin);
+        StaffOf(rig, UserRole.Coordinator);
+
+        await rig.Controller(During).Start(rig.Row.Id, NoLocation, default);
+
+        Assert.Empty(await NoticesAsync(rig));
+    }
+
+    [Fact]
+    public async Task Finish_NeverStarted_WithTypedStart_RaisesOnePerAdminAndCoordinator()
+    {
+        var rig = new Rig();
+        var admin = StaffOf(rig, UserRole.Admin);
+        var coordinator = StaffOf(rig, UserRole.Coordinator);
+
+        GroupActivityFixture.Body(await rig.Controller(During).Finish(rig.Row.Id, new FinishActivityShiftDto { ActualStart = During.UtcDateTime.AddHours(-2) }, default), 200);
+
+        Assert.Equal(new[] { admin.Id, coordinator.Id }.Order(), (await NoticesAsync(rig)).Select(n => n.RecipientUserId).Order());
+    }
+
+    [Fact]
+    public async Task RecordTimes_RaisesNothing()
+    {
+        var rig = new Rig();
+        var coordinator = StaffOf(rig, UserRole.Coordinator);
+        var activity = rig.Fx.AddActivity(ShiftStatus.InProgress, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
+        var row = new GroupActivityStaff { Id = Guid.NewGuid(), TenantId = rig.Fx.TenantId, GroupActivityId = activity.Id, UserId = rig.Worker.Id, StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0), TimeZoneId = "Australia/Sydney" };
+        rig.Fx.Seed.GroupActivityStaff.Add(row);
+        rig.Fx.Seed.SaveChanges();
+        var times = new SetGroupStaffActualsDto { ActualStart = DateTime.UtcNow.AddHours(-5), ActualEnd = DateTime.UtcNow.AddHours(-1), Reason = "Forgot to tap Finish" };
+
+        GroupActivityFixture.Body(await rig.Fx.Controller(userId: coordinator.Id).SetStaffActuals(activity.Id, row.Id, times, default), 200);
+
+        Assert.Empty(await NoticesAsync(rig));
+    }
 }

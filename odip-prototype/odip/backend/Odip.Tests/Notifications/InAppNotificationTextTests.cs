@@ -89,6 +89,16 @@ public class InAppNotificationTextTests
 
     /// <summary>Fix round 1 (CR-B N2): a missing name reads as a neutral word, never as a gap at the start of the sentence.</summary>
     [Fact]
+    public void Build_AGroupActivityFinish_NamesTheActivity_AndTheShiftCaseIsUnchanged()
+    {
+        var (title, link) = InAppNotificationText.Build(NotificationEventType.ShiftCompletionPendingReview, Id,
+            new ShiftCompletionPendingReviewPayload("a@x.au", "Sam Lee", "Bowling", Oct13, "Bowling"));
+
+        Assert.Equal("Sam Lee's hours for Bowling on Tue 13 Oct are ready for review.", title);
+        Assert.Equal("/rostering/completions", link);
+    }
+
+    [Fact]
     public void Build_AMissingName_ReadsAsANeutralWord()
     {
         Assert.Equal("Someone asked for annual leave, 13 Oct.", InAppNotificationText.Build(NotificationEventType.LeaveRequestSubmitted, Id,

@@ -287,4 +287,38 @@ public class EmploymentHeroTimesheetCardTests
         Assert.Empty(await db.EmploymentHeroOutbox.ToListAsync());
         Assert.Equal("888", (await db.EmploymentHeroConnections.SingleAsync()).BusinessId);
     }
+
+    [Fact]
+    public async Task WorkTypes_Change_RetimesPendingKind3Rows()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant);
+        var group = Row(tenant, EmploymentHeroOutboxStatus.Pending);
+        group.Kind = EmploymentHeroOutboxKind.GroupStaffTimesheet;
+        db.EmploymentHeroOutbox.Add(group);
+        await db.SaveChangesAsync();
+
+        Data(await Controller(db, tenant, WorkTypes()).SaveWorkTypes(new EmploymentHeroWorkTypesDto("7", "8", null, null), CancellationToken.None));
+
+        Assert.Equal(Clock().GetUtcNow().UtcDateTime, (await db.EmploymentHeroOutbox.SingleAsync()).NextAttemptAt);
+    }
+
+    [Fact]
+    public async Task Status_CountsIncludeKind3Rows()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant);
+        var sent = Row(tenant, EmploymentHeroOutboxStatus.Sent);
+        sent.Kind = EmploymentHeroOutboxKind.GroupStaffTimesheet;
+        var waiting = Row(tenant, EmploymentHeroOutboxStatus.Pending);
+        waiting.Kind = EmploymentHeroOutboxKind.GroupStaffTimesheet;
+        db.EmploymentHeroOutbox.AddRange(sent, waiting);
+        await db.SaveChangesAsync();
+
+        var status = Data(await Controller(db, tenant, new StubHttpHandler()).Status(CancellationToken.None));
+
+        Assert.Equal((1, 1), (status.TimesheetsSent, status.TimesheetsWaiting));
+    }
 }
