@@ -240,6 +240,10 @@ public class BookingsController : ControllerBase
         var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
+        // The editor read the booking at ExpectedUpdatedAt; a PATCH or another edit since then moved UpdatedAt, and this whole-row save would write over it. Absent: saved as before.
+        // Compared to the microsecond (the column's precision), as IntakeBookingsController.IsStale does.
+        if (dto.ExpectedUpdatedAt is { } expected && b.UpdatedAt.Ticks - b.UpdatedAt.Ticks % 10 != expected.Ticks - expected.Ticks % 10)
+            return Conflict(ApiResponse<BookingDetailDto>.Fail("Someone else just changed this booking. Close it and open it again to see their changes."));
 
         var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
         b.BookingStatus = dto.BookingStatus; b.SupportRatioOverride = dto.SupportRatioOverride;

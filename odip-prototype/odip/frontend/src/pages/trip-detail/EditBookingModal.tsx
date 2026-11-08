@@ -78,6 +78,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
       equipmentNotes: detail.equipmentNotes ?? undefined,
       riskSupportNotes: detail.riskSupportNotes ?? undefined,
       cancellationReason: detail.cancellationReason ?? undefined,
+      expectedUpdatedAt: detail.updatedAt,
       bookingStatus: (editForm.bookingStatus || undefined) as BookingStatus | undefined,
       supportRatioOverride: (editForm.supportRatioOverride || undefined) as SupportRatio | undefined,
       wheelchairRequired: editForm.wheelchairRequired,

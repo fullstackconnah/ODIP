@@ -1106,6 +1106,8 @@ public record UpdateBookingDto : CreateBookingDto
     public PaymentStatus PaymentStatus { get; init; }
     public bool ActionRequired { get; init; }
     public string? CancellationReason { get; init; }
+    /// <summary>The UpdatedAt the editor read; when it no longer matches the stored row the save is refused (409). Omitted: saved as before.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 public record PatchBookingDto

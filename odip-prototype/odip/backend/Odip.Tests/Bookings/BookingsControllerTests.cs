@@ -375,4 +375,38 @@ public class BookingsControllerTests
         PaymentStatus = PaymentStatus.NotInvoiced, ExpectedUpdatedAt = expectedUpdatedAt,
         InsuranceCoverageStart = coverStart, InsuranceCoverageEnd = coverEnd, CancellationReason = cancellationReason,
     };
+
+    // H44-3: a PUT built from an older read is refused and saves nothing.
+    [Fact]
+    public async Task Update_WithAStaleExpectedUpdatedAt_Is409AndKeepsThePatchedValue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        b.UpdatedAt = DateTime.UtcNow.AddMinutes(-5);
+        await db.SaveChangesAsync();
+        var controller = new BookingsController(db);
+
+        var read = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(b.Id, CancellationToken.None)).Result).Value).Data!;
+        await controller.Patch(b.Id, new PatchBookingDto { PaymentStatus = PaymentStatus.InvoiceSent }, CancellationToken.None);
+
+        var result = await controller.Update(b.Id, UpdateDto(b, read.UpdatedAt), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this booking. Close it and open it again to see their changes.", Assert.IsType<ApiResponse<BookingDetailDto>>(conflict.Value).Errors![0]);
+        Assert.Equal(PaymentStatus.InvoiceSent, (await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Id)).PaymentStatus);
+    }
+
+    [Fact]
+    public async Task Update_WithTheCurrentExpectedUpdatedAt_OrNone_Saves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        var controller = new BookingsController(db);
+
+        var current = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(b.Id, CancellationToken.None)).Result).Value).Data!.UpdatedAt;
+        Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b, current), CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b), CancellationToken.None)).Result);
+    }
 }

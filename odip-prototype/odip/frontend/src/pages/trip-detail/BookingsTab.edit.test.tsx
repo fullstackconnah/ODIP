@@ -35,6 +35,7 @@ let patches: Record<string, unknown>[] = []
 let detailFailures = 0
 let detailStatus = 500
 let putFails = false
+let putConflict = false
 
 const reply = (config: InternalAxiosRequestConfig, status: number, body: unknown): AxiosResponse =>
   ({ data: body, status, statusText: String(status), headers: {}, config }) as AxiosResponse
@@ -45,6 +46,7 @@ beforeEach(() => {
   detailFailures = 0
   detailStatus = 500
   putFails = false
+  putConflict = false
   const adapter: AxiosAdapter = async config => {
     const method = (config.method ?? 'get').toLowerCase()
     if (method === 'get' && config.url?.endsWith('/bookings/booking-1')) {
@@ -54,6 +56,11 @@ beforeEach(() => {
         throw Object.assign(new Error(`Request failed with status code ${detailStatus}`), { isAxiosError: true, response: res, config })
       }
       return reply(config, 200, { success: true, data: detail })
+    }
+    if (method === 'put' && putConflict) {
+      puts.push(JSON.parse(config.data as string))
+      const res = reply(config, 409, { success: false, errors: ['Someone else just changed this booking. Close it and open it again to see their changes.'] })
+      throw Object.assign(new Error('Request failed with status code 409'), { isAxiosError: true, response: res, config })
     }
     if (method === 'put' && putFails) {
       const res = reply(config, 500, { success: false })
@@ -121,6 +128,21 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
 
     expect(await screen.findByText("Couldn't update this booking. Check your connection and try again.")).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Changed note')
+  })
+
+  it('sends the updatedAt it loaded, and a stale-edit 409 shows the server message, keeps the modal open and leaves Save enabled', async () => {
+    const user = userEvent.setup()
+    putConflict = true
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    const notes = await screen.findByPlaceholderText('Optional notes...')
+    await user.type(notes, ' more')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Someone else just changed this booking. Close it and open it again to see their changes.')).toBeInTheDocument()
+    expect(puts[0]).toMatchObject({ expectedUpdatedAt: '2026-10-02T00:00:00Z' })
+    expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Original note more')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
   })
 
   it('shows the load failure with Try again, never an empty editable form, and recovers on retry', async () => {
