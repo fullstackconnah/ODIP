@@ -92,7 +92,8 @@ export function useUpdateModuleVisibility() {
     mutationFn: (data: ModuleVisibilityDto) => apiPutRaw<ModuleVisibilityDto>('/settings/module-visibility', data),
     onSuccess: response => {
       qc.setQueryData(key, response.data)
-      return qc.invalidateQueries({ queryKey: key })
+      // The group activities switch also changes what the dashboard (settings) and the roster board read.
+      return Promise.all([key, ['settings'], ['roster-board']].map(queryKey => qc.invalidateQueries({ queryKey })))
     },
   })
 }
