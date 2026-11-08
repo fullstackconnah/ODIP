@@ -90,7 +90,7 @@ public class EmploymentHeroSyncLog : ITenantEntity
 public enum EmploymentHeroSyncKind { Staff = 0, Timesheets = 1, Leave = 2 }
 
 /// <summary>What an outbox row sends to Employment Hero. Append-only, stored as an int.</summary>
-public enum EmploymentHeroOutboxKind { Timesheet = 0, Leave = 1, LeaveCancel = 2 }
+public enum EmploymentHeroOutboxKind { Timesheet = 0, Leave = 1, LeaveCancel = 2, GroupStaffTimesheet = 3 }   // GA PR3: GroupStaffTimesheet EntityId = GroupActivityStaff.Id; append-only, stored as int
 
 /// <summary>Where an outbox row is. Append-only, stored as an int; the Payroll page prints PayrollShiftStatus, derived from it.</summary>
 public enum EmploymentHeroOutboxStatus { Pending = 0, Sent = 1, Failed = 2, NeedsAttention = 3 }

@@ -98,21 +98,51 @@ public static class EmploymentHeroTimesheets
         return ProviderLocalTime.TodayIn(ProviderLocalTime.AsUtc(at.Value), (await ProviderTimeZoneResolver.ResolveAsync(db, tenantId, ct)).Zone);
     }
 
-    public static EmploymentHeroOutbox NewRow(Guid tenantId, Guid completionId, DateTime now) => new()
+    public static EmploymentHeroOutbox NewRow(Guid tenantId, Guid entityId, DateTime now, EmploymentHeroOutboxKind kind = EmploymentHeroOutboxKind.Timesheet) => new()
     {
-        Id = Guid.NewGuid(), TenantId = tenantId, Kind = EmploymentHeroOutboxKind.Timesheet, EntityId = completionId,
+        Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, EntityId = entityId,
         Status = EmploymentHeroOutboxStatus.Pending, Attempts = 0, NextAttemptAt = now, CreatedAt = now, UpdatedAt = now,
     };
 
     /// <summary>Adds a Pending row for each approved shift on or after the connect date that has none yet. Never saves: it rides on the approval's own save.</summary>
-    public static async Task EnqueueAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> approved, DateTime now, CancellationToken ct)
+    public static Task EnqueueAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> approved, DateTime now, CancellationToken ct) =>
+        EnqueueCoreAsync(db, tenantId, EmploymentHeroOutboxKind.Timesheet, approved.Select(p => (p.Shift.ServiceDate, p.Completion.Id)).ToList(), now, ct);
+
+    /// <summary>The same for approved group activity staff rows (GA PR3): the outbox row's EntityId is the staff row's id.</summary>
+    public static Task EnqueueGroupStaffAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<(GroupActivity Activity, GroupActivityStaff Row)> approved, DateTime now, CancellationToken ct) =>
+        EnqueueCoreAsync(db, tenantId, EmploymentHeroOutboxKind.GroupStaffTimesheet, approved.Select(p => (p.Activity.ServiceDate, p.Row.Id)).ToList(), now, ct);
+
+    private static async Task EnqueueCoreAsync(OdipDbContext db, Guid tenantId, EmploymentHeroOutboxKind kind, IReadOnlyCollection<(DateOnly Date, Guid EntityId)> approved, DateTime now, CancellationToken ct)
     {
         if (approved.Count == 0 || await CutoffAsync(db, tenantId, ct) is not { } cutoff) return;
-        var due = approved.Where(p => p.Shift.ServiceDate >= cutoff).Select(p => p.Completion.Id).ToList();
+        var due = approved.Where(p => p.Date >= cutoff).Select(p => p.EntityId).ToList();
         if (due.Count == 0) return;
         var have = await db.EmploymentHeroOutbox.IgnoreQueryFilters([TenantFilter.Name])
-            .Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet && due.Contains(r.EntityId)).Select(r => r.EntityId).ToListAsync(ct);
-        foreach (var id in due.Except(have)) db.EmploymentHeroOutbox.Add(NewRow(tenantId, id, now));
+            .Where(r => r.TenantId == tenantId && r.Kind == kind && due.Contains(r.EntityId)).Select(r => r.EntityId).ToListAsync(ct);
+        foreach (var id in due.Except(have)) db.EmploymentHeroOutbox.Add(NewRow(tenantId, id, now, kind));
+    }
+
+    /// <summary>
+    /// What Build needs for an approved group activity staff row: a transient Shift, ShiftCompletion and break, never attached to the context. NightType stays at its default, so the work type is Standard and
+    /// the sleepover branch never runs; the completion's id is the row's id, so the externalId sent to EH is the row id. Null when the row has no actual times (the sender flags it).
+    /// </summary>
+    public static (Shift Shift, ShiftCompletion Completion, List<ShiftBreak> Breaks)? ForStaffRow(GroupActivity a, GroupActivityStaff r)
+    {
+        if (r.ActualStart is not { } start || r.ActualEnd is not { } end) return null;
+        var shift = new Shift
+        {
+            Id = r.Id, TenantId = r.TenantId, ServiceDate = a.ServiceDate, StartTime = r.StartTime, EndTime = r.EndTime, EndsNextDay = r.EndsNextDay,
+            ServiceLocationId = a.ServiceLocationId, UserId = r.UserId, Status = ShiftStatus.Completed,
+        };
+        var completion = new ShiftCompletion
+        {
+            Id = r.Id, TenantId = r.TenantId, ShiftId = r.Id, ActualStart = start, ActualEnd = end, TimeZoneId = r.TimeZoneId ?? "",
+            SubmittedByUserId = r.UserId, ReviewOutcome = ReviewOutcome.Approved, IsActive = true,
+        };
+        var breaks = r.BreakStartedAt is { } b0 && r.BreakEndedAt is { } b1
+            ? [new ShiftBreak { Id = Guid.NewGuid(), TenantId = r.TenantId, ShiftCompletionId = r.Id, StartedAt = b0, EndedAt = b1, WithParticipant = false, CreatedByUserId = r.UserId }]
+            : new List<ShiftBreak>();
+        return (shift, completion, breaks);
     }
 
     /// <summary>The one derivation of a shift's word, reason and whether Send missing may queue it. The first matching rule wins.</summary>
