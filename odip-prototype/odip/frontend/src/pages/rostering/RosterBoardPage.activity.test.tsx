@@ -62,6 +62,21 @@ describe('RosterBoardPage: group activity writes', () => {
     expect(h.post).toHaveBeenLastCalledWith('/rostering/group-activities/activity-1/staff', { staffId: 'staff-2', overrideReason: 'Leave cancelled', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
   })
 
+  it("shows a refused retry in the modal and not on the board banner", async () => {
+    const user = userEvent.setup()
+    h.post.mockRejectedValueOnce(warning422).mockRejectedValueOnce({ response: { status: 409, data: { message: 'Sam Wilson is already on this activity.' } } })
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Group activity, Bowling/ }))
+    await user.click(await screen.findByRole('button', { name: 'Add staff' }))
+    await user.click(await screen.findByRole('option', { name: /^Sam Wilson/ }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Assign with warnings' })
+    await user.type(within(dialog).getByPlaceholderText('Reason for overriding these warnings'), 'Leave cancelled')
+    await user.click(within(dialog).getByRole('button', { name: 'Assign anyway' }))
+    const shown = await screen.findAllByText('Sam Wilson is already on this activity.')
+    expect(shown).toHaveLength(1)
+    expect(within(screen.getByRole('dialog')).getByText('Sam Wilson is already on this activity.')).toBeInTheDocument()
+  })
+
   it('asks before the card menu removes a participant; Keep removes no one', async () => {
     const user = userEvent.setup()
     h.del.mockResolvedValue(makeActivity())

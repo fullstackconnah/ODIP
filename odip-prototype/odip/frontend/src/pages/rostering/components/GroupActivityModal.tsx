@@ -33,6 +33,9 @@ export type GroupActivityModalProps = {
   boardShifts: ShiftDto[]
   /** Add a worker through the board's own write, so a finding that needs a reason opens the same override prompt as a drop. Resolves to a message when the refusal is not about findings. */
   onAddStaff: (activityId: string, staffId: string) => Promise<string | null>
+  /** A refusal that arrives after onAddStaff resolved (the override prompt's retry): shown in the callout until the next write here starts. */
+  lateRefusal?: string | null
+  onLateRefusalClear?: () => void
   onClose: () => void
 }
 
@@ -56,7 +59,7 @@ function toDto(f: Form): GroupActivityFormDto {
 }
 
 /** The group-activity modal (SHAPE section 5): the activity form behind Save, with the participants and the staff beside it as immediate writes. The parent keys it by target. */
-export function GroupActivityModal({ target, canWrite, participants, pickerData, boardShifts, onAddStaff, onClose }: GroupActivityModalProps) {
+export function GroupActivityModal({ target, canWrite, participants, pickerData, boardShifts, onAddStaff, lateRefusal, onLateRefusalClear, onClose }: GroupActivityModalProps) {
   const [savedId, setSavedId] = useState<string | null>(null)
   const id = target?.mode === 'edit' ? target.id : savedId
   const query = useGroupActivity(id)
@@ -100,6 +103,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   /** An immediate write: on a refusal the server's message shows and nothing else changes (the refetch redraws the truth). */
   async function write(key: string, run: () => Promise<unknown>, fallback: string) {
     setWriteError(null)
+    onLateRefusalClear?.()
     setPendingKey(key)
     try { await run() } catch (err) { setWriteError(extractErrorMessage(err, fallback)) } finally { setPendingKey(null) }
   }
@@ -181,9 +185,9 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                 <FormField label="Date" required hint={fromShift ? 'The date and times come from the shift.' : undefined}>
                   <input type="date" value={values.serviceDate} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ serviceDate: e.target.value })} />
                 </FormField>
-                <div className="grid grid-cols-2 gap-[var(--field-gap-x)]">
-                  <FormField label="Start" required><input type="time" className="px-2" value={values.startTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ startTime: e.target.value })} /></FormField>
-                  <FormField label="End" required error={noLength ? NO_LENGTH_MESSAGE : undefined}><input type="time" className="px-2" value={values.endTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ endTime: e.target.value })} /></FormField>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField label="Start" required><input type="time" className="px-1" value={values.startTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ startTime: e.target.value })} /></FormField>
+                  <FormField label="End" required error={noLength ? NO_LENGTH_MESSAGE : undefined}><input type="time" className="px-1" value={values.endTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ endTime: e.target.value })} /></FormField>
                 </div>
                 <FormField label="Ends the next day" layout="checkbox"><input type="checkbox" checked={values.endsNextDay} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ endsNextDay: e.target.checked })} /></FormField>
                 <FormField label="Service location">
@@ -265,7 +269,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           </section>
         </div>
       )}
-      {writeError && <div className="mt-4"><Callout tone="danger">{writeError}</Callout></div>}
+      {(writeError ?? lateRefusal) && <div className="mt-4"><Callout tone="danger">{writeError ?? lateRefusal}</Callout></div>}
 
       <ConfirmDialog
         open={confirmCancel}

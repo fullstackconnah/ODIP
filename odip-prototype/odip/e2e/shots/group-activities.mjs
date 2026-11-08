@@ -286,12 +286,19 @@ await scene('modal-1280', async () => {
   await page.waitForTimeout(300)
   await shot(page, dlg, 'modal-normal-dark.png', { pad: 16 })
   await page.evaluate(() => { delete document.documentElement.dataset.theme })
-  // S1: the time inputs hold their widest values at 1280 (px-2, no clipped digits).
-  for (const [i, label, value, text] of [[0, 'Start', '12:00', '12:00 PM'], [1, 'End', '09:00', '09:00 AM']]) {
+  // S1: the time inputs hold their widest values at 1280. The native clock icon covers the text tail, which scrollWidth cannot see:
+  // measured text + left and right padding + 28 px for the icon must fit the clientWidth.
+  for (const [i, label, value, text] of [[0, 'Start', '14:00', '02:00 PM'], [1, 'End', '09:00', '09:00 AM']]) {
     const input = dlg.locator('input[type=time]').nth(i)
     await input.fill(value)
-    const fit = await input.evaluate((el) => [el.scrollWidth, el.clientWidth])
-    check(`S1 time input ${label} shows ${text} unclipped at 1280`, fit[0] <= fit[1], fit)
+    const fit = await input.evaluate((el, t) => {
+      const cs = getComputedStyle(el)
+      const ctx = document.createElement('canvas').getContext('2d')
+      ctx.font = cs.font
+      const need = ctx.measureText(t).width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 28
+      return [Math.ceil(need), el.clientWidth]
+    }, text)
+    check(`S1 time input ${label} shows ${text} clear of the icon at 1280 (need <= clientWidth)`, fit[0] <= fit[1], fit)
   }
   await page.keyboard.press('Escape')
   await context.close()

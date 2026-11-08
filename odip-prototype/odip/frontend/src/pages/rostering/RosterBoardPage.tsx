@@ -467,15 +467,19 @@ export default function RosterBoardPage() {
     busyIds: busyActivityIds,
     removePerson: (activity, person) => setRemoveAsk({ activity, person }),
   } : null), [groupActivities, busyActivityIds]) // eslint-disable-line react-hooks/exhaustive-deps -- showWriteError and the mutation are stable enough per render
+  const [modalLateRefusal, setModalLateRefusal] = useState<string | null>(null)
   /** The modal's Add staff: the drop's write, so findings open the board's override prompt. A refusal that is not about findings comes back as words for the modal, whose overlay covers the banner. */
   async function addStaffFromModal(activityId: string, staffId: string): Promise<string | null> {
     let refusal: string | null = null
-    await runRosterWrite(async (overrideReason, acknowledgedFindingCodes) => {
-      try { await addGroupStaff.mutateAsync({ id: activityId, data: { staffId, overrideReason, acknowledgedFindingCodes } }) } catch (err) {
-        if (!getRosterFindings(err)) refusal = extractErrorMessage(err, "Couldn't add them.")
-        throw err
-      }
-    })
+    let returned = false
+    // Not the banner: the modal covers it. The first answer is returned; a retry from the override prompt comes after that, so it goes to lateRefusal.
+    const onRefusal = (err: unknown) => {
+      const message = extractErrorMessage(err, "Couldn't add them.")
+      if (returned) setModalLateRefusal(message); else refusal = message
+    }
+    setModalLateRefusal(null)
+    await runRosterWrite((overrideReason, acknowledgedFindingCodes) => addGroupStaff.mutateAsync({ id: activityId, data: { staffId, overrideReason, acknowledgedFindingCodes } }), null, [], onRefusal)
+    returned = true
     return refusal
   }
   const dragsOff = dropPending !== null || prompt !== null || pendingAssign !== null || pendingBlocked !== null
@@ -494,7 +498,7 @@ export default function RosterBoardPage() {
    * One roster write and today's answers to it: a 422 with a Blocking finding opens "Can't assign"; warnings open "Assign with warnings", whose "Assign anyway" re-sends this SAME
    * request with the reason and the codes; any other refusal is the error Callout, in the server's words. True when the write went through.
    */
-  async function runRosterWrite(send: Send, overrideReason: string | null = null, codes: string[] = []): Promise<boolean> {
+  async function runRosterWrite(send: Send, overrideReason: string | null = null, codes: string[] = [], onRefusal?: (err: unknown) => void): Promise<boolean> {
     setAssignError(null)
     try {
       await send(overrideReason, codes)
@@ -508,13 +512,13 @@ export default function RosterBoardPage() {
         // otherwise cover the banner, and a retry from it cannot fix a refusal that is not about findings.
         setPendingAssign(null)
         setOverrideReasonDraft('')
-        showWriteError(err, 'Something went wrong assigning this shift. Please try again.')
+        if (onRefusal) onRefusal(err); else showWriteError(err, 'Something went wrong assigning this shift. Please try again.')
         return false
       }
       if (findings.some(f => f.severity === 'Blocking')) {
         setPendingBlocked({ findings })
       } else {
-        setPendingAssign({ findings, retry: (reason, retryCodes) => runRosterWrite(send, reason, retryCodes) })
+        setPendingAssign({ findings, retry: (reason, retryCodes) => runRosterWrite(send, reason, retryCodes, onRefusal) })
         setOverrideReasonDraft('')
       }
       return false
@@ -1074,7 +1078,9 @@ export default function RosterBoardPage() {
           pickerData={{ staff, staffLoading, shifts: boardShifts, leave: boardLeave, availableDays: board?.staffAvailableDays ?? [], hours }}
           boardShifts={boardShifts}
           onAddStaff={addStaffFromModal}
-          onClose={() => setActivityTarget(null)}
+          lateRefusal={modalLateRefusal}
+          onLateRefusalClear={() => setModalLateRefusal(null)}
+          onClose={() => { setActivityTarget(null); setModalLateRefusal(null) }}
         />
       )}
       {groupActivities && (
