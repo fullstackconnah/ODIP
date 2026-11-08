@@ -127,8 +127,9 @@ public class GroupActivitiesController : ControllerBase
         if (!await _db.AppSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.GroupActivitiesEnabled).FirstOrDefaultAsync(ct)) return RefuseResult("GA_DISABLED");
         try
         {
-            var ids = (await participantsToLock(tenantId, ct)).Distinct().Order().ToList();
             await using var held = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, _generator.LockWait, scope: "roster-board");
+            // Read after the board lock: every activity write holds it, so the set cannot change between this read and the locks below.
+            var ids = (await participantsToLock(tenantId, ct)).Distinct().Order().ToList();
             // These join the board lock's transaction, so they need no disposing of their own.
             foreach (var id in ids) await RosterGenerationLock.AcquireAsync(_db, id, ct, _generator.LockWait);
             var result = await body(tenantId, ct);
@@ -266,6 +267,7 @@ public class GroupActivitiesController : ControllerBase
             if (dateChanged && attached.Count > 0) throw Deny("GA_MOVE_DAY");
             if (attached.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
 
+            var publishing = activity.Status == ShiftStatus.Draft && dto.Status == ShiftStatus.Published;
             var (oldStart, oldEnd, oldEndsNextDay) = (activity.StartTime, activity.EndTime, activity.EndsNextDay);
             var timesChanged = dto.StartTime != oldStart || dto.EndTime != oldEnd || dto.EndsNextDay != oldEndsNextDay;
             activity.ServiceDate = dto.ServiceDate;
@@ -274,6 +276,8 @@ public class GroupActivitiesController : ControllerBase
             (activity.ActivityId, activity.ServiceLocationId, activity.Status, activity.UpdatedAt) = (dto.ActivityId, dto.ServiceLocationId, dto.Status, DateTime.UtcNow);
 
             foreach (var shift in attached) SetTimes(shift, activity);
+            // Decision 29: publishing the activity publishes its Draft shifts; un-publishing leaves them as they are.
+            if (publishing) foreach (var s in attached.Where(s => s.Status == ShiftStatus.Draft)) (s.Status, s.UpdatedAt) = (ShiftStatus.Published, DateTime.UtcNow);
 
             // A worker whose part matched the old times follows the new ones; every worker whose times or day moved is judged again (decision 18).
             var rowsToJudge = new List<GroupActivityStaff>();
