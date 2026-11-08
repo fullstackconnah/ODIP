@@ -7,6 +7,8 @@ import { useLeaveGroup } from './groups/useLeaveGroup'
 import { useIncidentsGroup } from './groups/useIncidentsGroup'
 import { useTasksGroup } from './groups/useTasksGroup'
 import { useComplianceGroup } from './groups/useComplianceGroup'
+import { useGroupStaffGroup } from './groups/useGroupStaffGroup'
+import { useSettings } from '@/api/hooks'
 
 /**
  * The viewer's decision groups, in the tab order (the owner's: Completions, Leave, Incidents, Credentials, Tasks), so a position always means the same group. Every group hook runs on every render (the rules
@@ -25,8 +27,13 @@ export function useDecisionGroups(gates: DecisionGates, ctx: {
   const tasks = useTasksGroup(gates.tasks, { today: ctx.today, mayCloseBudgetReview: ctx.mayCloseBudgetReview })
   // The same right as closing a budget review: Admin or SuperAdmin.
   const compliance = useComplianceGroup(gates.compliance, { staff: ctx.staff, today: ctx.today, warningDays: ctx.warningDays, mayEditAdmins: ctx.mayCloseBudgetReview })
+  // Last, so the fixed order above and every tab position stay put; only organisations with group activities on, and only a viewer who decides completions.
+  const settings = useSettings()
+  const groupActivitiesOn = gates.completions && settings.data?.groupActivitiesEnabled === true
+  const groupStaff = useGroupStaffGroup(groupActivitiesOn)
   const ordered: Array<[boolean, GroupModel]> = [
     [gates.completions, completions], [gates.leave, leave], [gates.incidents, incidents], [gates.compliance, compliance], [gates.tasks, tasks],
+    [groupActivitiesOn, groupStaff],
   ]
   return ordered.filter(([shown]) => shown).map(([, group]) => group)
 }

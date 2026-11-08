@@ -213,6 +213,10 @@ public class TripsController : ControllerBase
     {
         var t = await _db.TripInstances.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TripDetailDto>.Fail("Trip not found"));
+        // The editor read the trip at ExpectedUpdatedAt; a later save moved UpdatedAt and this whole-row save would write over it. Absent: saved as before.
+        // Compared to the microsecond (the column's precision), as BookingsController.Update does.
+        if (dto.ExpectedUpdatedAt is { } expected && t.UpdatedAt.Ticks - t.UpdatedAt.Ticks % 10 != expected.Ticks - expected.Ticks % 10)
+            return Conflict(ApiResponse<TripDetailDto>.Fail("Someone else changed this trip while you were editing. Close it and open it again to see their changes."));
 
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));

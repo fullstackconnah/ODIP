@@ -221,7 +221,7 @@ public class EmploymentHeroController : ControllerBase
                 _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, $"Employment Hero work type: {label}", Name(was), Name(now), User));
             (conn.WorkTypeStandard, conn.WorkTypeActiveNight, conn.WorkTypePassiveNight, conn.WorkTypeSleepover) = (chosen[0], chosen[1], chosen[2], chosen[3]);
             var at = _clock.GetUtcNow().UtcDateTime;
-            foreach (var row in await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet
+            foreach (var row in await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && (r.Kind == EmploymentHeroOutboxKind.Timesheet || r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet)
                          && r.Status == EmploymentHeroOutboxStatus.Pending && r.Attempts == 0).ToListAsync(ct))
             {
                 row.NextAttemptAt = at;
@@ -533,8 +533,8 @@ public class EmploymentHeroController : ControllerBase
             : await _db.EmploymentHeroAttentions.AsNoTracking().Where(a => a.TenantId == tenantId && a.DismissedAt == null)
                 .OrderBy(a => a.Kind).ThenBy(a => a.Name)
                 .Select(a => new EmploymentHeroAttentionDto(a.Id, a.Kind, a.UserId, a.ExternalEmployeeId, a.Name, a.Reason)).ToListAsync(ct);
-        var queued = await _db.EmploymentHeroOutbox.CountAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet, ct);
-        var sent = await _db.EmploymentHeroOutbox.CountAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet && r.Status == EmploymentHeroOutboxStatus.Sent, ct);
+        var queued = await _db.EmploymentHeroOutbox.CountAsync(r => r.TenantId == tenantId && (r.Kind == EmploymentHeroOutboxKind.Timesheet || r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet), ct);
+        var sent = await _db.EmploymentHeroOutbox.CountAsync(r => r.TenantId == tenantId && (r.Kind == EmploymentHeroOutboxKind.Timesheet || r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet) && r.Status == EmploymentHeroOutboxStatus.Sent, ct);
         var (leaveSent, leaveWaiting, leaveProblems) = await LeaveCardAsync(tenantId, conn is not null, ct);
         return new EmploymentHeroStatusDto(_keys.IsConfigured, conn is not null, conn?.BusinessId, conn?.BusinessName, conn?.ConnectedAt, conn?.ConnectedByName,
             conn?.LastSyncAt, conn?.LastSyncError, linked, notLinked, attention, sent, queued - sent,

@@ -35,7 +35,7 @@ export function TierBoard({ participantId, participantName, compact = false, onM
 }) {
   const { canWrite } = usePermissions()
   const compat = useCompatibility(participantId)
-  const { data: staff = [] } = useStaff()
+  const { data: staff = [], isError: staffFailed, refetch: refetchStaff } = useStaff()
   const upsert = useUpsertCompatibility()
   const rootRef = useRef<HTMLDivElement>(null)
   const [busyStaffId, setBusyStaffId] = useState<string | null>(null)
@@ -135,6 +135,7 @@ export function TierBoard({ participantId, participantName, compact = false, onM
 
   return (
     <div ref={rootRef} className="space-y-4">
+      {canWrite && staffFailed && <PageState kind="error" noun="staff list" onRetry={() => refetchStaff()} />}
       {error && (
         <Callout
           tone="error"

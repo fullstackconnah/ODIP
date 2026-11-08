@@ -8,7 +8,7 @@ import { restoreZone, setZone } from '@/test/timeZone'
 
 const { mockPatchMutateAsync, mockUseStaff } = vi.hoisted(() => ({
   mockPatchMutateAsync: vi.fn(),
-  mockUseStaff: vi.fn((): { data: StaffListDto[] } => ({ data: [] })),
+  mockUseStaff: vi.fn((): { data?: StaffListDto[]; isError?: boolean; refetch?: () => unknown } => ({ data: [] })),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -142,5 +142,25 @@ describe('ParticipantIdentitySection — date of birth', () => {
     if (!setZone(zone)) return
     render(<ParticipantIdentitySection p={makeParticipant({ dateOfBirth: '1990-05-01' })} participantId="participant-1" canEdit={false} />)
     expect(screen.getByText('01/05/1990')).toBeInTheDocument()
+  })
+})
+
+describe('ParticipantIdentitySection: a failed staff list', () => {
+  it('says the staff list failed, with a retry, in place of the Preferred Staff picker', async () => {
+    const refetch = vi.fn()
+    mockUseStaff.mockReturnValue({ data: undefined, isError: true, refetch })
+    const user = userEvent.setup()
+    render(<ParticipantIdentitySection p={makeParticipant()} participantId='participant-1' canEdit />)
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    expect(screen.getByText(/Couldn't load this staff list/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+
+  it('shows the picker, and no message, when the list loaded', async () => {
+    const user = userEvent.setup()
+    render(<ParticipantIdentitySection p={makeParticipant()} participantId='participant-1' canEdit />)
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    expect(screen.queryByText(/Couldn't load this/)).not.toBeInTheDocument()
   })
 })

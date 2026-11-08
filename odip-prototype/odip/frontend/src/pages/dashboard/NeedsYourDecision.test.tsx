@@ -19,7 +19,7 @@ function Harness({ groups }: { groups: GroupModel[] }) {
 
 const TITLES: Record<GroupKey, [string, string]> = {
   completions: ['Completions', 'shift completions'], leave: ['Leave', 'leave requests'], incidents: ['Incidents', 'open incidents'],
-  compliance: ['Credentials', 'staff credentials to update'], tasks: ['Tasks', 'tasks due'],
+  compliance: ['Credentials', 'staff credentials to update'], tasks: ['Tasks', 'tasks due'], groupStaff: ['Group activities', 'group activity hours'],
 }
 const tap = (id: string, run: () => Promise<ActionOutcome> = async () => ({ announce: `Approved Person ${id}.` })): RowAction =>
   ({ kind: 'tap', label: 'Approve', busyLabel: 'Approving…', name: `Approve: Person ${id}`, failText: "Couldn't approve. Try again.", run })

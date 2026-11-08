@@ -36,6 +36,8 @@ public static class InAppNotificationText
                 ($"You've been taken off {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", "/portal"),
             (NotificationEventType.ShiftChanged, ShiftChangedPayload p) =>
                 (ShiftChangedWording.Sentence(p, Day, Clock, Whom), $"/portal/shifts/{entityId}"),
+            (NotificationEventType.ShiftCompletionPendingReview, ShiftCompletionPendingReviewPayload { ActivityTitle: { } title } p) =>
+                ($"{Who(p.WorkerName)}'s hours for {title} on {Day(p.ServiceDate)} are ready for review.", "/rostering/completions"),
             (NotificationEventType.ShiftCompletionPendingReview, ShiftCompletionPendingReviewPayload p) =>
                 ($"{Who(p.WorkerName)}'s shift with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} is ready for review.", "/rostering/completions"),
             // The entity is the completion, not the shift, so this links to the portal, as the email does.
