@@ -60,7 +60,7 @@ export interface EmploymentHeroLeaveProblemDto {
 }
 
 /** GET portal/leave/balances and staff/{id}/leave-balances. */
-export interface LeaveBalanceDto { category: string; amount: number; unit: string }
+export interface LeaveBalanceDto { category: string; amount: number | null; unit: string }
 export interface LeaveBalancesDto { status: 'NotConnected' | 'NotLinked' | 'Ready'; balances: LeaveBalanceDto[] }
 
 /** The EH work type id (a string) each kind of hours is sent under; null is not set. */

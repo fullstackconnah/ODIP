@@ -13,6 +13,11 @@ describe('formatBalance', () => {
     expect(formatBalance({ category: 'a', amount: -3.75, unit: 'Hours' })).toBe('\u22123.8 hours')
     expect(formatBalance({ category: 'a', amount: 10, unit: 'Days' })).toBe('10.0 days')
   })
+
+  it('shows a dash for an unknown amount and keeps a real zero', () => {
+    expect(formatBalance({ category: 'a', amount: null, unit: 'Hours' })).toBe('—')
+    expect(formatBalance({ category: 'a', amount: 0, unit: 'Hours' })).toBe('0.0 hours')
+  })
 })
 
 describe('LeaveBalances', () => {
