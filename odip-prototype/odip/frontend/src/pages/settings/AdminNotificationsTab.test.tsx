@@ -51,6 +51,20 @@ beforeEach(() => {
 })
 
 describe('AdminNotificationsTab', () => {
+  it('says the list is capped when the server returns 500 rows, and not for 499', () => {
+    const rowsOf = (n: number) => Array.from({ length: n }, (_, i) => makeRow({ id: `notif-${i}` }))
+    const line = 'Showing the latest 500. Narrow the dates to see older ones.'
+
+    mockUseAdminNotifications.mockReturnValue({ data: rowsOf(499), isLoading: false, isError: false })
+    const { unmount } = render(<AdminNotificationsTab />)
+    expect(screen.queryByText(line)).not.toBeInTheDocument()
+    unmount()
+
+    mockUseAdminNotifications.mockReturnValue({ data: rowsOf(500), isLoading: false, isError: false })
+    render(<AdminNotificationsTab />)
+    expect(screen.getByText(line)).toBeInTheDocument()
+  })
+
   it('renders failed rows with their error text', () => {
     mockUseAdminNotifications.mockReturnValue({ data: [makeRow()], isLoading: false, isError: false })
     render(<AdminNotificationsTab />)
