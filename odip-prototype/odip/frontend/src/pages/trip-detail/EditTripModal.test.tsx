@@ -151,3 +151,26 @@ describe('EditTripModal — section headings', () => {
     expect(screen.getByLabelText('Notes')).toHaveAttribute('aria-labelledby', 'editTripNotesLabel')
   })
 })
+
+describe('EditTripModal — a stale save', () => {
+  const STALE = 'Someone else changed this trip while you were editing. Close it and open it again to see their changes.'
+
+  it('sends the updatedAt the form loaded, not a newer one from a refetch', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<EditTripModal trip={{ ...trip, updatedAt: '2026-11-01T01:00:00Z' }} onClose={() => {}} />)
+    await screen.findByLabelText(/Start Date/)
+    rerender(<EditTripModal trip={{ ...trip, updatedAt: '2026-11-01T02:00:00Z' }} onClose={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mutate.mock.calls.at(-1)![0].data.expectedUpdatedAt).toBe('2026-11-01T01:00:00Z')
+  })
+
+  it('shows the 409 message in the error callout and keeps what was typed', async () => {
+    state.error = { response: { status: 409, data: { errors: [STALE] } } }
+    await setup()
+    fireEvent.change(screen.getByPlaceholderText('e.g. Beach Getaway 2026'), { target: { value: 'Typed name' } })
+    expect(screen.getByRole('alert')).toHaveTextContent(STALE)
+    expect(screen.getByPlaceholderText('e.g. Beach Getaway 2026')).toHaveValue('Typed name')
+    expect(screen.getByRole('dialog', { name: 'Edit Trip' })).toBeInTheDocument()
+    state.error = null
+  })
+})
