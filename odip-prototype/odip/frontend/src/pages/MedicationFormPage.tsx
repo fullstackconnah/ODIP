@@ -382,10 +382,10 @@ export default function MedicationFormPage() {
           <div className={formGrid}>
           <div className="contents">
             <FormField label="Name" required error={errors.name?.message} className={span.medium}>
-              <input {...register('name')} placeholder="e.g. Paracetamol" autoFocus />
+              <input {...register('name')} maxLength={200} placeholder="e.g. Paracetamol" autoFocus />
             </FormField>
             <FormField label="Strength" className={span.short}>
-              <input {...register('strength')} placeholder="e.g. 500mg" />
+              <input {...register('strength')} maxLength={100} placeholder="e.g. 500mg" />
             </FormField>
           </div>
           <div className="contents">
@@ -441,10 +441,10 @@ export default function MedicationFormPage() {
             />
           </FormField>
           <FormField label="Dose Description" required error={errors.doseDescription?.message} className={span.medium}>
-            <input {...register('doseDescription')} placeholder="e.g. 1 tablet" />
+            <input {...register('doseDescription')} maxLength={200} placeholder="e.g. 1 tablet" />
           </FormField>
           <FormField label="Directions" className={span.long}>
-            <textarea {...register('directions')} rows={3} placeholder="e.g. Take with food" />
+            <textarea {...register('directions')} maxLength={1000} rows={3} placeholder="e.g. Take with food" />
           </FormField>
         </div>
         </Card>
@@ -577,7 +577,7 @@ export default function MedicationFormPage() {
           ) : (
             <>
               <FormField label="PRN Indication" required error={errors.prnIndication?.message} hint={!errors.prnIndication ? 'What symptom or situation should prompt this dose?' : undefined} className={span.long}>
-                <textarea {...register('prnIndication')} rows={3} placeholder="e.g. Pain rated above 5/10" />
+                <textarea {...register('prnIndication')} maxLength={500} rows={3} placeholder="e.g. Pain rated above 5/10" />
               </FormField>
               <div className="contents">
                 <FormField label="Max doses / 24h" className={span.short}>
@@ -596,7 +596,7 @@ export default function MedicationFormPage() {
         <Card title="Clinical & compliance">
           <div className={formGrid}>
           <FormField label="Purpose" required={isChemicalRestraint} error={errors.purpose?.message} className={span.long}>
-            <textarea {...register('purpose')} rows={3} placeholder="What this medication is for" />
+            <textarea {...register('purpose')} maxLength={500} rows={3} placeholder="What this medication is for" />
           </FormField>
 
           <FormField label="High Risk" layout="checkbox" hint="Requires a witness for every administered dose" className={span.medium}>
@@ -638,7 +638,7 @@ export default function MedicationFormPage() {
               {restraintAuthorised ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <FormField label="Authorised by" required error={errors.restraintAuthorisedBy?.message}>
-                    <input {...register('restraintAuthorisedBy')} placeholder="e.g. Dr. Chen / NDIS Commission" />
+                    <input {...register('restraintAuthorisedBy')} maxLength={200} placeholder="e.g. Dr. Chen / NDIS Commission" />
                   </FormField>
                   <FormField label="Authorisation date" required error={errors.restraintAuthorisationDate?.message}>
                     <input type="date" {...register('restraintAuthorisationDate')} />
@@ -673,7 +673,7 @@ export default function MedicationFormPage() {
                   <input type="checkbox" {...register('bspInPlace')} className="w-4 h-4 rounded border-[var(--color-border)]" />
                 </FormField>
                 <FormField label="Authorisation reference">
-                  <input {...register('restrictivePracticeAuthorisationRef')} placeholder="Reference number" />
+                  <input {...register('restrictivePracticeAuthorisationRef')} maxLength={200} placeholder="Reference number" />
                 </FormField>
                 <p className="text-xs text-[var(--color-muted-foreground)]">For your records only. These don't decide whether it's authorised.</p>
               </div>
@@ -754,17 +754,17 @@ export default function MedicationFormPage() {
           <div className={formGrid}>
           <div className="contents">
             <FormField label="Prescriber Name" className={span.medium}>
-              <input {...register('prescriberName')} placeholder="e.g. Dr Smith" />
+              <input {...register('prescriberName')} maxLength={200} placeholder="e.g. Dr Smith" />
             </FormField>
             <FormField label="Pharmacy Name" className={span.medium}>
-              <input {...register('pharmacyName')} placeholder="e.g. Chemist Warehouse" />
+              <input {...register('pharmacyName')} maxLength={200} placeholder="e.g. Chemist Warehouse" />
             </FormField>
             <FormField label="Pharmacy Phone" hint="Shown as a tap-to-call number in the missed-medication guidance." className={span.medium}>
-              <input type="tel" {...register('pharmacyPhone')} placeholder="e.g. 03 9123 4567" />
+              <input type="tel" {...register('pharmacyPhone')} maxLength={30} placeholder="e.g. 03 9123 4567" />
             </FormField>
           </div>
           <FormField label="Storage Requirements" className={span.medium}>
-            <input {...register('storageRequirements')} placeholder="e.g. Refrigerate" />
+            <input {...register('storageRequirements')} maxLength={500} placeholder="e.g. Refrigerate" />
           </FormField>
           <div className="contents">
             <FormField label="Start Date" className={span.date}>
@@ -789,7 +789,7 @@ export default function MedicationFormPage() {
           {consentObtained && (
             <div className="contents">
               <FormField label="Consent Given By" required error={errors.consentGivenBy?.message} className={span.medium}>
-                <input {...register('consentGivenBy')} placeholder="e.g. Participant / Guardian name" />
+                <input {...register('consentGivenBy')} maxLength={200} placeholder="e.g. Participant / Guardian name" />
               </FormField>
               <FormField label="Consent Date" required error={errors.consentDate?.message} className={span.date}>
                 <input type="date" {...register('consentDate')} />
@@ -803,7 +803,7 @@ export default function MedicationFormPage() {
         <Card title="Notes">
           <div className={formGrid}>
           <FormField label="Notes" className={span.long}>
-            <textarea {...register('notes')} rows={3} placeholder="Any additional notes..." />
+            <textarea {...register('notes')} maxLength={2000} rows={3} placeholder="Any additional notes..." />
           </FormField>
         </div>
         </Card>

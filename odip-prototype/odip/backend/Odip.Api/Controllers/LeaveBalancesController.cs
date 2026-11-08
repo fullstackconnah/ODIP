@@ -69,7 +69,7 @@ public class LeaveBalancesController : ControllerBase
         try
         {
             var balances = await _client.ListLeaveBalancesAsync(key, conn.BusinessId, employeeId, ct);
-            return Answer(LeaveBalancesDto.Ready, balances.Select(b => new LeaveBalanceDto(b.LeaveCategoryName ?? "Leave", b.AccruedAmount ?? 0, b.UnitType ?? "Hours"))
+            return Answer(LeaveBalancesDto.Ready, balances.Select(b => new LeaveBalanceDto(b.LeaveCategoryName ?? "Leave", b.AccruedAmount, b.UnitType ?? "Hours"))
                 .OrderBy(b => b.Category, StringComparer.OrdinalIgnoreCase).ToList());
         }
         catch (EmploymentHeroException)

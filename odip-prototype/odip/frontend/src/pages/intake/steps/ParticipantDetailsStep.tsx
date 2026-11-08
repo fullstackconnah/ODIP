@@ -59,15 +59,15 @@ export function ParticipantDetailsStep({ control, register, setValue, errors, li
       <Card title="Personal Information">
         <div className={formGrid}>
           <FormField label="First Name" required error={errors.firstName?.message} className={span.medium}>
-            <input id="firstName" {...register('firstName')} placeholder="e.g. John" />
+            <input id="firstName" {...register('firstName')} maxLength={100} placeholder="e.g. John" />
           </FormField>
 
           <FormField label="Last Name" required error={errors.lastName?.message} className={span.medium}>
-            <input id="lastName" {...register('lastName')} placeholder="e.g. Smith" />
+            <input id="lastName" {...register('lastName')} maxLength={100} placeholder="e.g. Smith" />
           </FormField>
 
           <FormField label="Preferred Name" className={span.medium}>
-            <input id="preferredName" {...register('preferredName')} placeholder="e.g. Johnny" />
+            <input id="preferredName" {...register('preferredName')} maxLength={100} placeholder="e.g. Johnny" />
           </FormField>
 
           <FormField label="Date of Birth" className={span.date}>
@@ -75,11 +75,11 @@ export function ParticipantDetailsStep({ control, register, setValue, errors, li
           </FormField>
 
           <FormField label="Phone" error={errors.phone?.message} className={span.medium}>
-            <input id="phone" type="tel" {...register('phone')} placeholder="e.g. 0400 000 000" />
+            <input id="phone" type="tel" {...register('phone')} maxLength={30} placeholder="e.g. 0400 000 000" />
           </FormField>
 
           <FormField label="Email" error={errors.email?.message} className={span.medium}>
-            <input id="email" type="email" {...register('email')} placeholder="e.g. name@example.com" />
+            <input id="email" type="email" {...register('email')} maxLength={200} placeholder="e.g. name@example.com" />
           </FormField>
         </div>
       </Card>
@@ -91,7 +91,7 @@ export function ParticipantDetailsStep({ control, register, setValue, errors, li
           </FormField>
 
           <FormField label="Suburb" className={span.medium}>
-            <input id="addressSuburb" {...register('addressSuburb')} placeholder="e.g. Fortitude Valley" />
+            <input id="addressSuburb" {...register('addressSuburb')} maxLength={100} placeholder="e.g. Fortitude Valley" />
           </FormField>
 
           <FormField label="State" className={span.short}>
@@ -142,13 +142,13 @@ export function ParticipantDetailsStep({ control, register, setValue, errors, li
           {livingArrangementValue === 'Family' && (
             <>
               <FormField label="Main Support Person" required error={errors.mainSupportPersonName?.message} className={span.medium}>
-                <input id="mainSupportPersonName" {...register('mainSupportPersonName')} placeholder="e.g. Jane Citizen" />
+                <input id="mainSupportPersonName" {...register('mainSupportPersonName')} maxLength={200} placeholder="e.g. Jane Citizen" />
               </FormField>
               <FormField label="Relationship to Participant" className={span.medium}>
-                <input id="mainSupportPersonRelationship" {...register('mainSupportPersonRelationship')} placeholder="e.g. Mother" />
+                <input id="mainSupportPersonRelationship" {...register('mainSupportPersonRelationship')} maxLength={100} placeholder="e.g. Mother" />
               </FormField>
-              <TextAreaField label="Others Living in the Accommodation" id="othersLivingInAccommodation" {...register('othersLivingInAccommodation')} rows={2} placeholder="Who else lives there..." className={span.long} />
-              <TextAreaField label="Residential Information" id="residentialInfo" {...register('residentialInfo')} rows={2} placeholder="Home layout, accessibility..." className={span.long} />
+              <TextAreaField label="Others Living in the Accommodation" id="othersLivingInAccommodation" {...register('othersLivingInAccommodation')} maxLength={2000} rows={2} placeholder="Who else lives there..." className={span.long} />
+              <TextAreaField label="Residential Information" id="residentialInfo" {...register('residentialInfo')} maxLength={2000} rows={2} placeholder="Home layout, accessibility..." className={span.long} />
             </>
           )}
 
@@ -156,7 +156,7 @@ export function ParticipantDetailsStep({ control, register, setValue, errors, li
             <>
               <CheckboxField label="Lives With Others" id="livesWithOthers" {...register('livesWithOthers')} className={span.short} />
               <FormField label="Who They Live With" required error={errors.whoLivesWith?.message} className={span.medium}>
-                <input id="whoLivesWith" {...register('whoLivesWith')} placeholder="e.g. Housemates" />
+                <input id="whoLivesWith" {...register('whoLivesWith')} maxLength={2000} placeholder="e.g. Housemates" />
               </FormField>
             </>
           )}
@@ -164,22 +164,22 @@ export function ParticipantDetailsStep({ control, register, setValue, errors, li
           {livingArrangementValue === 'SupportedAccommodation' && (
             <>
               <FormField label="SIL Provider Name" required error={errors.silProviderName?.message} className={span.medium}>
-                <input id="silProviderName" {...register('silProviderName')} placeholder="e.g. Sunrise SIL Services" />
+                <input id="silProviderName" {...register('silProviderName')} maxLength={200} placeholder="e.g. Sunrise SIL Services" />
               </FormField>
               <FormField label="SIL Provider Contact (Phone)" className={span.medium}>
-                <input id="silProviderContactPhone" {...register('silProviderContactPhone')} placeholder="e.g. 0400 000 000" />
+                <input id="silProviderContactPhone" {...register('silProviderContactPhone')} maxLength={20} placeholder="e.g. 0400 000 000" />
               </FormField>
               <FormField label="Accommodation Type" className={span.medium}>
-                <input id="accommodationType" {...register('accommodationType')} placeholder="e.g. Group home" />
+                <input id="accommodationType" {...register('accommodationType')} maxLength={100} placeholder="e.g. Group home" />
               </FormField>
               <FormField label="On-Site Support Hours" className={span.medium}>
-                <input id="onSiteSupportHours" {...register('onSiteSupportHours')} placeholder="e.g. 24/7 or 9-5 weekdays" />
+                <input id="onSiteSupportHours" {...register('onSiteSupportHours')} maxLength={100} placeholder="e.g. 24/7 or 9-5 weekdays" />
               </FormField>
             </>
           )}
 
           {!!livingArrangementValue && (
-            <TextAreaField label="Living Arrangement Notes" id="livingArrangementNotes" {...register('livingArrangementNotes')} rows={2} placeholder="Any additional notes..." className={span.long} />
+            <TextAreaField label="Living Arrangement Notes" id="livingArrangementNotes" {...register('livingArrangementNotes')} maxLength={2000} rows={2} placeholder="Any additional notes..." className={span.long} />
           )}
         </div>
       </Card>

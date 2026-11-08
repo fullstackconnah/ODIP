@@ -28,6 +28,19 @@ beforeEach(() => {
   apiGet.mockReset().mockResolvedValue({ street: '12 Example Street', suburb: 'Brisbane City', state: 'QLD', postcode: '4000', formattedAddress: '12 Example Street, Brisbane City QLD 4000' })
 })
 
+describe('ParticipantDetailsStep — field limits', () => {
+  it('stops First name at the 100 characters the server accepts', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    const first = screen.getByLabelText(/first name/i)
+    await user.click(first)
+    await user.paste('x'.repeat(150))
+
+    expect(first).toHaveValue('x'.repeat(100))
+  })
+})
+
 describe('ParticipantDetailsStep — address lookup', () => {
   it('a picked suggestion sets street, suburb, state and postcode in the form, all dirty', async () => {
     const user = userEvent.setup()

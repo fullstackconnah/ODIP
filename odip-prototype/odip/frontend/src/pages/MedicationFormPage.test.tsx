@@ -48,6 +48,19 @@ beforeEach(() => {
   mockUseCreateMedication.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
 })
 
+describe('MedicationFormPage field limits', () => {
+  it('stops the Name field at the 200 characters the server accepts', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const field = await screen.findByLabelText(/^name/i)
+    await user.click(field)
+    await user.paste('9'.repeat(250))
+
+    expect(field).toHaveValue('9'.repeat(200))
+  })
+})
+
 describe('MedicationFormPage frequency controls', () => {
   it('defaults to Daily with SpecificDays/EveryNDays controls hidden', () => {
     renderCreatePage()
