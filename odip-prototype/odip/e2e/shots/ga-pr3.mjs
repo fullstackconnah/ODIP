@@ -221,8 +221,9 @@ async function coordinator(browser, vp) {
   checks.push(...full.checks)
   reviewsMode = 'hang'
   await page.goto(`${BASE_URL}/rostering/completions`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  const loading = page.locator('[role="status"].h-64')
-  await loading.waitFor({ timeout: 30_000 })
+  const loading = section
+  await loading.getByText('Loading...').waitFor({ timeout: 30_000 })
+  await page.addStyleTag({ content: '.animate-spin { animation: none !important }' })   // the table's spinner loops forever, so the crop could never settle
   await crop(page, loading, 'review-loading', vp)
   reviewsMode = '500'
   await page.goto(`${BASE_URL}/rostering/completions`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
