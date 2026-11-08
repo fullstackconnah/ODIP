@@ -679,6 +679,46 @@ public class EmploymentHeroStaffSyncTests
         Assert.Contains(db.EmploymentHeroAttentions, a => a.ExternalEmployeeId == "801" && a.Kind == EmploymentHeroAttentionKind.FixInEmploymentHero);
     }
 
+    [Fact]
+    public async Task Two_new_employees_sharing_an_email_show_the_clash_as_inside_this_organisation()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(301, "Ann", "Fox", "dup@gmail.com"), Employee(302, "Bea", "Gray", "dup@gmail.com")));
+
+        Assert.True(await db.Users.AnyAsync(u => u.ExternalPayrollId == "301"));
+        var item = await db.EmploymentHeroAttentions.SingleAsync(a => a.ExternalEmployeeId == "302");
+        Assert.DoesNotContain("another organisation", item.Reason);
+        Assert.Contains("A user with this email already exists.", item.Reason);
+    }
+
+    private sealed class RefusingEmailChange : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            eventData.Context!.ChangeTracker.Entries<User>().Any(e => e.State == EntityState.Modified && e.Entity.Email == "tom.ito@gmail.com")
+                ? throw new DbUpdateException("collision")
+                : base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    [Fact]
+    public async Task An_email_change_that_fails_to_save_leaves_only_the_could_not_save_item()
+    {
+        var (name, tenant) = (Guid.NewGuid().ToString(), Guid.NewGuid());
+        await using var db = Db(name, tenant, new RefusingEmailChange());
+        await ConnectAsync(db, tenant);
+        db.Users.Add(EhFixture.Staff(tenant, "Tom", "Ito", "tom@gmail.com", "102"));
+        await db.SaveChangesAsync();
+
+        await RunAsync(db, tenant, Eh(Employee(102, "Tom", "Ito", "tom.ito@gmail.com")));
+        await RunAsync(db, tenant, Eh(Employee(102, "Tom", "Ito", "tom.ito@gmail.com")));   // step 5 would carry a stray item into every later run
+
+        Assert.Equal("tom@gmail.com", (await db.Users.SingleAsync(u => u.FirstName == "Tom")).Email);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal(EmploymentHeroAttentionKind.FixInEmploymentHero, item.Kind);
+        Assert.DoesNotContain("changed their email", item.Reason);
+    }
+
     // The hold on an unusual address (audit I7): the sync brings addresses an Admin never typed, so one at neither the organisation's domain nor a common
     // provider waits for an Admin to confirm it before it can sign in. null = never assessed, true = held, false = a person confirmed it.
 
