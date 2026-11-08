@@ -3,7 +3,7 @@
 // Pinned: the fixture week 2026-09-07 (?date=), theme light (one dark set for board-normal and modal-normal), the mock board with activities injected through page.route.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks, settle } from './lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks, settle } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
