@@ -160,18 +160,18 @@ public class PortalPayslipsControllerTests
     {
         var (db, _, tenant, sam) = await OrganisationAsync();
         await using var _ = db;
-        var kim = EhFixture.Staff(tenant, "Kim", "Ng", "kim@acme.org.au", "77");
+        var kim = EhFixture.Staff(tenant, "Kim", "Ng", "kim@acme.org.au", "42");
         db.Users.Add(kim);
         sam.IsActive = false;
         await db.SaveChangesAsync();
         var eh = Eh();
 
         var gone = Data(await Controller(db, tenant, sam.Id, eh).List(CancellationToken.None));
-        var kept = Data(await Controller(db, tenant, kim.Id, eh).List(CancellationToken.None));
-
         Assert.Equal(("NotLinked", 0), (gone.Status, gone.Payslips.Count));
+        Assert.Empty(eh.Requests);   // the deactivated worker reached nobody
+
+        var kept = Data(await Controller(db, tenant, kim.Id, eh).List(CancellationToken.None));
         Assert.NotEqual("NotLinked", kept.Status);
-        Assert.DoesNotContain(eh.Requests, r => r.RequestUri!.AbsolutePath.Contains("/ess/42/"));
     }
 
     [Fact]
