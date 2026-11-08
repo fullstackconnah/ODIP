@@ -1,3 +1,5 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -363,5 +365,26 @@ public class ParticipantRiskEntriesControllerTests
 
         var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:risksHazards");
         Assert.True(note.IsArchived);
+    }
+
+    [Fact]
+    public async Task Delete_IsForAdminsAndCoordinatorsOnly_ASupportWorkerCanAddAndEditButNotRemove_AndACoordinatorStillRemoves()
+    {
+        string RolesOf(string action) =>
+            typeof(ParticipantRiskEntriesController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles!;
+
+        // A support worker is refused by the role gate (403) before the action runs, so the row is never touched.
+        Assert.Equal("Admin,Coordinator,SuperAdmin", RolesOf(nameof(ParticipantRiskEntriesController.Delete)));
+        Assert.Contains("SupportWorker", RolesOf(nameof(ParticipantRiskEntriesController.Create)));   // unchanged
+        Assert.Contains("SupportWorker", RolesOf(nameof(ParticipantRiskEntriesController.Update)));
+
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
+        var createResult = await controller.Create(participant.Id, CreateDto(), CancellationToken.None);
+        var created = Assert.IsType<ApiResponse<ParticipantRiskEntryDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
+
+        Assert.IsType<OkObjectResult>((await controller.Delete(created.Data!.Id, CancellationToken.None)).Result);
+        Assert.Empty(await db.ParticipantRiskEntries.ToListAsync());
     }
 }
