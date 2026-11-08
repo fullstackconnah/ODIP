@@ -256,7 +256,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
             {/* Notes */}
             <FormField label="Booking Notes"><textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3} className="resize-none"
-                placeholder="Optional notes..." /></FormField>
+                placeholder="Optional notes..." maxLength={4000} /></FormField>
 
             {/* Insurance */}
             <div className="border-t border-[var(--color-border)]/15 pt-4 mt-2">
@@ -272,9 +272,9 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                   <>
                     <div className={modalGrid}>
                       <FormField label="Provider"><input type="text" value={insuranceProvider} onChange={e => setInsuranceProvider(e.target.value)}
-                          placeholder="e.g. Allianz" /></FormField>
+                          placeholder="e.g. Allianz" maxLength={200} /></FormField>
                       <FormField label="Policy Number"><input type="text" value={insurancePolicyNumber} onChange={e => setInsurancePolicyNumber(e.target.value)}
-                          placeholder="e.g. POL-12345" /></FormField>
+                          placeholder="e.g. POL-12345" maxLength={100} /></FormField>
                     </div>
                     <div className={modalGrid}>
                       <FormField label="Coverage Start"><input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)} /></FormField>
