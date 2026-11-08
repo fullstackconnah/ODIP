@@ -72,4 +72,36 @@ public class TripUpdateGuardsTests
         Assert.Equal(TripStatus.Completed, (await db.TripInstances.FindAsync(trip.Id))!.Status);
         Assert.Equal(1, await db.BookingTasks.CountAsync(b => b.TripInstanceId == trip.Id && b.TaskType == TaskType.GenerateNdisClaims));
     }
+
+    private const string StaleMessage = "Someone else changed this trip while you were editing. Close it and open it again to see their changes.";
+
+    // H44-7: a PUT built from an older read is refused and saves nothing.
+    [Fact]
+    public async Task APutWithAStaleExpectedUpdatedAt_Is409_AndSavesNothing()
+    {
+        using var db = TestDb.Create();
+        var trip = Seed(db, TripStatus.Confirmed);
+        var read = trip.UpdatedAt;
+        trip.UpdatedAt = read.AddMinutes(1); // someone else saved after the editor loaded
+        db.SaveChanges();
+
+        var result = await Controller(db).Update(trip.Id, Put(trip, null) with { TripName = "Overwrite", ExpectedUpdatedAt = read }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(StaleMessage, Assert.IsType<ApiResponse<TripDetailDto>>(conflict.Value).Errors![0]);
+        Assert.Equal("Gold Coast", (await db.TripInstances.AsNoTracking().SingleAsync(x => x.Id == trip.Id)).TripName);
+    }
+
+    [Fact]
+    public async Task APutWithTheCurrentExpectedUpdatedAt_OrNone_Saves()
+    {
+        using var db = TestDb.Create();
+        var trip = Seed(db, TripStatus.Confirmed);
+        var controller = Controller(db);
+
+        Assert.IsType<OkObjectResult>((await controller.Update(trip.Id, Put(trip, null) with { TripName = "With token", ExpectedUpdatedAt = trip.UpdatedAt }, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.Update(trip.Id, Put(trip, null) with { TripName = "No token" }, CancellationToken.None)).Result);
+
+        Assert.Equal("No token", (await db.TripInstances.AsNoTracking().SingleAsync(x => x.Id == trip.Id)).TripName);
+    }
 }
