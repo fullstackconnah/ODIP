@@ -409,4 +409,50 @@ public class BookingsControllerTests
         Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b, current), CancellationToken.None)).Result);
         Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b), CancellationToken.None)).Result);
     }
+
+    // H44-6: an insurance cover that ends before it starts is refused; one that ends the day it starts is fine.
+    [Fact]
+    public async Task Update_CoverEndBeforeStart_Is400_AndEqualDatesSave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        var controller = new BookingsController(db);
+        var day = new DateOnly(2026, 9, 1);
+
+        var refused = await controller.Update(b.Id, UpdateDto(b, coverStart: day, coverEnd: day.AddDays(-1)), CancellationToken.None);
+        Assert.Equal("Choose a cover end date on or after the start date.", Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<BadRequestObjectResult>(refused.Result).Value).Errors![0]);
+        Assert.Null((await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Id)).InsuranceCoverageEnd);
+
+        Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b, coverStart: day, coverEnd: day), CancellationToken.None)).Result);
+        Assert.Equal(day, (await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Id)).InsuranceCoverageEnd);
+    }
+
+    [Fact]
+    public async Task Create_CoverEndBeforeStart_Is400()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var p = SeedParticipant(db);
+        var dto = BookingDto(trip.Id, p.Id) with { InsuranceCoverageStart = new DateOnly(2026, 9, 1), InsuranceCoverageEnd = new DateOnly(2026, 8, 31) };
+
+        var result = await new BookingsController(db).Create(dto, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(db.ParticipantBookings);
+    }
+
+    [Fact]
+    public void UpdateBookingDto_CancellationReasonOver2000Characters_FailsValidation()
+    {
+        var b = new ParticipantBooking { TripInstanceId = Guid.NewGuid(), ParticipantId = Guid.NewGuid() };
+        bool Valid(string reason)
+        {
+            var dto = UpdateDto(b, cancellationReason: reason);
+            return System.ComponentModel.DataAnnotations.Validator.TryValidateObject(dto, new System.ComponentModel.DataAnnotations.ValidationContext(dto), null, true);
+        }
+
+        Assert.False(Valid(new string('x', 2001)));
+        Assert.True(Valid(new string('x', 2000)));
+    }
 }

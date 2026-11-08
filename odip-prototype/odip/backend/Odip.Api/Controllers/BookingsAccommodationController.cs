@@ -136,6 +136,7 @@ public class BookingsController : ControllerBase
         // booking fields can never assert readiness. A participant who does not exist, is a draft
         // or is inactive is refused in either mode. Warn lets the booking proceed and reports what
         // is missing on the response; Enforce refuses it unless the strict gate accepts the participant.
+        if (CoverEndsBeforeStart(dto)) return BadRequest(ApiResponse<BookingDetailDto>.Fail(CoverDatesMessage));
         var readiness = await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct);
         if (!readiness.Allowed)
             return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
@@ -220,6 +221,9 @@ public class BookingsController : ControllerBase
             }));
     }
 
+    private const string CoverDatesMessage = "Choose a cover end date on or after the start date.";
+    private static bool CoverEndsBeforeStart(CreateBookingDto dto) => dto.InsuranceCoverageStart is { } start && dto.InsuranceCoverageEnd is { } end && end < start;
+
     /// <summary>Confirming a booking's insurance (PUT or PATCH) completes its open InsuranceConfirmation task. Saved with the caller's SaveChanges.</summary>
     private async Task CompleteInsuranceTaskAsync(Guid bookingId, CancellationToken ct)
     {
@@ -244,6 +248,8 @@ public class BookingsController : ControllerBase
         // Compared to the microsecond (the column's precision), as IntakeBookingsController.IsStale does.
         if (dto.ExpectedUpdatedAt is { } expected && b.UpdatedAt.Ticks - b.UpdatedAt.Ticks % 10 != expected.Ticks - expected.Ticks % 10)
             return Conflict(ApiResponse<BookingDetailDto>.Fail("Someone else just changed this booking. Close it and open it again to see their changes."));
+
+        if (CoverEndsBeforeStart(dto)) return BadRequest(ApiResponse<BookingDetailDto>.Fail(CoverDatesMessage));
 
         var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
         b.BookingStatus = dto.BookingStatus; b.SupportRatioOverride = dto.SupportRatioOverride;
