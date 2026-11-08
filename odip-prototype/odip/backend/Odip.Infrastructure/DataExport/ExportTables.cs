@@ -217,6 +217,8 @@ public static class ExportTables
         Own<ShiftPattern>("shift-patterns.csv", "Repeating shift patterns."),
         Own<RosterWeek>("roster-weeks.csv", "The roster weeks that have been started."),
         Own<Shift>("shifts.csv", "Shifts: participant, worker, date, times and status."),
+        Own<GroupActivity>("group-activities.csv", "Group activities: several participants and workers at one place and time."),
+        Own<GroupActivityStaff>("group-activity-staff.csv", "Which workers are rostered to each group activity."),
         Own<ShiftNote>("shift-notes.csv", "Notes written on shifts."),
         Own<ShiftCompletion>("shift-completions.csv", "Shift finishes: actual times, what happened, and the review."),
         Own<ShiftBreak>("shift-breaks.csv", "Breaks taken during shifts."),
