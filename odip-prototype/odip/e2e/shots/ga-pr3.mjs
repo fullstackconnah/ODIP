@@ -17,7 +17,7 @@ const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const refusal = (code, message, status = 409) => ({ status, json: { success: false, data: null, message, errors: [message], code } })
 const NOW = new Date('2026-11-16T04:00:00Z')   // 3:00 pm Monday 16 Nov in Sydney (AEDT)
 const checks = []
-const check = (name, pass, detail = '') => { checks.push({ name, pass: !!pass, detail: String(detail) }); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}: ${detail}`) }
+const check = (name, detail, pass) => { checks.push({ name, pass: !!pass, detail: String(detail) }); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}: ${detail}`) }
 const px = (page, token) => page.evaluate((t) => { const p = document.createElement('div'); p.style.height = `var(${t})`; document.body.append(p); const h = p.getBoundingClientRect().height; p.remove(); return h }, token)
 const crop = async (page, locator, name, vp, pad = 8) => {
   const r = await cropElement(page, locator, path.join(OUT_DIR, `${name}-${vp.name}.png`), { touch: vp.touch, natural: true, pad })
@@ -53,7 +53,7 @@ async function open(browser, vp, role) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch, isMobile: vp.touch, colorScheme: 'light', reducedMotion: 'reduce' })
   await context.addInitScript(([id]) => { try { localStorage.setItem('odip_ui_prefs:' + id, JSON.stringify({ theme: 'light' })) } catch { /* storage blocked */ } }, [USER_ID])
   const page = await context.newPage()
-  page.on('pageerror', (e) => check(`page error (${vp.name})`, false, e.message))
+  page.on('pageerror', (e) => check(`page error (${vp.name})`, e.message, false))
   const login = envelope({ id: USER_ID, token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.u', fullName: 'Dev User', role, tenantName: 'Sample Support Co', tenantId: 'tenant-0001' })
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: envelope([{ username: 'dev.u', role, tenantName: 'Sample Support Co' }]) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login }))
@@ -73,9 +73,13 @@ async function worker(browser) {
   await page.route((u) => u.pathname === '/api/v1/portal/my-shifts', (r) => r.fulfill({ json: envelope({ shifts: [], tripAssignments: [], timeZoneId: 'Australia/Sydney', activityShifts: [current] }) }))
   await page.route('**/api/v1/portal/shifts/*/notes', (r) => r.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/portal/activity-staff/*/finish', (r) => r.fulfill(refusal('GA_BREAK', 'Enter both break times, or neither.', 400)))
+  let startMode = 'hang'
+  await page.route('**/api/v1/portal/activity-staff/*/start', (r) => startMode === 'hang' ? new Promise(() => {}) : r.fulfill(startMode === '404' ? { status: 404, json: { success: false, data: null, message: null, errors: [] } } : refusal('GA_CANCELLED', 'This group activity is cancelled.')))
   const show = async (state) => {
     current = state
-    await page.goto(`${BASE_URL}/portal/shifts`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    // the saved copy of the list is fresh under the pinned clock, so clear it or the previous state paints and never refetches
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.includes('shifts:')) localStorage.removeItem(k) })
+    await page.goto(`${BASE_URL}/portal`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await page.getByText('Ten-pin bowling').first().waitFor({ timeout: 30_000 })
     await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
     return page.getByTestId('activity-shift-card')
@@ -132,6 +136,27 @@ async function worker(browser) {
   check('offline: Start is disabled with the helper text', '', await card.getByRole('button', { name: 'Start' }).isDisabled() && (await card.getByText("You're offline. Start and finish need a connection.").count()) === 1)
   await crop(page, card, 'offline-disabled', vp)
   await context.setOffline(false)
+
+  card = await show(STATES.notStarted)
+  await card.getByRole('button', { name: 'Start' }).click()
+  await card.getByRole('button', { name: 'Starting…' }).waitFor({ timeout: 30_000 })
+  await crop(page, card, 'card-sending', vp)
+  for (const [mode, name] of [['409', 'card-start-error-409'], ['404', 'card-start-error-404']]) {
+    startMode = mode
+    card = await show(STATES.notStarted)
+    await card.getByRole('button', { name: 'Start' }).click()
+    await card.getByRole('alert').waitFor({ timeout: 30_000 })
+    await crop(page, card, name, vp)
+  }
+  card = await show(activity({ state: 'Started', startTime: '06:00:00', endTime: '10:00:00', actualStart: '2026-11-15T19:00:00Z' }))
+  await crop(page, card, 'card-started-past', vp)
+  card = await show(activity({ endTime: '14:00:00' }))
+  await card.getByRole('button', { name: 'Finish' }).click()
+  const startSheet = page.getByRole('dialog')
+  await startSheet.getByRole('button', { name: 'Finish shift' }).click()
+  await startSheet.getByRole('alert').waitFor()
+  check('start time error uses the 24 hour wording', await startSheet.getByRole('alert').textContent(), (await startSheet.getByRole('alert').textContent()) === 'Enter a start time in the last 24 hours.')
+  await crop(page, startSheet, 'finish-sheet-start-error', vp)
   const full = await fullPage(page, path.join(OUT_DIR, 'full', 'portal-shifts-390.png'), { touch: true })
   checks.push(...full.checks)
   await context.close()
@@ -141,8 +166,10 @@ async function coordinator(browser, vp) {
   const { context, page } = await open(browser, vp, 'Coordinator')
   const paged = { items: [], totalCount: 0, page: 1, pageSize: 50, totalPages: 1, hasNext: false, hasPrevious: false }
   await page.route((u) => u.pathname === '/api/v1/rostering/completions', (r) => r.fulfill({ json: envelope(paged) }))
-  await page.route((u) => u.pathname === '/api/v1/rostering/group-activities/staff-reviews', (r) => r.fulfill({ json: envelope({ rows: REVIEWS, total: REVIEWS.length }) }))
-  await page.route((u) => u.pathname === '/api/v1/rostering/group-activities/staff-reviews/approve', (r) => r.fulfill({ json: envelope([
+  let reviewsMode = 'ok', approveMode = 'busy', putMode = 'long'
+  await page.route((u) => u.pathname === '/api/v1/rostering/group-activities/staff-reviews', (r) => reviewsMode === 'hang' ? new Promise(() => {}) : r.fulfill(reviewsMode === '500' ? { status: 500, json: { success: false, data: null, message: 'Server error', errors: ['Server error'] } } : { json: envelope({ rows: REVIEWS, total: REVIEWS.length }) }))
+  await page.route((u) => u.pathname.includes('/staff/') && u.pathname.endsWith('/actuals'), (r) => r.fulfill(putMode === 'long' ? refusal('GA_ACTUALS_LONG', 'These times are over 24 hours. Record times first.') : refusal('GA_TIMES', 'The finish must be after the start.', 400)))
+  await page.route((u) => u.pathname === '/api/v1/rostering/group-activities/staff-reviews/approve', (r) => approveMode === 'busy' ? r.fulfill(refusal('GA_BOARD_BUSY', 'Someone else is changing this board. Try again in a moment.')) : r.fulfill({ json: envelope([
     { rowId: 'r1', ok: true, code: null, message: null },
     { rowId: 'r2', ok: false, code: 'GA_ACTUALS_LONG', message: 'These times are over 24 hours. Record times first.' },
   ]) }))
@@ -162,13 +189,24 @@ async function coordinator(browser, vp) {
   await modal.getByRole('button', { name: 'Save times' }).click()
   await modal.getByRole('alert').waitFor()
   await crop(page, modal, 'record-times-error', vp)
+  await modal.getByLabel('Reason').fill('Phone died, times recorded by the coordinator')
+  await modal.getByRole('button', { name: 'Save times' }).click()
+  await modal.getByRole('alert').filter({ hasText: 'over 24 hours' }).waitFor()
+  await crop(page, modal, 'record-times-error-actuals', vp)
+  putMode = 'times'
+  await modal.getByRole('button', { name: 'Save times' }).click()
+  await modal.getByRole('alert').filter({ hasText: 'must be after' }).waitFor()
+  await crop(page, modal, 'record-times-error-times', vp)
   await page.keyboard.press('Escape')
 
-  await page.getByLabel('Select row r1').check()
-  await page.getByLabel('Select row r2').check()
-  await page.getByRole('button', { name: /approve selected \(2\)/i }).click()
+  await (vp.touch ? section.getByRole('checkbox').first() : page.getByRole('checkbox', { name: /select all/i }).first()).click()
+  await page.getByRole('button', { name: /approve selected \(\d+\)/i }).click()
   const dialog = page.getByRole('alertdialog')
   await crop(page, dialog, 'approve-confirm', vp)
+  await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+  await dialog.getByRole('alert').waitFor()
+  await crop(page, dialog, 'approve-busy-board', vp)
+  approveMode = 'ok'
   await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
   const result = section.getByRole('status').filter({ hasText: 'could not be approved' })
   await result.waitFor({ timeout: 15_000 })
@@ -176,6 +214,16 @@ async function coordinator(browser, vp) {
   await crop(page, result, 'approve-partial', vp)
   const full = await fullPage(page, path.join(OUT_DIR, 'full', `completions-${vp.name}.png`), { touch: vp.touch })
   checks.push(...full.checks)
+  reviewsMode = 'hang'
+  await page.goto(`${BASE_URL}/rostering/completions`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  const loading = page.locator('[role="status"].h-64')
+  await loading.waitFor({ timeout: 30_000 })
+  await crop(page, loading, 'review-loading', vp)
+  reviewsMode = '500'
+  await page.goto(`${BASE_URL}/rostering/completions`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  const loadError = page.getByRole('alert').filter({ hasText: "Couldn't load group activity staff" })
+  await loadError.waitFor({ timeout: 60_000 })
+  await crop(page, loadError, 'review-query-error', vp)
   await context.close()
 }
 
