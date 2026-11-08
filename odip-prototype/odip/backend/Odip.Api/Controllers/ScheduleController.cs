@@ -32,6 +32,11 @@ public class ScheduleController : ControllerBase
         _availabilityItemsQuery = availabilityItemsQuery;
     }
 
+    public const int MaxDays = 731;
+    public const string RangeMessage = "Choose a schedule window of 731 days or fewer, ending on or after its start.";
+
+    private static string? RangeRefusal(DateOnly from, DateOnly to) => from > to || to.DayNumber - from.DayNumber + 1 > MaxDays ? RangeMessage : null;
+
     /// <summary>
     /// Returns a scheduling overview: all trips with staff/vehicle availability matrix.
     /// </summary>
@@ -43,6 +48,7 @@ public class ScheduleController : ControllerBase
         var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var windowStart = from ?? providerToday.AddMonths(-3);
         var windowEnd = to ?? providerToday.AddMonths(12);
+        if (RangeRefusal(windowStart, windowEnd) is { } refusal) return BadRequest(ApiResponse<ScheduleOverviewDto>.Fail(refusal));
 
         // ── 1. Load trips in window ──
         var trips = await _db.TripInstances
