@@ -213,7 +213,7 @@ describe('Organisation profile', () => {
 
   it('says which fields the server needs when it refuses a blank one without a message', async () => {
     const user = userEvent.setup()
-    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { errors: { ABN: ['The ABN field is required.'] } } } })
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: {} } })
     renderSection('organisation')
     await user.clear(await screen.findByLabelText('ABN'))
     await user.click(saveButton())
