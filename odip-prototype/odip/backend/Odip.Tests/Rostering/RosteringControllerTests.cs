@@ -1033,6 +1033,34 @@ public class RosteringControllerTests
     }
 
     [Fact]
+    public async Task GetFlaggedShiftNotes_WithoutIncidentTrue_CountsAnInactiveIncidentAsWithout_AndKeepsOrder()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedFlaggedNotesShift(db, participant.Id, staff.Id, ServiceDate);
+        db.Shifts.Add(shift);
+        ShiftNote Note(string body, int minute) => new() { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = staff.Id, AuthorName = staff.FullName, Body = body, FlaggedCategories = ShiftNoteFlagCategory.Falls, CreatedAt = new DateTime(2026, 10, 20, 9, minute, 0, DateTimeKind.Utc) };
+        var active = Note("Has an active incident.", 1);
+        var inactive = Note("Has only a deleted incident.", 2);
+        var none = Note("Has no incident.", 3);
+        db.ShiftNotes.AddRange(none, inactive, active);
+        db.SaveChanges();
+        SeedIncidentForShiftNote(db, active.Id);
+        SeedIncidentForShiftNote(db, inactive.Id, isActive: false);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var filtered = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>((await controller.GetFlaggedShiftNotes(true, null, null, CancellationToken.None)).Result).Value);
+        Assert.Equal([inactive.Id, none.Id], filtered.Data!.Select(i => i.ShiftNoteId));
+        Assert.All(filtered.Data!, i => Assert.Null(i.IncidentId));
+
+        var all = Assert.IsType<ApiResponse<List<FlaggedShiftNoteDto>>>(Assert.IsType<OkObjectResult>((await controller.GetFlaggedShiftNotes(null, null, null, CancellationToken.None)).Result).Value);
+        Assert.Equal([active.Id, inactive.Id, none.Id], all.Data!.Select(i => i.ShiftNoteId));
+        Assert.NotNull(all.Data![0].IncidentId);
+        Assert.Null(all.Data![1].IncidentId);
+    }
+
+    [Fact]
     public async Task GetFlaggedShiftNotes_FromToFilters_ScopeByShiftServiceDate()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

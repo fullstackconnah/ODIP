@@ -110,6 +110,7 @@ export function RosterGateFields({
           <textarea
             ref={reasonTextareaRef}
             rows={2}
+            maxLength={2000}
             value={overrideReason}
             disabled={disabled}
             onChange={e => onOverrideReasonChange(e.target.value)}

@@ -109,6 +109,22 @@ public class ShiftCancellationClaimTests
     }
 
     [Fact]
+    public async Task ThreeParticipantsWithCancellations_AreEachOfferedWithTheirOwnNameAndPrice_OrderedByNameOnOneDate()
+    {
+        var (kit, engine) = NewKit();
+        using var _ = kit;
+        var shifts = new[] { "Cara", "Abel", "Bea" }.Select(n => Cancelled(kit, kit.SeedParticipant(first: n, last: "Test"), Service, SixDaysBefore)).ToList();
+
+        var result = await engine.CancellationCandidatesAsync(kit.TenantId, Now, Ct);
+
+        Assert.Equal(["Abel Test", "Bea Test", "Cara Test"], result.Shifts.Select(s => s.ParticipantName));
+        Assert.Equal(shifts.Select(s => s.Id).Order(), result.Shifts.Select(s => s.ShiftId).Order());
+        Assert.All(result.Shifts, s => Assert.True(s.TotalAmount > 0));
+        Assert.Single(result.Shifts.Select(s => s.TotalAmount).Distinct());   // same shift length and day type, so one price
+        Assert.Empty(result.LeftOut);
+    }
+
+    [Fact]
     public async Task D_AnItemWithACancellationTwin_IsOffered_AndTheLineStoresTheStandardCode()
     {
         var (kit, engine) = NewKit(CatalogueClaimFlag.No);
