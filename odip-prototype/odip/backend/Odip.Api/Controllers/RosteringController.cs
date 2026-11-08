@@ -1069,7 +1069,7 @@ public class RosteringController : ControllerBase
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             // Only a draft whose worker's screening has lapsed, who has not started by its day, or who is marked No for its participant can hit a Blocking finding, so only those need the full roster check: one query for every worker, one for the Nos.
             var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
-            var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate), ct);
+            var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate, Active: u.IsActive), ct);
             var excluded = (await _db.StaffParticipantCompatibilities.Where(c => c.Level == CompatibilityLevel.Excluded && workerIds.Contains(c.UserId) && shown.Contains(c.ParticipantId)).Select(c => new { c.UserId, c.ParticipantId }).ToListAsync(ct))
                 .Select(c => (c.UserId, c.ParticipantId)).ToHashSet();
 
@@ -1077,6 +1077,8 @@ public class RosteringController : ControllerBase
             var skipped = 0;
             foreach (var shift in drafts.Where(s => s.UserId.HasValue))
             {
+                // An archived worker gets no notice, so their draft stays Draft and counts as skipped (H42B-1).
+                if (shift.UserId is { } holder && gates.TryGetValue(holder, out var hg) && !hg.Active) { skipped++; continue; }
                 // shortcut: only a lapsed screening, a start date ahead or a No is re-checked (the Blocking rules today); check every filled draft again if another Blocking rule is added.
                 var mayBeBlocked = shift.UserId is { } worker && ((gates.TryGetValue(worker, out var g) && (g.Expiry < shift.ServiceDate || g.Start > shift.ServiceDate)) || excluded.Contains((worker, shift.ParticipantId)));
                 if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }
@@ -1985,6 +1987,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
+        // An end before the start would save a pattern that makes nothing.
+        if (dto.EffectiveTo < dto.EffectiveFrom) return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Choose an end date on or after the start date."));
         // A pattern makes shifts, so it needs a length like one (phase 3 review, N2): a pattern with none would make shifts the budget cannot price.
         if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
@@ -2020,6 +2024,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> UpdatePattern(
         Guid id, [FromBody] UpdateShiftPatternDto dto, CancellationToken ct)
     {
+        if (dto.EffectiveTo < dto.EffectiveFrom) return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Choose an end date on or after the start date."));
         var participantId = await _db.ShiftPatterns.Where(p => p.Id == id).Select(p => (Guid?)p.ParticipantId).FirstOrDefaultAsync(ct);
         if (participantId is null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
         // REV281B: the regular is a concurrency token, so a change must not commit between a generation's load and its save: queue behind the participant's generation lock, as the generators do.
@@ -2107,6 +2112,9 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<GeneratePatternResultDto>>> GeneratePattern(
         Guid id, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
     {
+        // A mistyped year would build hundreds of thousands of shifts under the board lock: refuse before the load and any lock.
+        if (to < from) return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail("Choose an end date on or after the start date."));
+        if (to.DayNumber - from.DayNumber > 400) return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail("Choose a date range of 400 days or less."));
         // Not tracked: the generator takes the participant lock and then loads the pattern tracked, and a tracked copy read here would be returned to it stale (a SetRegular committing in between would make its save a concurrency 500).
         var pattern = await _db.ShiftPatterns.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<GeneratePatternResultDto>.Fail("Pattern not found."));

@@ -82,7 +82,7 @@ public static class NdiaResultsFile
         }
         return new ResultsParse(rows, unread, null);
 
-        // numeric(18,2) is the ResultAmount column: anything outside it, negative, or finer than cents would fail the whole import at save.
+        // numeric(18,2) is the ResultAmount column: values outside it would fail the save; negative and finer-than-cents are refused here so the stored amount is never silently rounded.
         static bool IsStorable(decimal v) => v >= 0 && v <= 9_999_999_999_999_999.99m && decimal.Round(v, 2) == v;
 
         static ResultsParse Refuse(string error) => new([], [], error);
