@@ -77,7 +77,9 @@ public record PortalShiftsResponseDto(
     List<PortalShiftSummaryDto> Shifts,
     List<PortalTripAssignmentSummaryDto> TripAssignments,
     /// <summary>The provider's IANA zone: the shifts' dates and times are wall-clock there, so the list judges "today" and "ended" in it.</summary>
-    string TimeZoneId);
+    string TimeZoneId,
+    /// <summary>The caller's group activity shifts (GA PR3), each worked as one row of an activity; empty when none.</summary>
+    List<PortalActivityShiftDto>? ActivityShifts = null);
 
 /// <summary>
 /// Participant fields a support worker needs on shift — support/risk flags, mobility and
@@ -481,3 +483,30 @@ public record PortalWitnessRequestDto(
 /// <see cref="Odip.Domain.Entities.IncidentWitness.StatementText"/>. Never overwrites a
 /// previously-typed statement with null when omitted.</summary>
 public record PortalRespondIncidentWitnessRequestDto(string? StatementText);
+
+/// <summary>One participant on a group activity, as the worker sees them on their card.</summary>
+public record PortalActivityParticipantDto(Guid ShiftId, Guid ParticipantId, string Name);
+
+/// <summary>A worker's row on a group activity (GA PR3): the planned times are the row's, the actual times are what Start and Finish recorded. State is NotStarted, Started, Finished or Approved.</summary>
+public record PortalActivityShiftDto(
+    Guid Id, Guid GroupActivityId, string Title, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
+    string? Location, string? Role, string State, DateTime? ActualStart, DateTime? ActualEnd, DateTime? BreakStartedAt, DateTime? BreakEndedAt,
+    List<PortalActivityParticipantDto> Participants);
+
+public record StartActivityShiftDto
+{
+    [System.ComponentModel.DataAnnotations.Range(-90.0, 90.0)]
+    public decimal? Latitude { get; init; }
+    [System.ComponentModel.DataAnnotations.Range(-180.0, 180.0)]
+    public decimal? Longitude { get; init; }
+    public double? AccuracyMetres { get; init; }
+    public bool GeolocationDeclined { get; init; }
+}
+
+/// <summary>Finish: a typed start only when the worker never tapped Start; a break only as a pair (UTC instants).</summary>
+public record FinishActivityShiftDto
+{
+    public DateTime? ActualStart { get; init; }
+    public DateTime? BreakStart { get; init; }
+    public DateTime? BreakEnd { get; init; }
+}

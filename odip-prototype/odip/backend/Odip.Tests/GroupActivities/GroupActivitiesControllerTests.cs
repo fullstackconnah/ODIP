@@ -36,7 +36,7 @@ internal sealed class GroupActivityFixture
 
     public OdipDbContext Fresh() => TestDb.ForTenant(DbName, TenantId);
 
-    public GroupActivitiesController Controller(OdipDbContext? db = null, Guid? tenantId = null, string role = "Admin", bool superAdminNoTenant = false)
+    public GroupActivitiesController Controller(OdipDbContext? db = null, Guid? tenantId = null, string role = "Admin", bool superAdminNoTenant = false, Guid? userId = null)
     {
         db ??= Fresh();
         var tenant = new Mock<ICurrentTenant>();
@@ -45,9 +45,16 @@ internal sealed class GroupActivityFixture
         var controller = new GroupActivitiesController(db, tenant.Object, new StaffUnavailabilityQuery(db));
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test")) },
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(Claims(role, userId), "test")) },
         };
         return controller;
+    }
+
+    private static List<Claim> Claims(string role, Guid? userId)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.Role, role) };
+        if (userId is { } id) claims.Add(new Claim(ClaimTypes.NameIdentifier, id.ToString()));
+        return claims;
     }
 
     public Participant AddParticipant(string first = "Pat", bool active = true)

@@ -307,6 +307,12 @@ public partial class ShiftClaimGenerationService
         foreach (var shift in shifts)
         {
             var zone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone);
+            // shortcut: group activity shifts are claimed in GA PR4; until then they show as left out and are never billed
+            if (shift.GroupActivityId != null)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = "It is on a group activity, which shift claims do not price yet." });
+                continue;
+            }
             if (noNdisNumber is not null)
             {
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });

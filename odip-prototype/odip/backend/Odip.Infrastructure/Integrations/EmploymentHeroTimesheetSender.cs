@@ -89,13 +89,18 @@ public sealed class EmploymentHeroTimesheetSender
         var have = db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet).Select(r => r.EntityId);
         var missing = await db.ShiftCompletions
             .Where(c => c.TenantId == tenantId && c.IsActive && c.ReviewOutcome == ReviewOutcome.Approved && !have.Contains(c.Id)
-                        && c.Shift!.Status == ShiftStatus.Completed && c.Shift.ServiceDate >= cutoff)
+                        && c.Shift!.Status == ShiftStatus.Completed && c.Shift.GroupActivityId == null && c.Shift.ServiceDate >= cutoff)   // a group shift's completion is the coordinator's, not pay
             .Select(c => c.Id).Take(ScanSize).ToListAsync(ct);
+        // Approved group staff rows have their own kind: one row per worker, whose id is the entity.
+        var haveRows = db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet).Select(r => r.EntityId);
+        var missingRows = await db.GroupActivityStaff
+            .Where(r => r.TenantId == tenantId && r.ReviewOutcome == ReviewOutcome.Approved && !haveRows.Contains(r.Id) && r.GroupActivity!.ServiceDate >= cutoff)
+            .Select(r => r.Id).Take(ScanSize).ToListAsync(ct);
         // One row per save: EF sorts a batch's inserts by their random row Ids, so two drains insert the same shifts in different orders and deadlock on the unique index.
         var collided = 0;
-        foreach (var id in missing)
+        foreach (var (id, kind) in missing.Select(m => (m, EmploymentHeroOutboxKind.Timesheet)).Concat(missingRows.Select(m => (m, EmploymentHeroOutboxKind.GroupStaffTimesheet))))
         {
-            db.EmploymentHeroOutbox.Add(EmploymentHeroTimesheets.NewRow(tenantId, id, now));
+            db.EmploymentHeroOutbox.Add(EmploymentHeroTimesheets.NewRow(tenantId, id, now, kind));
             try
             {
                 await db.SaveChangesAsync(ct);
@@ -109,7 +114,7 @@ public sealed class EmploymentHeroTimesheetSender
         if (collided > 0) _logger.LogInformation("Employment Hero timesheet scan for organisation {TenantId} collided with another run on {Collided} shifts", tenantId, collided);
     }
 
-    /// <summary>Re-builds sent rows from today's data: an edit puts the row back in the queue, and a Changed row whose data matches what was sent again is Sent.</summary>
+    /// <summary>Re-builds sent rows from today's data: an edit puts the row back in the queue, and a Changed row whose data matches what was sent again is Sent. Group staff rows are not rebuilt: they are frozen at approval (GA PR3 decision 14).</summary>
     private async Task CheckChangesAsync(OdipDbContext db, Guid tenantId, EmploymentHeroTimesheets.TimesheetMapping map, TimeZoneInfo zone, DateTime now, CancellationToken ct)
     {
         var from = ProviderLocalTime.TodayIn(now, zone).AddDays(-ChangeWindowDays);
@@ -148,12 +153,19 @@ public sealed class EmploymentHeroTimesheetSender
 
     private static async Task<Dictionary<Guid, RowData>> LoadAsync(OdipDbContext db, Guid tenantId, List<EmploymentHeroOutbox> rows, CancellationToken ct)
     {
-        var ids = rows.Select(r => r.EntityId).ToList();
+        var ids = rows.Where(r => r.Kind == EmploymentHeroOutboxKind.Timesheet).Select(r => r.EntityId).ToList();
         var completions = await db.ShiftCompletions.Include(c => c.Shift).Where(c => c.TenantId == tenantId && ids.Contains(c.Id)).ToListAsync(ct);
-        var workerIds = completions.Select(c => c.SubmittedByUserId).Distinct().ToList();
+        var groupIds = rows.Where(r => r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet).Select(r => r.EntityId).ToList();
+        var groupRows = await db.GroupActivityStaff.Include(g => g.GroupActivity).Where(g => g.TenantId == tenantId && groupIds.Contains(g.Id)).ToListAsync(ct);
+        var workerIds = completions.Select(c => c.SubmittedByUserId).Concat(groupRows.Select(g => g.UserId)).Distinct().ToList();
         var payroll = await db.Users.Where(u => u.TenantId == tenantId && workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.ExternalPayrollId, ct);
         var breaks = (await db.ShiftBreaks.Where(b => b.TenantId == tenantId && ids.Contains(b.ShiftCompletionId)).ToListAsync(ct)).ToLookup(b => b.ShiftCompletionId);
-        return completions.Where(c => c.Shift is not null).ToDictionary(c => c.Id, c => new RowData(c.Shift!, c, breaks[c.Id].ToList(), payroll.GetValueOrDefault(c.SubmittedByUserId)));
+        var data = completions.Where(c => c.Shift is not null).ToDictionary(c => c.Id, c => new RowData(c.Shift!, c, breaks[c.Id].ToList(), payroll.GetValueOrDefault(c.SubmittedByUserId)));
+        // A row with no actual times has no pay data: it stays out of the result, so the drain flags that one row and carries on with the next.
+        foreach (var g in groupRows)
+            if (g.GroupActivity is { } activity && EmploymentHeroTimesheets.ForStaffRow(activity, g) is { } built)
+                data[g.Id] = new RowData(built.Shift, built.Completion, built.Breaks, payroll.GetValueOrDefault(g.UserId));
+        return data;
     }
 
     private sealed record DrainResult(int Sent, int Failed, int Flagged, int ChangedFlagged, EmploymentHeroFailure? StoppedBy);
@@ -182,10 +194,14 @@ public sealed class EmploymentHeroTimesheetSender
 
         // Only workers who are linked: an unlinked worker's row waits without costing a try.
         var due = await db.EmploymentHeroOutbox
-            .Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet
+            .Where(r => r.TenantId == tenantId
                         && (r.Status == EmploymentHeroOutboxStatus.Pending || r.Status == EmploymentHeroOutboxStatus.Failed) && r.NextAttemptAt <= now
-                        && db.ShiftCompletions.Any(c => c.Id == r.EntityId && c.TenantId == tenantId
-                                                        && db.Users.Any(u => u.Id == c.SubmittedByUserId && u.TenantId == tenantId && u.ExternalPayrollId != null)))
+                        && ((r.Kind == EmploymentHeroOutboxKind.Timesheet
+                             && db.ShiftCompletions.Any(c => c.Id == r.EntityId && c.TenantId == tenantId
+                                                             && db.Users.Any(u => u.Id == c.SubmittedByUserId && u.TenantId == tenantId && u.ExternalPayrollId != null)))
+                            || (r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet
+                                && db.GroupActivityStaff.Any(g => g.Id == r.EntityId && g.TenantId == tenantId
+                                                                  && db.Users.Any(u => u.Id == g.UserId && u.TenantId == tenantId && u.ExternalPayrollId != null)))))
             .OrderBy(r => r.NextAttemptAt).Take(BatchSize).ToListAsync(ct);
         if (due.Count == 0) return new(0, 0, 0, 0, null);
         var data = await LoadAsync(db, tenantId, due, ct);
