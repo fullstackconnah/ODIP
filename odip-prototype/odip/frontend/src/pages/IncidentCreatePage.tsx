@@ -383,7 +383,7 @@ function IncidentWizardForm() {
   // A prefill can name a participant past the list's 200-row ceiling; its own name covers that person.
   const prefillParticipant = marPrefill ?? shiftNotePrefill ?? shiftPrefill
   const participantName = (participantId: string | null | undefined) =>
-    participants.find((p) => p.id === participantId)?.fullName ?? (prefillParticipant?.participantId === participantId ? prefillParticipant.participantName : '—')
+    participants.find((p) => p.id === participantId)?.fullName ?? (participantId && prefillParticipant?.participantId === participantId ? prefillParticipant.participantName : '—')
   const practiceLabel = (practiceId: string | null | undefined) => allRestrictivePractices.find((p) => p.id === practiceId)?.description ?? '—'
 
   // The live preview of the authorisation this report will be filed with.
