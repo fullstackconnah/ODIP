@@ -121,8 +121,26 @@ public class ShiftBreakRulesTests
         var shift = new Shift { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0), NightType = SleepoverType.None };
         var completion = new ShiftCompletion { ActualStart = Start, ActualEnd = Start.AddMinutes(60) };
 
-        Assert.Equal((60, 0, 60), ShiftBreakRules.PaidMinutes(shift, completion, Now, [With(B(10, 40))]));
-        Assert.Equal((60, 30, 30), ShiftBreakRules.PaidMinutes(shift, completion, Now, [B(10, 40)]));
+        Assert.Equal((60, 0, 60), ShiftBreakRules.PaidMinutes(shift, completion, Now, [With(B(10, 40))], TimeZoneInfo.Utc));
+        Assert.Equal((60, 30, 30), ShiftBreakRules.PaidMinutes(shift, completion, Now, [B(10, 40)], TimeZoneInfo.Utc));
+    }
+
+    // Rostered minutes are real elapsed time in the shift's zone, so a clock-change night is an hour short or long; a sleepover is paid them.
+    [Theory]
+    [InlineData("2026-10-03", SleepoverType.Sleepover, 22, 6, 420)]   // clocks 02:00 -> 03:00
+    [InlineData("2027-04-03", SleepoverType.Sleepover, 22, 6, 540)]   // clocks 03:00 -> 02:00
+    [InlineData("2026-10-10", SleepoverType.Sleepover, 22, 6, 480)]   // an ordinary night
+    [InlineData("2026-10-04", SleepoverType.None, 9, 17, 480)]        // a day shift on the change day itself
+    public void PaidMinutes_RosteredAreElapsedMinutesInTheShiftZone(string date, SleepoverType night, int startHour, int endHour, int expected)
+    {
+        var zone = ProviderLocalTime.ResolveZone("Australia/Sydney");
+        var shift = new Shift { ServiceDate = DateOnly.Parse(date), StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0), EndsNextDay = endHour <= startHour, NightType = night };
+        var completion = new ShiftCompletion { ActualStart = Start, ActualEnd = Start.AddMinutes(60) };
+
+        var (rostered, _, paid) = ShiftBreakRules.PaidMinutes(shift, completion, Now, [], zone);
+
+        Assert.Equal(expected, rostered);
+        Assert.Equal(night == SleepoverType.Sleepover ? expected : 60, paid);
     }
 
     [Fact]

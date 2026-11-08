@@ -7,6 +7,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -69,7 +70,7 @@ public class ReportsController : ControllerBase
             {
                 c.Id, c.SubmittedByUserId, c.ActualStart, c.ActualEnd,
                 Awaiting = c.Shift!.Status == ShiftStatus.PendingReview,
-                c.Shift.StartTime, c.Shift.EndTime, c.Shift.EndsNextDay, c.Shift.NightType,
+                c.Shift.ServiceDate, c.Shift.ServiceLocationId, c.Shift.StartTime, c.Shift.EndTime, c.Shift.EndsNextDay, c.Shift.NightType,
             })
             .ToListAsync(ct);
 
@@ -80,32 +81,34 @@ public class ReportsController : ControllerBase
             .ToListAsync(ct))
             .ToLookup(b => b.ShiftCompletionId);
 
+        // Group activity staff rows: approved ones are hours, finished and unreviewed ones are awaiting. A started or unstarted row is neither. Actual times, else the rostered ones.
+        var groupRows = await _db.GroupActivityStaff.AsNoTracking().Include(r => r.GroupActivity)
+            .Where(r => r.TenantId == tid && r.GroupActivity!.ServiceDate >= f && r.GroupActivity.ServiceDate <= t
+                && (r.ReviewOutcome == ReviewOutcome.Approved || (r.SubmittedAt != null && r.ReviewOutcome == null && r.GroupActivity.Status != ShiftStatus.Draft && r.GroupActivity.Status != ShiftStatus.Cancelled)))
+            .ToListAsync(ct);   // shortcut: one read per range; page it if a tenant's group rows pass a few thousand
         var now = _clock.GetUtcNow().UtcDateTime;
+        var orgZone = (await ProviderTimeZoneResolver.ResolveAsync(_db, tid, ct)).Zone;   // as Payroll: a shift's place zone, else the organisation's
+        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tid, completions.Select(c => c.ServiceLocationId).Concat(groupRows.Select(g => g.GroupActivity!.ServiceLocationId)), ct);
         var perWorker = new Dictionary<Guid, (int Shifts, int Approved, int Awaiting)>();
         foreach (var c in completions)
         {
-            var shift = new Shift { StartTime = c.StartTime, EndTime = c.EndTime, EndsNextDay = c.EndsNextDay, NightType = c.NightType };
+            var shift = new Shift { ServiceDate = c.ServiceDate, ServiceLocationId = c.ServiceLocationId, StartTime = c.StartTime, EndTime = c.EndTime, EndsNextDay = c.EndsNextDay, NightType = c.NightType };
             var completion = new ShiftCompletion { ActualStart = c.ActualStart, ActualEnd = c.ActualEnd };
             var shiftBreaks = breaks[c.Id].Select(b => new ShiftBreak { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = b.WithParticipant });
-            var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks).PaidMinutes;
+            var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks, ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone)).PaidMinutes;
             var cur = perWorker.GetValueOrDefault(c.SubmittedByUserId);
             perWorker[c.SubmittedByUserId] = c.Awaiting
                 ? (cur.Shifts, cur.Approved, cur.Awaiting + paid)
                 : (cur.Shifts + 1, cur.Approved + paid, cur.Awaiting);
         }
 
-        // Group activity staff rows: approved ones are hours, finished and unreviewed ones are awaiting. A started or unstarted row is neither. Actual times, else the rostered ones.
-        var groupRows = await _db.GroupActivityStaff.AsNoTracking().Include(r => r.GroupActivity)
-            .Where(r => r.TenantId == tid && r.GroupActivity!.ServiceDate >= f && r.GroupActivity.ServiceDate <= t
-                && (r.ReviewOutcome == ReviewOutcome.Approved || (r.SubmittedAt != null && r.ReviewOutcome == null && r.GroupActivity.Status != ShiftStatus.Draft && r.GroupActivity.Status != ShiftStatus.Cancelled)))
-            .ToListAsync(ct);   // shortcut: one read per range; page it if a tenant's group rows pass a few thousand
         foreach (var g in groupRows)
         {
             // No actual times: the rostered minutes of the row (a blank completion would measure from year 1).
             var staffRow = EmploymentHeroTimesheets.ForStaffRow(g.GroupActivity!, g);
             var paid = staffRow is { } sr
-                ? ShiftBreakRules.PaidMinutes(sr.Shift, sr.Completion, now, sr.Breaks).PaidMinutes
-                : ShiftBreakRules.PaidMinutes(new Shift { StartTime = g.StartTime, EndTime = g.EndTime, EndsNextDay = g.EndsNextDay }, new ShiftCompletion(), now, []).RosteredMinutes;
+                ? ShiftBreakRules.PaidMinutes(sr.Shift, sr.Completion, now, sr.Breaks, ProviderTimeZoneResolver.ZoneOf(sr.Shift, placeZones, orgZone)).PaidMinutes
+                : ShiftBreakRules.PaidMinutes(new Shift { ServiceDate = g.GroupActivity!.ServiceDate, ServiceLocationId = g.GroupActivity!.ServiceLocationId, StartTime = g.StartTime, EndTime = g.EndTime, EndsNextDay = g.EndsNextDay }, new ShiftCompletion(), now, [], ProviderTimeZoneResolver.ZoneOf(g.GroupActivity!.ServiceLocationId, placeZones, orgZone)).RosteredMinutes;
             var cur = perWorker.GetValueOrDefault(g.UserId);
             perWorker[g.UserId] = g.ReviewOutcome == ReviewOutcome.Approved
                 ? (cur.Shifts + 1, cur.Approved + paid, cur.Awaiting)

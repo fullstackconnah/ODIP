@@ -165,12 +165,14 @@ public static class ShiftBreakRules
 
     /// <summary>
     /// The minutes a completed shift is paid, shared by Payroll and Reports so the two pages never disagree: rostered minutes,
-    /// the break minutes, and the paid minutes (a sleepover is paid its rostered hours, otherwise net worked time).
+    /// the break minutes, and the paid minutes (a sleepover is paid its rostered hours, otherwise net worked time). <paramref name="zone"/> is the shift's zone, in which the rostered times are read.
     /// </summary>
     public static (int RosteredMinutes, int BreakMinutes, int PaidMinutes) PaidMinutes(
-        Shift shift, ShiftCompletion completion, DateTime nowUtc, IEnumerable<ShiftBreak> breaks)
+        Shift shift, ShiftCompletion completion, DateTime nowUtc, IEnumerable<ShiftBreak> breaks, TimeZoneInfo zone)
     {
-        var rostered = (int)(shift.EndTime.ToTimeSpan() - shift.StartTime.ToTimeSpan()).TotalMinutes + (shift.EndsNextDay ? 1440 : 0);
+        // Elapsed minutes in the shift's zone, as UnclaimedSpans: a night the clocks change is an hour short or long.
+        var rostered = WholeMinutes(ProviderLocalTime.LocalToUtc(shift.ServiceDate.AddDays(shift.EndsNextDay ? 1 : 0).ToDateTime(shift.EndTime), zone)
+            - ProviderLocalTime.LocalToUtc(shift.ServiceDate.ToDateTime(shift.StartTime), zone));
         var (_, breakMinutes, net) = NetWorked(completion.ActualStart, completion.ActualEnd, nowUtc, breaks);
         return (rostered, breakMinutes, shift.NightType == SleepoverType.Sleepover ? rostered : net);
     }
