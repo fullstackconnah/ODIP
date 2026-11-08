@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useBeginServices, useCreateParticipant, useDeleteParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants, useSaveParticipantIntake, useSupportProfile, useUpdateSupportProfile } from './participants'
+import { apiClient } from '../client'
+import { useBeginServices, useCreateParticipant, useDeleteParticipant, useDownloadIntakeFormPdf, useMakeParticipantActive, usePatchParticipant, useParticipants, useSaveParticipantIntake, useSupportProfile, useUpdateSupportProfile } from './participants'
 import type { PatchParticipantDto, SupportProfileDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
@@ -428,5 +429,23 @@ describe('usePatchParticipant expectedRevisions', () => {
     mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 1 }))
     await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' } } })
     expect('expectedRevisions' in body(0)).toBe(false)
+  })
+})
+
+// H62-2: a literal percent sign in a Content-Disposition name threw URIError out of decodeURIComponent, so nothing saved.
+describe('document downloads with a percent sign in the name', () => {
+  it('saves under the header name and never throws', async () => {
+    const saved: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { saved.push(this.download) })
+    window.URL.createObjectURL = vi.fn(() => 'blob:x')
+    window.URL.revokeObjectURL = vi.fn()
+    const get = vi.spyOn(apiClient, 'get')
+    const queryClient = new QueryClient()
+    const { result } = renderHook(() => useDownloadIntakeFormPdf(), { wrapper: createWrapper(queryClient) })
+    for (const disposition of ['attachment; filename="100%.pdf"', "attachment; filename*=UTF-8''100%25.pdf", "attachment; filename*=UTF-8''100%.pdf", undefined]) {
+      get.mockResolvedValueOnce({ data: new Blob(['x']), headers: disposition ? { 'content-disposition': disposition } : {} })
+      await result.current.mutateAsync({ id: 'p1', fileName: 'fallback.pdf' })
+    }
+    expect(saved).toEqual(['100%.pdf', '100%.pdf', 'fallback.pdf', 'fallback.pdf'])
   })
 })
