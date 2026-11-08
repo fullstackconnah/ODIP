@@ -759,3 +759,31 @@ public record UpdateGroupStaffDto
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
+
+// ── Group activity staff work, review and approval (GA PR3) ─────────────────────────────────────────
+
+/// <summary>One staff row awaiting review: the planned and recorded times, and the flags a coordinator needs before approving.</summary>
+public record GroupStaffReviewDto(
+    Guid RowId, Guid GroupActivityId, string ActivityTitle, DateOnly ServiceDate, Guid UserId, string StaffName, string? Role,
+    TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
+    DateTime? ActualStart, DateTime? ActualEnd, DateTime? BreakStartedAt, DateTime? BreakEndedAt, string? TimeZoneId,
+    string State, LocationCheckStatus? LocationCheck, bool OffRoster, string? AdjustmentReason, bool PayrollLinked, int ParticipantCount);
+
+/// <summary>The review list, capped: <c>Total</c> is every unapproved row that matched, so the page can say more are waiting.</summary>
+public record GroupStaffReviewListDto(List<GroupStaffReviewDto> Rows, int Total);
+
+public record GroupStaffApproveDto
+{
+    public List<Guid>? RowIds { get; init; }
+}
+
+public record GroupStaffApproveResultDto(Guid RowId, bool Ok, string? Code, string? Message);
+
+public record SetGroupStaffActualsDto
+{
+    public DateTime ActualStart { get; init; }
+    public DateTime ActualEnd { get; init; }
+    public DateTime? BreakStart { get; init; }
+    public DateTime? BreakEnd { get; init; }
+    public string? Reason { get; init; }
+}

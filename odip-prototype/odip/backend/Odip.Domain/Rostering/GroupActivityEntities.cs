@@ -60,4 +60,36 @@ public class GroupActivityStaff : ITenantEntity
 
     /// <summary>Comma-separated finding codes the coordinator acknowledged (as <see cref="Shift.AcknowledgedFindingCodes"/>).</summary>
     public string? AcknowledgedFindingCodes { get; set; }
+
+    // ── Work recorded by the worker and reviewed by a coordinator (GA PR3). All nullable, so rows made before PR3 need no backfill. ──
+
+    /// <summary>When the worker started (UTC): the server's clock at Start, the typed start at Finish, or the coordinator's recorded time.</summary>
+    public DateTime? ActualStart { get; set; }
+    public DateTime? ActualEnd { get; set; }
+    /// <summary>The zone the actual times are paid and shown in (the row shift's place, else the organisation's).</summary>
+    public string? TimeZoneId { get; set; }
+    /// <summary>One unpaid break, entered at Finish: both set or both null.</summary>
+    public DateTime? BreakStartedAt { get; set; }
+    public DateTime? BreakEndedAt { get; set; }
+    public LocationCheckStatus? LocationCheck { get; set; }
+    public int? LocationDistanceMetres { get; set; }
+    /// <summary>When the server recorded the start.</summary>
+    public DateTime? StartedAt { get; set; }
+    /// <summary>Set at Finish (or when a coordinator records times on a row that never finished): the row enters review.</summary>
+    public DateTime? SubmittedAt { get; set; }
+    public ReviewOutcome? ReviewOutcome { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    /// <summary>The coordinator who recorded the times, and why (required with the times).</summary>
+    public Guid? AdjustedByUserId { get; set; }
+    public string? AdjustmentReason { get; set; }
+
+    /// <summary>Derived, never stored.</summary>
+    public GroupStaffRowState State =>
+        ReviewOutcome == Rostering.ReviewOutcome.Approved ? GroupStaffRowState.Approved
+        : SubmittedAt != null ? GroupStaffRowState.Finished
+        : ActualStart != null ? GroupStaffRowState.Started
+        : GroupStaffRowState.NotStarted;
 }
+
+public enum GroupStaffRowState { NotStarted, Started, Finished, Approved }

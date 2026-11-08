@@ -9,6 +9,9 @@ const { mockUseCompletions, mockApproveBatch, idle } = vi.hoisted(() => ({
   mockUseCompletions: vi.fn(), mockApproveBatch: vi.fn(), idle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/hooks', () => ({
+  useGroupStaffReviews: () => ({ data: { rows: [], total: 0 }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useApproveGroupStaffRows: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetGroupStaffActuals: () => ({ mutate: vi.fn(), isPending: false }),
   useCompletions: mockUseCompletions,
   useCompletion: () => ({ data: undefined }),
   useStaff: () => ({ data: [] }),
