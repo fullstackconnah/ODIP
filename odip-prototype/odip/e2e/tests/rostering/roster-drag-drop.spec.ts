@@ -1,5 +1,7 @@
 import { Locator, Page } from '@playwright/test';
 import { test, expect, call } from '../../support/fixtures';
+import { login } from '../../support/api';
+import { SEEDED } from '../../support/env';
 import { assignShift, makeParticipant, makeShift, makeStaff, startWeek } from '../../support/data';
 import { addDays, mondayOf, nextWednesday } from '../../support/dates';
 
@@ -84,4 +86,38 @@ test('a shift\'s menu swaps its person with a colleague on another shift', async
   const staffOn = (id: string) => (row.shifts as { id: string; staffId?: string }[]).find(s => s.id === id)?.staffId;
   expect(staffOn(alexsShift.id)).toBe(sam.id);
   expect(staffOn(samsShift.id)).toBe(alex.id);
+});
+
+// Group activities (spec 2026-11-08, decision D3): a person carried from the strip onto an activity card joins its staff and nothing else moves. The flag is the organisation's
+// module-visibility switch, which only an Admin may change, so the test turns it on and back off as the seeded Admin.
+test('a person from the strip joins a group activity by a drop on its card', async ({ page, session }) => {
+  const admin = await login(SEEDED.admin);
+  const flag = (await call(admin, 'GET', '/settings/module-visibility')).data;
+  const setFlag = async (on: boolean) => expect((await call(admin, 'PUT', '/settings/module-visibility', { hiddenAccommodation: flag.hiddenAccommodation, hiddenVehicles: flag.hiddenVehicles, hiddenTrips: flag.hiddenTrips, groupActivitiesEnabled: on })).status).toBe(200);
+  await setFlag(true);
+  try {
+    const participant = await makeParticipant(session);
+    const alex = await makeStaff(session);
+    const wednesday = nextWednesday();
+    const made = await call(session, 'POST', '/rostering/group-activities', {
+      serviceDate: wednesday, startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, title: `Bowling ${participant.token}`,
+    });
+    expect(made.status, JSON.stringify(made.body)).toBe(200);
+    const activityId = made.data.id as string;
+    await call(session, 'POST', `/rostering/group-activities/${activityId}/participants`, { participantId: participant.id, ratio: 'OneToOne' });
+
+    await startWeek(session, wednesday);
+    await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
+    const card = page.locator(`[data-activity-card="${activityId}"]`);
+    await expect(card).toBeVisible();
+
+    await page.getByRole('textbox', { name: 'Find staff' }).fill(alex.token);
+    await carry(page, page.getByRole('button', { name: new RegExp(`^Wk ${alex.token},`) }), card.locator('[data-activity-drop]'));
+    await expect(card.locator('[data-activity-count]')).toContainText('1 of 1 staff');
+
+    const detail = await call(session, 'GET', `/rostering/group-activities/${activityId}`);
+    expect((detail.data.staff as { staffId: string }[]).map(s => s.staffId)).toEqual([alex.id]);
+  } finally {
+    await setFlag(flag.groupActivitiesEnabled === true);
+  }
 });

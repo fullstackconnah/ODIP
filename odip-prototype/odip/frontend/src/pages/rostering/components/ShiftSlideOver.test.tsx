@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeUnfilledShift, makeFinding } from '../test-fixtures'
@@ -2170,5 +2170,31 @@ describe('ShiftSlideOver support type', () => {
     expect(screen.getByRole('button', { name: /Night type/ })).toBeEnabled()
     expect(screen.getByRole('combobox', { name: 'Support type' })).toBeEnabled()
     expect(screen.queryByText(/Delete that claim/)).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftSlideOver: Make a group activity', () => {
+  const renderEdit = (props: Partial<React.ComponentProps<typeof ShiftSlideOver>> & { shift?: ReturnType<typeof makeShift> } = {}) => {
+    const { shift = makeShift({ isGroupLine: true }), ...rest } = props
+    return render(<ShiftSlideOver target={{ mode: 'edit', shift }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} {...rest} />)
+  }
+
+  it('shows the button with the flag on and hands over the shift', async () => {
+    const onMakeActivity = vi.fn()
+    const shift = makeShift({ isGroupLine: true })
+    renderEdit({ shift, onMakeActivity })
+    await userEvent.click(screen.getByRole('button', { name: 'Make a group activity' }))
+    expect(onMakeActivity).toHaveBeenCalledWith(shift)
+  })
+
+  it('hides the button with the flag off, for a reader and for an attached shift', () => {
+    renderEdit()
+    expect(screen.queryByRole('button', { name: 'Make a group activity' })).not.toBeInTheDocument()
+    cleanup()
+    renderEdit({ onMakeActivity: noop, canWrite: false })
+    expect(screen.queryByRole('button', { name: 'Make a group activity' })).not.toBeInTheDocument()
+    cleanup()
+    renderEdit({ onMakeActivity: noop, shift: makeShift({ groupActivityId: 'a' }) })
+    expect(screen.queryByRole('button', { name: 'Make a group activity' })).not.toBeInTheDocument()
   })
 })
