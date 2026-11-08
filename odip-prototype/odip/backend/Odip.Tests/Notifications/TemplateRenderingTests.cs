@@ -118,6 +118,18 @@ public class TemplateRenderingTests
     }
 
     [Fact]
+    public void ShiftCompletionPendingReviewTemplate_AGroupActivity_RendersTheActivityWording()
+    {
+        var payload = new ShiftCompletionPendingReviewPayload("coord@example.com", "Ben Turner", "Bowling", new DateOnly(2026, 9, 15), "Bowling");
+        var message = ShiftCompletionPendingReviewTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("Group activity ready for review: Ben Turner / Bowling", message.Subject);
+        Assert.Contains("Ben Turner's hours for Bowling on ", message.PlainTextBody);
+        Assert.Contains("have been submitted and are awaiting review.\n\nReview it: https://odip.test/rostering/completions", message.PlainTextBody);
+        Assert.Contains("https://odip.test/rostering/completions", message.HtmlBody);
+    }
+
+    [Fact]
     public void ShiftCompletionReturnedTemplate_RendersExactSubjectAndBody()
     {
         var payload = new ShiftCompletionReturnedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), "Missing end time");

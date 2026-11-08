@@ -6,7 +6,9 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Application.Interfaces;
 using Odip.Domain.Notifications;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -34,10 +36,20 @@ public class AdminNotificationsController : ControllerBase
     {
         var query = _db.NotificationOutbox.AsQueryable();
         if (status.HasValue) query = query.Where(o => o.Status == status.Value);
-        if (from.HasValue) query = query.Where(o => o.CreatedAt >= from.Value);
-        if (to.HasValue) query = query.Where(o => o.CreatedAt <= to.Value);
+        // from/to are whole days (a date input sends 2026-11-08) in the provider's zone: [start of from day, start of the day after to).
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone;
+        if (from.HasValue)
+        {
+            var fromUtc = ProviderLocalTime.LocalToUtc(from.Value.Date, zone);
+            query = query.Where(o => o.CreatedAt >= fromUtc);
+        }
+        if (to.HasValue)
+        {
+            var toUtc = ProviderLocalTime.LocalToUtc(to.Value.Date.AddDays(1), zone);
+            query = query.Where(o => o.CreatedAt < toUtc);
+        }
 
-        var rows = await query.OrderByDescending(o => o.CreatedAt).Take(500).ToListAsync(ct);
+        var rows = await query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id).Take(500).ToListAsync(ct);
 
         var recipientIds = rows.Select(o => o.RecipientUserId).Distinct().ToList();
         var names = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])

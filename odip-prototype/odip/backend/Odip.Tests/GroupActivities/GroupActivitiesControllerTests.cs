@@ -410,6 +410,16 @@ public class GroupActivitiesControllerTests
         var attr = typeof(GroupActivitiesController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
         Assert.Equal("SuperAdmin,Admin,Coordinator", attr.Roles);
     }
+
+    [Fact]
+    public void Attendance_IsCoordinatorOnly_NoSupportWorker_NoPerMethodOverride()
+    {
+        var method = typeof(GroupActivitiesController).GetMethod(nameof(GroupActivitiesController.SetAttendance))!;
+        Assert.Empty(method.GetCustomAttributes(typeof(AuthorizeAttribute), false));
+        Assert.Empty(method.GetCustomAttributes(typeof(AllowAnonymousAttribute), false));
+        Assert.Equal("POST", method.GetCustomAttributes(typeof(HttpPostAttribute), false).Cast<HttpPostAttribute>().Single().HttpMethods.Single());
+        Assert.DoesNotContain("SupportWorker", typeof(GroupActivitiesController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single().Roles);
+    }
 }
 
 public class GroupActivityTenantTests

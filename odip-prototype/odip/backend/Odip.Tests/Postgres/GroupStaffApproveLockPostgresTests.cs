@@ -12,6 +12,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Rostering;
 using Xunit;
 
@@ -92,7 +93,7 @@ public class GroupStaffApproveLockPostgresTests : IClassFixture<PostgresFixture>
         // Part A: the row is Started; the coordinator records the finish, and a worker Finish begins during that save.
         await using var finishDb = NewContext(tenantId);
         Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", finishDb.Database.ProviderName);   // so an InMemory run can never satisfy this
-        var finishing = new PortalActivityShiftsController(finishDb, TenantOf(tenantId).Object, new Clock(DateTimeOffset.UtcNow)) { ControllerContext = As(workerId) };
+        var finishing = new PortalActivityShiftsController(finishDb, TenantOf(tenantId).Object, new Clock(DateTimeOffset.UtcNow), new NotificationRaiser(finishDb)) { ControllerContext = As(workerId) };
         var interceptor = new FinishDuringWriteInterceptor(() => finishing.Finish(rowId, new FinishActivityShiftDto(), CancellationToken.None));
         await using (var record = NewContext(tenantId, interceptor))
         {
@@ -113,7 +114,7 @@ public class GroupStaffApproveLockPostgresTests : IClassFixture<PostgresFixture>
             Assert.True(results.Single().Ok);
         }
         await using var lateDb = NewContext(tenantId);
-        var late = new PortalActivityShiftsController(lateDb, TenantOf(tenantId).Object, new Clock(DateTimeOffset.UtcNow)) { ControllerContext = As(workerId) };
+        var late = new PortalActivityShiftsController(lateDb, TenantOf(tenantId).Object, new Clock(DateTimeOffset.UtcNow), new NotificationRaiser(lateDb)) { ControllerContext = As(workerId) };
         var refusal = Assert.IsAssignableFrom<ObjectResult>((await late.Finish(rowId, new FinishActivityShiftDto(), CancellationToken.None)).Result);
         Assert.Equal(409, refusal.StatusCode);
         Assert.Equal(ShiftErrorCodes.ShiftAlreadyCompleted, Assert.IsType<ApiResponse<PortalActivityShiftDto>>(refusal.Value).Code);

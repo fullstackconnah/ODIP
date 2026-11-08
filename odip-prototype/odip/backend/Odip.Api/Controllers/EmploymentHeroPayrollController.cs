@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
 using Odip.Domain.Interfaces;
@@ -101,7 +102,7 @@ public class EmploymentHeroPayrollController : ControllerBase
             queued++;
             if (item.Row is null)
             {
-                _db.EmploymentHeroOutbox.Add(EmploymentHeroTimesheets.NewRow(tenantId, item.CompletionId, now));
+                _db.EmploymentHeroOutbox.Add(EmploymentHeroTimesheets.NewRow(tenantId, item.EntityId, now, item.Kind));
                 continue;
             }
             // shortcut: a given-up row that never got an EH id may have reached EH on a try whose reply was lost, so it restarts at Attempts 1 and looks itself up
@@ -127,9 +128,12 @@ public class EmploymentHeroPayrollController : ControllerBase
 
     private static string? RangeRefusal(DateOnly from, DateOnly to) => from == default || to == default || from > to || to.DayNumber - from.DayNumber + 1 > MaxDays ? RangeMessage : null;
 
-    private sealed record Item(Guid CompletionId, EmploymentHeroOutbox? Row, bool Sendable);
+    private sealed record Item(Guid EntityId, EmploymentHeroOutboxKind Kind, EmploymentHeroOutbox? Row, bool Sendable);
 
-    /// <summary>The range's approved shifts with their derived words. Every query names the organisation and, for the outbox, Kind == Timesheet.</summary>
+    /// <summary>One payable line: an approved shift completion, or an approved group activity staff row turned into the same transient shape the sender sends. <c>Title</c> is the participant name or the activity title.</summary>
+    private sealed record Line(Guid EntityId, EmploymentHeroOutboxKind Kind, Guid WorkerId, Shift Shift, ShiftCompletion Completion, List<ShiftBreak> Breaks, string Title);
+
+    /// <summary>The range's approved shifts with their derived words. Every query names the organisation; the outbox is matched per Kind (Timesheet by completion, GroupStaffTimesheet by staff row).</summary>
     private async Task<(PayrollCheckDto Check, List<Item> Items)> LoadAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
     {
         var now = _clock.GetUtcNow().UtcDateTime;
@@ -141,37 +145,52 @@ public class EmploymentHeroPayrollController : ControllerBase
             .Where(c => c.TenantId == tenantId && c.IsActive && c.ReviewOutcome == ReviewOutcome.Approved
                         && c.Shift!.Status == ShiftStatus.Completed && c.Shift.GroupActivityId == null && c.Shift.ServiceDate >= from && c.Shift.ServiceDate <= to)
             .ToListAsync(ct);
+        // Approved group staff rows are pay too: the same transient Shift, Completion and break the sender sends. A row with no actual times has no pay data and is skipped, as the sender does.
+        var groupLines = (await _db.GroupActivityStaff.AsNoTracking().Include(r => r.GroupActivity)
+                .Where(r => r.TenantId == tenantId && r.ReviewOutcome == ReviewOutcome.Approved && r.GroupActivity!.ServiceDate >= from && r.GroupActivity.ServiceDate <= to)
+                .ToListAsync(ct))
+            .Select(r => (Row: r, Built: EmploymentHeroTimesheets.ForStaffRow(r.GroupActivity!, r)))
+            .Where(g => g.Built is not null)
+            .Select(g => new Line(g.Row.Id, EmploymentHeroOutboxKind.GroupStaffTimesheet, g.Row.UserId, g.Built!.Value.Shift, g.Built.Value.Completion, g.Built.Value.Breaks, g.Row.GroupActivity!.Title))
+            .ToList();
         var ids = completions.Select(c => c.Id).ToList();
-        var workerIds = completions.Select(c => c.SubmittedByUserId).Distinct().ToList();
+        var groupIds = groupLines.Select(l => l.EntityId).ToList();
+        var workerIds = completions.Select(c => c.SubmittedByUserId).Concat(groupLines.Select(l => l.WorkerId)).Distinct().ToList();
         var participantIds = completions.Select(c => c.Shift!.ParticipantId).Distinct().ToList();
         var workers = await _db.Users.Where(u => u.TenantId == tenantId && workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
         var participants = await _db.Participants.Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => $"{p.FirstName} {p.LastName}".Trim(), ct);
-        var rows = (await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet && ids.Contains(r.EntityId)).ToListAsync(ct))
-            .ToDictionary(r => r.EntityId);
+        var rows = (await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId
+                    && ((r.Kind == EmploymentHeroOutboxKind.Timesheet && ids.Contains(r.EntityId)) || (r.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet && groupIds.Contains(r.EntityId)))).ToListAsync(ct))
+            .ToDictionary(r => (r.Kind, r.EntityId));
         var breaks = (await _db.ShiftBreaks.AsNoTracking().Where(b => b.TenantId == tenantId && ids.Contains(b.ShiftCompletionId)).ToListAsync(ct)).ToLookup(b => b.ShiftCompletionId);
-        var awaiting = await _db.Shifts.CountAsync(s => s.TenantId == tenantId && s.ServiceDate >= from && s.ServiceDate <= to
-                                                        && (s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview), ct);
+        // A group's participant shifts are coordinator records, not pay (as in the sender scan); its staff rows that are started or finished and not yet approved are.
+        var awaiting = await _db.Shifts.CountAsync(s => s.TenantId == tenantId && s.GroupActivityId == null && s.ServiceDate >= from && s.ServiceDate <= to
+                                                        && (s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview), ct)
+                       + await _db.GroupActivityStaff.CountAsync(r => r.TenantId == tenantId && r.ActualStart != null && r.ReviewOutcome != ReviewOutcome.Approved
+                                                                      && r.GroupActivity!.Status != ShiftStatus.Draft && r.GroupActivity.Status != ShiftStatus.Cancelled
+                                                                      && r.GroupActivity.ServiceDate >= from && r.GroupActivity.ServiceDate <= to, ct);
 
-        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, completions.Select(c => c.Shift!.ServiceLocationId), ct);
+        var lines = completions.Select(c => new Line(c.Id, EmploymentHeroOutboxKind.Timesheet, c.SubmittedByUserId, c.Shift!, c, breaks[c.Id].ToList(), participants.GetValueOrDefault(c.Shift!.ParticipantId, "")))
+            .Concat(groupLines).ToList();
+        var placeZones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, lines.Select(l => l.Shift.ServiceLocationId), ct);
         var items = new List<Item>();
         var byWorker = new Dictionary<Guid, List<PayrollShiftDto>>();
-        foreach (var c in completions)
+        foreach (var line in lines)
         {
-            var shift = c.Shift!;
-            workers.TryGetValue(c.SubmittedByUserId, out var worker);
+            var (shift, c, shiftBreaks) = (line.Shift, line.Completion, line.Breaks);
+            workers.TryGetValue(line.WorkerId, out var worker);
             var payrollId = worker?.ExternalPayrollId;
-            rows.TryGetValue(c.Id, out var row);
-            var shiftBreaks = breaks[c.Id].ToList();
+            rows.TryGetValue((line.Kind, line.EntityId), out var row);
             var shiftZone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, zone);
             var built = EmploymentHeroTimesheets.Build(shift, c, shiftBreaks, payrollId, map, shiftZone);
             var (status, reason, sendable) = EmploymentHeroTimesheets.StatusOf(row, payrollId is not null, built.WaitReason, zone);
             var (rostered, breakMinutes, paid) = ShiftBreakRules.PaidMinutes(shift, c, now, shiftBreaks);
             var (paidStart, paidEnd, held) = EmploymentHeroTimesheets.PaidWindow(shift, c, shiftZone);   // unapproved extra time is held at rostered hours, here as in what is sent
             if (held) (_, breakMinutes, paid) = ShiftBreakRules.NetWorked(paidStart, paidEnd, now, shiftBreaks);
-            items.Add(new Item(c.Id, row, sendable));
-            if (!byWorker.TryGetValue(c.SubmittedByUserId, out var list)) byWorker[c.SubmittedByUserId] = list = [];
-            list.Add(new PayrollShiftDto(shift.Id, shift.ServiceDate, participants.GetValueOrDefault(shift.ParticipantId, ""), shift.StartTime, shift.EndTime, shift.EndsNextDay,
-                rostered, c.ActualStart, c.ActualEnd, c.TimeZoneId, breakMinutes, paid, shift.NightType, status, reason, row?.SentAt, sendable, paidStart, c.ActualEnd is null ? null : paidEnd, held));
+            items.Add(new Item(line.EntityId, line.Kind, row, sendable));
+            if (!byWorker.TryGetValue(line.WorkerId, out var list)) byWorker[line.WorkerId] = list = [];
+            list.Add(new PayrollShiftDto(shift.Id, shift.ServiceDate, line.Title, shift.StartTime, shift.EndTime, shift.EndsNextDay,
+                rostered, c.ActualStart, c.ActualEnd, c.TimeZoneId, breakMinutes, paid, shift.NightType, status, reason, row?.SentAt, sendable, paidStart, c.ActualEnd is null ? null : paidEnd, held, line.Kind == EmploymentHeroOutboxKind.GroupStaffTimesheet));
         }
 
         static int Rank(PayrollShiftStatus s) => s switch

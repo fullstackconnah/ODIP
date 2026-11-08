@@ -6,7 +6,7 @@ import type { Tone } from '@/lib/tone'
 // REAL mutation hooks to this; QuickGroup only draws it and keeps each row's in-flight and error state.
 
 /** The groups; their tab order is useDecisionGroups'. PR C adds 'unfilled' and 'agreements'. */
-export type GroupKey = 'completions' | 'leave' | 'incidents' | 'tasks' | 'compliance'
+export type GroupKey = 'completions' | 'leave' | 'incidents' | 'tasks' | 'compliance' | 'groupStaff'
 
 /** What a decision did besides leaving the list. */
 export interface ActionOutcome {
