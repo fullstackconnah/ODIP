@@ -424,3 +424,17 @@ describe('BookingsTab — Add Booking: text fields stop at the server limits', (
     }
   })
 })
+
+describe('BookingsTab — Add Booking: participant list cut at the ceiling', () => {
+  it('says so under the picker when the list was truncated, and says nothing when it was whole', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderTab([], [readyParticipant, notReadyParticipant])
+    await openModalAndPick(user)
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument()
+    unmount()
+
+    renderTab([], Object.assign([readyParticipant, notReadyParticipant], { isTruncated: true, totalCount: 250 }))
+    await openModalAndPick(user)
+    expect(screen.getByText('Showing the first 2 of 250 participants.')).toBeInTheDocument()
+  })
+})
