@@ -390,7 +390,7 @@ await scene('touch-390', async () => {
   check('7 390 columns stack Activity, Participants, Staff', m.tops[0] < m.tops[1] && m.tops[1] < m.tops[2], m.tops)
   const tap = await dlg.evaluate((root) => {
     const min = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap-min')) || 44
-    const size = (el) => { const b = el.getBoundingClientRect(); const pb = getComputedStyle(el, '::before'); const pw = parseFloat(pb.minWidth) || parseFloat(pb.width) || 0, ph = parseFloat(pb.minHeight) || parseFloat(pb.height) || 0; return [Math.max(b.width, pw), Math.max(b.height, ph)] }
+    const size = (el0) => { const el = (el0.type === 'checkbox' || el0.type === 'radio') ? (el0.closest('label') ?? el0) : el0; const b = el.getBoundingClientRect(); const pb = getComputedStyle(el, '::before'); const pw = parseFloat(pb.minWidth) || parseFloat(pb.width) || 0, ph = parseFloat(pb.minHeight) || parseFloat(pb.height) || 0; return [Math.max(b.width, pw), Math.max(b.height, ph)] }
     const bad = []
     for (const el of root.querySelectorAll('button, input:not([type=hidden]), select, textarea, [role=checkbox]')) {
       const b = el.getBoundingClientRect(); if (!b.width || !b.height) continue
@@ -444,7 +444,9 @@ await scene('slideover-390', async () => {
   await page.locator('[data-activity-card]').first().waitFor({ state: 'visible', timeout: 30_000 })
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
   // slide-over: Make a group activity
-  await page.locator('[data-shift-open="gl-1"]').click()
+  // the chip body nests the staff name as a link, so a centre click navigates: open it from the keyboard like the chip's own handler
+  await page.locator('[data-shift-open="gl-1"]').focus()
+  await page.keyboard.press('Enter')
   const make = page.getByRole('button', { name: 'Make a group activity' })
   await make.waitFor({ timeout: 10_000 }).catch(async (e) => { console.log('[group-activities] slide-over debug:', JSON.stringify({ dialogs: (await page.getByRole('dialog').allTextContents()).map((t) => t.slice(0, 160)), headings: await page.getByRole('heading').allTextContents() })); throw e })
   await make.scrollIntoViewIfNeeded()
