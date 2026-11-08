@@ -7,6 +7,8 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
+using System.ComponentModel.DataAnnotations;
 
 namespace Odip.Api.Controllers;
 
@@ -29,14 +31,16 @@ public class PersonsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant? _tenant;
+    private readonly TimeProvider _clock;
 
     public const string ChooseOrganisation = "Choose an organisation to view as first: a person belongs to one organisation.";
 
     // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
-    public PersonsController(OdipDbContext db, ICurrentTenant? tenant = null)
+    public PersonsController(OdipDbContext db, ICurrentTenant? tenant = null, TimeProvider? clock = null)
     {
         _db = db;
         _tenant = tenant;
+        _clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>List/search people for this tenant — the SearchableSelect person picker's data
@@ -86,6 +90,8 @@ public class PersonsController : ControllerBase
         if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<PersonDto>.Fail(ChooseOrganisation));
         var nameError = ValidateName(dto.FirstName, dto.LastName);
         if (nameError != null) return BadRequest(ApiResponse<PersonDto>.Fail(nameError));
+        var contactError = await ValidateContactAsync(dto, null, ct);
+        if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         var person = new Person
         {
@@ -110,6 +116,8 @@ public class PersonsController : ControllerBase
 
         var p = await _db.People.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<PersonDto>.Fail("Person not found"));
+        var contactError = await ValidateContactAsync(dto, p.Email, ct);
+        if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim();
         p.Phone = dto.Phone; p.Mobile = dto.Mobile; p.Email = dto.Email;
@@ -127,6 +135,17 @@ public class PersonsController : ControllerBase
         string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName)
             ? "Provide at least a first or last name."
             : null;
+
+    /// <summary>A non-blank email must look like one (on update only when it changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
+    private async Task<string?> ValidateContactAsync(CreatePersonDto dto, string? storedEmail, CancellationToken ct)
+    {
+        var email = dto.Email?.Trim();
+        if (!string.IsNullOrEmpty(email) && email != storedEmail?.Trim() && !new EmailAddressAttribute().IsValid(email))
+            return "Enter an email address like name@example.com.";
+        if (dto.DateOfBirth is { } dob && dob > await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))
+            return "Choose a date of birth that isn't in the future.";
+        return null;
+    }
 
     private static PersonDto ToDto(Person p) => new()
     {
