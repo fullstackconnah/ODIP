@@ -231,7 +231,7 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
         <div role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)]/40 p-3 text-sm space-y-1">
           <div className="flex items-center justify-between gap-2">
             <p>{plural(failures.length, 'staff shift')} could not be approved.</p>
-            <Button variant="ghost" size="sm" onClick={() => setFailures([])}>Dismiss</Button>
+            <Button variant="ghost" size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" onClick={() => setFailures([])}>Dismiss</Button>
           </div>
           {failures.map(f => (
             <p key={f.result.rowId} className="text-xs text-[var(--color-destructive)]">{f.row ? `${f.row.staffName}, ${f.row.activityTitle}` : f.result.rowId}: {f.result.message ?? f.result.code ?? 'Could not approve.'}</p>

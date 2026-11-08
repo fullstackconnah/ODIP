@@ -22,6 +22,8 @@ public static class ImportShiftRows
     public const int DatedHorizonDays = 83;
     /// <summary>How far ahead a pattern may start from.</summary>
     public const int PatternStartDays = 28;
+    /// <summary>The Shift.Notes column length: a longer cell refuses its row instead of failing the one save.</summary>
+    public const int NotesMax = 2000;
 
     private static readonly Regex Clock = new(@"^([0-9]{1,2})(?:[:.]([0-9]{2}))?\s*([ap])\.?(?:m\.?)?$|^([0-9]{1,2})[:.]([0-9]{2})$", RegexOptions.IgnoreCase);
     private static readonly string[] DateKeys = ["dateOfBirth", "date"];
@@ -114,13 +116,15 @@ public static class ImportShiftRows
             else reasons.Add("Weekday must be Mon to Sun.");
         }
 
+        var notes = get("notes");
+        if (notes.Length > NotesMax) reasons.Add($"Notes can be at most {NotesMax} characters.");
+
         var plan = new ImportRowPlan { RowNumber = rowNumber, Name = name.Length > 0 ? name : ndisText };
         foreach (var reason in reasons) plan.Refuse(reason);
         if (reasons.Count > 0) return plan;
         if (start == end) { plan.Refuse("The shift has no length."); return plan; }
         var endsNextDay = end < start;
         if (endsNextDay) plan.Notes.Add("Ends the next day.");
-        var notes = get("notes");
         plan.Shift = new ImportShiftLine(ndisKey, name, dob, get("staffEmail"), get("staffName"), start!.Value, end!.Value, endsNextDay,
             notes.Length > 0 ? notes : null, weekday, dates);
         return plan;

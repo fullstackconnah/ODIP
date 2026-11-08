@@ -225,6 +225,47 @@ public class MedicationsControllerTests
         Assert.Equal("03 9111 1111", body.Data!.PharmacyPhone);
     }
 
+    private static UpdateMedicationDto ChartEdit(string pharmacyPhone, DateTime? expected) => new()
+    {
+        Name = "Levetiracetam", Strength = "500mg", Form = MedicationForm.Tablet, Route = MedicationRoute.Oral,
+        DoseDescription = "1 tablet (500mg)", Type = MedicationType.Regular, TimesOfDay = "08:00,20:00",
+        DrugSchedule = DrugSchedule.Schedule4, SupportLevel = MedicationSupportLevel.Administer,
+        StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        Status = MedicationStatus.Active, PharmacyPhone = pharmacyPhone, ExpectedUpdatedAt = expected,
+    };
+
+    [Fact]
+    public async Task Update_WithAStaleToken_Is409_AndKeepsTheFirstSave()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var created = await new MedicationsController(db, tenant).Create(participant.Id, RegularDto(), CancellationToken.None);
+        var loaded = Assert.IsType<ApiResponse<MedicationDetailDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!;
+
+        var first = await new MedicationsController(db, tenant).Update(loaded.Id, ChartEdit("03 9111 1111", loaded.UpdatedAt), CancellationToken.None);
+        Assert.IsType<OkObjectResult>(first.Result);
+        var second = await new MedicationsController(db, tenant).Update(loaded.Id, ChartEdit("03 9222 2222", loaded.UpdatedAt), CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(second.Result);
+        Assert.Equal("03 9111 1111", (await db.ParticipantMedications.SingleAsync()).PharmacyPhone);
+    }
+
+    [Fact]
+    public async Task Update_WithTheCurrentToken_Saves_AndWithNoToken_SavesAsBefore()
+    {
+        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var created = await new MedicationsController(db, tenant).Create(participant.Id, RegularDto(), CancellationToken.None);
+        var loaded = Assert.IsType<ApiResponse<MedicationDetailDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!;
+
+        var fresh = await new MedicationsController(db, tenant).Update(loaded.Id, ChartEdit("03 9111 1111", loaded.UpdatedAt), CancellationToken.None);
+        Assert.IsType<OkObjectResult>(fresh.Result);
+        var none = await new MedicationsController(db, tenant).Update(loaded.Id, ChartEdit("03 9333 3333", null), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(none.Result);
+        Assert.Equal("03 9333 3333", (await db.ParticipantMedications.SingleAsync()).PharmacyPhone);
+    }
+
     [Fact]
     public async Task Create_WithoutPharmacyPhone_DetailPharmacyPhoneIsNull()
     {

@@ -372,7 +372,7 @@ public record CreateShiftDto
     public SleepoverType NightType { get; init; }
     /// <summary>Ignored: the server never takes a pattern link from a request. It sets the link itself when it generates a shift from a pattern, and the budget's one-off rule reads only that saved link, so naming a pattern cannot dodge a hard limit.</summary>
     public Guid? ShiftPatternId { get; init; }
-    public string? Notes { get; init; }
+    [StringLength(2000)] public string? Notes { get; init; }
     /// <summary>Where the shift happens, as the coordinator typed it: trimmed, blank is null, at most 200. Never filled from the participant's address. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <see cref="UpdateShiftDto.ExpectedStaffId"/>); null or blank clears it. A POST treats both as none.</summary>
     public string? Location { get; init { field = value; HasLocation = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasLocation { get; private init; }
