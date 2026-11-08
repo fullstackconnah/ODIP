@@ -92,7 +92,7 @@ public class LeaveBalancesController : ControllerBase
         var userId = _tenant.ViewAsUserId ?? ownUserId;
         if (userId is null) return null;
 
-        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
+        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct);
         return exists ? userId : null;
     }
 }

@@ -182,6 +182,23 @@ public class PersonsControllerTests
     }
 
     [Fact]
+    public async Task Update_NameOnly_SavesWhenTheStoredDobIsAlreadyInTheFuture_AChangedFutureDobStillRefused()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var future = new DateOnly(2026, 11, 9);
+        var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson", DateOfBirth = future };
+        db.People.Add(person);
+        db.SaveChanges();
+        var controller = new PersonsController(db, null, new FixedClock());
+
+        Assert.IsType<OkObjectResult>((await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Kay", LastName = "Johnson", DateOfBirth = future }, CancellationToken.None)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Kay", LastName = "Johnson", DateOfBirth = future.AddDays(1) }, CancellationToken.None)).Result);
+
+        var stored = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(("Kay", future), (stored.FirstName, stored.DateOfBirth));
+    }
+
+    [Fact]
     public async Task Update_NotesOnly_SavesWhenTheStoredEmailIsAlreadyInvalid()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

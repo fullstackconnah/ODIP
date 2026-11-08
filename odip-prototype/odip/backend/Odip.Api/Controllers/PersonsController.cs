@@ -90,7 +90,7 @@ public class PersonsController : ControllerBase
         if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<PersonDto>.Fail(ChooseOrganisation));
         var nameError = ValidateName(dto.FirstName, dto.LastName);
         if (nameError != null) return BadRequest(ApiResponse<PersonDto>.Fail(nameError));
-        var contactError = await ValidateContactAsync(dto, null, ct);
+        var contactError = await ValidateContactAsync(dto, null, null, ct);
         if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         var person = new Person
@@ -116,7 +116,7 @@ public class PersonsController : ControllerBase
 
         var p = await _db.People.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<PersonDto>.Fail("Person not found"));
-        var contactError = await ValidateContactAsync(dto, p.Email, ct);
+        var contactError = await ValidateContactAsync(dto, p.Email, p.DateOfBirth, ct);
         if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim();
@@ -136,13 +136,13 @@ public class PersonsController : ControllerBase
             ? "Provide at least a first or last name."
             : null;
 
-    /// <summary>A non-blank email must look like one (on update only when it changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
-    private async Task<string?> ValidateContactAsync(CreatePersonDto dto, string? storedEmail, CancellationToken ct)
+    /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
+    private async Task<string?> ValidateContactAsync(CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct)
     {
         var email = dto.Email?.Trim();
         if (!string.IsNullOrEmpty(email) && email != storedEmail?.Trim() && !new EmailAddressAttribute().IsValid(email))
             return "Enter an email address like name@example.com.";
-        if (dto.DateOfBirth is { } dob && dob > await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))
+        if (dto.DateOfBirth is { } dob && dob != storedDob && dob > await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))
             return "Choose a date of birth that isn't in the future.";
         return null;
     }
