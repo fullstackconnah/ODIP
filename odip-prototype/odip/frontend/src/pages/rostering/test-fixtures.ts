@@ -4,6 +4,7 @@ import type {
   RosterBoardDto,
   RosterParticipantRowDto,
   RosterStaffRowDto,
+  GroupActivityDto,
 } from '@/api/types'
 
 /** Shaped like the real ShiftDto the API returns — override only what a test cares about. */
@@ -107,6 +108,25 @@ export function makeStaffBoard(overrides: Partial<Extract<RosterBoardDto, { grou
     staffRows: [makeStaffRow()],
     unfilled: [],
     exceptions: [],
+    ...overrides,
+  }
+}
+
+/** A group activity as the PR1 API sends it: Published, 1 of 2 staff needed met, one participant. Override only what a test cares about. */
+export function makeActivity(overrides: Partial<GroupActivityDto> = {}): GroupActivityDto {
+  return {
+    id: 'activity-1',
+    serviceDate: '2026-08-17',
+    startTime: '10:00:00',
+    endTime: '14:00:00',
+    endsNextDay: false,
+    title: 'Bowling',
+    status: 'Published',
+    staffNeeded: 1,
+    staffAssigned: 1,
+    participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'OneToOne', shiftIds: ['shift-1'], timesDiffer: false }],
+    staff: [{ id: 'row-1', staffId: 'staff-1', staffName: 'Alex Rivera', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, findings: [] }],
+    findings: [],
     ...overrides,
   }
 }

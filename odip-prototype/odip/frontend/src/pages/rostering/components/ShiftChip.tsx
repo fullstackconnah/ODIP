@@ -9,6 +9,7 @@ import { formatShiftTimeRange, isUnfilledShift, participantWeekHref, RATIO_LABEL
 import { plural } from '@/lib/format'
 import { ON_TINT, TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
+import { ActivityContext } from '../lib/groupActivities'
 import { DropStateContext, canDeleteShift, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 /**
@@ -110,7 +111,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const canPick = Boolean(pick) && canWrite && isUnfilledShift(shift) && !locked && !selecting
   const picking = pickingId === shift.id
   const pickLabel = pickName(shift)
-  // Where the shift came from (spec 2026-10-15, decision B), derived: Agreed, Pattern or Ad hoc. Neutral ink for all three: colour on a chip means something is wrong.
+  // Where the shift came from (spec 2026-10-15, decision B), derived: Agreed, Pattern or Ad hoc. Neutral ink for all three: colour on a chip means something is wrong. One exception, group activities (spec 2026-11-08, decision 12): their card has its own fill, `--color-activity-container`, which marks a category, never a state; warning and danger keep their meaning on it.
   const source = shiftSource(shift)
   const SourceIcon = SOURCE_ICON[source.kind]
   // A Draft shift with nobody on it is not a draft on screen (owner, 2026-10-28): it is a Needs staff card, and turns into a draft once someone is put on it. The status is unchanged; this is display only.
@@ -144,8 +145,12 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const awayLine = shift.regularAwayReason ? `Regular away: ${shift.regularAwayReason}` : null
   const chipTitle = [selecting && hasBlocking && isDraft ? 'A rule stops this shift. Open it after you finish selecting.' : null, onApprovedLeave ? onLeaveTitle : null, awayLine, shift.isRegular ? `${shift.staffName} is the regular` : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null, statusWords].filter(Boolean).join('\n')
 
+  // Group activities (flag on): an unattached group-line shift can join one from its menu.
+  const activities = useContext(ActivityContext)
+  const canJoinActivity = Boolean(activities) && canWrite && shift.isGroupLine === true && !shift.groupActivityId && !locked
   const menuItems = [
     { value: 'edit', label: 'Edit' },
+    ...(canJoinActivity ? [{ value: 'activity', label: 'Add to an activity…', disabled: dragsOff }] : []),
     // Publish (card roster-draft-publish): a staffed Draft shift, for the writers the menu is already for (an unstaffed one is held until someone is on it). It waits while its own write is out.
     ...(isDraft && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing || dragsOff }] : []),
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
@@ -160,6 +165,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   function handleMenuSelect(value: string) {
     if (value === 'edit') onOpen(shift)
+    else if (value === 'activity') activities?.addShift(shift)
     else if (value === 'publish') { if (!dragsOff) publish?.(shift) }
     // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Replace {first name}…" keeps the panel.
     else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }

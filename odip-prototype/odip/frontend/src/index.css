@@ -68,6 +68,8 @@
   --color-warning: #f59e0b;
   --color-warning-container: #fef3c7;
   --color-on-warning-container: #92400e;
+  --color-activity-container: #dccff7;
+  --color-on-activity-container: #553591;
   --color-info: #515f74;
   --color-conflict: #ba1a1a;
   --color-accessible-container: #ffd7ef;
@@ -659,6 +661,8 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-warning: #f59e0b;
   --color-warning-container: #3f2f0b;
   --color-on-warning-container: #f8cd76;
+  --color-activity-container: #41325f;
+  --color-on-activity-container: #d6c5ff;
   --color-info: #b3c1d8;
   --color-conflict: #ff8f84;
   --color-accessible-container: #4a1b40;

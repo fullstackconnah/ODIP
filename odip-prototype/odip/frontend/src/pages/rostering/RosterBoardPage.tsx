@@ -21,11 +21,15 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
+import { useAddGroupStaff, useDetachShift } from '@/api/hooks/groupActivities'
+import { ActivityContext, type ActivityBoardState } from './lib/groupActivities'
+import { GroupActivityModal, type ActivityModalTarget } from './components/GroupActivityModal'
+import { AddToActivityDialog } from './components/AddToActivityDialog'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
 import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useAutoRosterDraft, useApplyAutoRoster, useSetRegular, useUpdateShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
-import type { ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto, AutoRosterApplyResultDto } from '@/api/types'
+import type { GroupActivityDto, ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto, AutoRosterApplyResultDto } from '@/api/types'
 import { AutoRosterPanel, type AutoRosterPanelProps, type AutoRosterRowText } from './components/AutoRosterPanel'
 import {
   WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementsPanel, RefreshBoardAction,
@@ -38,6 +42,7 @@ import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
+  firstName, joinedSentence,
 } from './lib/rosterDrag'
 import {
   ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, regularConfirm, regularDone, bannerBlockedLine, bannerTitle, isBlocked, selectionTitle, startBudgetWarnings, startResultBody, startResultTitle,
@@ -146,6 +151,11 @@ export default function RosterBoardPage() {
   })
 
   const { data: board, isLoading, isError, refetch } = useRosterBoard(weekStart, groupBy)
+  // Group activities (SHAPE section 7): everything below renders only while the flag is on, in the Participant view (no cards in the Staff view).
+  const groupActivities = useMemo(() => (board?.groupBy === 'Participant' && board.groupActivitiesEnabled === true ? board.groupActivities ?? [] : null), [board])
+  const [activityTarget, setActivityTarget] = useState<ActivityModalTarget | null>(null)
+  const [addShiftTarget, setAddShiftTarget] = useState<ShiftDto | null>(null)
+  const [busyActivityIds, setBusyActivityIds] = useState<ReadonlySet<string>>(new Set())
   // `?shift=<id>` (a shift clicked on a person's roster week, spec 2026-10-28) opens that shift's editor once its week has loaded. Read once, then dropped from the address with replace.
   const [pendingShiftId, setPendingShiftId] = useState(() => searchParams.get('shift'))
   useEffect(() => {
@@ -164,6 +174,8 @@ export default function RosterBoardPage() {
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [], isLoading: staffLoading } = useStaff()
   const assignShift = useAssignShift()
+  const addGroupStaff = useAddGroupStaff()
+  const detachShift = useDetachShift()
   const updateShift = useUpdateShift()
   const moveStaff = useMoveStaff()
   const belowMd = useIsBelowMd()
@@ -439,6 +451,19 @@ export default function RosterBoardPage() {
       setPublishOpen(false)
     }
   }
+  const activityState = useMemo<ActivityBoardState | null>(() => (groupActivities ? {
+    byId: new Map(groupActivities.map(a => [a.id, a])),
+    open: a => setActivityTarget({ mode: 'edit', id: a.id }),
+    addShift: setAddShiftTarget,
+    busyIds: busyActivityIds,
+    removePerson: async (activity, person) => {
+      setBusyActivityIds(prev => new Set(prev).add(activity.id))
+      setAssignError(null)
+      try { for (const shiftId of person.shiftIds) await detachShift.mutateAsync({ id: activity.id, shiftId }) } catch (err) { showWriteError(err, `Couldn't remove ${firstName(person.participantName)} from ${activity.title}.`) } finally {
+        setBusyActivityIds(prev => { const next = new Set(prev); next.delete(activity.id); return next })
+      }
+    },
+  } : null), [groupActivities, busyActivityIds]) // eslint-disable-line react-hooks/exhaustive-deps -- showWriteError and the mutation are stable enough per render
   const dragsOff = dropPending !== null || prompt !== null || pendingAssign !== null || pendingBlocked !== null
 
   // A mouse lifts after a 4px move. A finger lifts a strip puck after a 200 ms press, so a swipe still scrolls the strip; a grip (touch-none, a person off a puck) lifts at once.
@@ -525,6 +550,12 @@ export default function RosterBoardPage() {
     setDropPending(null)
   }
 
+  /** D3: a join is add-only. The shift the person was lifted off stays as it is; the server's findings (double booked, leave) answer the drop like an assign. */
+  function dropJoin(person: DragCarry, activity: GroupActivityDto) {
+    return dropWrite({ targetId: activity.id, staffName: person.staffName }, joinedSentence(person, activity), (overrideReason, acknowledgedFindingCodes) =>
+      addGroupStaff.mutateAsync({ id: activity.id, data: { staffId: person.staffId, overrideReason, acknowledgedFindingCodes } }))
+  }
+
   function dropAssign(person: DragCarry, shift: ShiftDto) {
     return dropWrite({ targetId: shift.id, staffName: person.staffName }, assignedSentence(person, shift), (overrideReason, acknowledgedFindingCodes) =>
       // expectedStaffId: who the board showed (nobody, an on-leave worker, or the person the prompt replaces); the server refuses with 409 if that changed since.
@@ -554,6 +585,7 @@ export default function RosterBoardPage() {
     if (outcome.kind === 'assign') void dropAssign(person, outcome.shift)
     else if (outcome.kind === 'move') void dropMove(person, outcome.from, outcome.shift, outcome.mode)
     else if (outcome.kind === 'prompt') setPrompt({ carry: person, shift: outcome.shift, canSwap: outcome.canSwap })
+    else if (outcome.kind === 'join') void dropJoin(person, outcome.activity)
     else if (outcome.kind === 'create') {
       setCreateMoveSource(person.fromShift ?? null)
       setSlideOverTarget({ mode: 'create', participantId: outcome.participantId, staffId: person.staffId, serviceDate: outcome.day, focusField: 'start', moveFromShiftId: person.fromShift?.id })
@@ -722,8 +754,8 @@ export default function RosterBoardPage() {
         triggerVariant={unstarted || publishable.length > 0 ? 'secondary' : 'primary'}
         label="New"
         icon={<Plus aria-hidden="true" className="h-4 w-4" />}
-        items={[{ value: 'shift', label: 'Shift' }, { value: 'trip', label: 'Trip' }]}
-        onSelect={value => (value === 'trip' ? navigate('/trips/new') : setSlideOverTarget({ mode: 'create', serviceDate: weekStart }))}
+        items={[{ value: 'shift', label: 'Shift' }, { value: 'trip', label: 'Trip' }, ...(groupActivities ? [{ value: 'activity', label: 'Group activity' }] : [])]}
+        onSelect={value => (value === 'trip' ? navigate('/trips/new') : value === 'activity' ? setActivityTarget({ mode: 'new', serviceDate: weekStart }) : setSlideOverTarget({ mode: 'create', serviceDate: weekStart }))}
       />
     </div>
   )
@@ -964,6 +996,7 @@ export default function RosterBoardPage() {
 
       {!isLoading && !loadFailed && grid && !unstarted && (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
+        <ActivityContext.Provider value={activityState}>
         <DropStateContext.Provider value={{ disabled: dragsOff || selecting, select: selecting ? { ids: chosenIds, selectable: publishableIds, toggle: toggleChosen } : undefined, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, publish: canWrite ? publishShift : undefined, publishingIds, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
           {dragOn ? (
             <DndContext
@@ -988,9 +1021,11 @@ export default function RosterBoardPage() {
             </DndContext>
           ) : grid}
         </DropStateContext.Provider>
+        </ActivityContext.Provider>
       )}
 
       <ShiftSlideOver
+        onMakeActivity={groupActivities && canWrite ? shift => { setSlideOverTarget(null); setActivityTarget({ mode: 'new', serviceDate: shift.serviceDate, fromShift: shift }) } : undefined}
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
         target={slideOverTarget}
         onClose={() => { setSlideOverTarget(null); setCreateMoveSource(null) }}
@@ -1015,6 +1050,28 @@ export default function RosterBoardPage() {
         onPick={handlePick}
         onClose={closePicker}
       />
+
+      {groupActivities && (
+        <GroupActivityModal
+          key={activityTarget ? (activityTarget.mode === 'edit' ? `activity-${activityTarget.id}` : 'activity-new') : 'activity-closed'}
+          target={activityTarget}
+          canWrite={canWrite}
+          participants={participantOptions.map(o => ({ id: o.value, fullName: o.label }))}
+          pickerData={{ staff, staffLoading, shifts: boardShifts, leave: boardLeave, availableDays: board?.staffAvailableDays ?? [], hours }}
+          boardShifts={boardShifts}
+          onClose={() => setActivityTarget(null)}
+        />
+      )}
+      {groupActivities && (
+        <AddToActivityDialog
+          key={addShiftTarget?.id ?? 'add-closed'}
+          shift={addShiftTarget}
+          activities={groupActivities}
+          onClose={() => setAddShiftTarget(null)}
+          onNew={shift => { setAddShiftTarget(null); setActivityTarget({ mode: 'new', serviceDate: shift.serviceDate, fromShift: shift }) }}
+          onAttached={(activity, shift) => { setAddShiftTarget(null); setAnnouncement(`${shift.participantName} added to ${activity.title}.`) }}
+        />
+      )}
 
       <SwapPicker key={swapShift?.id ?? 'swap-closed'} source={swapShift} shifts={boardShifts} sheet={belowMd} onPick={handleSwap} onClose={closeSwap} />
 

@@ -34,7 +34,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { blockedOnlyByDoubleBooking, getRosterGate } from '../lib/rosterGate'
-import { canDeleteShift, lockedWords } from '../lib/rosterDrag'
+import { canDeleteShift, firstName, isLockedShift, lockedWords } from '../lib/rosterDrag'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
 import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
@@ -67,6 +67,8 @@ export type ShiftSlideOverProps = {
    * line under the Participant field for whoever is selected. A participant the list does not know about falls back to the shift's own
    * `readinessIssues` in edit mode; an entry holding an empty list means "ready", and wins over that fallback.
    */
+  /** Group activities (flag on): "Make a group activity" starts one from the shift being edited. Absent with the flag off, and the button with it. */
+  onMakeActivity?: (shift: ShiftDto) => void
   participantReadiness?: Record<string, string[]>
   /** Called with the saved shift after a successful save, before onClose; never on Cancel. The board uses it to clear the shift a person was carried off (roster drag and drop, decision 6). */
   onSaved?: (shift: ShiftDto) => void
@@ -96,7 +98,7 @@ const BUDGET_REASON_COPY = {
 /** "Backup #2" for a ranked tier, the bare level for an unranked one. */
 const tierPlace = (level: string, rank: number) => (rank > 0 ? `${level} #${rank}` : level)
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness, onSaved }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness, onMakeActivity, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
   const refusalId = useId()
   const open = target !== null
@@ -638,6 +640,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         <FormField label="Notes" hint="The support worker sees this on their shift.">
           <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />
         </FormField>
+
+        {onMakeActivity && existing && canWrite && !isLockedShift(existing) && !existing.groupActivityId && (
+          <div className="flex flex-col gap-1 border-t border-border pt-4">
+            <Button variant="secondary" onClick={() => onMakeActivity(existing)}><span className="whitespace-nowrap">Make a group activity</span></Button>
+            <p className="text-xs text-muted-foreground">Starts a group activity from this shift.{existing.staffName ? ` ${firstName(existing.staffName)} moves to its staff.` : ''}</p>
+          </div>
+        )}
 
         {relevantRoutines.length > 0 && (
           <div>
