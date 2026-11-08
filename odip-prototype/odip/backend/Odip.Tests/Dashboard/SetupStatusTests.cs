@@ -77,6 +77,17 @@ public class SetupStatusTests
     }
 
     [Fact]
+    public async Task Setup_DraftParticipantsAreNotCounted()
+    {
+        var db = Db(A);
+        var draft = Participant(db, A);
+        draft.IsDraft = true;
+        PlanFor(db, A, draft);
+        var got = await Get(db);
+        Assert.Equal((0, 0), (got.ParticipantCount, got.ParticipantsWithPlanCount));
+    }
+
+    [Fact]
     public async Task Setup_DraftShiftIsNotFinishLine()
     {
         var db = Db(A);
