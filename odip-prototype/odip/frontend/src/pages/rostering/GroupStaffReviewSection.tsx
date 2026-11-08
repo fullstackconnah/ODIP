@@ -25,6 +25,7 @@ const STATE: Record<GroupStaffReviewDto['state'], { label: string; tone: Tone }>
   Approved: { label: 'Approved', tone: 'success' },
 }
 const fieldClass = `w-full py-2 min-h-[var(--control-h)] text-sm ${fieldSurface}`
+const APPROVE_COMPLETES = 'Approving marks everyone still on this activity as attended.'
 const chip = (tone: Tone) => `inline-block whitespace-nowrap text-xs px-2 py-0.5 rounded-full ${TONE[tone].solid}`
 
 const zoneOf = (r: GroupStaffReviewDto) => r.timeZoneId || FALLBACK_ZONE
@@ -151,9 +152,20 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
     })
   }
 
+  // The last listed Finished row of an activity completes it on approve (the server completes once every staff row is approved; a row hidden by the list cap is the one case this misses).
+  const completesActivity = (r: GroupStaffReviewDto) => r.state === 'Finished' && !rows.some(o => o.rowId !== r.rowId && o.groupActivityId === r.groupActivityId)
+  const completing = new Set(rows.filter(r => selected.has(r.rowId) && completesActivity(r)).map(r => r.groupActivityId))
+
   const columns: Column<GroupStaffReviewDto>[] = [
     { key: 'serviceDate', header: 'Date', render: r => formatDateAu(r.serviceDate) },
-    { key: 'activityTitle', header: 'Activity', render: r => r.activityTitle },
+    {
+      key: 'activityTitle', header: 'Activity', render: r => (
+        <>
+          {r.activityTitle}
+          <p className="text-xs text-[var(--color-muted-foreground)]">{r.participantCount} attending{r.didNotAttendCount > 0 && ` · ${r.didNotAttendCount} didn't attend`}</p>
+        </>
+      ),
+    },
     { key: 'staffName', header: 'Staff', render: r => r.staffName },
     { key: 'planned', header: 'Planned', render: r => formatShiftTimeRange(r.startTime, r.endTime) },
     { key: 'actual', header: 'Actual', render: actualLine },
@@ -180,7 +192,10 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" onClick={() => setRecording(r)} aria-label={`Record times for ${r.staffName} on ${r.activityTitle}`}>Record times</Button>
           {r.state === 'Finished' && (
-            <Button size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" disabled={approve.isPending} onClick={() => run([r.rowId], () => {})} aria-label={`Approve ${r.staffName} on ${r.activityTitle}`}>Approve</Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" disabled={approve.isPending} onClick={() => run([r.rowId], () => {})} aria-label={`Approve ${r.staffName} on ${r.activityTitle}`}>Approve</Button>
+              {completesActivity(r) && <p className="max-w-[32ch] text-right text-xs text-[var(--color-muted-foreground)]">{APPROVE_COMPLETES}</p>}
+            </div>
           )}
         </div>
       ),
@@ -235,6 +250,7 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
         message={(
           <div className="space-y-2">
             <p>{plural(selected.size, 'staff shift')} will be approved and sent to payroll.</p>
+            {completing.size > 0 && <p>{completing.size > 1 ? APPROVE_COMPLETES.replace('this activity', 'these activities') : APPROVE_COMPLETES}</p>}
             {error && <p role="alert" className="text-xs text-[var(--color-destructive)]">{error}</p>}
           </div>
         )}

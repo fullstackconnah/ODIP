@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, Plus, X } from 'lucide-react'
 import type { GroupActivityDto, GroupActivityFormDto, ShiftDto, ShiftStatus, SupportRatio } from '@/api/types'
 import { SUPPORT_RATIOS } from '@/api/types'
 import {
   useActivities, useAddGroupParticipant, useAttachShifts, useCancelGroupActivity, useCreateActivityFromShift, useCreateGroupActivity, useDetachShift, useGroupActivity, useRemoveGroupStaff,
-  useServiceLocations, useSetGroupRatio, useUpdateGroupActivity,
+  useServiceLocations, useSetGroupAttendance, useSetGroupRatio, useUpdateGroupActivity,
 } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -13,8 +13,10 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField, inputClass } from '@/components/FormField'
 import { Modal } from '@/components/Modal'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
 import { extractErrorMessage } from '@/lib/utils'
+import { useOnline } from '@/pages/portal/shift/useOnline'
 import { NO_LENGTH_MESSAGE, hasNoLength } from '../lib/shiftTimes'
 import { RATIO_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { firstName } from '../lib/rosterDrag'
@@ -92,11 +94,24 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const addPerson = useAddGroupParticipant()
   const setRatio = useSetGroupRatio()
   const removeStaff = useRemoveGroupStaff()
+  const setAttendance = useSetGroupAttendance()
+  const online = useOnline()
   const [pendingKey, setPendingKey] = useState<string | null>(null)
+  // After a mark or an undo the button swaps for its twin; focus follows the person's row once the refetch shows the new state.
+  const focusAfter = useRef<{ id: string; didNotAttend: boolean } | null>(null)
+  useEffect(() => {
+    const want = focusAfter.current
+    if (!want || activity?.participants.find(p => p.participantId === want.id)?.didNotAttend !== want.didNotAttend) return
+    focusAfter.current = null
+    document.querySelector<HTMLElement>(`[data-participant-row="${want.id}"] [data-attendance-action]`)?.focus()
+  }, [activity])
   const saving = create.isPending || createFromShift.isPending || update.isPending
 
   const cancelled = activity?.status === 'Cancelled'
   const readOnly = !canWrite || cancelled
+  // From the start the participants are final but for attendance: the server refuses Remove and a ratio change there, so neither is offered.
+  const started = activity?.status === 'InProgress' || activity?.status === 'PendingReview' || activity?.status === 'Completed'
+  const markable = started && canWrite && activity?.status !== 'Completed'
   const title = isNew ? 'New group activity' : activity?.title || 'Group activity'
   const noLength = hasNoLength(values.startTime, values.endTime, values.endsNextDay)
 
@@ -106,6 +121,13 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
     onLateRefusalClear?.()
     setPendingKey(key)
     try { await run() } catch (err) { setWriteError(extractErrorMessage(err, fallback)) } finally { setPendingKey(null) }
+  }
+
+  function markAttendance(p: GroupActivityDto['participants'][number], attended: boolean) {
+    if (!activity) return
+    focusAfter.current = { id: p.participantId, didNotAttend: !attended }
+    void write(`p:${p.participantId}`, () => setAttendance.mutateAsync({ id: activity.id, participantId: p.participantId, attended }),
+      attended ? `Couldn't undo for ${firstName(p.participantName)}.` : `Couldn't mark ${firstName(p.participantName)} as didn't attend.`)
   }
 
   async function save() {
@@ -210,6 +232,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
 
           <section aria-label="Participants" className="min-w-0">
             <h4 className="mb-2 text-sm font-semibold">Participants · {activity?.participants.length ?? (fromShift ? 1 : 0)}</h4>
+            {markable && !loading && <p className="mb-2 text-xs text-muted-foreground">Mark anyone who didn't come. Everyone else is marked as attended when the last staff shift is approved.</p>}
             {loading ? <Skeleton /> : (
               <div className="flex flex-col gap-2">
                 {fromShift && isNew && (
@@ -222,15 +245,29 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                     <div key={p.participantId} data-participant-row={p.participantId} className={`flex flex-col gap-1 rounded-sm border border-border p-2 ${pending ? 'opacity-60' : ''}`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate text-sm font-medium">{p.participantName}</span>
-                        {!readOnly && (
+                        {!readOnly && !started && (
                           <button type="button" aria-label={`Remove ${p.participantName} from ${activity.title}`} disabled={pending} onClick={() => setRemoving({ kind: 'participant', key: `p:${p.participantId}`, name: p.participantName, run: async () => { for (const shiftId of p.shiftIds) await detach.mutateAsync({ id: activity.id, shiftId }) } })} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
                         )}
+                        {started && (
+                          <div className="flex shrink-0 items-center gap-2">
+                            {p.didNotAttend && <StatusBadge tone="neutral" label="Didn't attend" />}
+                            {!p.didNotAttend && activity.status === 'Completed' && <StatusBadge tone="success" label="Attended" />}
+                            {markable && (
+                              <Button
+                                variant={p.didNotAttend ? 'ghost' : 'secondary'} size="sm" data-attendance-action className="whitespace-nowrap pointer-coarse:min-h-[var(--tap-min)]"
+                                aria-label={p.didNotAttend ? `Undo didn't attend for ${p.participantName}` : `Mark ${p.participantName} as didn't attend`}
+                                disabled={pending || !online} title={online ? undefined : "You're offline."} onClick={() => markAttendance(p, p.didNotAttend)}
+                              >{p.didNotAttend ? 'Undo' : "Didn't attend"}</Button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{pending ? 'Saving…' : formatShiftTimeRange(activity.startTime, activity.endTime)}</p>
+                      <p className="text-xs text-muted-foreground">{pending ? 'Saving…' : p.didNotAttend ? 'Shift cancelled as a no-show.' : formatShiftTimeRange(activity.startTime, activity.endTime)}</p>
+                      {markable && !online && <p className="text-xs text-muted-foreground">You're offline.</p>}
                       {p.timesDiffer && (
                         <p className="flex items-start gap-1 text-xs text-muted-foreground"><Clock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>Times differ from agreement {p.agreementStartTime && p.agreementEndTime ? `(${noBreak(formatShiftTimeRange(p.agreementStartTime, p.agreementEndTime))})` : ''}</span></p>
                       )}
-                      <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending || p.ratio === 'TwoToOne'} onChange={e => void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`)}>{SUPPORT_RATIOS.filter(r => r !== 'TwoToOne' || p.ratio === r).map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>
+                      {!started && <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending || p.ratio === 'TwoToOne'} onChange={e => void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`)}>{SUPPORT_RATIOS.filter(r => r !== 'TwoToOne' || p.ratio === r).map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>}
                     </div>
                   )
                 })}
