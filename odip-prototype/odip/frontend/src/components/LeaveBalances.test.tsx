@@ -58,4 +58,10 @@ describe('LeaveBalances', () => {
     render(<LeaveBalances {...props} query={{ ...base, isFetching: true, data: { status: 'Ready', balances: [{ category: 'Sick', amount: 1, unit: 'Days' }] } }} />)
     expect(screen.getByText('1.0 days')).toBeInTheDocument()
   })
+
+  it('gives an unknown balance an accessible name and still reads zero as a number', () => {
+    render(<LeaveBalances {...props} query={{ ...base, data: { status: 'Ready', balances: [{ category: 'Annual Leave', amount: null, unit: 'Hours' }, { category: 'Sick', amount: 0, unit: 'Hours' }] } }} />)
+    expect(screen.getByText('Not available')).toBeInTheDocument()
+    expect(screen.getByText('0.0 hours')).toBeInTheDocument()
+  })
 })

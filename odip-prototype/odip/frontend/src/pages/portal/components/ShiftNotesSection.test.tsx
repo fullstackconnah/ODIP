@@ -201,6 +201,38 @@ describe('ShiftNotesSection', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
+  it('clears the shortened hint once the pasted note is saved', async () => {
+    const user = userEvent.setup()
+    mockUseShiftNotes.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: mockRefetch })
+    mockCreateMutateAsync.mockResolvedValue(undefined)
+    renderSection()
+    const field = screen.getByLabelText(/add a note/i)
+
+    await user.click(field)
+    await user.paste('x'.repeat(1500))
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /add note/i }))
+
+    await waitFor(() => expect(field).toHaveValue(''))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('does not bring the shortened hint back when an edit is cancelled and started again', async () => {
+    const user = userEvent.setup()
+    setCurrentUser('user-1')
+    mockUseShiftNotes.mockReturnValue({ data: [makeNote({ authorUserId: 'user-1' })], isLoading: false, isError: false, refetch: mockRefetch })
+    renderSection()
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.click(screen.getByLabelText(/edit note/i))
+    await user.paste('x'.repeat(1500))
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it("offers an Edit action only on the current user's own note", () => {
     setCurrentUser('user-1')
     mockUseShiftNotes.mockReturnValue({

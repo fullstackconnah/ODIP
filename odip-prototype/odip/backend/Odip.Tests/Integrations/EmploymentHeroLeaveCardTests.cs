@@ -126,6 +126,11 @@ public class EmploymentHeroLeaveCardTests
         for (var i = 0; i < 500; i++)
             db.EmploymentHeroOutbox.Add(Row(tenant, await LeaveAsync(db, tenant, worker, longAgo, longAgo), EmploymentHeroOutboxKind.Leave, EmploymentHeroOutboxStatus.Sent, 1));
         db.EmploymentHeroOutbox.Add(Row(tenant, await LeaveAsync(db, tenant, worker, Today, Today), EmploymentHeroOutboxKind.Leave, EmploymentHeroOutboxStatus.Failed, 3, "Employment Hero refused it."));
+        // Characterisation: a Sent row whose leave has a LeaveCancel row, or whose leave was Declined, is not counted as sent.
+        var cancelled = await LeaveAsync(db, tenant, worker, longAgo, longAgo);
+        db.EmploymentHeroOutbox.Add(Row(tenant, cancelled, EmploymentHeroOutboxKind.Leave, EmploymentHeroOutboxStatus.Sent, 1));
+        db.EmploymentHeroOutbox.Add(Row(tenant, cancelled, EmploymentHeroOutboxKind.LeaveCancel, EmploymentHeroOutboxStatus.Sent, 1));
+        db.EmploymentHeroOutbox.Add(Row(tenant, await LeaveAsync(db, tenant, worker, longAgo, longAgo, LeaveStatus.Declined), EmploymentHeroOutboxKind.Leave, EmploymentHeroOutboxStatus.Sent, 1));
         await db.SaveChangesAsync();
 
         var status = Data(await Controller(db, tenant, new StubHttpHandler()).Status(CancellationToken.None));

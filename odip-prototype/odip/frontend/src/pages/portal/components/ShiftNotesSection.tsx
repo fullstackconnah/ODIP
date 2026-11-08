@@ -141,6 +141,7 @@ export function ShiftNotesSection({
     try {
       await createNote.mutateAsync(trimmed)
       setBody('')
+      setShortened(null)
     } catch {
       setCreateError("Couldn't save your note. Check your connection and try again.")
     }
@@ -150,6 +151,7 @@ export function ShiftNotesSection({
     setEditingId(note.id)
     setEditBody(note.body)
     setEditError(null)
+    setShortened(null)
   }
 
   async function handleSaveEdit(id: string) {
@@ -159,6 +161,7 @@ export function ShiftNotesSection({
     try {
       await updateNote.mutateAsync({ id, body: trimmed })
       setEditingId(null)
+      setShortened(null)
     } catch (err) {
       setEditError(extractErrorMessage(err, "Couldn't save your changes. Check your connection and try again."))
     }
@@ -224,7 +227,7 @@ export function ShiftNotesSection({
                   <div className="flex items-center justify-between gap-2">
                     <CharCount length={editBody.length} />
                     <div className="flex items-center gap-2">
-                      <Button variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
+                      <Button variant="secondary" onClick={() => { setEditingId(null); setShortened(null) }}>Cancel</Button>
                       <Button
                         onClick={() => handleSaveEdit(note.id)}
                         disabled={updateNote.isPending || !editBody.trim()}
