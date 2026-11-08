@@ -41,6 +41,10 @@ async function run(vp, name, count) {
   await page.goto(`${BASE_URL}/settings?section=failed-sends`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByRole('heading', { name: 'Notification outbox' }).waitFor({ timeout: 45_000 })
   await page.getByText('Callum Radford').first().waitFor({ timeout: 45_000 })
+  // 500 rows make a 150,000 px page: hide all but the first 3 (after the row count and cap line are read from the real render) so the crop holds.
+  const rendered = await page.locator('tbody tr').count()
+  check(`${name}: rows rendered`, rendered, rendered === count)
+  await page.addStyleTag({ content: 'tbody tr:nth-child(n+4) { display: none }' })
   const region = page.getByRole('heading', { name: 'Notification outbox' }).locator("xpath=ancestor::div[contains(@class,'space-y-3')][1]")
   const line = page.getByText(CAP_LINE)
   const n = await line.count()
