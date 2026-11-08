@@ -121,6 +121,18 @@ public class ModuleVisibilityTests
         Assert.Equal(mayWrite, write.Roles!.Split(',').Contains(role));
         Assert.Empty(type.GetMethod(nameof(SettingsController.GetModuleVisibility))!.GetCustomAttributes<AuthorizeAttribute>().Where(a => a.Roles != null));
     }
+
+    [Fact]
+    public async Task GroupActivitiesEnabled_IsOffByDefault_ChangesOnlyWhenSent_AndIsAudited()
+    {
+        var (db, controller) = Create(A);
+        Assert.False(Data(await controller.GetModuleVisibility(default)).GroupActivitiesEnabled);
+        Assert.True(Data(await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = false, GroupActivitiesEnabled = true }, default)).GroupActivitiesEnabled);
+        var audit = Assert.Single(await db.AuditLogs.ToListAsync());
+        Assert.Equal(nameof(AppSettings.GroupActivitiesEnabled), JsonDocument.Parse(audit.Changes).RootElement.EnumerateArray().Single().GetProperty("Field").GetString());
+        Assert.True(Data(await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false, HiddenTrips = false }, default)).GroupActivitiesEnabled);
+        Assert.True((await db.AppSettings.SingleAsync()).GroupActivitiesEnabled);
+    }
 }
 
 

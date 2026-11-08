@@ -730,7 +730,7 @@ public sealed class ServiceAgreementApprovalService
     }
 
     /// <summary>A Draft nobody is on and nobody wrote on: nobody has been given it or shown it, and a coordinator's own notes on it are not thrown away.</summary>
-    private static bool Unfilled(Shift shift) => shift.Status == ShiftStatus.Draft && shift.UserId is null && string.IsNullOrWhiteSpace(shift.Notes);
+    private static bool Unfilled(Shift shift) => shift.Status == ShiftStatus.Draft && shift.UserId is null && shift.GroupActivityId is null && string.IsNullOrWhiteSpace(shift.Notes);
 
     /// <summary>
     /// The shifts among <paramref name="ids"/> that something is recorded against: a note, a completion, a handover read or a claim line. Each of those keys restricts a delete, and one refused delete rolls

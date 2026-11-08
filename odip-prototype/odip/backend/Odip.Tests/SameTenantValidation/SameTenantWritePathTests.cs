@@ -592,6 +592,32 @@ public class SameTenantWritePathTests
         Assert.Contains("staff member", body.Errors![0], StringComparison.OrdinalIgnoreCase);
     }
 
+    // ── Group activities ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task GroupActivity_AddStaff_WithAnotherOrganisationsUser_400_GA_STAFF_NOT_FOUND_AndNoRow()
+    {
+        var fx = new Odip.Tests.GroupActivities.GroupActivityFixture();
+        var activity = fx.AddActivity();
+        var foreign = fx.AddUser("Eve", tenantId: Guid.NewGuid());
+        var result = await fx.Controller().AddStaff(activity.Id, new AddGroupStaffDto { StaffId = foreign.Id }, CancellationToken.None);
+        Assert.Equal("GA_STAFF_NOT_FOUND", Odip.Tests.GroupActivities.GroupActivityFixture.Error(result, 400));
+        Assert.Empty(fx.Seed.GroupActivityStaff);
+    }
+
+    [Fact]
+    public async Task GroupActivity_AddParticipant_WithAnotherOrganisationsParticipant_400_GA_PARTICIPANT_NOT_FOUND_AndNoShift()
+    {
+        var fx = new Odip.Tests.GroupActivities.GroupActivityFixture();
+        var activity = fx.AddActivity();
+        var foreign = new Participant { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), FirstName = "Eve", LastName = "Other", IsActive = true };
+        fx.Seed.Participants.Add(foreign);
+        fx.Seed.SaveChanges();
+        var result = await fx.Controller().AddParticipant(activity.Id, new AddGroupParticipantDto { ParticipantId = foreign.Id, Ratio = SupportRatio.OneToOne }, CancellationToken.None);
+        Assert.Equal("GA_PARTICIPANT_NOT_FOUND", Odip.Tests.GroupActivities.GroupActivityFixture.Error(result, 400));
+        Assert.Empty(fx.Seed.Shifts);
+    }
+
     // ── Helper ────────────────────────────────────────────────────────
 
     private static TripInstance SeedTrip(OdipDbContext db, Guid tenantId)

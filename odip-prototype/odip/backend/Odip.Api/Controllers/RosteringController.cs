@@ -217,7 +217,15 @@ public class RosteringController : ControllerBase
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
         var weeklyHours = await RosterAvailability.WeeklyHoursAsync(_db, activeStaff.Select(u => u.TenantId), ct);
-        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours, otherWeekShifts);
+        // Workers on group activities are busy too (group activities D7): their staff rows go in as transient shifts, so the snapshot sees them but weekShifts (and so the board) never does.
+        var staffBusy = await RosterAvailability.ActivityStaffBusyAsync(_db, staffIds, fortnightStart, fortnightStart.AddDays(13), ct);   // the fortnight always holds the week
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts.Concat(staffBusy.Where(b => b.ServiceDate >= start && b.ServiceDate <= end)).ToList(), weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours,
+            otherWeekShifts.Concat(staffBusy.Where(b => (b.ServiceDate < start || b.ServiceDate > end) && casualIds.Contains(b.UserId!.Value))).ToList());
+
+        // Group activities (PR1): while the switch is off the board carries none, so a stray row never shows. Cancelled activities are not listed.
+        var groupActivitiesEnabled = _tenant?.TenantId is { } boardTenant
+            && await _db.AppSettings.AsNoTracking().Where(s => s.TenantId == boardTenant).Select(s => s.GroupActivitiesEnabled).FirstOrDefaultAsync(ct);
+        var groupActivities = groupActivitiesEnabled ? await new GroupActivityReader(_db, _availability).ForWeekAsync(start, end, ct) : new List<GroupActivityDto>();
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
@@ -265,6 +273,7 @@ public class RosteringController : ControllerBase
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
@@ -381,6 +390,7 @@ public class RosteringController : ControllerBase
             {
                 WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Participant,
                 ParticipantRows = participantRows, Exceptions = exceptions, StaffAvailableDays = availableDays,
+                GroupActivities = groupActivities, GroupActivitiesEnabled = groupActivitiesEnabled,
                 PendingAgreements = await PendingAgreementsAsync(ct),
                 // The leave the findings already loaded (weekWindows): leave requests only; recurring and legacy unavailability stay findings of the assign.
                 StaffLeave = weekWindows
@@ -444,13 +454,14 @@ public class RosteringController : ControllerBase
 
             // One staff member's week has no Unfilled lane: an empty list, never null (the client spreads it).
             var unfilled = staffId is null
-                ? weekShifts.Where(s => s.UserId is null).Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList()
+                ? weekShifts.Where(s => s.UserId is null && s.GroupActivityId is null).Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList()
                 : new List<ShiftDto>();
 
             board = new RosterBoardDto
             {
                 WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Staff,
-                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions, StaffAvailableDays = availableDays
+                StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions, StaffAvailableDays = availableDays,
+                GroupActivities = groupActivities, GroupActivitiesEnabled = groupActivitiesEnabled
             };
         }
 
@@ -711,6 +722,10 @@ public class RosteringController : ControllerBase
         if (dto.HasLocation && location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        // Ruling 2: what the activity owns (who, which participant, ratio, day and times) cannot change here; notes, location and cancelling still save.
+        if (shift.GroupActivityId is not null && (dto.Ratio != shift.Ratio || dto.ParticipantId != shift.ParticipantId || dto.StaffId != shift.UserId || dto.ServiceDate != shift.ServiceDate
+                || dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftOnGroupActivityMessage, GroupActivityOnShiftCode));
         if (dto.HasServiceLocationId && dto.ServiceLocationId is { } newPlaceId && !await ServiceLocationUsableAsync(newPlaceId, shift.TenantId, shift.ServiceLocationId, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail(ServiceLocationRefusedMessage));
         if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
@@ -875,6 +890,7 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<bool>.Fail("Shift not found."));
+        if (shift.GroupActivityId is not null) return Conflict(ApiResponse<bool>.Fail(DeleteOnGroupActivityMessage, GroupActivityOnShiftCode));
         // A started or finished shift has a completion (and notes) behind it, held by a Restrict foreign key: refuse it as the other writes do, never a 500.
         if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed)
             return Conflict(ApiResponse<bool>.Fail(ShiftNotDeletableMessage, ShiftErrorCodes.ShiftStatusLocked));
@@ -923,6 +939,7 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        if (shift.GroupActivityId is not null) return Conflict(ApiResponse<ShiftDto>.Fail(WorkerOnGroupActivityMessage, GroupActivityOnShiftCode));
         if (IsLockedForStaffChange(shift.Status))
             return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
         // A drop names who the board showed (nobody, or the person the prompt offered to replace): someone changed the shift since, so say so rather than replace them by surprise.
@@ -979,6 +996,7 @@ public class RosteringController : ControllerBase
             var to = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.ToShiftId, ct);
             // The query filter keeps both in the caller's organisation; a SuperAdmin with no tenant sees all of them, so they must also share one.
             if (from is null || to is null || from.TenantId != to.TenantId) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+            if (from.GroupActivityId is not null || to.GroupActivityId is not null) return Conflict(ApiResponse<ShiftDto>.Fail(WorkerOnGroupActivityMessage, GroupActivityOnShiftCode));
             if (IsLockedForStaffChange(from.Status) || IsLockedForStaffChange(to.Status))
                 return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
             // The person the page carried is no longer on the source (or nobody is): never move somebody else by surprise.
@@ -1067,6 +1085,19 @@ public class RosteringController : ControllerBase
                 published.Add(shift);
             }
 
+            // Group activities (PR1): publishing the whole week publishes its Draft activities too, and a published activity brings its Draft participant shifts out with it (they have no worker, so the loop above skips them). Publishing a chosen list leaves activities alone: publish those from the activity.
+            var weekActivities = await _db.GroupActivities.Where(a => a.TenantId == tenantId && a.ServiceDate >= start && a.ServiceDate <= end).ToListAsync(ct);
+            if (chosen == null)
+                foreach (var activity in weekActivities.Where(a => a.Status == ShiftStatus.Draft))
+                    (activity.Status, activity.UpdatedAt) = (ShiftStatus.Published, DateTime.UtcNow);
+            var publishedActivityIds = weekActivities.Where(a => a.Status == ShiftStatus.Published).Select(a => a.Id).ToHashSet();
+            foreach (var shift in drafts.Where(s => s.GroupActivityId is { } activityId && s.UserId is null && publishedActivityIds.Contains(activityId)))
+            {
+                shift.Status = ShiftStatus.Published;
+                shift.UpdatedAt = DateTime.UtcNow;
+                published.Add(shift);
+            }
+
             // One notice per worker, listing every shift of theirs this publish put out, earliest first (fix round 1). A shift whose day has gone is published for the
             // record, but nobody is told about it now.
             var toTell = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).GroupBy(s => s.UserId!.Value).ToList();
@@ -1094,7 +1125,7 @@ public class RosteringController : ControllerBase
             {
                 Published = published.Count,
                 Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
-                Unfilled = drafts.Count(s => s.UserId is null),
+                Unfilled = drafts.Count(s => s.UserId is null && s.GroupActivityId is null),
                 Skipped = skipped,
             }));
         }
@@ -1212,6 +1243,7 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == split.ShiftId, ct);
         if (shift is null) return "Shift not found.";
+        if (shift.GroupActivityId is not null) return "This shift is part of a group activity.";   // ruling 1: the activity owns its workers
         if (shift.UserId is not null || shift.Status is not (ShiftStatus.Draft or ShiftStatus.Published) || shift.StartTime != split.StartTime || shift.EndTime != split.EndTime)
             return "This shift has changed since the draft.";
         if (shift.EndsNextDay || shift.NightType != SleepoverType.None || shift.Ratio != SupportRatio.OneToOne) return "This shift can't be split.";
@@ -2489,6 +2521,7 @@ public class RosteringController : ControllerBase
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
             ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
@@ -2588,10 +2621,16 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>Roster drag and drop (2026-10-14), decision 8: a shift that has started, waits for review, is finished or is cancelled keeps its worker; only its completion endpoints move it on.</summary>
-    private static bool IsLockedForStaffChange(ShiftStatus status) =>
+    internal static bool IsLockedForStaffChange(ShiftStatus status) =>
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
+    // Group activities (PR1): a shift on an activity is changed from the activity, so the board's writes refuse the fields the activity owns.
+    private const string GroupActivityOnShiftCode = "GA_ON_ACTIVITY";
+    private const string ShiftOnGroupActivityMessage = "This shift is part of a group activity. Change it on the activity.";
+    private const string WorkerOnGroupActivityMessage = "This shift is part of a group activity. Change who works it on the activity.";
+    private const string DeleteOnGroupActivityMessage = "This shift is part of a group activity. Remove them from the activity first.";
+
     private const string ShiftNotDeletableMessage = "This shift has been started or finished, so it can't be deleted.";
     private const string ShiftHasRecordsMessage = "This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead.";
     private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";

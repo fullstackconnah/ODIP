@@ -94,6 +94,10 @@ public class Shift : ITenantEntity
     /// <summary>The support type (<see cref="Odip.Domain.Entities.SupportActivityGroup.GroupCode"/>) this shift is claimed under. Null is community access; the claim prices that group's hourly row for the shift's day.</summary>
     public string? SupportGroupCode { get; set; }
 
+    /// <summary>The group activity this shift is a participant of (group activities D2), or null. An attached shift never has a <see cref="UserId"/>: its workers are the activity's staff rows.</summary>
+    public Guid? GroupActivityId { get; set; }
+    public GroupActivity? GroupActivity { get; set; }
+
     /// <summary>Why the coordinator accepted the Warning findings below, if any were.</summary>
     public string? OverrideReason { get; set; }
 

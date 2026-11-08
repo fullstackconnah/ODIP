@@ -19,7 +19,7 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
         var end = monday.AddDays(6);
         var weekShifts = await db.Shifts.AsNoTracking().Where(s => s.TenantId == tenantId && s.ServiceDate >= monday && s.ServiceDate <= end && s.Status != ShiftStatus.Cancelled).ToListAsync(ct);
         // The open shifts a coordinator could still staff: as the board's IsLockedForStaffChange, an assigned shift is never touched.
-        var open = weekShifts.Where(s => s.UserId == null && s.Status is ShiftStatus.Draft or ShiftStatus.Published).ToList();
+        var open = weekShifts.Where(s => s.UserId == null && s.GroupActivityId == null && s.Status is ShiftStatus.Draft or ShiftStatus.Published).ToList();
         var regulars = await RosterRegulars.ByPatternAsync(db, open.Select(s => s.ShiftPatternId), ct);
 
         var participantIds = open.Select(s => s.ParticipantId).Distinct().OrderBy(id => id).ToList();
