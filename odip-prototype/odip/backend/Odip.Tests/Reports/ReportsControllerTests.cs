@@ -196,6 +196,27 @@ public class ReportsControllerTests
         Assert.Equal(7.00m, row.ApprovedHours);
     }
 
+    // [H54-1] Rostered 09:00-17:00 Sydney (AEDT), worked 08:30-17:00, no break: 30 min of extra time. Payroll holds it at rostered (480) unless approved (510).
+    [Theory]
+    [InlineData(ExtraTimeDecision.Pending, 8.00)]
+    [InlineData(ExtraTimeDecision.Declined, 8.00)]
+    [InlineData(ExtraTimeDecision.Approved, 8.50)]
+    public async Task HoursByWorker_UnapprovedExtraTimeIsHeldAtRostered_AsPayrollDoes(ExtraTimeDecision decision, double hours)
+    {
+        using var db = TestDb.Create();
+        var w = AddUser(db, "Eve", "Extra");
+        var shift = AddShift(db, new DateOnly(2026, 10, 20), ShiftStatus.Completed, w.Id, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var c = AddCompletion(db, shift, w, 0);
+        c.ActualStart = new DateTime(2026, 10, 19, 21, 30, 0, DateTimeKind.Utc);   // 08:30 AEDT
+        c.ActualEnd = new DateTime(2026, 10, 20, 6, 0, 0, DateTimeKind.Utc);       // 17:00 AEDT
+        c.VarianceMinutesStart = -30;
+        c.ExtraTime = decision;
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(Rows<HoursByWorkerRowDto>(await Call(Controller(db), "hours", From, To)));
+        Assert.Equal((decimal)hours, row.ApprovedHours);   // the same 480 / 510 Payroll's PaidWindow + NetWorked give for this data
+    }
+
     // ---------- shift fulfilment ----------
 
     [Fact]
