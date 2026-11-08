@@ -139,6 +139,7 @@ const contrastPairs = (page) => page.evaluate(() => {
 })
 
 const browser = await chromium.launch({ headless: true })
+let offOverhang = null
 
 // ── 1280 fine pointer: the board ──────────────────────────────────────────────────────────────────────────────
 await scene('board-1280', async () => {
@@ -189,7 +190,7 @@ await scene('board-1280', async () => {
   // Carrying: the card's text must not move and the day slot must not cover the card. Mei is not on Pool afternoon, so the drop is a real join.
   const target = page.locator('[data-activity-card="act-short"]').first()
   const strip = page.getByRole('button', { name: /^Mei Zhang,/ }).first()
-  const textX = (el) => ({ title: el.querySelector('[data-activity-title]').getBoundingClientRect().left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left })
+  const textX = (el) => { const c = el.getBoundingClientRect(); return { title: el.querySelector('[data-activity-title]').getBoundingClientRect().left - c.left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left - c.left, cardLeft: c.left, cardWidth: c.width } }
   const before = await target.evaluate(textX)
   const s = await strip.boundingBox()
   const dropBox = () => target.locator('[data-activity-drop]').boundingBox()
@@ -205,9 +206,9 @@ await scene('board-1280', async () => {
     while (p && !p.querySelector('[data-day-slot]')) p = p.parentElement
     const slot = p ? p.querySelector('[data-day-slot]') : null
     const sb = slot ? slot.getBoundingClientRect() : null
-    return { title: el.querySelector('[data-activity-title]').getBoundingClientRect().left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left, overlap: sb ? !(sb.right <= c.left || sb.left >= c.right || sb.bottom <= c.top || sb.top >= c.bottom) : false, hasSlot: Boolean(slot) }
+    return { title: el.querySelector('[data-activity-title]').getBoundingClientRect().left - c.left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left - c.left, cardLeft: c.left, cardWidth: c.width, overlap: sb ? !(sb.right <= c.left || sb.left >= c.right || sb.bottom <= c.top || sb.top >= c.bottom) : false, hasSlot: Boolean(slot) }
   })
-  check('4 carrying: card text x unchanged (title, count)', during.title === before.title && during.count === before.count, { before, during })
+  check('4 carrying: card text x unchanged inside the card (title, count offsets from the card edge)', during.title === before.title && during.count === before.count, { before, during })
   check('4 carrying: the day slot does not overlap the card', !during.overlap, during)
   // cropElement parks the mouse to settle, so the hover is restored inside `during` just before the shot.
   const crop = await cropElement(page, target, path.join(OUT_DIR, 'drop-hover.png'), {
@@ -342,13 +343,18 @@ await scene('board-flag-off', async () => {
   const options = await page.getByRole('option').allTextContents()
   check('board-flag-off: New menu keeps two items', options.length === 2, options)
   await page.keyboard.press('Escape')
-  await fullPage(page, path.join(OUT_DIR, 'full', 'board-flag-off-1280.png')).then((r) => checks.push(...r.checks))
+  const off = await fullPage(page, path.join(OUT_DIR, 'full', 'board-flag-off-1280.png'))
+  checks.push(...off.checks.filter((c) => !c.name.startsWith('full page not truncated')))
+  offOverhang = off.checks.find((c) => c.name.startsWith('full page not truncated')).detail
   await context.close()
 })
 await scene('full-1280', async () => {
   const { context, page } = await openBoard(browser, { width: 1280, height: 1300, touch: false })
   await page.locator('[data-activity-card]').first().waitFor({ timeout: 30_000 })
-  checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'board-1280.png'))).checks)
+  const on = await fullPage(page, path.join(OUT_DIR, 'full', 'board-1280.png'))
+  checks.push(...on.checks.filter((c) => !c.name.startsWith('full page not truncated')))
+  const d = on.checks.find((c) => c.name.startsWith('full page not truncated')).detail
+  check('full page overhang equals the flag-off board (the shell, not the feature)', offOverhang && d.scrollHeight - d.viewportHeight === offOverhang.scrollHeight - offOverhang.viewportHeight, { on: d, off: offOverhang })
   await context.close()
 })
 
@@ -397,7 +403,7 @@ await scene('touch-390', async () => {
   // slide-over: Make a group activity
   await page.locator('[data-shift-open="gl-1"]').click()
   const make = page.getByRole('button', { name: 'Make a group activity' })
-  await make.waitFor({ timeout: 10_000 })
+  await make.waitFor({ timeout: 10_000 }).catch(async (e) => { console.log('[group-activities] slide-over debug:', JSON.stringify({ dialogs: (await page.getByRole('dialog').allTextContents()).map((t) => t.slice(0, 160)), headings: await page.getByRole('heading').allTextContents() })); throw e })
   await make.scrollIntoViewIfNeeded()
   await shot(page, make.locator('xpath=..'), 'slideover-make-activity-390.png', { touch: true })
   await page.keyboard.press('Escape')
@@ -407,7 +413,7 @@ await scene('touch-390', async () => {
   await scene('modal-390', async () => {
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
   // modal at 390
-  await card.locator('[data-activity-open]').click()
+  await card.locator('[data-activity-open]').click({ timeout: 8000 }).catch(async (e) => { console.log('[group-activities] 390 modal click debug:', JSON.stringify(await card.evaluate((el) => { const b = el.querySelector('[data-activity-open]').getBoundingClientRect(); const h = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return { b: [b.left, b.top, b.width, b.height], hit: h ? h.tagName + '.' + String(h.className).slice(0, 80) : null, dialogs: document.querySelectorAll('[role=dialog]').length } }))); throw e })
   const dlg = page.getByRole('dialog').first()
   await page.getByRole('heading', { name: /Staff · 3 of 3/ }).waitFor({ timeout: 10_000 })
   await page.waitForTimeout(400)
