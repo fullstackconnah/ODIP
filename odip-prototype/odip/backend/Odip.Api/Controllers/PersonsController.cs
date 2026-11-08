@@ -90,7 +90,7 @@ public class PersonsController : ControllerBase
         if (_tenant is { TenantId: null }) return BadRequest(ApiResponse<PersonDto>.Fail(ChooseOrganisation));
         var nameError = ValidateName(dto.FirstName, dto.LastName);
         if (nameError != null) return BadRequest(ApiResponse<PersonDto>.Fail(nameError));
-        var contactError = await ValidateContactAsync(dto, null, null, ct);
+        var contactError = await ValidateContactAsync(_db, _clock, dto, null, null, ct);
         if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         var person = new Person
@@ -116,7 +116,7 @@ public class PersonsController : ControllerBase
 
         var p = await _db.People.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<PersonDto>.Fail("Person not found"));
-        var contactError = await ValidateContactAsync(dto, p.Email, p.DateOfBirth, ct);
+        var contactError = await ValidateContactAsync(_db, _clock, dto, p.Email, p.DateOfBirth, ct);
         if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim();
@@ -137,8 +137,8 @@ public class PersonsController : ControllerBase
             : null;
 
     /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
-    private async Task<string?> ValidateContactAsync(CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct) =>
-        ParticipantPatchApplier.ValidatePersonContact(dto.Email, dto.DateOfBirth, storedEmail, storedDob, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
+    internal static async Task<string?> ValidateContactAsync(OdipDbContext db, TimeProvider clock, CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct) =>
+        ParticipantPatchApplier.ValidatePersonContact(dto.Email, dto.DateOfBirth, storedEmail, storedDob, await ProviderTimeZoneResolver.TodayAsync(db, clock, ct));
 
     private static PersonDto ToDto(Person p) => new()
     {
