@@ -152,11 +152,11 @@ async function modal(browser, vp) {
   // error
   mode = 'closed'
   await row('Liam Okafor').getByRole('button', { name: /^Mark/ }).click()
-  const refusalLine = dlg().getByText('Attendance is final once every staff shift is approved.')
+  const refusalLine = row('Liam Okafor').getByText('Attendance is final once every staff shift is approved.')   // under that participant's own row
   await refusalLine.waitFor({ timeout: 10_000 })
-  await refusalLine.scrollIntoViewIfNeeded()   // the refusal sits below the sections in a scrolling dialog: bring it into the crop
+  await refusalLine.scrollIntoViewIfNeeded()
   const seen = await refusalLine.evaluate((e) => { const r = e.getBoundingClientRect(); const d = e.closest('[role="dialog"]').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, dTop: d.top, dBottom: d.bottom, vh: innerHeight } })
-  check(`5 the refusal text is visible inside the dialog and the viewport in modal-error (${vp.name})`, seen.top >= Math.max(seen.dTop, 0) && seen.bottom <= Math.min(seen.dBottom, seen.vh), JSON.stringify(seen))
+  check(`5 the refusal text sits in Liam's row and is visible inside the dialog and the viewport in modal-error (${vp.name})`, seen.top >= Math.max(seen.dTop, 0) && seen.bottom <= Math.min(seen.dBottom, seen.vh), JSON.stringify(seen))
   check(`5 after a refusal the button is usable again (${vp.name})`, await row('Liam Okafor').getByRole('button', { name: /^Mark/ }).isEnabled())
   await shot(page, dlg(), 'modal-error', vp, 8)
   mode = 'ok'
@@ -229,7 +229,8 @@ async function reviews(browser, vp) {
   await (vp.touch ? section.getByRole('checkbox').first() : page.getByRole('checkbox', { name: /select all/i }).first()).click()
   await page.getByRole('button', { name: /approve selected \(\d+\)/i }).click()
   const dialog = page.getByRole('alertdialog')
-  await dialog.getByText('Approving marks everyone still on this activity as attended.').waitFor({ timeout: 10_000 })
+  // 390 selects the first row (one activity completes); 1280 selects all, and two activities complete.
+  await dialog.getByText(vp.touch ? 'Approving marks everyone still on this activity as attended.' : 'Approving marks everyone still on these activities as attended.').waitFor({ timeout: 10_000 })
   const confirm = await shot(page, dialog, 'review-confirm', vp, 8)
   const full = await fullPage(page, path.join(OUT_DIR, 'full', `completions-${vp.name}.png`), { touch: vp.touch })
   checks.push(...full.checks)

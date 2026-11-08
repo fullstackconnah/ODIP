@@ -75,6 +75,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const dirty = form !== null && JSON.stringify(form) !== JSON.stringify(initial)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [writeError, setWriteError] = useState<string | null>(null)
+  const [writeKey, setWriteKey] = useState<string | null>(null)   // which immediate write the error belongs to: a `p:<id>` one shows under that participant row
   const [titleError, setTitleError] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [removing, setRemoving] = useState<{ kind: 'participant' | 'staff'; key: string; name: string; run: () => Promise<unknown> } | null>(null)
@@ -118,6 +119,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   /** An immediate write: on a refusal the server's message shows and nothing else changes (the refetch redraws the truth). */
   async function write(key: string, run: () => Promise<unknown>, fallback: string) {
     setWriteError(null)
+    setWriteKey(key)
     onLateRefusalClear?.()
     setPendingKey(key)
     try { await run() } catch (err) { setWriteError(extractErrorMessage(err, fallback)) } finally { setPendingKey(null) }
@@ -264,6 +266,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                       </div>
                       <p className="text-xs text-muted-foreground">{pending ? 'Saving…' : p.didNotAttend ? 'Shift cancelled as a no-show.' : formatShiftTimeRange(activity.startTime, activity.endTime)}</p>
                       {markable && !online && <p className="text-xs text-muted-foreground">You're offline.</p>}
+                      {writeError && writeKey === `p:${p.participantId}` && <p role="alert" className="text-xs text-destructive">{writeError}</p>}
                       {p.timesDiffer && (
                         <p className="flex items-start gap-1 text-xs text-muted-foreground"><Clock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>Times differ from agreement {p.agreementStartTime && p.agreementEndTime ? `(${noBreak(formatShiftTimeRange(p.agreementStartTime, p.agreementEndTime))})` : ''}</span></p>
                       )}
@@ -306,7 +309,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           </section>
         </div>
       )}
-      {(writeError ?? lateRefusal) && <div className="mt-4"><Callout tone="danger">{writeError ?? lateRefusal}</Callout></div>}
+      {((writeError && !writeKey?.startsWith('p:')) || lateRefusal) && <div className="mt-4"><Callout tone="danger">{(writeError && !writeKey?.startsWith('p:') ? writeError : null) ?? lateRefusal}</Callout></div>}
 
       <ConfirmDialog
         open={confirmCancel}

@@ -174,14 +174,18 @@ describe('GroupActivityModal attendance', () => {
     expect(screen.queryByText(/Mark anyone who didn't come/)).toBeNull()
   })
 
-  it("shows the server's refusal and leaves the button usable again", async () => {
-    serve(started({ participants: [mia] }))
+  it("shows the server's refusal under that row only and leaves the button usable again", async () => {
+    serve(started({ participants: [mia, sam] }))
     const message = 'Attendance is final once every staff shift is approved.'
     post.mockRejectedValue({ response: { status: 409, data: { message, errors: [message] } } })
     open({ mode: 'edit', id: 'activity-1' })
-    await userEvent.click(await screen.findByRole('button', { name: "Mark Mia Chen as didn't attend" }))
-    expect(await screen.findByText(message)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: "Mark Mia Chen as didn't attend" })).toBeEnabled())
+    await userEvent.click(await screen.findByRole('button', { name: "Undo didn't attend for Sam Lee" }))
+    const samRow = screen.getByText('Sam Lee').closest('[data-participant-row]') as HTMLElement
+    const miaRow = screen.getByText('Mia Chen').closest('[data-participant-row]') as HTMLElement
+    expect(await within(samRow).findByText(message)).toBeInTheDocument()
+    expect(within(miaRow).queryByText(message)).toBeNull()
+    expect(screen.getAllByText(message)).toHaveLength(1)   // no second copy in a modal-level banner
+    await waitFor(() => expect(screen.getByRole('button', { name: "Undo didn't attend for Sam Lee" })).toBeEnabled())
   })
 
   it('offline: the button is disabled and the row says so', async () => {
