@@ -20,6 +20,7 @@ const STATES = [{ name: '390', width: 390, height: 844 }, { name: '1280', width:
 const checks = []
 const add = (name, detail, pass) => checks.push({ name, detail, pass: !!pass })
 
+let step = ''
 async function openPanel(page, hangSave) {
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
@@ -32,13 +33,18 @@ async function openPanel(page, hangSave) {
   await btn.waitFor({ state: 'visible', timeout: 60_000 })
   await btn.click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
-  await page.goto(`${BASE_URL}/rostering`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.locator('#roster-week-heading').waitFor({ state: 'visible', timeout: 60_000 })
-  await page.getByRole('button', { name: /^New shift$/ }).first().click()
+  await page.goto(`${BASE_URL}/staff/s-0001?tab=week`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  step = 'new-shift'
+  const add = page.getByRole('button', { name: 'Add shift' }).first()
+  await add.waitFor({ state: 'visible', timeout: 60_000 })
+  await add.click()
   const dialog = page.getByRole('dialog')
   await dialog.waitFor({ state: 'visible', timeout: 30_000 })
-  await dialog.getByRole('button', { name: /select a participant/i }).click()
-  await page.getByRole('option').first().click()
+  step = 'participant-trigger'
+  await dialog.locator('[data-shift-field="participant"] button[aria-haspopup="listbox"]').click({ timeout: 15_000 })
+  step = 'participant-option'
+  await page.getByRole('option').first().click({ timeout: 15_000 })
+  step = 'reason-box'
   const reason = dialog.getByLabel(/reason for override/i)
   await reason.waitFor({ state: 'visible', timeout: 30_000 })
   await reason.scrollIntoViewIfNeeded()
@@ -70,7 +76,7 @@ try {
         const c = await cropElement(page, field, path.join(OUT_DIR, `roster-reason-limit-${st.name}.png`), { touch: mobile, hideChrome: true })
         add(`crop [roster-reason-limit-${st.name}]`, { clip: c.clip, box: c.box }, c.overlap?.pass ?? true)
       } catch (e) {
-        add(`reason-limit scene ran [${st.name}]`, String(e.message).split('\n')[0], false)
+        add(`reason-limit scene ran [${st.name}]`, `${step}: ${String(e.message).split('\n').slice(0, 5).join(' | ').slice(0, 500)}`, false)
       }
       await context.close()
     }
@@ -94,7 +100,7 @@ try {
         const c = await cropElement(page, dialog, path.join(OUT_DIR, `shift-panel-saving-escape-${st.name}.png`), { touch: mobile, hideChrome: true })
         add(`crop [shift-panel-saving-escape-${st.name}]`, { clip: c.clip, box: c.box }, c.overlap?.pass ?? true)
       } catch (e) {
-        add(`saving-escape scene ran [${st.name}]`, String(e.message).split('\n')[0], false)
+        add(`saving-escape scene ran [${st.name}]`, `${step}: ${String(e.message).split('\n').slice(0, 5).join(' | ').slice(0, 500)}`, false)
       }
       await context.close()
     }
