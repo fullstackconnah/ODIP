@@ -190,6 +190,20 @@ public class AdminUsersGuardTests
     }
 
     [Fact]
+    public async Task Create_CommaJoinedRoleNames_AreRefusedAndNothingIsSaved()
+    {
+        var t = SeedTenant();
+        // Enum.TryParse ORs the two values: 1 | 2 = 3, which is the defined ReadOnly.
+        var dto = new CreateAdminUserDto { FirstName = "P", LastName = "Q", Email = "pat@org.example", Username = "patq", Role = "Coordinator,SupportWorker", TenantId = t.Id, AddressConfirmed = true };
+
+        var r = await Controller().Create(dto, default);
+
+        Assert.Equal(400, Assert.IsAssignableFrom<ObjectResult>(r).StatusCode);
+        Assert.Empty(_db.Users.IgnoreQueryFilters().Where(x => x.Email == "pat@org.example"));
+        _firebase.Verify(f => f.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Create_SuperAdminDomainEmail_RefusesAnyOtherRoleAndSavesNothing()
     {
         var t = SeedTenant();
