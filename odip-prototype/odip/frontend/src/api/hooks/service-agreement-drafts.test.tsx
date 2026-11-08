@@ -179,6 +179,8 @@ describe('fileNameFromDisposition', () => {
     expect(fileNameFromDisposition('attachment; filename="100% sure.pdf"')).toBe('100% sure.pdf')
     expect(fileNameFromDisposition("attachment; filename=\"Jos_.pdf\"; filename*=UTF-8''Jos%C3%.pdf")).toBe('Jos_.pdf')
     expect(fileNameFromDisposition("attachment; filename*=UTF-8''Jos%C3%.pdf")).toBeNull()
+    expect(fileNameFromDisposition('attachment; filename="100%.pdf"')).toBe('100%.pdf')
+    expect(fileNameFromDisposition("attachment; filename*=UTF-8''100%25.pdf")).toBe('100%.pdf')
   })
 
   it('has no name for a header without one', () => {

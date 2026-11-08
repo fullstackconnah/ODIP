@@ -202,6 +202,9 @@ function UploadStep({ batch, announce }: { batch: BatchDetailDto; announce: (m: 
   )
 }
 
+const MAX_RESULTS_BYTES = 5 * 1024 * 1024 // the server's request cap is 6 MB; 5 MB matches the import wizard's file rule
+const RESULTS_TOO_BIG = 'This file is over 5 MB. Choose a smaller results file.'
+
 function ImportStep({ batch, announce, onImported, onReviewRejected }: { batch: BatchDetailDto; announce: (m: string) => void; onImported: (s: ResultsImportDto) => void; onReviewRejected?: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [refusal, setRefusal] = useState<{ title?: string; body: string } | null>(null)
@@ -227,6 +230,8 @@ function ImportStep({ batch, announce, onImported, onReviewRejected }: { batch: 
         if (res?.status === 400) {
           const body = await serverSentence(res.data, 'Choose the results file to upload.')
           setRefusal(/columns/i.test(body) ? { title: "This isn't an NDIA results file", body } : { body })
+        } else if (res?.status === 413) {
+          setRefusal({ body: RESULTS_TOO_BIG })
         } else if (res?.status === 409) {
           setRefusal({ body: await serverSentence(res.data, "Couldn't import the results. Check your connection and try again.") })
         } else {
@@ -248,7 +253,17 @@ function ImportStep({ batch, announce, onImported, onReviewRejected }: { batch: 
         {refusal && <Callout tone="danger" title={refusal.title} className="mt-3">{refusal.body}</Callout>}
         <div className="mt-3 flex flex-col gap-1.5">
           <label htmlFor={inputId} className="text-sm font-medium">Results file (.csv)</label>
-          <input id={inputId} type="file" accept=".csv" onChange={e => { setFile(e.target.files?.[0] ?? null); setRefusal(null) }} className="block w-full text-sm file:mr-3 file:min-h-[var(--control-h-sm)] pointer-coarse:file:min-h-11 file:rounded-[var(--radius-sm)] file:border file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-3 file:text-sm" />
+          <input id={inputId} type="file" accept=".csv" onChange={e => {
+            const picked = e.target.files?.[0] ?? null
+            if (picked && picked.size > MAX_RESULTS_BYTES) {
+              e.target.value = '' // so the same file can be chosen again after it is edited
+              setFile(null)
+              setRefusal({ body: RESULTS_TOO_BIG })
+              return
+            }
+            setFile(picked)
+            setRefusal(null)
+          }} className="block w-full text-sm file:mr-3 file:min-h-[var(--control-h-sm)] pointer-coarse:file:min-h-11 file:rounded-[var(--radius-sm)] file:border file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-3 file:text-sm" />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button data-testid="file-next-action" variant="primary" size="md" className="max-md:w-full aria-disabled:opacity-60" aria-disabled={!file || importer.isPending} aria-describedby={file ? undefined : `${inputId}-hint`} onClick={run}>
