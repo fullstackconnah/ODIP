@@ -4,6 +4,7 @@ import type { ModuleVisibilityDto } from '@/api/types'
 import { CheckboxField } from '@/components/CheckboxField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PageState } from '@/components/PageState'
+import { httpStatusOf } from '@/lib/httpStatus'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
 import { notSavedText } from './settingsSections'
@@ -25,7 +26,11 @@ export default function WorkspaceVisibilitySection(frame: SectionFrame) {
     setResult(null)
     update.mutate(draft, {
       onSuccess: () => { setSaved(draft); setResult('saved') },
-      onError: error => setResult({ error: notSavedText(error) }),
+      // A 409 means the server refused the switch-off (an activity is still in flight): the saved value stands, so the switch goes back to it.
+      onError: error => {
+        setResult({ error: notSavedText(error) })
+        if (httpStatusOf(error) === 409 && saved) setDraft({ ...draft, groupActivitiesEnabled: saved.groupActivitiesEnabled })
+      },
     })
   }
   const moved = [draft?.hiddenTrips && 'Trips and Bookings', draft?.hiddenAccommodation && 'Accommodation', draft?.hiddenVehicles && 'Vehicles'].filter(Boolean) as string[]

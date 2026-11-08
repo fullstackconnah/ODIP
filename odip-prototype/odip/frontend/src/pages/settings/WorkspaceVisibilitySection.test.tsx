@@ -96,6 +96,14 @@ describe('group activities switch', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Turn off' }))
     expect(mutate.mock.calls[0][0]).toEqual({ hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, groupActivitiesEnabled: false })
   })
+  it('a 409 refusing the switch-off shows the server message as it is and puts the switch back on', () => {
+    const said = "Group activities can't be turned off while 2 activities are in progress or waiting for review. Finish and review them first, then try again."
+    query.data = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, groupActivitiesEnabled: true }
+    mutate.mockImplementation((_data, options) => options.onError({ response: { status: 409, data: { success: false, errors: [said] } } }))
+    show(); fireEvent.click(box()); fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); fireEvent.click(screen.getByRole('button', { name: 'Turn off' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(`Not saved. ${said}`)
+    expect(box()).toBeChecked()
+  })
   it('a failed save keeps the switch as chosen and shows the error', () => {
     query.data = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, groupActivitiesEnabled: false }
     mutate.mockImplementation((_data, options) => options.onError(new Error('offline')))

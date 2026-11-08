@@ -148,7 +148,10 @@ public class PortalController : ControllerBase
             a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status,
             NullIfBlank(a.TripInstance.Destination), NullIfBlank(a.AssignmentRole))).ToList();
 
-        var activityDtos = await PortalActivityShifts.ListAsync(_db, staffId.Value, start, end, ProviderLocalTime.TodayIn(NowUtc, provider.Zone), ct);
+        // H55-1: while group activities are off a worker is not offered an activity whose Start would answer 409.
+        var activityDtos = _currentTenant.TenantId is { } tenantId && await GroupActivitiesController.FlagOnAsync(_db, tenantId, ct)
+            ? await PortalActivityShifts.ListAsync(_db, staffId.Value, start, end, ProviderLocalTime.TodayIn(NowUtc, provider.Zone), ct)
+            : new List<PortalActivityShiftDto>();
         return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
             new PortalShiftsResponseDto(shiftDtos, tripDtos, provider.Id, activityDtos)));
     }
