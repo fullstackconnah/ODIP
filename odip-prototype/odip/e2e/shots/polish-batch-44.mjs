@@ -44,21 +44,28 @@ try {
     await notes.waitFor({ timeout: 60_000 })
     await notes.fill('Typed note')
     await dialog.getByRole('button', { name: 'Save' }).click()
-    const msg = dialog.getByText(MESSAGE)
-    await msg.waitFor({ timeout: 30_000 })
+    const msg = page.getByRole('alert').filter({ hasText: MESSAGE })
+    await msg.waitFor({ state: 'visible', timeout: 30_000 })
+    await page.waitForTimeout(600) // let the scroll-into-view settle
+    add(`alert text equals the server sentence [${st.name}]`, await msg.innerText(), (await msg.innerText()).trim() === MESSAGE)
 
-    // The sentence sits inside the dialog's visible area with no inner scrolling needed to read it, and nothing overflows sideways.
+    // The sentence (role=alert) sits inside the dialog's visible area with no inner scrolling needed to read it, and nothing overflows sideways.
     const fit = await msg.evaluate((el) => {
       const dlg = el.closest('[role="dialog"]')
       const r = el.getBoundingClientRect()
       const d = dlg.getBoundingClientRect()
       let scroller = el.parentElement
       while (scroller && scroller !== dlg && scroller.scrollHeight <= scroller.clientHeight + 1) scroller = scroller.parentElement
-      return { top: r.top, bottom: r.bottom, dialogTop: d.top, dialogBottom: d.bottom, viewport: innerHeight, scrolls: !!scroller && scroller !== dlg, scrollWidth: dlg.scrollWidth, clientWidth: dlg.clientWidth }
+      const foot = [...dlg.querySelectorAll('div')].find((x) => getComputedStyle(x).position === 'sticky')
+      const footTop = foot ? foot.getBoundingClientRect().top : d.bottom
+      return { footTop, top: r.top, bottom: r.bottom, dialogTop: d.top, dialogBottom: d.bottom, viewport: innerHeight, scrolls: !!scroller && scroller !== dlg, scrollWidth: dlg.scrollWidth, clientWidth: dlg.clientWidth }
     })
-    add(`server message visible inside the dialog [${st.name}]`, fit, fit.top >= 0 && fit.bottom <= fit.viewport && fit.top >= fit.dialogTop && fit.bottom <= fit.dialogBottom)
+    add(`server message visible inside the dialog [${st.name}]`, fit, fit.top >= 0 && fit.bottom <= fit.viewport && fit.top >= fit.dialogTop && fit.bottom <= fit.dialogBottom && fit.bottom <= fit.footTop)
     add(`no horizontal overflow in the dialog [${st.name}]`, { scrollWidth: fit.scrollWidth, clientWidth: fit.clientWidth }, fit.scrollWidth <= fit.clientWidth)
     add(`connection fallback not shown [${st.name}]`, null, (await dialog.getByText(/check your connection/i).count()) === 0)
+    // The whole dialog as the user sees it after Save: the panel scrolls, so at 390 the title may be scrolled off while the message shows.
+    const titleBox = await dialog.getByText(/^Edit Booking/).first().boundingBox()
+    add(`dialog title in the crop (info; false = scrolled off at 390) [${st.name}]`, titleBox, true)
     const v = await cropElement(page, dialog, path.join(OUT_DIR, `booking-edit-validation-${st.name}.png`), { hideChrome: true })
     add(`crop [booking-edit-validation-${st.name}]`, { clip: v.clip, box: v.box }, v.overlap?.pass ?? true)
 
