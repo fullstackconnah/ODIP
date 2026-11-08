@@ -481,7 +481,7 @@ public class MicrosoftAuthController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> PutLink([FromBody] UpdateMicrosoftLinkDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<UserRole>(dto.DefaultRole, true, out var role) || !Enum.IsDefined(role) || !GrantableRoles.Contains(role))
+        if (!EnumInput.TryParseDefined<UserRole>(dto.DefaultRole, out var role) || !GrantableRoles.Contains(role))
             return BadRequest(ApiResponse<object>.Fail("Choose Coordinator, Support Worker or Read only."));
         var link = await _db.MicrosoftTenantLinks.FirstOrDefaultAsync(ct);
         if (link is null) return NotFound(ApiResponse<object>.Fail("Microsoft sign-in is not set up for this organisation."));

@@ -1,3 +1,4 @@
+using Odip.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,7 @@ public class ParticipantCommunityAccessRiskItemsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantCommunityAccessRiskItemDto>>> Upsert(
         Guid participantId, string itemType, [FromBody] UpsertParticipantCommunityAccessRiskItemDto dto, CancellationToken ct)
     {
-        if (!Enum.TryParse<CommunityAccessRiskItemType>(itemType, ignoreCase: true, out var type) || !Enum.IsDefined(type))
+        if (!EnumInput.TryParseDefined<CommunityAccessRiskItemType>(itemType, out var type))
             return BadRequest(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Fail("Unrecognised community access risk item type."));
 
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);

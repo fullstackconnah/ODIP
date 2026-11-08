@@ -151,7 +151,7 @@ public class TenantsController : ControllerBase
         Guid? initialUserId = null;
         if (dto.InitialUser is { } iu)
         {
-            if (!Enum.TryParse<UserRole>(iu.Role, true, out var role) || !Enum.IsDefined(role) || role == UserRole.SuperAdmin)
+            if (!EnumInput.TryParseDefined<UserRole>(iu.Role, out var role) || role == UserRole.SuperAdmin)
                 return BadRequest("Invalid role for tenant user");
 
             var user = new User
