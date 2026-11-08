@@ -138,7 +138,7 @@ export default function VehicleCreatePage() {
         <Card title="Vehicle information">
           <div className={formGrid}>
             <FormField label="Vehicle Name" required error={errors.vehicleName?.message} className={span.medium}>
-              <input {...register('vehicleName')} placeholder="e.g. Blue Van 1" autoFocus />
+              <input maxLength={100} {...register('vehicleName')} placeholder="e.g. Blue Van 1" autoFocus />
             </FormField>
 
             <FormField label="Registration" className={span.short}>
