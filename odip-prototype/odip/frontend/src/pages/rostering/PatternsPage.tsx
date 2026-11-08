@@ -11,6 +11,7 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
+import { participantsCutNote } from '@/api/hooks/pagedList'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
 import { PatternSlideOver, GeneratePatternDialog, type PatternSlideOverTarget } from './components'
@@ -231,6 +232,7 @@ export default function PatternsPage() {
         onClose={() => setSlideOverTarget(null)}
         canWrite={canWrite}
         participantOptions={participantOptions}
+        participantsNote={participantsCutNote(participants)}
         staffOptions={staffOptions}
         blockDays={blockDays}
       />

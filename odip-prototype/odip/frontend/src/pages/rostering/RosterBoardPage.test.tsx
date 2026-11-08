@@ -761,3 +761,16 @@ describe('RosterBoardPage: group activities (flag)', () => {
     expect(await screen.findByRole('dialog', { name: 'New group activity' })).toBeInTheDocument()
   })
 })
+
+describe('RosterBoardPage — participant list cut at the ceiling', () => {
+  it('says so under the toolbar when the list was truncated, and says nothing when it was whole', () => {
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithLeaveException(), isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderPage()
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument()
+    unmount()
+
+    mockUseParticipants.mockReturnValue({ data: Object.assign([{ id: 'p-1', fullName: 'Ava Lin' }, { id: 'p-2', fullName: 'Ben Ode' }], { isTruncated: true, totalCount: 250 }) })
+    renderPage()
+    expect(screen.getByText('Showing the first 2 of 250 participants.')).toBeInTheDocument()
+  })
+})
