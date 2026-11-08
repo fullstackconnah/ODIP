@@ -42,6 +42,7 @@ import {
 } from '@/lib/incidentPrefill'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { INCIDENT_SERVICE_TYPES, toIncidentBody } from './incidents/incidentEditForm'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
 import { extractErrorMessage } from '@/lib/utils'
@@ -130,6 +131,8 @@ function IncidentWizardForm() {
   const location = useLocation()
   const createIncident = useCreateIncident()
   const mutation = createIncident
+  // One key per form session, kept across failed submits; a successful one unmounts the page, so a new incident gets a new key.
+  const [idempotencyKey] = useState(() => newCompletionRequestId())
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
   const { data: participants = [] } = useParticipants()
@@ -326,7 +329,7 @@ function IncidentWizardForm() {
     }, true)
 
     try {
-      const res = await createIncident.mutateAsync(base)
+      const res = await createIncident.mutateAsync({ ...base, idempotencyKey })
       if (res.success) {
         // NOTES-02: closing the loop on a shift-note-sourced filing — fire-and-forget, error
         // tolerant (the incident is already filed by this point).

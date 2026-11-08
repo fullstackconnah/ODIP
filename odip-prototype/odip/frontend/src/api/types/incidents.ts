@@ -190,6 +190,8 @@ export interface IncidentDetailDto extends IncidentListDto {
 }
 
 export interface CreateIncidentDto {
+  /** One per form session, resent on every retry of the same submit so the server replays the first incident instead of filing a second. */
+  idempotencyKey?: string
   serviceType: IncidentServiceType
   tripInstanceId?: string
   participantBookingId?: string
