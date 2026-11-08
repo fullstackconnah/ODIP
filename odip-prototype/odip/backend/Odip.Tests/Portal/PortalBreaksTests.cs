@@ -144,6 +144,17 @@ public class ShiftBreakRulesTests
     }
 
     [Fact]
+    public void PaidMinutes_AShiftStartingInTheSpringForwardGap_NeverGoesBelowZero()
+    {
+        var zone = ProviderLocalTime.ResolveZone("Australia/Sydney");
+        var shift = new Shift { ServiceDate = new DateOnly(2026, 10, 4), StartTime = new TimeOnly(2, 15), EndTime = new TimeOnly(3, 0), NightType = SleepoverType.Sleepover };   // 02:15 does not exist that day
+
+        var (rostered, _, paid) = ShiftBreakRules.PaidMinutes(shift, new ShiftCompletion { ActualStart = Start, ActualEnd = Start.AddMinutes(60) }, Now, [], zone);
+
+        Assert.Equal((0, 0), (rostered, paid));
+    }
+
+    [Fact]
     public void NetWorked_InProgress_CountsUpToNow_AndARunningBreakCountsToo()
     {
         // 09:05 -> 11:00 is 115 minutes; a break running since 10:30 has taken 30 of them.
