@@ -79,6 +79,8 @@ public class ParticipantContactRolesController : ControllerBase
         {
             var nameError = PersonsController.ValidateName(dto.NewPersonFirstName ?? "", dto.NewPersonLastName ?? "");
             if (nameError != null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail(nameError));
+            var contactError = await PersonsController.ValidateContactAsync(_db, _clock, new CreatePersonDto { Email = dto.NewPersonEmail, DateOfBirth = dto.NewPersonDateOfBirth }, null, null, ct);
+            if (contactError != null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail(contactError));
             person = new Person
             {
                 Id = Guid.NewGuid(), TenantId = participant.TenantId,

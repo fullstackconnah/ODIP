@@ -560,4 +560,42 @@ public class ParticipantContactRolesControllerTests
         Assert.Null(data.OrganisationName);
         Assert.Equal("Neighbour", data.RelationshipToParticipant);
     }
+
+    // ── Create: the inline new person gets the same email / date-of-birth checks as PersonsController (H45R-N3) ──
+
+    [Theory]
+    [InlineData("not-an-email", null, "Enter an email address like name@example.com.")]
+    [InlineData(null, "2999-01-01", "Choose a date of birth that isn't in the future.")]
+    public async Task Create_NewPersonWithBadEmailOrFutureDob_IsRefusedAndNothingSaved(string? email, string? dob, string message)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+        var dto = NewPersonDto() with { NewPersonEmail = email, NewPersonDateOfBirth = dob == null ? null : DateOnly.Parse(dob) };
+
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal(message, Assert.Single(body.Errors!));
+        Assert.Equal(0, await db.People.CountAsync());
+        Assert.Equal(0, await db.ParticipantContactRoles.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("karen@example.com", "1980-05-06")]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public async Task Create_NewPersonWithValidOrBlankEmailAndDob_Saves(string? email, string? dob)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+        var dto = NewPersonDto() with { NewPersonEmail = email, NewPersonDateOfBirth = dob == null ? null : DateOnly.Parse(dob) };
+
+        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(1, await db.People.CountAsync());
+        Assert.Equal(1, await db.ParticipantContactRoles.CountAsync());
+    }
 }

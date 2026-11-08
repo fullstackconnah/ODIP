@@ -45,6 +45,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const [tripEditForm, setTripEditForm] = useState<TripEditFormState | null>(null)
   const initialized = useRef(false)
   const openedStatus = useRef(trip.status) // the status the form opened with, not the live one
+  const openedUpdatedAt = useRef(trip.updatedAt) // the stale-edit token: a later refetch brings changes the typed edits know nothing about
   const [errors, setErrors] = useState<{ startDate?: string; durationDays?: string }>({})
 
   useEffect(() => {
@@ -100,6 +101,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
       requiredBedrooms: toOptionalNumber(tripEditForm.requiredBedrooms),
       minStaffRequired: toOptionalNumber(tripEditForm.minStaffRequired),
       notes: toOptionalString(tripEditForm.notes),
+      expectedUpdatedAt: openedUpdatedAt.current,
     }
     updateTrip.mutate({ id: trip.id, data }, { onSuccess: onClose })
   }

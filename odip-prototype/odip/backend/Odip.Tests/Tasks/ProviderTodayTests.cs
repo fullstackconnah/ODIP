@@ -162,4 +162,23 @@ public class ProviderTodayTests
         Assert.Equal(TaskItemStatus.Completed, task.Status);
         Assert.Equal(Oct3, task.CompletedDate);
     }
+
+    // ── Update: a dateless task moved to Completed is stamped with Sydney today (PB36-N1) ──
+
+    [Theory]
+    [InlineData(2026, 11, 8, 22, 30)]   // 09:30 Mon 9 Nov in Sydney, still 8 Nov in UTC
+    [InlineData(2026, 11, 9, 2, 0)]     // 13:00 Mon 9 Nov in Sydney
+    public async Task UpdatingADatelessTaskToCompleted_StampsTheSydneyDate(int y, int mo, int d, int h, int mi)
+    {
+        using var db = CreateDb();
+        var task = Task("manual", null);
+        db.BookingTasks.Add(task);
+        await db.SaveChangesAsync();
+        var controller = new TasksController(db, FakeClock.AtUtc(y, mo, d, h, mi));
+
+        var dto = new UpdateTaskDto { TaskType = task.TaskType, Title = task.Title, Priority = task.Priority, Status = TaskItemStatus.Completed };
+        Assert.IsType<OkObjectResult>((await controller.Update(task.Id, dto, CancellationToken.None)).Result);
+
+        Assert.Equal(new DateOnly(2026, 11, 9), (await db.BookingTasks.SingleAsync()).CompletedDate);
+    }
 }
