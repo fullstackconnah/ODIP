@@ -42,7 +42,7 @@ public class EmploymentHeroLeaveRulesTests
 
         Assert.Null(built.WaitReason);
         var line = built.Line!;
-        Assert.Equal(new EhLeaveLine(null, 42, "2026-11-02T00:00:00", "2026-11-06T00:00:00", 5, 0m, $"Sent from ODIP (ref {LeaveId:D})", true), line);
+        Assert.Equal(new EhLeaveLine(null, 42, "2026-11-02T00:00:00", "2026-11-06T00:00:00", 5, 0m, $"Sent from Bunya Support (ref {LeaveId:D})", true), line);
         Assert.Equal(EmploymentHeroLeave.Marker(LeaveId), line.Notes);
     }
 
@@ -78,6 +78,16 @@ public class EmploymentHeroLeaveRulesTests
         Assert.Equal(LeaveType.Other, EmploymentHeroLeave.TypeFor(9, new("5", "6", "6", null)));
         Assert.Equal(LeaveType.Annual, EmploymentHeroLeave.TypeFor(5, Mapped));
         Assert.Equal(LeaveType.Other, EmploymentHeroLeave.TypeFor(null, Mapped));
+    }
+
+    [Theory]
+    [InlineData("Sent from Bunya Support")]
+    [InlineData("Sent from ODIP")]
+    public void The_marker_carries_the_brand_and_both_wordings_parse_back(string start)
+    {
+        Assert.DoesNotContain("ODIP", EmploymentHeroLeave.Marker(LeaveId));
+        Assert.True(EmploymentHeroLeave.TryParseMarker($"{start} (ref {LeaveId:D})", out var id));
+        Assert.Equal(LeaveId, id);
     }
 
     [Fact]

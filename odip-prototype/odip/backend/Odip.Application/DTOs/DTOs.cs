@@ -1398,6 +1398,8 @@ public record StaffListDto
 
 public record StaffDetailDto : StaffListDto
 {
+    /// <summary>The row's UpdatedAt: the staff edit form sends it back as ExpectedUpdatedAt.</summary>
+    public DateTime UpdatedAt { get; init; }
     /// <summary>When a sign-in invite email was last sent (UTC); null: never invited. Set on the overview only, and null for non-managers (see StaffScreeningMask).</summary>
     public DateTime? SignInInviteSentAt { get; init; }
     /// <summary>True once the person has signed in at all; null everywhere but the overview, and for non-managers (see StaffScreeningMask).</summary>
@@ -1506,7 +1508,11 @@ public record CreateStaffDto
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
 }
 
-public record UpdateStaffDto : CreateStaffDto { }
+public record UpdateStaffDto : CreateStaffDto
+{
+    /// <summary>The staff row's UpdatedAt the form loaded: the server answers 409 if it changed since. Absent from older open tabs and the quick editors, which save as before.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
 
 // ══════════════════════════════════════════════════════════════
 // APP SETTINGS DTOs

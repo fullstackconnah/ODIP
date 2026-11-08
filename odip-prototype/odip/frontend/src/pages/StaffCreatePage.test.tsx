@@ -39,7 +39,7 @@ function makeStaff(overrides: Partial<StaffDetailDto> = {}): StaffDetailDto {
     isFirstAidQualified: false, isMedicationCompetent: false, isManualHandlingCompetent: false,
     isOvernightEligible: false, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null,
     manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningRecorded: false,
-    workerScreeningExpiryDate: null, hasExpiredQualifications: false, notes: null,
+    workerScreeningExpiryDate: null, hasExpiredQualifications: false, notes: null, updatedAt: '2026-11-01T03:04:05.123456Z',
     ...overrides,
   }
 }
@@ -119,6 +119,16 @@ describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () 
     // The role the disabled select displayed round-trips unchanged — the backend only rejects a
     // role PROMOTION, not this same-role edit of the record's other fields.
     expect(call.data.role).toBe('Admin')
+  })
+
+  it('sends the updatedAt it loaded as expectedUpdatedAt', async () => {
+    const user = userEvent.setup()
+    renderEditPage('staff-1')
+
+    await user.type(await screen.findByLabelText(/mobile/i), '1')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.expectedUpdatedAt).toBe('2026-11-01T03:04:05.123456Z')
   })
 })
 

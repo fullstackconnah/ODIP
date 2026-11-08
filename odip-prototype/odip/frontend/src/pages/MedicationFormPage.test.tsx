@@ -305,6 +305,15 @@ describe('MedicationFormPage — Back, Cancel and Save return to where the form 
     expect(router.state.location.search).toBe('?tab=medications')
   })
 
+  it('sends the updatedAt it loaded as expectedUpdatedAt', async () => {
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    renderFrom(null)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ expectedUpdatedAt: '2026-01-01T00:00:00Z' }),
+    }))
+  })
+
 })
 
 // C25: a failed or missing record must never open an empty form that a save would write over the real one.
@@ -378,6 +387,15 @@ describe('MedicationFormPage — chemical restraint register panel', () => {
     await user.click(screen.getByRole('button', { name: /create medication/i }))
     expect(await screen.findByText('Add who authorised it')).toBeInTheDocument()
     expect(screen.getByText('Add the date it was authorised')).toBeInTheDocument()
+  })
+
+  it('shows the server\x27s stale-chart sentence on a 409 that carries one', () => {
+    mockUseCreateMedication.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync, isPending: false, isError: true,
+      error: { response: { status: 409, data: { errors: ['Someone else just changed this medicine. Reload the page to see their changes, then save again.'] } } },
+    })
+    renderCreatePage()
+    expect(screen.getByRole('alert')).toHaveTextContent('Someone else just changed this medicine. Reload the page')
   })
 
   it('shows a warning banner with the reload copy on a 409', () => {

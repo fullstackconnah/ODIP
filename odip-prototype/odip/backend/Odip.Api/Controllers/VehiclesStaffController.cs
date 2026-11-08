@@ -420,6 +420,7 @@ public class StaffController : ControllerBase
 
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
+        UpdatedAt = s.UpdatedAt,
         SignInInviteSentAt = s.SignInInviteSentAt,
         SignInAddressUnconfirmed = s.SignInAddressUnconfirmed == true,
         HasSignedIn = s.LastLoginAt != null,
@@ -538,6 +539,7 @@ public class StaffController : ControllerBase
         return Ok(ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
+            UpdatedAt = s.UpdatedAt,
             FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
@@ -574,6 +576,7 @@ public class StaffController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
+            UpdatedAt = s.UpdatedAt,
             FullName = s.FullName, Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
@@ -601,6 +604,11 @@ public class StaffController : ControllerBase
 
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
+
+        // The form read the row at ExpectedUpdatedAt; another edit since (a deactivation, say) moved UpdatedAt, and this whole-row save would write over it. Absent: saved as before.
+        // Compared to the microsecond (the column's precision), as BookingsAccommodationController does.
+        if (dto.ExpectedUpdatedAt is { } expectedAt && s.UpdatedAt.Ticks - s.UpdatedAt.Ticks % 10 != expectedAt.Ticks - expectedAt.Ticks % 10)
+            return Conflict(ApiResponse<StaffDetailDto>.Fail("Someone else just changed this staff member. Reload the page to see their changes, then save again."));
 
         var guardError = ValidateRoleGuardrails(dto.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
@@ -683,6 +691,7 @@ public class StaffController : ControllerBase
         return Ok(ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
+            UpdatedAt = s.UpdatedAt,
             FullName = s.FullName, Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,

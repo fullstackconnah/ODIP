@@ -89,7 +89,7 @@ public partial class ShiftClaimGenerationService
         // The same per-participant lock the date-range claim takes, so two claims never read the shift as free at once, and reopening or moving it waits for this claim to save.
         await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, scope: "claim-generate");
 
-        var shift = await _db.Shifts.FirstAsync(s => s.Id == shiftId, ct);
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == shiftId, ct) ?? throw new InvalidOperationException("Shift not found.");
         // The lock is on the participant read above; a move to another participant while this waited would bill the wrong plan.
         if (shift.ParticipantId != participantId) throw new InvalidOperationException(ShiftChangedMessage);
         await RequireClaimableCancelledShiftAsync(shift, ct);
