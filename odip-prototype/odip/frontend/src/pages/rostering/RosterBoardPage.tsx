@@ -22,14 +22,14 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useAddGroupStaff, useDetachShift } from '@/api/hooks/groupActivities'
-import { ActivityContext, type ActivityBoardState } from './lib/groupActivities'
+import { ActivityContext, removeFromActivityCopy, type ActivityBoardState } from './lib/groupActivities'
 import { GroupActivityModal, type ActivityModalTarget } from './components/GroupActivityModal'
 import { AddToActivityDialog } from './components/AddToActivityDialog'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
 import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useAutoRosterDraft, useApplyAutoRoster, useSetRegular, useUpdateShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
-import type { GroupActivityDto, ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto, AutoRosterApplyResultDto } from '@/api/types'
+import type { GroupActivityDto, GroupActivityParticipantDto, ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto, AutoRosterApplyResultDto } from '@/api/types'
 import { AutoRosterPanel, type AutoRosterPanelProps, type AutoRosterRowText } from './components/AutoRosterPanel'
 import {
   WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementsPanel, RefreshBoardAction,
@@ -451,19 +451,33 @@ export default function RosterBoardPage() {
       setPublishOpen(false)
     }
   }
+  const [removeAsk, setRemoveAsk] = useState<{ activity: GroupActivityDto; person: GroupActivityParticipantDto } | null>(null)
+  /** The card menu's remove, once confirmed. */
+  async function removePersonNow({ activity, person }: { activity: GroupActivityDto; person: GroupActivityParticipantDto }) {
+    setBusyActivityIds(prev => new Set(prev).add(activity.id))
+    setAssignError(null)
+    try { for (const shiftId of person.shiftIds) await detachShift.mutateAsync({ id: activity.id, shiftId }) } catch (err) { showWriteError(err, `Couldn't remove ${firstName(person.participantName)} from ${activity.title}.`) } finally {
+      setBusyActivityIds(prev => { const next = new Set(prev); next.delete(activity.id); return next })
+    }
+  }
   const activityState = useMemo<ActivityBoardState | null>(() => (groupActivities ? {
     byId: new Map(groupActivities.map(a => [a.id, a])),
     open: a => setActivityTarget({ mode: 'edit', id: a.id }),
     addShift: setAddShiftTarget,
     busyIds: busyActivityIds,
-    removePerson: async (activity, person) => {
-      setBusyActivityIds(prev => new Set(prev).add(activity.id))
-      setAssignError(null)
-      try { for (const shiftId of person.shiftIds) await detachShift.mutateAsync({ id: activity.id, shiftId }) } catch (err) { showWriteError(err, `Couldn't remove ${firstName(person.participantName)} from ${activity.title}.`) } finally {
-        setBusyActivityIds(prev => { const next = new Set(prev); next.delete(activity.id); return next })
-      }
-    },
+    removePerson: (activity, person) => setRemoveAsk({ activity, person }),
   } : null), [groupActivities, busyActivityIds]) // eslint-disable-line react-hooks/exhaustive-deps -- showWriteError and the mutation are stable enough per render
+  /** The modal's Add staff: the drop's write, so findings open the board's override prompt. A refusal that is not about findings comes back as words for the modal, whose overlay covers the banner. */
+  async function addStaffFromModal(activityId: string, staffId: string): Promise<string | null> {
+    let refusal: string | null = null
+    await runRosterWrite(async (overrideReason, acknowledgedFindingCodes) => {
+      try { await addGroupStaff.mutateAsync({ id: activityId, data: { staffId, overrideReason, acknowledgedFindingCodes } }) } catch (err) {
+        if (!getRosterFindings(err)) refusal = extractErrorMessage(err, "Couldn't add them.")
+        throw err
+      }
+    })
+    return refusal
+  }
   const dragsOff = dropPending !== null || prompt !== null || pendingAssign !== null || pendingBlocked !== null
 
   // A mouse lifts after a 4px move. A finger lifts a strip puck after a 200 ms press, so a swipe still scrolls the strip; a grip (touch-none, a person off a puck) lifts at once.
@@ -1059,6 +1073,7 @@ export default function RosterBoardPage() {
           participants={participantOptions.map(o => ({ id: o.value, fullName: o.label }))}
           pickerData={{ staff, staffLoading, shifts: boardShifts, leave: boardLeave, availableDays: board?.staffAvailableDays ?? [], hours }}
           boardShifts={boardShifts}
+          onAddStaff={addStaffFromModal}
           onClose={() => setActivityTarget(null)}
         />
       )}
@@ -1095,6 +1110,10 @@ export default function RosterBoardPage() {
       {agreementsOpen && hasNotice && <PendingAgreementsPanel waiting={waiting} onClose={() => setAgreementsOpen(false)} />}
 
       {leaveDialog}
+      {removeAsk && (() => {
+        const copy = removeFromActivityCopy('participant', firstName(removeAsk.person.participantName), removeAsk.activity.title)
+        return <ConfirmDialog open title={copy.title} message={copy.message} confirmLabel="Remove" cancelLabel="Keep" variant="danger" onCancel={() => setRemoveAsk(null)} onConfirm={() => { const ask = removeAsk; setRemoveAsk(null); void removePersonNow(ask) }} />
+      })()}
       <ConfirmDialog
         open={regularCopy !== null}
         onCancel={closeRegular}

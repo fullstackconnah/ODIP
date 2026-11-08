@@ -42,3 +42,11 @@ export function staffCountText(activity: Pick<GroupActivityDto, 'staffNeeded' | 
 }
 
 export const isStaffShort = (activity: Pick<GroupActivityDto, 'findings'>) => activity.findings.some(f => f.code === 'ACTIVITY_STAFF_SHORT')
+
+/** The confirm before taking one person off an activity (modal X, staff X, card menu). DetachShift keeps a participant's shift on the board as a regular shift. */
+export function removeFromActivityCopy(kind: 'participant' | 'staff', first: string, activityTitle: string) {
+  return {
+    title: `Remove ${first} from ${activityTitle}?`,
+    message: kind === 'participant' ? 'Their shift stays on the board as a regular shift.' : `${first} comes off this activity.`,
+  }
+}

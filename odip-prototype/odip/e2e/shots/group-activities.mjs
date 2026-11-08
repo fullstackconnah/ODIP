@@ -195,10 +195,12 @@ await scene('board-1280', async () => {
   const s = await strip.boundingBox()
   const dropBox = () => target.locator('[data-activity-drop]').boundingBox()
   let d = await dropBox()
-  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2)
+  // The puck is grabbed at its top-left and let hover at the chip's bottom-right corner, so the carried overlay trails away from the card and the ring and card stay in view.
+  const corner = () => ({ x: d.x + d.width - 3, y: d.y + d.height - 3 })
+  await page.mouse.move(s.x + 3, s.y + 3)
   await page.mouse.down()
-  await page.mouse.move(s.x + s.width / 2 + 8, s.y + s.height / 2, { steps: 4 })
-  await page.mouse.move(d.x + d.width / 2, d.y + d.height / 2, { steps: 20 })
+  await page.mouse.move(s.x + 11, s.y + 3, { steps: 4 })
+  await page.mouse.move(corner().x, corner().y, { steps: 20 })
   await page.waitForTimeout(300)
   const during = await target.evaluate((el) => {
     const c = el.getBoundingClientRect()
@@ -212,7 +214,7 @@ await scene('board-1280', async () => {
   check('4 carrying: the day slot does not overlap the card', !during.overlap, during)
   // cropElement parks the mouse to settle, so the hover is restored inside `during` just before the shot.
   const crop = await cropElement(page, target, path.join(OUT_DIR, 'drop-hover.png'), {
-    during: async () => { d = await dropBox(); await page.mouse.move(d.x + d.width / 2, d.y + d.height / 2, { steps: 6 }); await page.waitForTimeout(250) },
+    during: async () => { d = await dropBox(); await page.mouse.move(corner().x, corner().y, { steps: 6 }); await page.waitForTimeout(250) },
   })
   checks.push(checkCropHolds(crop))
   const ring = await target.locator('[data-activity-drop]').evaluate((el) => getComputedStyle(el).boxShadow)
@@ -284,6 +286,13 @@ await scene('modal-1280', async () => {
   await page.waitForTimeout(300)
   await shot(page, dlg, 'modal-normal-dark.png', { pad: 16 })
   await page.evaluate(() => { delete document.documentElement.dataset.theme })
+  // S1: the time inputs hold their widest values at 1280 (px-2, no clipped digits).
+  for (const [i, label, value, text] of [[0, 'Start', '12:00', '12:00 PM'], [1, 'End', '09:00', '09:00 AM']]) {
+    const input = dlg.locator('input[type=time]').nth(i)
+    await input.fill(value)
+    const fit = await input.evaluate((el) => [el.scrollWidth, el.clientWidth])
+    check(`S1 time input ${label} shows ${text} unclipped at 1280`, fit[0] <= fit[1], fit)
+  }
   await page.keyboard.press('Escape')
   await context.close()
 })
@@ -372,6 +381,7 @@ await scene('touch-390', async () => {
   const drop = await px(page, card.locator('[data-activity-drop]'))
   check('2 drop chip height == --control-h (coarse)', drop.h === ch, { drop: drop.h, controlH: ch })
   await shot(page, card, 'board-normal-390.png', { touch: true })
+  await shot(page, card.locator('xpath=ancestor::*[count(.//*[@data-activity-card]) >= 2][1]'), 'board-row-390.png', { touch: true })
 
   await scene('modal-390', async () => {
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
@@ -404,6 +414,8 @@ await scene('touch-390', async () => {
   check('8 coarse: Ratio select height == --control-h', tap.ratioH === ch, { ratio: tap.ratioH, controlH: ch })
   await dlg.evaluate((el) => el.scrollTo?.(0, 0))
   await shot(page, dlg, 'modal-390.png', { touch: true, natural: true })
+  await shot(page, dlg.locator('section[aria-label="Participants"]'), 'modal-390-participants.png', { touch: true, natural: true })
+  await shot(page, dlg.locator('section[aria-label="Staff"]'), 'modal-390-staff.png', { touch: true, natural: true })
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'modal-390.png'), { touch: true })).checks)
   })
   await context.close()

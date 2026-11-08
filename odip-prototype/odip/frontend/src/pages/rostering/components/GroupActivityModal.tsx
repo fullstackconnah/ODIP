@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import { Clock, Plus, X } from 'lucide-react'
-import type { AddGroupStaffDto, GroupActivityDto, GroupActivityFormDto, ShiftDto, ShiftStatus, SupportRatio } from '@/api/types'
+import type { GroupActivityDto, GroupActivityFormDto, ShiftDto, ShiftStatus, SupportRatio } from '@/api/types'
 import { SUPPORT_RATIOS } from '@/api/types'
 import {
-  useActivities, useAddGroupParticipant, useAddGroupStaff, useAttachShifts, useCancelGroupActivity, useCreateActivityFromShift, useCreateGroupActivity, useDetachShift, useGroupActivity, useRemoveGroupStaff,
+  useActivities, useAddGroupParticipant, useAttachShifts, useCancelGroupActivity, useCreateActivityFromShift, useCreateGroupActivity, useDetachShift, useGroupActivity, useRemoveGroupStaff,
   useServiceLocations, useSetGroupRatio, useUpdateGroupActivity,
 } from '@/api/hooks'
 import { Button } from '@/components/Button'
@@ -18,6 +18,7 @@ import { extractErrorMessage } from '@/lib/utils'
 import { NO_LENGTH_MESSAGE, hasNoLength } from '../lib/shiftTimes'
 import { RATIO_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { firstName } from '../lib/rosterDrag'
+import { removeFromActivityCopy } from '../lib/groupActivities'
 import { StaffPicker, type StaffPickerProps } from './StaffPicker'
 
 export type ActivityModalTarget = { mode: 'new'; serviceDate: string; fromShift?: ShiftDto } | { mode: 'edit'; id: string }
@@ -30,6 +31,8 @@ export type GroupActivityModalProps = {
   pickerData: Omit<StaffPickerProps, 'target' | 'sheet' | 'onClose' | 'onPick'>
   /** The board's shifts, for the "Booked for group support today" group of the participant picker. */
   boardShifts: ShiftDto[]
+  /** Add a worker through the board's own write, so a finding that needs a reason opens the same override prompt as a drop. Resolves to a message when the refusal is not about findings. */
+  onAddStaff: (activityId: string, staffId: string) => Promise<string | null>
   onClose: () => void
 }
 
@@ -53,7 +56,7 @@ function toDto(f: Form): GroupActivityFormDto {
 }
 
 /** The group-activity modal (SHAPE section 5): the activity form behind Save, with the participants and the staff beside it as immediate writes. The parent keys it by target. */
-export function GroupActivityModal({ target, canWrite, participants, pickerData, boardShifts, onClose }: GroupActivityModalProps) {
+export function GroupActivityModal({ target, canWrite, participants, pickerData, boardShifts, onAddStaff, onClose }: GroupActivityModalProps) {
   const [savedId, setSavedId] = useState<string | null>(null)
   const id = target?.mode === 'edit' ? target.id : savedId
   const query = useGroupActivity(id)
@@ -69,6 +72,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const [writeError, setWriteError] = useState<string | null>(null)
   const [titleError, setTitleError] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [removing, setRemoving] = useState<{ kind: 'participant' | 'staff'; key: string; name: string; run: () => Promise<unknown> } | null>(null)
   const [pickingStaff, setPickingStaff] = useState(false)
   const [pickingPerson, setPickingPerson] = useState(false)
   const [personSearch, setPersonSearch] = useState('')
@@ -84,7 +88,6 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const detach = useDetachShift()
   const addPerson = useAddGroupParticipant()
   const setRatio = useSetGroupRatio()
-  const addStaff = useAddGroupStaff()
   const removeStaff = useRemoveGroupStaff()
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const saving = create.isPending || createFromShift.isPending || update.isPending
@@ -179,8 +182,8 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                   <input type="date" value={values.serviceDate} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ serviceDate: e.target.value })} />
                 </FormField>
                 <div className="grid grid-cols-2 gap-[var(--field-gap-x)]">
-                  <FormField label="Start" required><input type="time" value={values.startTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ startTime: e.target.value })} /></FormField>
-                  <FormField label="End" required error={noLength ? NO_LENGTH_MESSAGE : undefined}><input type="time" value={values.endTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ endTime: e.target.value })} /></FormField>
+                  <FormField label="Start" required><input type="time" className="px-2" value={values.startTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ startTime: e.target.value })} /></FormField>
+                  <FormField label="End" required error={noLength ? NO_LENGTH_MESSAGE : undefined}><input type="time" className="px-2" value={values.endTime} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ endTime: e.target.value })} /></FormField>
                 </div>
                 <FormField label="Ends the next day" layout="checkbox"><input type="checkbox" checked={values.endsNextDay} disabled={readOnly || Boolean(fromShift)} onChange={e => set({ endsNextDay: e.target.checked })} /></FormField>
                 <FormField label="Service location">
@@ -216,14 +219,14 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate text-sm font-medium">{p.participantName}</span>
                         {!readOnly && (
-                          <button type="button" aria-label={`Remove ${p.participantName} from ${activity.title}`} disabled={pending} onClick={() => void write(`p:${p.participantId}`, async () => { for (const shiftId of p.shiftIds) await detach.mutateAsync({ id: activity.id, shiftId }) }, `Couldn't remove ${firstName(p.participantName)}.`)} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                          <button type="button" aria-label={`Remove ${p.participantName} from ${activity.title}`} disabled={pending} onClick={() => setRemoving({ kind: 'participant', key: `p:${p.participantId}`, name: p.participantName, run: async () => { for (const shiftId of p.shiftIds) await detach.mutateAsync({ id: activity.id, shiftId }) } })} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">{pending ? 'Saving…' : formatShiftTimeRange(activity.startTime, activity.endTime)}</p>
                       {p.timesDiffer && (
                         <p className="flex items-start gap-1 text-xs text-muted-foreground"><Clock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>Times differ from agreement {p.agreementStartTime && p.agreementEndTime ? `(${noBreak(formatShiftTimeRange(p.agreementStartTime, p.agreementEndTime))})` : ''}</span></p>
                       )}
-                      <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending} onChange={e => void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`)}>{SUPPORT_RATIOS.map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>
+                      <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending || p.ratio === 'TwoToOne'} onChange={e => void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`)}>{SUPPORT_RATIOS.filter(r => r !== 'TwoToOne' || p.ratio === r).map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>
                     </div>
                   )
                 })}
@@ -234,12 +237,12 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           </section>
 
           <section aria-label="Staff" className="min-w-0">
-            <h4 className="mb-2 text-sm font-semibold">Staff · {activity?.staffAssigned ?? 0} of {activity?.staffNeeded ?? 0}</h4>
+            <h4 className="mb-2 text-sm font-semibold">Staff · {cancelled || !activity?.staffNeeded ? (activity?.staffAssigned ?? 0) : `${activity.staffAssigned} of ${activity.staffNeeded}`}</h4>
             {loading ? <Skeleton /> : (
               <div className="flex flex-col gap-2">
-                {activity && <p className="text-xs text-muted-foreground">{activity.minStaffRequired != null ? `Needs ${activity.staffNeeded}: the minimum set for this activity.` : `Needs ${activity.staffNeeded}: from each person's ratio.`}</p>}
+                {activity && !cancelled && <p className="text-xs text-muted-foreground">{activity.minStaffRequired != null ? `Needs ${activity.staffNeeded}: the minimum set for this activity.` : `Needs ${activity.staffNeeded}: from each person's ratio.`}</p>}
                 {activity && activity.staffNeeded > activity.staffAssigned && !cancelled && <Callout tone="warning">{activity.staffNeeded - activity.staffAssigned} more staff needed.</Callout>}
-                {activity?.staff.length === 0 && <p className="text-sm text-muted-foreground">No staff yet. Drag someone onto the activity on the board, or add them here.</p>}
+                {activity?.staff.length === 0 && <p className="text-sm text-muted-foreground">{cancelled ? 'No staff.' : 'No staff yet. Drag someone onto the activity on the board, or add them here.'}</p>}
                 {activity?.staff.map(s => {
                   const pending = pendingKey === `s:${s.id}`
                   return (
@@ -247,7 +250,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                       <div className="flex items-center justify-between gap-2">
                         <span className="min-w-0 truncate text-sm font-medium">{s.staffName}</span>
                         {!readOnly && (
-                          <button type="button" aria-label={`Remove ${s.staffName} from ${activity.title}`} disabled={pending} onClick={() => void write(`s:${s.id}`, () => removeStaff.mutateAsync({ id: activity.id, rowId: s.id }), `Couldn't remove ${firstName(s.staffName)}.`)} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                          <button type="button" aria-label={`Remove ${s.staffName} from ${activity.title}`} disabled={pending} onClick={() => setRemoving({ kind: 'staff', key: `s:${s.id}`, name: s.staffName, run: () => removeStaff.mutateAsync({ id: activity.id, rowId: s.id }) })} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">{pending ? 'Saving…' : formatShiftTimeRange(s.startTime, s.endTime)}</p>
@@ -276,6 +279,22 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         onConfirm={() => { if (activity) void write('cancel', () => cancel.mutateAsync(activity.id), "Couldn't cancel the activity.").then(() => setConfirmCancel(false)) }}
       />
 
+      {removing && activity && (() => {
+        const copy = removeFromActivityCopy(removing.kind, firstName(removing.name), activity.title)
+        return (
+          <ConfirmDialog
+            open
+            title={copy.title}
+            message={copy.message}
+            confirmLabel="Remove"
+            cancelLabel="Keep"
+            variant="danger"
+            onCancel={() => setRemoving(null)}
+            onConfirm={() => { const r = removing; setRemoving(null); void write(r.key, r.run, `Couldn't remove ${firstName(r.name)}.`) }}
+          />
+        )
+      })()}
+
       <Modal open={pickingPerson} onClose={() => setPickingPerson(false)} title="Add participant" size="sm">
         <input type="search" aria-label="Find participant" placeholder="Find participant" value={personSearch} onChange={e => setPersonSearch(e.target.value)} className="mb-2" />
         {booked.length > 0 && <PickGroup label="Booked for group support today">
@@ -297,8 +316,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         onClose={() => setPickingStaff(false)}
         onPick={row => {
           setPickingStaff(false)
-          const data: AddGroupStaffDto = { staffId: row.person.id }
-          if (activity) void write('add-staff', () => addStaff.mutateAsync({ id: activity.id, data }), `Couldn't add ${firstName(row.person.fullName)}.`)
+          if (activity) void write('add-staff', async () => { const refusal = await onAddStaff(activity.id, row.person.id); if (refusal) throw new Error(refusal) }, `Couldn't add ${firstName(row.person.fullName)}.`)
         }}
       />
     </Modal>

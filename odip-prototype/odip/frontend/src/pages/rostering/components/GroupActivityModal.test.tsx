@@ -7,13 +7,14 @@ import { makeActivity } from '../test-fixtures'
 
 const get = vi.fn()
 const post = vi.fn()
+const del = vi.fn()
 const put = vi.fn()
 vi.mock('@/api/client', async () => ({
   ...(await vi.importActual<object>('@/api/client')),
   apiGet: (...a: unknown[]) => get(...a),
   apiPost: (...a: unknown[]) => post(...a),
   apiPut: (...a: unknown[]) => put(...a),
-  apiDelete: vi.fn(),
+  apiDelete: (...a: unknown[]) => del(...a),
 }))
 
 const pickerData = { staff: [], shifts: [], leave: [] } as unknown as GroupActivityModalProps['pickerData']
@@ -22,7 +23,7 @@ function open(target: GroupActivityModalProps['target']) {
   const onClose = vi.fn()
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <GroupActivityModal target={target} canWrite participants={[]} pickerData={pickerData} boardShifts={[]} onClose={onClose} />
+      <GroupActivityModal target={target} canWrite participants={[]} pickerData={pickerData} boardShifts={[]} onAddStaff={vi.fn()} onClose={onClose} />
     </QueryClientProvider>,
   )
   return onClose
@@ -30,7 +31,7 @@ function open(target: GroupActivityModalProps['target']) {
 const newTarget = { mode: 'new', serviceDate: '2026-08-17' } as const
 
 beforeEach(() => {
-  get.mockReset(); post.mockReset(); put.mockReset()
+  get.mockReset(); post.mockReset(); put.mockReset(); del.mockReset()
   get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? makeActivity() : []))
 })
 
@@ -76,5 +77,44 @@ describe('GroupActivityModal', () => {
     const keep = await screen.findByText('Keep activity')
     await userEvent.click(within(keep.parentElement!).getByRole('button', { name: 'Cancel activity' }))
     await waitFor(() => expect(post).toHaveBeenCalledWith('/rostering/group-activities/activity-1/cancel', {}))
+  })
+
+  it('asks before removing a participant or a worker, and only the confirmed one goes', async () => {
+    del.mockResolvedValue(makeActivity())
+    open({ mode: 'edit', id: 'activity-1' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Mia Chen from Bowling' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove Mia from Bowling?' })
+    expect(within(dialog).getByText('Their shift stays on the board as a regular shift.')).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep' }))
+    expect(del).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Alex Rivera from Bowling' }))
+    const staff = await screen.findByRole('alertdialog', { name: 'Remove Alex from Bowling?' })
+    expect(within(staff).getByText('Alex comes off this activity.')).toBeInTheDocument()
+    await userEvent.click(within(staff).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/rostering/group-activities/activity-1/staff/row-1'))
+    expect(del).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves 2:1 out of the ratio options unless the person is on it, and then locks the select', async () => {
+    open({ mode: 'edit', id: 'activity-1' })
+    const one = await screen.findByLabelText('Ratio for Mia Chen')
+    expect(within(one).queryByRole('option', { name: '2:1' })).toBeNull()
+    expect(one).toBeEnabled()
+  })
+
+  it('locks a 2:1 ratio select', async () => {
+    get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? makeActivity({ participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'TwoToOne', shiftIds: ['a', 'b'], timesDiffer: false }] }) : []))
+    open({ mode: 'edit', id: 'activity-1' })
+    const two = await screen.findByLabelText('Ratio for Mia Chen')
+    expect(two).toBeDisabled()
+    expect(within(two).getByRole('option', { name: '2:1' })).toBeInTheDocument()
+  })
+
+  it('a cancelled activity shows the plain staff count and no needs line', async () => {
+    get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? makeActivity({ status: 'Cancelled', staff: [], staffAssigned: 0, staffNeeded: 2 }) : []))
+    open({ mode: 'edit', id: 'activity-1' })
+    expect(await screen.findByText('No staff.')).toBeInTheDocument()
+    expect(screen.getByText('Staff · 0')).toBeInTheDocument()
+    expect(screen.queryByText(/Needs 2/)).toBeNull()
   })
 })
