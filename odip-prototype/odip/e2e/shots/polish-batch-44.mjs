@@ -67,9 +67,10 @@ try {
     const prompt = page.getByRole('alertdialog').or(page.getByRole('dialog')).filter({ hasText: 'Discard changes?' }).last()
     await prompt.waitFor({ timeout: 10_000 })
     const tapMin = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap-min')) || 0)
-    const heights = await prompt.getByRole('button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().height)))
+    await page.waitForTimeout(600) // the prompt scales in; measure it at rest
+    const heights = await prompt.getByRole('button', { name: /^(Keep editing|Discard)$/ }).evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().height)))
     const need = mobile ? tapMin : 0
-    add(`discard prompt buttons >= --tap-min (${need}px) [${st.name}]`, { tapMin, heights }, heights.length >= 2 && heights.every((h) => h >= need) && (!mobile || tapMin > 0))
+    add(`discard prompt buttons >= --tap-min (${need}px) [${st.name}]`, { tapMin, heights }, heights.length === 2 && heights.every((h) => h >= need) && (!mobile || tapMin > 0))
     add(`edit dialog still open behind the prompt [${st.name}]`, null, await notes.isVisible())
     const p = await cropElement(page, prompt, path.join(OUT_DIR, `booking-edit-discard-${st.name}.png`), { hideChrome: true })
     add(`crop [booking-edit-discard-${st.name}]`, { clip: p.clip, box: p.box }, p.overlap?.pass ?? true)
