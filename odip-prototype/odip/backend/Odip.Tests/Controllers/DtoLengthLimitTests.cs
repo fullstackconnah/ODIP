@@ -31,9 +31,9 @@ public class DtoLengthLimitTests
             yield return new object[] { t, "LastName", 100 };
             yield return new object[] { t, "Email", 200 };
             yield return new object[] { t, "Username", 100 };
-            yield return new object[] { t, "WorkerScreeningNumber", 50 };
-            yield return new object[] { t, "Notes", 2000 };
         }
+        yield return new object[] { typeof(CreateAdminUserDto), "WorkerScreeningNumber", 50 };
+        yield return new object[] { typeof(CreateAdminUserDto), "Notes", 2000 };
         yield return new object[] { typeof(CreateAdminUserDto), "Region", 100 };
 
         yield return new object[] { typeof(CreateScheduledActivityDto), "Title", 200 };

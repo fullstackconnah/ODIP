@@ -383,6 +383,7 @@ public record CreateShiftDto
     public string? SupportGroupCode { get; init { field = value; HasSupportGroupCode = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasSupportGroupCode { get; private init; }
     /// <summary>Required when the shift carries Warning findings; ignored (never enough) for Blocking findings.</summary>
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
     public List<string>? AcknowledgedFindingCodes { get; init; }
@@ -414,6 +415,7 @@ public record AssignShiftDto
 {
     /// <summary>Null clears the assignment (the shift becomes unfilled), which never produces findings.</summary>
     public Guid? StaffId { get; init; }
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 
@@ -443,6 +445,7 @@ public record MoveStaffDto
     /// <summary>Who the board showed on the target, for Replace and Swap (deep review S4). When given and someone else is on the target now, the move is refused (409) rather than taking off, or swapping with, somebody the coordinator never saw.</summary>
     public Guid? ExpectedToStaffId { get; init; }
     /// <summary>Required when any finding of the move (a swap has two people's) needs a reason; never enough for a Blocking one.</summary>
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
@@ -711,6 +714,7 @@ public record UpdateGroupActivityDto
     public int? MinStaffRequired { get; init; }
     /// <summary>Draft or Published only; cancel has its own endpoint.</summary>
     public ShiftStatus Status { get; init; }
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
@@ -718,6 +722,7 @@ public record UpdateGroupActivityDto
 public record ConvertShiftDto
 {
     public string? Title { get; init; }
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
@@ -725,6 +730,7 @@ public record ConvertShiftDto
 public record AttachShiftsDto
 {
     public List<Guid> ShiftIds { get; init; } = new();
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
@@ -753,6 +759,7 @@ public record AddGroupStaffDto
     public TimeOnly? EndTime { get; init; }
     public bool EndsNextDay { get; init; }
     public string? Role { get; init; }
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
@@ -763,6 +770,7 @@ public record UpdateGroupStaffDto
     public TimeOnly EndTime { get; init; }
     public bool EndsNextDay { get; init; }
     public string? Role { get; init; }
+    [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
