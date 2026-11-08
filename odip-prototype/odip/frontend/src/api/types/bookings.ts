@@ -70,6 +70,8 @@ export interface UpdateBookingDto extends CreateBookingDto {
   paymentStatus: PaymentStatus
   actionRequired: boolean
   cancellationReason?: string
+  /** The `updatedAt` of the booking the editor loaded; the server refuses (409) a save when the row has changed since. */
+  expectedUpdatedAt?: string
 }
 
 export interface PatchBookingDto {

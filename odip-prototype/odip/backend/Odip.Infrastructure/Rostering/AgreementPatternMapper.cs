@@ -71,6 +71,10 @@ public static class AgreementPatternMapper
         _ => null,
     };
 
+    /// <summary>N for a shift on a group activity at 1:N (2 to 5): its claim is the rate x 1 / N, as its agreement block was quoted. Null for any other shift (priced, or refused, as before).</summary>
+    public static int? GroupSizeOf(Guid? groupActivityId, SupportRatio ratio) =>
+        groupActivityId is not null && ShapeOf(ratio) is (1, > 1 and var n) ? n : null;
+
     /// <summary>A block where the worker may sleep is a sleepover; otherwise one that crosses midnight (its end is not after its start) is an active night; otherwise it is none.</summary>
     public static SleepoverType NightTypeOf(PlanBlock block) => block.WorkerMaySleep ? SleepoverType.Sleepover : block.EndsNextDay ? SleepoverType.ActiveNight : SleepoverType.None;
 

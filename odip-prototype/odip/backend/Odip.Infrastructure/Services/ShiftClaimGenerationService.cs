@@ -280,7 +280,7 @@ public partial class ShiftClaimGenerationService
 
         // The travel of every shift, read once inside the same lock as the shifts (the staff edit of the travel legs takes the same lock): the worker's submitted legs, else the agreement's forecast.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, participant.TenantId, ct);
-        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, participant.MmLevel)).ToList(), ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, participant.MmLevel, AgreementPatternMapper.GroupSizeOf(s.GroupActivityId, s.Ratio))).ToList(), ct);
         var travelOf = shifts.Select((s, i) => (s.Id, Input: travelInputs[i])).ToDictionary(t => t.Id, t => t.Input);
 
         // The breaks taken alone, read once for preview, run and claim again alike. A cancellation passes none: a cancelled shift was never worked, so it has no completion and no breaks.
@@ -289,10 +289,13 @@ public partial class ShiftClaimGenerationService
         // The window each shift is claimed on (W2 PR3): the hours worked, the pay window, with approved extra time only once approved. A cancellation has no completion and stays rostered.
         var completions = cancelToday is null ? await ShiftClaimWindow.LoadAsync(_db, shifts.Select(s => s.Id).ToList(), ct) : new();
         var windows = shifts.ToDictionary(s => s.Id, s => ShiftClaimWindow.For(s, completions.GetValueOrDefault(s.Id), ProviderTimeZoneResolver.ZoneOf(s, placeZones, orgZone)));
+        // A group shift whose pattern block changes headcount mid-support cannot be priced from one N: it is refused with a reason (GA PR4 G6).
+        var headcountChanged = await ShiftTravelSource.HeadcountChangedAsync(_db, participant.TenantId, shifts.Select(s => s.ShiftPatternId), ct);
         ShiftPriceOutcome PriceOn(Shift shift, ClaimSpan w, TimeZoneInfo shiftZone) => ShiftPriceEstimator.Price(
             new ShiftRateRows(RowsOf(shift), personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.Ratio, shift.NightType,
             participant.IsIntensiveSupport, state, publicHolidays, shiftZone,
-            ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone));
+            ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone),
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio), shift.ShiftPatternId is Guid pid && headcountChanged.Contains(pid));
         var extraRefusal = await ExtraTimeRefusalsAsync(participant, shifts, windows, PriceOn, placeZones, orgZone, ct);
 
         var lineItems = new List<ShiftLineCalc>();
@@ -307,12 +310,6 @@ public partial class ShiftClaimGenerationService
         foreach (var shift in shifts)
         {
             var zone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone);
-            // shortcut: group activity shifts are claimed in GA PR4; until then they show as left out and are never billed
-            if (shift.GroupActivityId != null)
-            {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = "It is on a group activity, which shift claims do not price yet." });
-                continue;
-            }
             if (noNdisNumber is not null)
             {
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });

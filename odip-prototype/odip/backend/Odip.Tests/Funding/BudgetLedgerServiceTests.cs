@@ -187,7 +187,7 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
-    public async Task ACompletedGroupActivityShift_AddsNothingUntilItIsClaimed()
+    public async Task ACompletedGroupActivityShift_AtOneToOne_IsCountedLikeAnyOtherCompletedShift()
     {
         var (kit, person, _) = Arrange();
         kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
@@ -197,8 +197,8 @@ public class BudgetLedgerServiceTests
 
         var q2 = Q2Of(await LedgerOf(kit, person));
 
-        Assert.Equal(480m, q2.Pending);   // the Thursday shift only
-        Assert.Single(q2.Items);
+        Assert.Equal(1152m, q2.Pending);   // the Thursday (480) and the Saturday (672) shift, both at full rate: GA PR4 prices an attached shift, it no longer leaves it out
+        Assert.Equal(2, q2.Items.Count);
     }
 
     [Fact]

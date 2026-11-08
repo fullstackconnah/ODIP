@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
@@ -167,11 +168,12 @@ public sealed class BudgetLedgerService
         // ...and at the hours worked (W2 PR3), the window its claim will use: approved extra time is in it, held extra time is not.
         var completions = await ShiftClaimWindow.LoadAsync(_db, shiftRows.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.Id).ToList(), ct);
         var peopleById = withPlan.ToDictionary(p => p.Id);
-        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, peopleById[s.ParticipantId].MmLevel)).ToList(), ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, peopleById[s.ParticipantId].MmLevel, AgreementPatternMapper.GroupSizeOf(s.GroupActivityId, s.Ratio))).ToList(), ct);
+        var headcountChanged = await ShiftTravelSource.HeadcountChangedAsync(_db, tenantId, shiftRows.Select(s => s.ShiftPatternId), ct);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
-        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks, completions));
+        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks, completions, headcountChanged));
         AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
@@ -335,7 +337,7 @@ public sealed class BudgetLedgerService
         Guid Id, Guid ClaimId, string ClaimReference, TripClaimStatus ClaimStatus, ClaimLineItemStatus Status, string ItemCode, DateOnly From, decimal Hours, decimal TotalAmount, decimal? PaidAmount,
         Guid? ShiftId, Guid? BookingId, Guid ParticipantId, PlanType? BookingPlanType);
 
-    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null, Guid? ShiftPatternId = null, Guid? ServiceLocationId = null);
+    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null, Guid? ShiftPatternId = null, Guid? ServiceLocationId = null, Guid? GroupActivityId = null);
 
     public sealed record BookingRow(
         Guid Id, Guid ParticipantId, PlanType? PlanTypeOverride, Guid TripId, string TripName, DateOnly StartDate, int DurationDays, TimeOnly? DepartureTime, TimeOnly? ReturnTime,
@@ -371,13 +373,12 @@ public sealed class BudgetLedgerService
     private async Task<List<ShiftRow>> LoadShiftsAsync(Guid tenantId, List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
         await ShiftsQuery(tenantId, participantIds, from, to).ToListAsync(ct);
 
-    // shortcut: a completed group activity shift is left out (the claim run leaves it out too, so it is never billed) until GA PR4 prices it
     public IQueryable<ShiftRow> ShiftsQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly from, DateOnly to) =>
         _db.Shifts.AsNoTracking()
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
-                    || (s.Status == ShiftStatus.Completed && s.GroupActivityId == null && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
-            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType, s.SupportGroupCode, s.ShiftPatternId, s.ServiceLocationId));
+                    || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
+            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType, s.SupportGroupCode, s.ShiftPatternId, s.ServiceLocationId, s.GroupActivityId));
 
     /// <summary>
     /// Confirmed bookings of trips that start between <paramref name="from"/> and <paramref name="to"/> and have not been cancelled, and that no claim line has already taken over. The lower
@@ -513,7 +514,7 @@ public sealed class BudgetLedgerService
     /// The ledger items of a shift: one for each part of it, a date and a PACE category (<see cref="ShiftPriceEstimator.PartsOf"/>), so the ledger counts the shift exactly as the claim lines it becomes are filed. Kind and group come
     /// from the shift (completed, past or ahead); only the part's own date places it in a period. A shift with no price is one $0 item that says why.
     /// </summary>
-    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks, Dictionary<Guid, ShiftCompletion> completions)
+    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks, Dictionary<Guid, ShiftCompletion> completions, HashSet<Guid> headcountChanged)
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         // A completed shift is described and priced on the window its claim will use; any other shift is rostered.
@@ -523,7 +524,8 @@ public sealed class BudgetLedgerService
         var (start, end, endsNextDay) = window is null ? (shift.Start, shift.End, shift.EndsNextDay) : (window.Start, window.End, window.EndsNextDay);
         var hours = Shift.HoursBetween(start, end, endsNextDay);
         var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, start, end, endsNextDay, shift.NightType, pricing.ZoneOf(shift));
-        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, start, end, endsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.ZoneOf(shift), unclaimed);
+        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, start, end, endsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.ZoneOf(shift), unclaimed,
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio), shift.ShiftPatternId is Guid pid && headcountChanged.Contains(pid));
         // The travel counts in the shift's pool like the claim lines it becomes; its caveat is for the claim, not a ledger note, so the note below is the estimator's own.
         var counted = outcome.IsPriced ? ShiftTravelPricer.Apply(outcome, travel, shift.ServiceDate, state, travelPolicy.KmRate, pricing.ShiftRows(shift.SupportGroupCode).Concat(pricing.PersonalCare).ToList(), travelPolicy.TravelRows) : outcome;
 
