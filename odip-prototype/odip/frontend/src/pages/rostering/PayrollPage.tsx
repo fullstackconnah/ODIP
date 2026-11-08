@@ -82,6 +82,7 @@ function ShiftLines({ id, shifts, canLink }: { id: string; shifts: PayrollShiftD
           </div>
           <span className="text-[13px] text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{shiftLine(s)}</span>
           {s.extraTimeHeld && <span className={`w-fit text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Extra time held</span>}
+          {s.isGroupActivity && <span className={`w-fit text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Group activity</span>}
           {s.status !== 'Sent' && s.reason && <span className="text-[13px] [overflow-wrap:anywhere]">{keepAmPm(s.reason)}</span>}
           {s.status === 'NotLinked' && canLink && (
             <Link className="flex w-fit items-center text-[13px] underline pointer-coarse:min-h-[var(--tap-min)]" to="/settings?section=integrations">Link in Settings → Integrations</Link>
