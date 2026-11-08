@@ -150,7 +150,7 @@ public class InvoiceService
         static string NameOf(string person, string? organisation) => string.IsNullOrWhiteSpace(organisation) ? person : $"{person} — {organisation}";
         if (participant.PlanManagerContact is { } c) return (NameOf(c.FullName, c.Organisation), BuildContactAddress(c), c.Email);
         var role = participant.ContactRoles
-            .Where(r => r.RoleType == ContactRoleType.PlanManager && r.Status == ContactRoleStatus.Active && r.Person != null)
+            .Where(r => r.RoleType == ContactRoleType.PlanManager && r.Status == ContactRoleStatus.Active && r.Person != null && r.Person.TenantId == participant.TenantId)
             .OrderByDescending(r => r.StartDate).ThenBy(r => r.Id).FirstOrDefault();
         if (role?.Person is not { } p) return null;
         var address = string.Join(", ", new[] { p.AddressLine, p.Suburb, p.State, p.Postcode }.Where(s => !string.IsNullOrWhiteSpace(s)));

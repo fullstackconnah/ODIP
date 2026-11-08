@@ -86,4 +86,33 @@ public class InvoiceBillToRoleTests
         AddRole(kit, p, "Rhea", "Role Plans");
         Assert.Equal("Bea Bee", (await PreviewOf(kit, p)).BillToName);
     }
+
+    [Fact]
+    public async Task PlanManaged_RoleWhosePersonBelongsToAnotherOrganisation_IsBilledToTheParticipant()
+    {
+        var kit = Create(superAdmin: true);
+        var p = kit.Person("Sam", "Lee", PlanType.PlanManaged);
+        var foreign = new Person { Id = Guid.NewGuid(), TenantId = TenantB, FirstName = "Frank", LastName = "Foreign", Organisation = "Other Org", Email = "f@other.example" };
+        kit.Db.People.Add(foreign);
+        kit.Db.ParticipantContactRoles.Add(new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = kit.TenantId, ParticipantId = p.Id, PersonId = foreign.Id, RoleType = ContactRoleType.PlanManager, Status = ContactRoleStatus.Active });
+        kit.Db.SaveChanges();
+        Assert.Equal("Sam Lee", (await PreviewOf(kit, p)).BillToName);
+    }
+
+    [Fact]
+    public async Task TripClaim_TwoPlanManagedParticipants_AreEachBilledToTheirOwnPlanManager()
+    {
+        var kit = Create();
+        kit.Settings();
+        var a = kit.Person("Ann", "One", PlanType.PlanManaged);
+        var b = kit.Person("Bob", "Two", PlanType.PlanManaged);
+        AddRole(kit, a, "Alpha", "Alpha Plans");
+        AddRole(kit, b, "Beta", "Beta Plans");
+        var trip = kit.Trip();
+        var claim = kit.TripClaim(trip, TripClaimStatus.Draft, kit.Book(trip, a), kit.Book(trip, b));
+
+        Assert.Equal(200, StatusOf(await kit.Controller().UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct)));
+        var billed = await kit.Db.Invoices.AsNoTracking().Where(i => i.TripClaimId == claim.Id).Select(i => i.BillToName).ToListAsync(Ct);
+        Assert.Equal(new[] { "Alpha Roles — Alpha Plans", "Beta Roles — Beta Plans" }, billed.OrderBy(x => x).ToArray());
+    }
 }

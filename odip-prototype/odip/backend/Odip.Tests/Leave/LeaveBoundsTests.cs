@@ -27,6 +27,14 @@ public class LeaveBoundsTests
     }
 
     [Fact]
+    public void NearMaxDate_WithinFiveYears_DoesNotThrow()
+    {
+        Assert.Null(LeaveController.ValidateLeaveDates(new DateOnly(9998, 1, 1), new DateOnly(9998, 1, 2)));
+        Assert.Null(LeaveController.ValidateRecurringWindow(new TimeOnly(9, 0), new TimeOnly(12, 0), new DateOnly(9998, 1, 1), new DateOnly(9998, 1, 2)));
+        Assert.NotNull(LeaveController.ValidateLeaveDates(Start, new DateOnly(2031, 11, 11)));
+    }
+
+    [Fact]
     public void RecurringEffectiveTo_MoreThanFiveYearsAfterFrom_IsRefused()
     {
         Assert.Equal("Choose an end date within 5 years of the start.",
