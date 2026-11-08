@@ -80,7 +80,7 @@ public class LeaveBalancesControllerTests
         var data = Data(await Controller(db, tenant, sam.Id, eh).Mine(CancellationToken.None));
 
         Assert.Equal(LeaveBalancesDto.Ready, data.Status);
-        Assert.Equal([("Annual leave", 76.0m, "Hours"), ("Leave", 0m, "Hours"), ("Personal leave", 20.5m, "Hours")], data.Balances.Select(b => (b.Category, b.Amount, b.Unit)));
+        Assert.Equal([("Annual leave", (decimal?)76.0m, "Hours"), ("Leave", (decimal?)null, "Hours"), ("Personal leave", (decimal?)20.5m, "Hours")], data.Balances.Select(b => (b.Category, b.Amount, b.Unit)));
         Assert.Equal(1, eh.Requests.Count(r => r.RequestUri!.AbsolutePath == Path));
     }
 
