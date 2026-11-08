@@ -99,6 +99,46 @@ public class AdminNotificationsControllerTests
         Assert.Equal(start.AddMinutes(1), body.Data[^1].CreatedAt);
     }
 
+    // No ProviderSettings row: the provider zone falls back to Australia/Sydney (AEDT, +11 on 8 Nov 2026).
+    private static async Task<List<NotificationOutboxDto>> GetRange(OdipDbContext db, DateTime? from, DateTime? to)
+    {
+        var result = await new AdminNotificationsController(db, NoOpChannels()).GetAll(null, from, to, CancellationToken.None);
+        return Assert.IsType<ApiResponse<List<NotificationOutboxDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+    }
+
+    [Fact]
+    public async Task GetAll_FromAndToAreWholeProviderLocalDays()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = TenantScopedDb(tenantId);
+        var user = SeedUser(db, tenantId);
+        var day = new DateTime(2026, 11, 8);
+        var inDay = SeedOutboxRow(db, tenantId, user.Id);
+        inDay.CreatedAt = new DateTime(2026, 11, 7, 23, 0, 0, DateTimeKind.Utc); // 10:00 on the 8th, Sydney
+        var nextDay = SeedOutboxRow(db, tenantId, user.Id);
+        nextDay.CreatedAt = new DateTime(2026, 11, 8, 13, 30, 0, DateTimeKind.Utc); // 00:30 on the 9th, Sydney
+        db.SaveChanges();
+
+        Assert.Equal(inDay.Id, Assert.Single(await GetRange(db, null, day)).Id);
+        Assert.Equal(2, (await GetRange(db, day, null)).Count);
+        Assert.Equal(inDay.Id, Assert.Single(await GetRange(db, day, day)).Id);
+    }
+
+    [Fact]
+    public async Task GetAll_SameCreatedAt_NewestIdFirst()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = TenantScopedDb(tenantId);
+        var user = SeedUser(db, tenantId);
+        var at = DateTime.UtcNow.AddHours(-1);
+        for (var i = 0; i < 3; i++) SeedOutboxRow(db, tenantId, user.Id).CreatedAt = at;
+        db.SaveChanges();
+
+        var ids = (await GetRange(db, null, null)).Select(r => r.Id).ToList();
+
+        Assert.Equal(ids.OrderByDescending(i => i).ToList(), ids);
+    }
+
     /// <summary>Mandatory cross-tenant negative test: an Admin (non-SuperAdmin) caller in tenant A must never see tenant B's outbox rows.</summary>
     [Fact]
     public async Task GetAll_NeverReturnsAnotherTenantsRows()

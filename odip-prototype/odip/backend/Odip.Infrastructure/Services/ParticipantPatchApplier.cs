@@ -510,6 +510,35 @@ public static class ParticipantPatchApplier
             ? "Please provide a valid email address."
             : null;
 
+    private static readonly System.Text.RegularExpressions.Regex NineDigits = new(@"^[0-9]{9}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>A non-blank NDIS number is nine digits, spaces allowed. Shared by the enquiry form and the participant create.</summary>
+    public static string? ValidateNdisNumber(string? ndisNumber) =>
+        !string.IsNullOrWhiteSpace(ndisNumber) && !NineDigits.IsMatch(ndisNumber.Trim().Replace(" ", "", StringComparison.Ordinal))
+            ? "Enter the 9-digit NDIS number, like 430 123 456."
+            : null;
+
+    /// <summary>The date of birth is not after the provider's today and not more than 120 years back. Shared by the enquiry form and the participant create.</summary>
+    public static string? ValidateDateOfBirthRange(DateOnly? dateOfBirth, DateOnly today) =>
+        dateOfBirth > today ? "The date of birth can't be in the future."
+        : dateOfBirth < today.AddYears(-120) ? "Check the year: that's more than 120 years ago."
+        : null;
+
+    /// <summary>The plan end is not before the plan start. Shared by the enquiry form and the participant create.</summary>
+    public static string? ValidatePlanDates(DateOnly? start, DateOnly? end) =>
+        end < start ? "The plan end can't be before the plan start." : null;
+
+    /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today. Shared by the Persons page and a new contact person on a participant create.</summary>
+    public static string? ValidatePersonContact(string? email, DateOnly? dateOfBirth, string? storedEmail, DateOnly? storedDob, DateOnly today)
+    {
+        var trimmed = email?.Trim();
+        if (!string.IsNullOrEmpty(trimmed) && trimmed != storedEmail?.Trim() && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(trimmed))
+            return "Enter an email address like name@example.com.";
+        if (dateOfBirth is { } dob && dob != storedDob && dob > today)
+            return "Choose a date of birth that isn't in the future.";
+        return null;
+    }
+
     /// <summary>WeightKg is numeric(5,2); reject out-of-range before it hits an Npgsql overflow. Moved verbatim.</summary>
     public static string? ValidateWeight(CreateParticipantDto dto) =>
         dto.WeightKg.HasValue && (dto.WeightKg.Value <= 0 || dto.WeightKg.Value > 999.99m)

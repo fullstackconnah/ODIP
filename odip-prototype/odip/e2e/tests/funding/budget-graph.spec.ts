@@ -25,7 +25,7 @@ async function fundedParticipant(session: Session, token: string): Promise<strin
     addressSuburb: 'Newtown',
     addressState: 'NSW',
     addressPostcode: '2042',
-    ndisNumber: `420${Math.floor(100000000 + Math.random() * 899999999)}`,
+    ndisNumber: `420${Math.floor(100000 + Math.random() * 899999)}`,
     planType: 1, // PlanManaged
     isDraft: false,
     completeIntake: true,
