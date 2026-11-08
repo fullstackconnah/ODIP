@@ -136,6 +136,12 @@ public class TasksController : ControllerBase
         return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
 
+    /// <summary>Why a status change is refused (409), or null: a deleted task stays deleted, and a leave cover task closes itself when the shift is covered.</summary>
+    private static string? StatusChangeRefusal(BookingTask t, TaskItemStatus status) =>
+        t.Status == TaskItemStatus.Cancelled && status != TaskItemStatus.Cancelled ? "This task was deleted, so it can't be reopened."
+        : t.TaskType == TaskType.LeaveCoverage && status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed ? "This task closes itself when the shift is covered."
+        : null;
+
     /// <summary>The status change from the Tasks page and a trip's Tasks tab: writes status and completion date only (Update rewrites every field, so it reverts what someone changed after the caller read the row). Allows the same transitions Update does.</summary>
     [HttpPost("{id:guid}/status")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -148,6 +154,7 @@ public class TasksController : ControllerBase
         if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
         if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
             return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
+        if (StatusChangeRefusal(t, status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
         if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null && status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
@@ -246,9 +253,13 @@ public class TasksController : ControllerBase
         if (!await IsValidOwnerRefAsync(ownerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
 
+        if (StatusChangeRefusal(t, dto.Status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
+
+        // A completion date belongs to a Completed task only; the task form may send Completed without one.
+        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? DateOnly.FromDateTime(DateTime.UtcNow) : (DateOnly?)null;
         t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = ownerId;
         t.Priority = dto.Priority; t.DueDate = dto.DueDate; t.Status = dto.Status;
-        t.CompletedDate = dto.CompletedDate; t.Notes = dto.Notes; t.UpdatedAt = DateTime.UtcNow;
+        t.CompletedDate = completedDate; t.Notes = dto.Notes; t.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
         await _db.Entry(t).Reference(x => x.TripInstance).LoadAsync(ct);
@@ -595,8 +606,8 @@ public class DashboardController : ControllerBase
             .OrderBy(s => s.ServiceDate).Select(s => (DateOnly?)s.ServiceDate).FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<SetupStatusDto>.Ok(new SetupStatusDto(
             StaffCount: await _db.Users.CountAsync(u => u.IsActive && u.Role != UserRole.Admin && u.Role != UserRole.SuperAdmin, ct),
-            ParticipantCount: await _db.Participants.CountAsync(p => p.IsActive, ct),
-            ParticipantsWithPlanCount: await _db.Participants.CountAsync(p => p.IsActive && _db.FundingPlans.Any(f => f.ParticipantId == p.Id), ct),
+            ParticipantCount: await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
+            ParticipantsWithPlanCount: await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft && _db.FundingPlans.Any(f => f.ParticipantId == p.Id), ct),
             FirstPublishedWeekStart: firstPublished is { } d ? RosterWeek.MondayOf(d) : null,
             HasInvoice: await _db.Invoices.AnyAsync(i => i.Status != InvoiceStatus.Voided, ct),
             EmploymentHeroAvailable: keys.IsConfigured)));
