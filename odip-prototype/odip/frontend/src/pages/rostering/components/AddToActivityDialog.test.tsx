@@ -39,6 +39,12 @@ describe('AddToActivityDialog', () => {
     expect(screen.getByRole('radio', { name: /Bowling/ })).toBeChecked()
   })
 
+  it('counts only the people who are coming', () => {
+    const person = (id: string, didNotAttend: boolean) => ({ participantId: id, participantName: id, ratio: 'OneToOne' as const, shiftIds: [id], timesDiffer: false, didNotAttend })
+    open([makeActivity({ id: 'act', participants: [person('a', false), person('b', true), person('c', false)] })])
+    expect(screen.getByText(/· 2 people/)).toBeInTheDocument()
+  })
+
   it('attaches the shift on Add to activity', async () => {
     const props = open()
     await userEvent.click(screen.getByRole('radio', { name: /Bowling/ }))
