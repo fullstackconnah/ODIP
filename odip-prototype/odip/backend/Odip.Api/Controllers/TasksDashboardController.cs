@@ -256,7 +256,7 @@ public class TasksController : ControllerBase
         if (StatusChangeRefusal(t, dto.Status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
 
         // A completion date belongs to a Completed task only; the task form may send Completed without one.
-        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? DateOnly.FromDateTime(DateTime.UtcNow) : (DateOnly?)null;
+        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct) : (DateOnly?)null;
         t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = ownerId;
         t.Priority = dto.Priority; t.DueDate = dto.DueDate; t.Status = dto.Status;
         t.CompletedDate = completedDate; t.Notes = dto.Notes; t.UpdatedAt = DateTime.UtcNow;
