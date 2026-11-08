@@ -9,7 +9,7 @@ namespace Odip.Infrastructure.Notifications.Templates;
 /// ShiftAssignedTemplate's recipient works from.
 /// </summary>
 public record ShiftCompletionPendingReviewPayload(
-    string RecipientEmail, string WorkerName, string ParticipantName, DateOnly ServiceDate);
+    string RecipientEmail, string WorkerName, string ParticipantName, DateOnly ServiceDate, string? ActivityTitle = null);
 
 public static class ShiftCompletionPendingReviewTemplate
 {

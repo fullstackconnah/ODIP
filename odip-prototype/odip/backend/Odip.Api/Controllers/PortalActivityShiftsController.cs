@@ -31,9 +31,11 @@ public class PortalActivityShiftsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
     private readonly TimeProvider _clock;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
 
-    public PortalActivityShiftsController(OdipDbContext db, ICurrentTenant tenant, TimeProvider clock)
+    public PortalActivityShiftsController(OdipDbContext db, ICurrentTenant tenant, TimeProvider clock, Odip.Application.Interfaces.INotificationRaiser notificationRaiser)
     {
+        _notificationRaiser = notificationRaiser;
         _db = db;
         _tenant = tenant;
         _clock = clock;
