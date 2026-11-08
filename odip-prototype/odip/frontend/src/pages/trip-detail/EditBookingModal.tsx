@@ -56,7 +56,12 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
   const detail = query.data
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   // Initialised once, when the detail first arrives; a later background refetch must not overwrite what the person has typed.
-  if (detail && !editForm) setEditForm(formFrom(detail))
+  // The stale-edit token is the updatedAt the form was built from: a later refetch brings a newer one the typed edits know nothing about.
+  const [formUpdatedAt, setFormUpdatedAt] = useState<string | undefined>()
+  if (detail && !editForm) {
+    setEditForm(formFrom(detail))
+    setFormUpdatedAt(detail.updatedAt)
+  }
   const bodyRef = useRef<HTMLDivElement>(null)
   const hasForm = !!editForm
   // The form replaces a state that held focus (the dialog, or the Try again button that just unmounted): put focus on its first control.
@@ -78,7 +83,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
       equipmentNotes: detail.equipmentNotes ?? undefined,
       riskSupportNotes: detail.riskSupportNotes ?? undefined,
       cancellationReason: detail.cancellationReason ?? undefined,
-      expectedUpdatedAt: detail.updatedAt,
+      expectedUpdatedAt: formUpdatedAt,
       bookingStatus: (editForm.bookingStatus || undefined) as BookingStatus | undefined,
       supportRatioOverride: (editForm.supportRatioOverride || undefined) as SupportRatio | undefined,
       wheelchairRequired: editForm.wheelchairRequired,

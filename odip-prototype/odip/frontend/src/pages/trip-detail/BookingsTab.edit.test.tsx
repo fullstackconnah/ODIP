@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -36,6 +36,8 @@ let detailFailures = 0
 let detailStatus = 500
 let putFails = false
 let putConflict = false
+let servedUpdatedAt = detail.updatedAt
+let client: QueryClient
 
 const reply = (config: InternalAxiosRequestConfig, status: number, body: unknown): AxiosResponse =>
   ({ data: body, status, statusText: String(status), headers: {}, config }) as AxiosResponse
@@ -47,6 +49,7 @@ beforeEach(() => {
   detailStatus = 500
   putFails = false
   putConflict = false
+  servedUpdatedAt = detail.updatedAt
   const adapter: AxiosAdapter = async config => {
     const method = (config.method ?? 'get').toLowerCase()
     if (method === 'get' && config.url?.endsWith('/bookings/booking-1')) {
@@ -55,7 +58,7 @@ beforeEach(() => {
         const res = reply(config, detailStatus, { success: false, message: 'boom' })
         throw Object.assign(new Error(`Request failed with status code ${detailStatus}`), { isAxiosError: true, response: res, config })
       }
-      return reply(config, 200, { success: true, data: detail })
+      return reply(config, 200, { success: true, data: { ...detail, updatedAt: servedUpdatedAt } })
     }
     if (method === 'put' && putConflict) {
       puts.push(JSON.parse(config.data as string))
@@ -82,7 +85,7 @@ beforeEach(() => {
 afterEach(() => { apiClient.defaults.adapter = original })
 
 function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -143,6 +146,21 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
     expect(puts[0]).toMatchObject({ expectedUpdatedAt: '2026-10-02T00:00:00Z' })
     expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Original note more')
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  it('sends the updatedAt the form was built from, not a newer one a background refetch brought in', async () => {
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    const notes = await screen.findByPlaceholderText('Optional notes...')
+    await user.type(notes, ' more')
+
+    servedUpdatedAt = '2026-10-03T00:00:00Z'
+    await act(() => client.refetchQueries({ queryKey: ['bookings', 'detail', 'booking-1'] }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ expectedUpdatedAt: '2026-10-02T00:00:00Z' })
   })
 
   it('shows the load failure with Try again, never an empty editable form, and recovers on retry', async () => {
