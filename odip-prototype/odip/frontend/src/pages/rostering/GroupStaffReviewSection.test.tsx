@@ -78,6 +78,15 @@ describe('GroupStaffReviewSection', () => {
     expect(screen.getByText(/Fred Finished, Bowling: Not finished yet\./)).toBeInTheDocument()
   })
 
+  it('the partial-approve Dismiss meets the touch minimum', () => {
+    show([row(), row({ rowId: 'r2', staffName: 'Fred Finished' })])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select all/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Approve selected \(2\)/ }))
+    approveMutate.mockImplementation((_ids, opts) => opts.onSuccess([{ rowId: 'r2', ok: false, code: 'GA_STAFF_NOT_FINISHED', message: 'Not finished yet.' }]))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve' }))
+    expect(screen.getByRole('button', { name: 'Dismiss' }).className).toContain('pointer-coarse:min-h-[var(--tap-min)]')
+  })
+
   it('Record times maps a reason refusal to the reason field and keeps the modal open', () => {
     show([row({ state: 'Started', actualEnd: null })])
     fireEvent.click(screen.getAllByRole('button', { name: /^Record times for Wendy/ })[0])

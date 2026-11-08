@@ -46,6 +46,18 @@ public class ImportShiftRowsTests
         Assert.Equal([ImportRowStatus.Invalid, ImportRowStatus.Ready, ImportRowStatus.Ready, ImportRowStatus.Invalid], plans.Select(p => p.Status));
     }
 
+    [Fact]
+    public void Dated_NotesOver2000_RefusesTheRow_2000Ready()
+    {
+        var mapping = new[] { "ndis", "date", "start", "end", "notes" };
+        var date = Today.ToString("yyyy-MM-dd");
+        var plans = Build(ImportShiftShape.Dated, mapping, Next, 1,
+            ["430000001", date, "09:00", "15:00", new string('n', 2001)],
+            ["430000001", date, "09:00", "15:00", new string('n', 2000)]);
+        Assert.Equal([ImportRowStatus.Invalid, ImportRowStatus.Ready], plans.Select(p => p.Status));
+        Assert.Contains("Notes", plans[0].Reasons.Single());
+    }
+
     [Theory]
     [InlineData("9:00 am", 9, 0)]
     [InlineData("9am", 9, 0)]

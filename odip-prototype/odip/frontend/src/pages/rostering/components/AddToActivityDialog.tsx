@@ -76,7 +76,7 @@ export function AddToActivityDialog({ shift, activities, onClose, onNew, onAttac
           <legend className="sr-only">Activity</legend>
           {day.length === 0 && <p className="mb-1 text-sm text-muted-foreground">No activities on {weekday} yet.</p>}
           {day.map(a => (
-            <Choice key={a.id} value={a.id} checked={choice === a.id} onChange={setChoice} label={a.title} sub={`${range(a.startTime, a.endTime)} · ${plural(a.participants.length, 'person', 'people')}`} />
+            <Choice key={a.id} value={a.id} checked={choice === a.id} onChange={setChoice} label={a.title} sub={`${range(a.startTime, a.endTime)} · ${plural(a.participants.filter(p => !p.didNotAttend).length, 'person', 'people')}`} />
           ))}
           <Choice value={NEW} checked={choice === NEW} onChange={setChoice} label="New activity" />
         </fieldset>

@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import WorkspaceVisibilitySection from './WorkspaceVisibilitySection'
 
 const { query, mutate } = vi.hoisted(() => ({
-  query: { data: undefined as { hiddenAccommodation: boolean; hiddenVehicles: boolean; hiddenTrips: boolean } | undefined, isError: false, isFetching: false, refetch: vi.fn() },
+  query: { data: undefined as { hiddenAccommodation: boolean; hiddenVehicles: boolean; hiddenTrips: boolean; groupActivitiesEnabled?: boolean } | undefined, isError: false, isFetching: false, refetch: vi.fn() },
   mutate: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({ useModuleVisibility: () => query, useUpdateModuleVisibility: () => ({ mutate, isPending: false }) }))
@@ -31,11 +31,11 @@ describe('workspace visibility settings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(mutate.mock.calls[1][0]).toEqual({ hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false })
   })
-  it('lists the three boxes in order; unticking trips unticks the others, re-ticking restores the saved values, and Save sends all three', () => {
+  it('lists the four boxes in order; unticking trips unticks the others, re-ticking restores the saved values, and Save sends all three', () => {
     query.data = { hiddenAccommodation: false, hiddenVehicles: true, hiddenTrips: false }
     mutate.mockImplementation((data, options) => { query.data = data; options.onSuccess() })
     show()
-    expect(screen.getAllByRole('checkbox').map(c => (c as HTMLInputElement).labels?.[0]?.textContent?.slice(0, 23))).toEqual(['Show trips and holiday', 'Show Accommodation', 'Show Vehicles'].map(t => expect.stringContaining(t.slice(0, 20))))
+    expect(screen.getAllByRole('checkbox').map(c => (c as HTMLInputElement).labels?.[0]?.textContent?.slice(0, 23))).toEqual(['Show trips and holiday', 'Show Accommodation', 'Show Vehicles', 'Group activities'].map(t => expect.stringContaining(t.slice(0, 20))))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Show trips and holidays' }))
     expect(screen.getByRole('checkbox', { name: 'Show Accommodation' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Show Vehicles' })).not.toBeChecked()
@@ -64,6 +64,44 @@ describe('workspace visibility settings', () => {
     fireEvent.click(screen.getByRole('button', { name: /retry|try again/i }))
     expect(query.refetch).toHaveBeenCalledOnce()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+describe('group activities switch', () => {
+  const box = () => screen.getByRole('checkbox', { name: 'Group activities' })
+  const saves = () => mutate.mockImplementation((data, options) => { query.data = data; options.onSuccess() })
+  it('shows the saved value with its helper; turning on sends true with the other three unchanged and no confirm', () => {
+    query.data = { hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: true, groupActivitiesEnabled: false }
+    saves(); show()
+    expect(box()).not.toBeChecked()
+    expect(screen.getByText(/Run group sessions on the roster board/)).toBeInTheDocument()
+    fireEvent.click(box())
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(mutate.mock.calls[0][0]).toEqual({ hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: true, groupActivitiesEnabled: true })
+  })
+  it('turning off asks first: Cancel saves nothing and leaves it on, Turn off sends false', () => {
+    query.data = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, groupActivitiesEnabled: true }
+    saves(); show()
+    expect(box()).toBeChecked()
+    fireEvent.click(box())
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Turn off group activities?')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("Existing activities are hidden from the board and can't be changed until you turn this back on. Their shifts stay on the roster.")
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(mutate).not.toHaveBeenCalled()
+    expect(box()).toBeChecked()
+    fireEvent.click(box())
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off' }))
+    expect(mutate.mock.calls[0][0]).toEqual({ hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, groupActivitiesEnabled: false })
+  })
+  it('a failed save keeps the switch as chosen and shows the error', () => {
+    query.data = { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false, groupActivitiesEnabled: false }
+    mutate.mockImplementation((_data, options) => options.onError(new Error('offline')))
+    show(); fireEvent.click(box()); fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Not saved.')
+    expect(box()).toBeChecked()
   })
 })
 

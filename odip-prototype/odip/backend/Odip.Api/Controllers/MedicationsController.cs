@@ -128,6 +128,11 @@ public class MedicationsController : ControllerBase
         var med = await _db.ParticipantMedications.Include(m => m.Participant).FirstOrDefaultAsync(m => m.Id == id, ct);
         if (med == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Medication not found"));
 
+        // The form read the chart at ExpectedUpdatedAt; another edit since then moved UpdatedAt, and this whole-row save would write over it. Absent: saved as before.
+        // Compared to the microsecond (the column's precision), as BookingsAccommodationController does.
+        if (dto.ExpectedUpdatedAt is { } expectedAt && med.UpdatedAt.Ticks - med.UpdatedAt.Ticks % 10 != expectedAt.Ticks - expectedAt.Ticks % 10)
+            return Conflict(ApiResponse<MedicationDetailDto>.Fail("Someone else just changed this medicine. Reload the page to see their changes, then save again."));
+
         var validationError = ValidateMedicationDto(
             dto.Type, dto.TimesOfDay, dto.PrnIndication, dto.PrnMaxDosesPer24h, dto.IsChemicalRestraint, dto.Purpose,
             dto.Frequency, dto.DaysOfWeek, dto.IntervalDays, dto.AnchorDate);

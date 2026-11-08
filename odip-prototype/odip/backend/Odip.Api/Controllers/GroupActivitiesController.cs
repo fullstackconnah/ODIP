@@ -555,6 +555,7 @@ public partial class GroupActivitiesController : ControllerBase
             var row = activity.Staff.FirstOrDefault(r => r.Id == rowId) ?? throw Deny("GA_STAFF_ROW_NOT_FOUND");
             await using var rowLock = await GroupStaffRowLock.AcquireAsync(_db, row.Id, token);
             await _db.Entry(row).ReloadAsync(token);   // re-check under the row lock: an approval or a Finish may have landed first
+            if (_db.Entry(row).State == EntityState.Detached) throw Deny("GA_STAFF_ROW_NOT_FOUND");   // another coordinator removed it first: reload drops a deleted row
             if (row.State == GroupStaffRowState.Approved) throw Deny("GA_STAFF_APPROVED");
             if (row.State != GroupStaffRowState.NotStarted) throw Deny("GA_STAFF_STARTED");   // a row with times stays; record its times instead
             var now = DateTime.UtcNow;

@@ -184,6 +184,12 @@ describe('ShiftSlideOver override gate', () => {
     expect(screen.getByLabelText('Notes')).toHaveAccessibleDescription('The support worker sees this on their shift.')
   })
 
+  it('caps the notes at the 2000 characters the server keeps', () => {
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    expect(screen.getByLabelText('Notes')).toHaveAttribute('maxLength', '2000')
+  })
+
   it('populates an existing overrideReason when reopening a shift', () => {
     const shift = makeShift({ overrideReason: 'Approved by team lead', findings: [] })
     render(

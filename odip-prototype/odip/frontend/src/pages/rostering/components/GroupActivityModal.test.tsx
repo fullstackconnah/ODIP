@@ -95,6 +95,21 @@ describe('GroupActivityModal', () => {
     expect(del).toHaveBeenCalledTimes(1)
   })
 
+  it('Escape cancels a pending remove and sends nothing', async () => {
+    open({ mode: 'edit', id: 'activity-1' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Mia Chen from Bowling' }))
+    await screen.findByRole('alertdialog', { name: 'Remove Mia from Bowling?' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('choosing the ratio it already has sends no PUT', async () => {
+    open({ mode: 'edit', id: 'activity-1' })
+    await userEvent.selectOptions(await screen.findByLabelText('Ratio for Mia Chen'), 'OneToOne')
+    expect(put).not.toHaveBeenCalled()
+  })
+
   it('leaves 2:1 out of the ratio options unless the person is on it, and then locks the select', async () => {
     open({ mode: 'edit', id: 'activity-1' })
     const one = await screen.findByLabelText('Ratio for Mia Chen')

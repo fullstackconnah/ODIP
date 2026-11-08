@@ -242,6 +242,8 @@ export interface CreateMedicationDto {
 
 export interface UpdateMedicationDto extends CreateMedicationDto {
   status: MedicationStatus
+  /** The medication's updatedAt as loaded: the server answers 409 if the chart changed since. */
+  expectedUpdatedAt?: string
   /** The linked entry's updatedAt as loaded: the server answers 409 if it changed since. */
   expectedRestrictivePracticeUpdatedAt?: string
 }
