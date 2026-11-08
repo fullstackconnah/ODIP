@@ -62,4 +62,32 @@ public class AuditHistoryResponseTests
     {
         Assert.Equal(0, (await HistoryChangesAsync("not json")).GetArrayLength());
     }
+
+    // H44-5: rows that share a ChangedAt page in a fixed order (newest Id first), so no row repeats or goes missing between pages.
+    [Fact]
+    public async Task GetAuditHistory_TiedChangedAt_PagesInStableIdOrder()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(TenantId);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        var p = new Participant { Id = Guid.NewGuid(), TenantId = TenantId };
+        db.Add(p);
+        var at = DateTimeOffset.UtcNow;
+        // Inserted in ascending Id order, so an unordered tie would come back ascending.
+        var ids = Enumerable.Range(1, 3).Select(n => new Guid(n, 0, 0, new byte[8])).ToList();
+        foreach (var id in ids) db.Add(new AuditLog { Id = id, EntityType = "Participant", EntityId = p.Id, Action = AuditAction.Updated, ChangedAt = at });
+        db.SaveChanges();
+        var controller = new AuditController(db, NullLogger<AuditController>.Instance);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonOptions.Configure(options);
+
+        var seen = new List<Guid>();
+        foreach (var page in new[] { 1, 2 })
+        {
+            var json = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(await controller.GetAuditHistory("Participant", p.Id, page: page, pageSize: 2, ct: CancellationToken.None)).Value, options);
+            seen.AddRange(JsonDocument.Parse(json).RootElement.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("id").GetGuid()));
+        }
+
+        Assert.Equal(ids.OrderByDescending(i => i).ToList(), seen);
+    }
 }

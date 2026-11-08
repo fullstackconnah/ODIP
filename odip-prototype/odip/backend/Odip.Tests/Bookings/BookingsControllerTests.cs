@@ -307,4 +307,165 @@ public class BookingsControllerTests
         Assert.Empty(page1Ids.Intersect(page2Ids)); // disjoint — no row duplicated across pages
         Assert.Equal(3, page1Ids.Concat(page2Ids).Distinct().Count()); // exhaustive — every row appears exactly once
     }
+
+    private static ParticipantBooking SeedBooking(OdipDbContext db, TripInstance trip, Participant p, InsuranceStatus insurance = InsuranceStatus.None)
+    {
+        var b = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = p.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 9, 1), InsuranceStatus = insurance };
+        db.ParticipantBookings.Add(b);
+        db.SaveChanges();
+        return b;
+    }
+
+    // H44-1: a claim line that points at the booking makes the delete a message, not an FK 500.
+    [Fact]
+    public async Task Delete_BookingOnAClaimLine_Is409AndKeepsTheBooking()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var p = SeedParticipant(db);
+        var b = SeedBooking(db, trip, p);
+        db.ClaimLineItems.Add(new ClaimLineItem { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("This booking is on a claim, so it can't be deleted. Cancel it instead.", Assert.IsType<ApiResponse<bool>>(conflict.Value).Errors![0]);
+        Assert.True(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
+    }
+
+    // Invoice.ParticipantBookingId has no FK on purpose (a snapshot), so an invoice alone must not stop the delete.
+    [Fact]
+    public async Task Delete_BookingReferencedOnlyByAnInvoiceSnapshot_Deletes()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        db.Invoices.Add(new Invoice { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
+    }
+
+    [Fact]
+    public async Task Delete_BookingWithNoClaimOrInvoice_StillDeletes()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+
+        var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
+    }
+
+    // H44-2: confirming insurance with PATCH completes the open InsuranceConfirmation task, as PUT does.
+    [Fact]
+    public async Task Patch_InsuranceConfirmed_CompletesTheInsuranceTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        var task = new BookingTask { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantBookingId = b.Id, TaskType = TaskType.InsuranceConfirmation, Title = "Confirm travel insurance", Status = TaskItemStatus.NotStarted };
+        db.BookingTasks.Add(task);
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Patch(b.Id, new PatchBookingDto { InsuranceStatus = InsuranceStatus.Confirmed }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.BookingTasks.AsNoTracking().SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.Completed, saved.Status);
+        Assert.NotNull(saved.CompletedDate);
+    }
+
+    private static UpdateBookingDto UpdateDto(ParticipantBooking b, DateTime? expectedUpdatedAt = null, DateOnly? coverStart = null, DateOnly? coverEnd = null, string? cancellationReason = null) => new()
+    {
+        TripInstanceId = b.TripInstanceId, ParticipantId = b.ParticipantId, BookingStatus = b.BookingStatus,
+        PaymentStatus = PaymentStatus.NotInvoiced, ExpectedUpdatedAt = expectedUpdatedAt,
+        InsuranceCoverageStart = coverStart, InsuranceCoverageEnd = coverEnd, CancellationReason = cancellationReason,
+    };
+
+    // H44-3: a PUT built from an older read is refused and saves nothing.
+    [Fact]
+    public async Task Update_WithAStaleExpectedUpdatedAt_Is409AndKeepsThePatchedValue()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        b.UpdatedAt = DateTime.UtcNow.AddMinutes(-5);
+        await db.SaveChangesAsync();
+        var controller = new BookingsController(db);
+
+        var read = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(b.Id, CancellationToken.None)).Result).Value).Data!;
+        await controller.Patch(b.Id, new PatchBookingDto { PaymentStatus = PaymentStatus.InvoiceSent }, CancellationToken.None);
+
+        var result = await controller.Update(b.Id, UpdateDto(b, read.UpdatedAt), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this booking. Close it and open it again to see their changes.", Assert.IsType<ApiResponse<BookingDetailDto>>(conflict.Value).Errors![0]);
+        Assert.Equal(PaymentStatus.InvoiceSent, (await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Id)).PaymentStatus);
+    }
+
+    [Fact]
+    public async Task Update_WithTheCurrentExpectedUpdatedAt_OrNone_Saves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        var controller = new BookingsController(db);
+
+        var current = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(b.Id, CancellationToken.None)).Result).Value).Data!.UpdatedAt;
+        Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b, current), CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b), CancellationToken.None)).Result);
+    }
+
+    // H44-6: an insurance cover that ends before it starts is refused; one that ends the day it starts is fine.
+    [Fact]
+    public async Task Update_CoverEndBeforeStart_Is400_AndEqualDatesSave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        var controller = new BookingsController(db);
+        var day = new DateOnly(2026, 9, 1);
+
+        var refused = await controller.Update(b.Id, UpdateDto(b, coverStart: day, coverEnd: day.AddDays(-1)), CancellationToken.None);
+        Assert.Equal("Choose a cover end date on or after the start date.", Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<BadRequestObjectResult>(refused.Result).Value).Errors![0]);
+        Assert.Null((await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Id)).InsuranceCoverageEnd);
+
+        Assert.IsType<OkObjectResult>((await controller.Update(b.Id, UpdateDto(b, coverStart: day, coverEnd: day), CancellationToken.None)).Result);
+        Assert.Equal(day, (await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Id)).InsuranceCoverageEnd);
+    }
+
+    [Fact]
+    public async Task Create_CoverEndBeforeStart_Is400()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var p = SeedParticipant(db);
+        var dto = BookingDto(trip.Id, p.Id) with { InsuranceCoverageStart = new DateOnly(2026, 9, 1), InsuranceCoverageEnd = new DateOnly(2026, 8, 31) };
+
+        var result = await new BookingsController(db).Create(dto, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(db.ParticipantBookings);
+    }
+
+    [Fact]
+    public void UpdateBookingDto_CancellationReasonOver2000Characters_FailsValidation()
+    {
+        var b = new ParticipantBooking { TripInstanceId = Guid.NewGuid(), ParticipantId = Guid.NewGuid() };
+        bool Valid(string reason)
+        {
+            var dto = UpdateDto(b, cancellationReason: reason);
+            return System.ComponentModel.DataAnnotations.Validator.TryValidateObject(dto, new System.ComponentModel.DataAnnotations.ValidationContext(dto), null, true);
+        }
+
+        Assert.False(Valid(new string('x', 2001)));
+        Assert.True(Valid(new string('x', 2000)));
+    }
 }
