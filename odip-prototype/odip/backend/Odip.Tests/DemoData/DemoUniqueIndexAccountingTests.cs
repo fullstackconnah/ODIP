@@ -60,6 +60,10 @@ public class DemoUniqueIndexAccountingTests
             "DemoRecordedSlotTests.APresenterWhoRecordsTheLunchtimeDoseAsRefused_BeforeTheShiftsEnd_LeavesOneActiveRecordOfTheSlot_TheirOwn",
             "DemoRecordedSlotTests.APresenterWhoRecordsADoseTheScriptWouldWriteWhileTheShiftRuns_LeavesOneActiveRecordOfTheSlot_TheirOwn"),
 
+        ["IncidentReport|IX_IncidentReports_TenantId_IdempotencyKey"] = new(
+            "The index is filtered to rows with a key (a person's retried report); the packs never set IdempotencyKey on an incident, so every pack row has a null key and stays outside it.",
+            "DemoIncidentsTests.EveryIncidentThePacksWrite_HasNoIdempotencyKey_SoTheFilteredUniqueIndexNeverHoldsIt"),
+
         ["ShiftPattern|IX_ShiftPatterns_SourceDraft_Block_Day_Slot"] = new(
             "The index (plan builder phase D) is partial: it holds only a pattern an approved agreement revision made (SourceDraftId set). The pack's patterns are written by id with no source, " +
             "so they are outside it, and a pattern a person's approval makes has a random id the pack never writes.",
