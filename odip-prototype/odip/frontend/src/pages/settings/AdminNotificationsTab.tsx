@@ -18,6 +18,9 @@ import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { retryingAfterError } from '@/lib/queryPhase'
 
+// Mirrors the server's Take(500) in AdminNotificationsController.GetAll.
+const SERVER_ROW_CAP = 500
+
 const STATUS_FILTER_ITEMS: { value: NotificationOutboxStatus | ''; label: string }[] = [
   { value: '', label: 'All statuses' },
   { value: 'Pending', label: 'Pending' },
@@ -146,6 +149,9 @@ export default function AdminNotificationsTab() {
           onRetry={() => refetch()}
           emptyMessage="No notifications match these filters."
         />
+        {rows.length >= SERVER_ROW_CAP && (
+          <p className="text-xs text-[var(--color-muted-foreground)]">Showing the latest {SERVER_ROW_CAP}. Narrow the dates to see older ones.</p>
+        )}
       </div>
 
       <div className="max-w-md space-y-3 border-t border-[var(--color-border)] pt-6">
