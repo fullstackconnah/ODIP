@@ -10,7 +10,7 @@ vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (awai
 installDashboardDefaults()
 
 const NOUNS: Record<GroupKey, string> = {
-  completions: 'shift completions', leave: 'leave requests', incidents: 'open incidents', compliance: 'staff credentials to update', tasks: 'tasks due',
+  completions: 'shift completions', leave: 'leave requests', incidents: 'open incidents', compliance: 'staff credentials to update', tasks: 'tasks due', groupStaff: 'group activity hours',
 }
 const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, facts: [], flags: [], actions: [] })
 const group = (key: GroupKey, o: Partial<GroupModel> = {}): GroupModel => ({
@@ -149,7 +149,7 @@ describe('DashboardPage — groups at zero (SHAPE §6)', () => {
 
   it('shows only the All clear row under Needs your decision when every group is at zero but an alert is not, and the band below it', () => {
     asRole('Admin')
-    mockUseDecisionGroups.mockReturnValue((Object.keys(NOUNS) as GroupKey[]).map((key) => group(key)))
+    mockUseDecisionGroups.mockReturnValue((Object.keys(NOUNS) as GroupKey[]).filter((key) => key !== 'groupStaff').map((key) => group(key)))
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 2 }))
     renderPage()
 
@@ -163,7 +163,7 @@ describe('DashboardPage — groups at zero (SHAPE §6)', () => {
 })
 
 describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
-  const allClearGroups = () => (Object.keys(NOUNS) as GroupKey[]).map((key) => group(key))
+  const allClearGroups = () => (Object.keys(NOUNS) as GroupKey[]).filter((key) => key !== 'groupStaff').map((key) => group(key))
 
   it('replaces clear queues with one audited field while retaining trips and platform entry points', () => {
     asRole('Admin')
