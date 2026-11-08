@@ -104,6 +104,8 @@ export interface PayrollShiftDto {
   paidEnd: string | null
   /** True when unapproved extra time is held at rostered hours. */
   extraTimeHeld: boolean
+  /** A group activity staff row (a Kind 3 timesheet); absent counts as a shift. */
+  isGroupActivity?: boolean
 }
 export interface PayrollWorkerDto { userId: string; name: string; linked: boolean; rosteredMinutes: number; paidMinutes: number; shifts: PayrollShiftDto[] }
 export interface PayrollCheckDto {

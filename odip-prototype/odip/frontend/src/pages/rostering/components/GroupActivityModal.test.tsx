@@ -103,7 +103,7 @@ describe('GroupActivityModal', () => {
   })
 
   it('locks a 2:1 ratio select', async () => {
-    get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? makeActivity({ participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'TwoToOne', shiftIds: ['a', 'b'], timesDiffer: false }] }) : []))
+    get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? makeActivity({ participants: [{ participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'TwoToOne', shiftIds: ['a', 'b'], timesDiffer: false, didNotAttend: false }] }) : []))
     open({ mode: 'edit', id: 'activity-1' })
     const two = await screen.findByLabelText('Ratio for Mia Chen')
     expect(two).toBeDisabled()
@@ -116,5 +116,84 @@ describe('GroupActivityModal', () => {
     expect(await screen.findByText('No staff.')).toBeInTheDocument()
     expect(screen.getByText('Staff · 0')).toBeInTheDocument()
     expect(screen.queryByText(/Needs 2/)).toBeNull()
+  })
+})
+
+describe('GroupActivityModal attendance', () => {
+  const mia = { participantId: 'participant-1', participantName: 'Mia Chen', ratio: 'OneToOne' as const, shiftIds: ['s1'], timesDiffer: false, didNotAttend: false }
+  const sam = { participantId: 'participant-2', participantName: 'Sam Lee', ratio: 'OneToOne' as const, shiftIds: ['s2'], timesDiffer: false, didNotAttend: true }
+  const serve = (activity: ReturnType<typeof makeActivity>) =>
+    get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? activity : []))
+  const started = (over: Parameters<typeof makeActivity>[0] = {}) => makeActivity({ status: 'InProgress', participants: [mia, sam], ...over })
+
+  it("marks an attending participant as didn't attend, with no confirm, and hands focus to Undo", async () => {
+    let current = started({ participants: [mia] })
+    get.mockImplementation((url: string) => Promise.resolve(String(url).includes('/rostering/group-activities/') ? current : []))
+    post.mockImplementation(() => { current = started({ participants: [{ ...mia, didNotAttend: true }] }); return Promise.resolve(current) })
+    open({ mode: 'edit', id: 'activity-1' })
+    await userEvent.click(await screen.findByRole('button', { name: "Mark Mia Chen as didn't attend" }))
+    expect(post).toHaveBeenCalledWith('/rostering/group-activities/activity-1/participants/participant-1/attendance', { attended: false })
+    await waitFor(() => expect(screen.getByRole('button', { name: "Undo didn't attend for Mia Chen" })).toHaveFocus())
+  })
+
+  it("shows a didn't-attend row with its badge and a no-show line, and Undo sends attended: true", async () => {
+    serve(started())
+    post.mockResolvedValue(started())
+    open({ mode: 'edit', id: 'activity-1' })
+    const row = (await screen.findByText('Sam Lee')).closest('[data-participant-row]') as HTMLElement
+    expect(within(row).getByText("Didn't attend")).toBeInTheDocument()
+    expect(within(row).getByText('Shift cancelled as a no-show.')).toBeInTheDocument()
+    await userEvent.click(within(row).getByRole('button', { name: "Undo didn't attend for Sam Lee" }))
+    expect(post).toHaveBeenCalledWith('/rostering/group-activities/activity-1/participants/participant-2/attendance', { attended: true })
+  })
+
+  it('on a started activity offers neither Remove nor the ratio select, and says how attendance settles', async () => {
+    serve(started())
+    open({ mode: 'edit', id: 'activity-1' })
+    expect(await screen.findByText("Mark anyone who didn't come. Everyone else is marked as attended when the last staff shift is approved.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Remove Mia Chen/ })).toBeNull()
+    expect(screen.queryByLabelText('Ratio for Mia Chen')).toBeNull()
+  })
+
+  it('before the activity starts there is no attendance control and no helper line', async () => {
+    serve(makeActivity({ status: 'Published', participants: [mia] }))
+    open({ mode: 'edit', id: 'activity-1' })
+    expect(await screen.findByLabelText('Ratio for Mia Chen')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /didn't attend/i })).toBeNull()
+    expect(screen.queryByText(/Mark anyone who didn't come/)).toBeNull()
+  })
+
+  it("a completed activity shows Attended and Didn't attend badges and no buttons", async () => {
+    serve(started({ status: 'Completed' }))
+    open({ mode: 'edit', id: 'activity-1' })
+    const miaRow = (await screen.findByText('Mia Chen')).closest('[data-participant-row]') as HTMLElement
+    expect(within(miaRow).getByText('Attended')).toBeInTheDocument()
+    const samRow = screen.getByText('Sam Lee').closest('[data-participant-row]') as HTMLElement
+    expect(within(samRow).getByText("Didn't attend")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /didn't attend/i })).toBeNull()
+    expect(screen.queryByText(/Mark anyone who didn't come/)).toBeNull()
+  })
+
+  it("shows the server's refusal under that row only and leaves the button usable again", async () => {
+    serve(started({ participants: [mia, sam] }))
+    const message = 'Attendance is final once every staff shift is approved.'
+    post.mockRejectedValue({ response: { status: 409, data: { message, errors: [message] } } })
+    open({ mode: 'edit', id: 'activity-1' })
+    await userEvent.click(await screen.findByRole('button', { name: "Undo didn't attend for Sam Lee" }))
+    const samRow = screen.getByText('Sam Lee').closest('[data-participant-row]') as HTMLElement
+    const miaRow = screen.getByText('Mia Chen').closest('[data-participant-row]') as HTMLElement
+    expect(await within(samRow).findByText(message)).toBeInTheDocument()
+    expect(within(miaRow).queryByText(message)).toBeNull()
+    expect(screen.getAllByText(message)).toHaveLength(1)   // no second copy in a modal-level banner
+    await waitFor(() => expect(screen.getByRole('button', { name: "Undo didn't attend for Sam Lee" })).toBeEnabled())
+  })
+
+  it('offline: the button is disabled and the row says so', async () => {
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
+    serve(started({ participants: [mia] }))
+    open({ mode: 'edit', id: 'activity-1' })
+    expect(await screen.findByRole('button', { name: "Mark Mia Chen as didn't attend" })).toBeDisabled()
+    expect(screen.getByText("You're offline.")).toBeInTheDocument()
+    online.mockRestore()
   })
 })

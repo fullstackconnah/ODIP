@@ -109,6 +109,16 @@ public class TemplateHtmlEncodingTests
     }
 
     [Fact]
+    public void ShiftCompletionPendingReviewTemplate_EncodesTheActivityTitle()
+    {
+        var payload = new ShiftCompletionPendingReviewPayload("coord@example.com", "Ben Turner", Payload, new DateOnly(2026, 9, 15), Payload);
+        var message = ShiftCompletionPendingReviewTemplate.Render(payload, BaseUrl);
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.Contains("&lt;script&gt;", message.HtmlBody);
+    }
+
+    [Fact]
     public void ShiftCompletionReturnedTemplate_EncodesParticipantNameAndReturnReason()
     {
         var payload = new ShiftCompletionReturnedPayload(

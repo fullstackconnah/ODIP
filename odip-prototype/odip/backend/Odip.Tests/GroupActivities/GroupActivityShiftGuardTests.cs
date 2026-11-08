@@ -89,6 +89,19 @@ public class GroupActivityShiftGuardTests
         Assert.Equal("A note", (await fx.Seed.Shifts.AsNoTracking().SingleAsync(s => s.Id == attached.Id)).Notes);
     }
 
+    [Theory]
+    [InlineData(ShiftStatus.Completed)]
+    [InlineData(ShiftStatus.Cancelled)]
+    public async Task Put_ReopeningOrCancellingAnAttachedShift_OfAFinishedActivity_409_AndTheShiftStays(ShiftStatus activityStatus)
+    {
+        var (fx, attached, _, _) = await Seeded();
+        var activity = await fx.Seed.GroupActivities.SingleAsync();
+        (activity.Status, attached.Status) = (activityStatus, ShiftStatus.Cancelled);
+        await fx.Seed.SaveChangesAsync();
+        Assert.Equal("GA_ON_ACTIVITY", Code(await Rostering(fx).UpdateShift(attached.Id, Put(attached) with { Status = ShiftStatus.Published }, default), 409));
+        Assert.Equal(ShiftStatus.Cancelled, (await fx.Seed.Shifts.AsNoTracking().SingleAsync(s => s.Id == attached.Id)).Status);
+    }
+
     [Fact]
     public async Task Delete_OfAnAttachedShift_409_AndItStays()
     {

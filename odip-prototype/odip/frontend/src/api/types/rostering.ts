@@ -850,6 +850,8 @@ export interface GroupActivityParticipantDto {
   ratio: SupportRatio
   shiftIds: string[]
   timesDiffer: boolean
+  /** Every attached shift is cancelled: the coordinator marked them as not coming. Only listed once the activity has started. */
+  didNotAttend: boolean
   agreementStartTime?: string | null
   agreementEndTime?: string | null
 }
@@ -935,6 +937,8 @@ export interface GroupStaffReviewDto {
   adjustmentReason: string | null
   payrollLinked: boolean
   participantCount: number
+  /** Participants on the activity marked as not coming (distinct people; `participantCount` counts shifts). */
+  didNotAttendCount: number
 }
 
 /** The review list, capped: `total` is every unapproved row that matched. */

@@ -28,3 +28,5 @@ export const useAddGroupParticipant = () => useActivityWrite(({ id, participantI
 export const useSetGroupRatio = () => useActivityWrite(({ id, participantId, ratio }: { id: string; participantId: string; ratio: SupportRatio }) => apiPut<GroupActivityDto>(`${BASE}/${id}/participants/${participantId}/ratio`, { ratio }))
 export const useAddGroupStaff = () => useActivityWrite(({ id, data }: { id: string; data: AddGroupStaffDto }) => apiPost<GroupActivityDto>(`${BASE}/${id}/staff`, data))
 export const useRemoveGroupStaff = () => useActivityWrite(({ id, rowId }: { id: string; rowId: string }) => apiDelete(`${BASE}/${id}/staff/${rowId}`))
+/** Marks a participant as not coming (`attended: false`, which cancels their shift) or undoes it. Only while the activity is in progress. */
+export const useSetGroupAttendance = () => useActivityWrite(({ id, participantId, attended }: { id: string; participantId: string; attended: boolean }) => apiPost<GroupActivityDto>(`${BASE}/${id}/participants/${participantId}/attendance`, { attended }))
