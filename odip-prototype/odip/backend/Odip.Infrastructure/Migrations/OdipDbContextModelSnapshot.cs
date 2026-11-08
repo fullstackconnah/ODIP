@@ -815,6 +815,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("HandledByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<Guid?>("IncidentReportId")
                         .HasColumnType("uuid");
 
@@ -864,6 +868,11 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Complaints_TenantId_IdempotencyKey")
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "IsActive", "Status", "ReceivedOn");
 
