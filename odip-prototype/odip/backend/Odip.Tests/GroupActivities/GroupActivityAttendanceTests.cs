@@ -204,7 +204,7 @@ public class GroupActivityAttendanceTests
     }
 
     [Fact]
-    public async Task Reader_StartedActivity_ListsDidNotAttend_AndStaffNeededIgnoresThem()
+    public async Task Reader_StartedActivity_ListsDidNotAttend_AndStaffNeededSkipsThem()
     {
         var rig = new Rig();
         var (gone, _) = rig.Person("Ann");
@@ -212,7 +212,7 @@ public class GroupActivityAttendanceTests
         var before = GroupActivityFixture.Body(await rig.Controller().Get(rig.Activity.Id, default), 200);
         var after = GroupActivityFixture.Body(await rig.Mark(gone.Id, false), 200);
         Assert.Equal(2, before.StaffNeeded);
-        Assert.Equal(before.StaffNeeded, after.StaffNeeded);
+        Assert.Equal(1, after.StaffNeeded);   // Ann no longer needs a worker
         Assert.Equal(2, after.Participants.Count);
         Assert.Equal([true, false], after.Participants.Select(p => p.DidNotAttend));
     }
