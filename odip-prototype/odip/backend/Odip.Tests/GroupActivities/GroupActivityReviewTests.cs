@@ -269,6 +269,23 @@ public class GroupActivityReviewTests
     }
 
     [Fact]
+    public async Task Approve_LastRow_CancelledParticipantShiftUntouched()
+    {
+        var rig = new Rig();
+        var a = rig.Activity();
+        var row = rig.Row(a);
+        var live = rig.Participant(a);
+        var gone = rig.Participant(a, ShiftStatus.Cancelled);
+        var before = await rig.Fx.Fresh().Shifts.AsNoTracking().SingleAsync(s => s.Id == gone.Id);
+        GroupActivityFixture.Body(await rig.Controller().ApproveStaffRows(Ids(row.Id), default), 200);
+        Assert.Equal(ShiftStatus.Completed, await rig.ActivityStatusAsync(a.Id));
+        var after = await rig.Fx.Fresh().Shifts.AsNoTracking().SingleAsync(s => s.Id == gone.Id);
+        Assert.Equal((ShiftStatus.Cancelled, before.UpdatedAt, before.CancelledAt), (after.Status, after.UpdatedAt, after.CancelledAt));
+        Assert.Empty(await rig.Fx.Fresh().ShiftCompletions.AsNoTracking().Where(c => c.ShiftId == gone.Id).ToListAsync());
+        Assert.Single(await rig.Fx.Fresh().ShiftCompletions.AsNoTracking().Where(c => c.ShiftId == live.Id).ToListAsync());
+    }
+
+    [Fact]
     public async Task RemoveStaff_LastUnapprovedRow_CompletesTheActivity_AndAnApprovedRowCannotBeRemoved()
     {
         var rig = new Rig();

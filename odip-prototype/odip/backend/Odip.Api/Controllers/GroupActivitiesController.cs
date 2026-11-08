@@ -449,6 +449,12 @@ public partial class GroupActivitiesController : ControllerBase
             return await SavedAsync(activity.Id, token);
         }, ct);
 
+    // ── E13 attendance ──────────────────────────────────────────────────────────────────────────────
+
+    [HttpPost("{id:guid}/participants/{participantId:guid}/attendance")]
+    public Task<ActionResult<ApiResponse<GroupActivityDto>>> SetAttendance(Guid id, Guid participantId, [FromBody] SetAttendanceDto dto, CancellationToken ct) =>
+        Task.FromResult(RefuseResult("GA_NOT_FOUND"));   // red stub
+
     // ── E10-E12 workers ─────────────────────────────────────────────────────────────────────────────
 
     [HttpPost("{id:guid}/staff")]

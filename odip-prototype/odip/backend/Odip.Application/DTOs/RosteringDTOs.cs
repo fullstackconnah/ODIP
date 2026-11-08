@@ -666,6 +666,8 @@ public record GroupActivityParticipantDto
     public bool TimesDiffer { get; init; }
     public TimeOnly? AgreementStartTime { get; init; }
     public TimeOnly? AgreementEndTime { get; init; }
+    /// <summary>True when every attached shift of this participant is cancelled on a started or finished activity: the coordinator marked them as not attending.</summary>
+    public bool DidNotAttend { get; init; }
 }
 
 public record GroupActivityStaffDto
@@ -738,6 +740,11 @@ public record SetGroupRatioDto
     public SupportRatio Ratio { get; init; }
 }
 
+public record SetAttendanceDto
+{
+    public bool Attended { get; init; }
+}
+
 public record AddGroupStaffDto
 {
     public Guid StaffId { get; init; }
@@ -767,7 +774,7 @@ public record GroupStaffReviewDto(
     Guid RowId, Guid GroupActivityId, string ActivityTitle, DateOnly ServiceDate, Guid UserId, string StaffName, string? Role,
     TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
     DateTime? ActualStart, DateTime? ActualEnd, DateTime? BreakStartedAt, DateTime? BreakEndedAt, string? TimeZoneId,
-    string State, LocationCheckStatus? LocationCheck, bool OffRoster, string? AdjustmentReason, bool PayrollLinked, int ParticipantCount);
+    string State, LocationCheckStatus? LocationCheck, bool OffRoster, string? AdjustmentReason, bool PayrollLinked, int ParticipantCount, int DidNotAttendCount = 0);
 
 /// <summary>The review list, capped: <c>Total</c> is every unapproved row that matched, so the page can say more are waiting.</summary>
 public record GroupStaffReviewListDto(List<GroupStaffReviewDto> Rows, int Total);
