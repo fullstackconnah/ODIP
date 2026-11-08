@@ -9,15 +9,14 @@ using static Odip.Tests.Funding.LedgerKit;
 
 namespace Odip.Tests.Funding;
 
-/// <summary>GA PR3: a completed shift on a group activity is left out of the shift claim and never billed (claims for group activities come in PR4), whatever its ratio.</summary>
+/// <summary>GA PR3 left a completed shift on a group activity out of the shift claim; GA PR4 bills it: 1:1 at the full rate and 1:N at its share (the rate x 1 / N, floored to the cent), whatever the activity holds.</summary>
 public class GroupActivityWorkClaimTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
     private static readonly DateOnly From = new(2026, 10, 1);
     private static readonly DateOnly To = new(2026, 10, 31);
-    private const string GroupReason = "It is on a group activity, which shift claims do not price yet.";
 
-    private static async Task AssertLeftOutNotBilledAsync(SupportRatio ratio)
+    private static async Task AssertBilledAsync(SupportRatio ratio, decimal unitPrice)
     {
         var kit = LedgerKit.Create();
         kit.SeedProvider("NSW");
@@ -27,23 +26,22 @@ public class GroupActivityWorkClaimTests
         var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed, 9, 17, false);
         shift.Ratio = ratio;
         shift.GroupActivityId = Guid.NewGuid();
-        var ordinary = kit.SeedShift(person, new DateOnly(2026, 10, 2), ShiftStatus.Completed, 9, 17, false);   // keeps the run from being all left-out
+        var ordinary = kit.SeedShift(person, new DateOnly(2026, 10, 2), ShiftStatus.Completed, 9, 17, false);
         kit.Db.SaveChanges();
         var engine = new ShiftClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant);
 
         var preview = await engine.PreviewAsync(person.Id, From, To, Ct);
 
-        Assert.DoesNotContain(preview.LineItems, l => l.ShiftId == shift.Id);
+        Assert.Empty(preview.LeftOut);
         Assert.Contains(preview.LineItems, l => l.ShiftId == ordinary.Id);
-        var left = Assert.Single(preview.LeftOut);
-        Assert.Equal(shift.Id, left.ShiftId);
-        Assert.Equal(GroupReason, left.Reason);
-        Assert.False(await kit.Db.ClaimLineItems.AnyAsync(l => l.ShiftId == shift.Id, Ct));
+        var line = Assert.Single(preview.LineItems, l => l.ShiftId == shift.Id);
+        Assert.Equal(unitPrice, line.UnitPrice);
+        Assert.Equal(8m, line.Hours);
     }
 
     [Fact]
-    public Task ClaimRun_CompletedOneToOneActivityShift_LeftOutNotBilled() => AssertLeftOutNotBilledAsync(SupportRatio.OneToOne);
+    public Task ClaimRun_CompletedOneToOneActivityShift_BilledAtFullRate() => AssertBilledAsync(SupportRatio.OneToOne, 60m);   // the NSW weekday limit of the test catalogue
 
     [Fact]
-    public Task ClaimRun_CompletedOneToThreeActivityShift_LeftOutNotBilled() => AssertLeftOutNotBilledAsync(SupportRatio.OneToThree);
+    public Task ClaimRun_CompletedOneToThreeActivityShift_BilledAtShare() => AssertBilledAsync(SupportRatio.OneToThree, 20m);   // 60 / 3
 }

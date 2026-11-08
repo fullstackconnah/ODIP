@@ -8,7 +8,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>A shift (or an agreement occurrence that has no shift yet) to read travel for: its id, the pattern it came from, and its participant's MM level. Either id may be null; a hand-made shift has no pattern. The level has no default, so a caller that forgets it fails to compile instead of capping at 30 minutes.</summary>
-public sealed record ShiftRef(Guid? ShiftId, Guid? ShiftPatternId, int? ParticipantMm);
+public sealed record ShiftRef(Guid? ShiftId, Guid? ShiftPatternId, int? ParticipantMm, int? GroupOf = null);
 
 /// <summary>What the organisation allows and the rows travel is priced from: its own switch, its kilometre rate, and the kilometre ("_799_") rows of the catalogue.</summary>
 public sealed record ShiftTravelPolicy(bool OrgClaims, decimal KmRate, IReadOnlyList<SupportCatalogueItem> TravelRows);
@@ -56,15 +56,23 @@ public static class ShiftTravelSource
                 var travel = block?.Travel;
                 return new ShiftTravelInput(
                     new TravelLeg(actual.PreMinutes ?? 0, actual.PreKm ?? 0m), new TravelLeg(actual.PostMinutes ?? 0, actual.PostKm ?? 0m),
-                    named ? block?.Location : ProviderTravelRule.LocationOf(r.ParticipantMm), SharingOf(block), !named || travel is { Claim: true }, !named || travel is { ReturnToBase: true });
+                    named ? block?.Location : ProviderTravelRule.LocationOf(r.ParticipantMm), SharingOf(block, r.GroupOf), !named || travel is { Claim: true }, !named || travel is { ReturnToBase: true });
             }
             if (block?.Travel is not { Claim: true } forecast) return null;
             var leg = new TravelLeg(forecast.MinutesEachWay, forecast.KmEachWay);
-            return new ShiftTravelInput(leg, forecast.ReturnToBase ? leg : new TravelLeg(0, 0m), block.Location, SharingOf(block), true, forecast.ReturnToBase);
+            return new ShiftTravelInput(leg, forecast.ReturnToBase ? leg : new TravelLeg(0, 0m), block.Location, SharingOf(block, r.GroupOf), true, forecast.ReturnToBase);
         }).ToList();
     }
 
-    private static int SharingOf(PlanBlock? block) => block is null ? 1 : Math.Max(1, block.Travel?.ParticipantsSharing ?? block.ParticipantsPresent);
+    // A shift with no agreement block that sits on a group activity shares its travel by the group size; a block's own sharing stands.
+    private static int SharingOf(PlanBlock? block, int? groupOf) => block is null ? groupOf ?? 1 : Math.Max(1, block.Travel?.ParticipantsSharing ?? block.ParticipantsPresent);
+
+    /// <summary>Of these patterns, those whose agreement block changes the headcount part-way through (<see cref="PlanBlock.HeadcountChanges"/>): a group shift from one is left out of the claim, because its starting ratio is not what was delivered all through.</summary>
+    public static async Task<HashSet<Guid>> HeadcountChangedAsync(OdipDbContext db, Guid tenantId, IEnumerable<Guid?> patternIds, CancellationToken ct)
+    {
+        var (blocks, _) = await BlocksAsync(db, tenantId, patternIds.OfType<Guid>().Distinct().ToList(), ct);
+        return blocks.Where(b => b.Value.HeadcountChanges is { Count: > 0 }).Select(b => b.Key).ToHashSet();
+    }
 
     /// <summary>The agreement block each pattern was made from, read only through the caller's own patterns and drafts.</summary>
     private static async Task<(Dictionary<Guid, PlanBlock> Blocks, HashSet<Guid> AgreementIds)> BlocksAsync(OdipDbContext db, Guid tenantId, List<Guid> patternIds, CancellationToken ct)

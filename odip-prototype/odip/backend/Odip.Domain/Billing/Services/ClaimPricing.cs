@@ -1,5 +1,6 @@
 using System.Globalization;
 using Odip.Domain.Billing.Catalogue;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -132,8 +133,8 @@ public sealed record ShiftPriceOutcome(IReadOnlyList<ShiftPrice> Lines, string? 
 /// group with no night row of its own take the personal care night row (owner ruling, 2026-11-02). A shift is claimed all or nothing: one stretch with no rate leaves the whole shift out.
 /// A sleepover or a passive night (8 elapsed hours or more across midnight) is one flat sleepover item. Pure: the caller loads the rows, the holidays and the zone.
 ///
-/// <b>The interim guard (the 2026-10-08 review, L3-02).</b> A group shift (1:2 to 1:5, shared or another ratio) is a fraction of the one-to-one rate and is still not priced here: it has NO price and says why.
-/// Two-to-one is priced (two one-to-one shifts are the quote).
+/// <b>Group shifts (the 2026-10-08 review, L3-02; GA PR4).</b> A group shift is priced only on a group activity (<c>groupOf</c> is N, 2 to 5), at its agreement's own share: the rate x 1 / N floored to the cent
+/// (<c>PlanMoney.GroupPrice</c>). An unattached 1:N, shared support and another ratio are still refused with their reason. Two-to-one is priced (two one-to-one shifts are the quote).
 /// </summary>
 public static class ShiftPriceEstimator
 {
@@ -151,6 +152,9 @@ public static class ShiftPriceEstimator
 
     /// <summary>The same, when it is one stretch of a shift cut into several that has no rate.</summary>
     public const string NoBandRateKind = "no catalogue rate for part of the shift";
+
+    /// <summary>Why a group shift has no price when its agreement block changes the headcount part-way (the clause and its kind are the same words).</summary>
+    public const string GroupHeadcountChangedBecause = "the group size changed during this support; claim it by hand";
 
     /// <summary>Why a shift has no price when it ends at or before it starts (an overnight shift saved without "Ends the next day").</summary>
     public const string NoLengthBecause = "it has no length (it ends at or before its start)";
@@ -213,17 +217,20 @@ public static class ShiftPriceEstimator
     /// <param name="groupCode">The shift's support group, or null for community access; a short-term accommodation group takes the short-term accommodation sleepover item.</param>
     /// <param name="publicHolidays">The whole-day holidays that apply in <paramref name="state"/>, loaded to the day after the last service date (a shift runs past midnight).</param>
     /// <param name="zone">The organisation's time zone, where the clocks change.</param>
+    /// <param name="groupOf">N when the shift sits on a group activity at 1:N (<c>AgreementPatternMapper.GroupSizeOf</c>): each hourly line is priced at the rate x 1 / N, floored to the cent. Null prices the shift as before (a 1:N, shared or other ratio is refused).</param>
+    /// <param name="groupHeadcountChanged">True when the shift's agreement block changes the headcount part-way: its starting ratio is not what was delivered all through, so a group line is refused and claimed by hand.</param>
     /// <param name="unclaimed">Minute offsets from the rostered start (<see cref="ShiftBreakRules.UnclaimedSpans"/>): breaks taken alone come off the hourly stretches they fall in, before each line is rounded. A sleepover item is flat and never changes. Null (a future shift, a cancellation) deducts nothing.</param>
     public static ShiftPriceOutcome Price(
         ShiftRateRows rows, string? groupCode, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
-        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null)
+        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false)
     {
         // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
         // so this is said before the shift's kind.
         if (Shift.HoursBetween(start, end, endsNextDay) <= 0m) return ShiftPriceOutcome.Unpriced(NoLengthBecause, NoLengthKind);
 
         // The kind of shift comes first: a shift that would be wrong to price is not priced however good its rate, and its own kind is the useful thing to say.
-        var unpriced = new[] { UnpricedRatio(ratio), UnknownNightType(nightType) }.OfType<string>().ToList();
+        if (groupOf is not null && groupHeadcountChanged) return ShiftPriceOutcome.Unpriced(GroupHeadcountChangedBecause, GroupHeadcountChangedBecause);
+        var unpriced = new[] { groupOf is null ? UnpricedRatio(ratio) : null, groupOf is not null && nightType is SleepoverType.Sleepover or SleepoverType.PassiveNight ? "a group sleepover" : null, UnknownNightType(nightType) }.OfType<string>().ToList();
         if (unpriced.Count > 0) return ShiftPriceOutcome.Unpriced($"it is {string.Join(" and ", unpriced)}, which shift claims do not price yet", unpriced.ToArray());
 
         // "Ends the next day" with an end after the start is more than 24 hours: the data is wrong, so it is not priced as it was.
@@ -252,7 +259,7 @@ public static class ShiftPriceEstimator
 
             // The night band of a group with no night row of its own is priced as personal care night hours; a group that has its own night row uses it.
             var item = EffectiveCatalogueResolver.FindForDay(rows.Group, part.DayType, isIntensive, part.Date)
-                ?? (part.DayType == ClaimDayType.WeekdayNight ? EffectiveCatalogueResolver.FindForDay(rows.PersonalCare, part.DayType, isIntensive, part.Date) : null);
+                ?? (part.DayType == ClaimDayType.WeekdayNight && groupOf is null ? EffectiveCatalogueResolver.FindForDay(rows.PersonalCare, part.DayType, isIntensive, part.Date) : null);
             if (item is null)
                 return split.Parts.Count == 1
                     ? ShiftPriceOutcome.Unpriced(NoCatalogueRateBecause, NoCatalogueRateKind)
@@ -272,7 +279,8 @@ public static class ShiftPriceEstimator
         foreach (var s in stretches)
         {
             var hours = s.Minutes / 60m;
-            var unitPrice = CatalogueStatePrice.For(s.Item, state);
+            var statePrice = CatalogueStatePrice.For(s.Item, state);
+            var unitPrice = groupOf is int n ? PlanMoney.GroupPrice(statePrice, 1, n) : statePrice;
             lines.Add(new ShiftPrice(s.Item, s.DayType, ClaimPricing.LineHours(hours), unitPrice, ClaimPricing.LineAmount(hours, unitPrice), s.Date));
         }
 
