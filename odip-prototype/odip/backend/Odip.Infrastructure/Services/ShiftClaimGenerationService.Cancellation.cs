@@ -31,11 +31,12 @@ public partial class ShiftClaimGenerationService
 
         var offered = new List<CancellationCandidateDto>();
         var notOffered = new List<CancellationLeftOutDto>();
-        // shortcut: this prices per participant on each open of the chooser; fine for a few cancellations in 90 days, cache or store the price once a busy organisation has hundreds.
+        var participantIds = shifts.Select(s => s.ParticipantId).Distinct().ToList();
+        var participants = await _db.Participants.Where(p => participantIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
+        // shortcut: PriceShiftsAsync still runs its own queries per participant (it needs that participant's days and shift places); batch it only if a chooser with many participants proves slow.
         foreach (var group in shifts.GroupBy(s => s.ParticipantId))
         {
-            var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == group.Key, ct);
-            if (participant is null) continue;
+            if (!participants.TryGetValue(group.Key, out var participant)) continue;
             var list = group.ToList();
             List<ShiftLineCalc> lines = new();
             IReadOnlyList<ShiftClaimLeftOutDto> leftOut;
