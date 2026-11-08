@@ -36,13 +36,16 @@ public static class EmploymentHeroLeave
 
     private static readonly Regex MarkerPattern = new(@"ref ([0-9a-fA-F-]{36})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static string Marker(Guid leaveId) => $"Sent from ODIP (ref {leaveId:D})";
+    // Notes already in Employment Hero say "Sent from ODIP"; the reader keeps matching them.
+    private const string LegacyMarkerStart = "Sent from ODIP";
+
+    public static string Marker(Guid leaveId) => $"Sent from Bunya Support (ref {leaveId:D})";
 
     /// <summary>The leave a note was sent for, when it still holds ODIP's marker.</summary>
     public static bool TryParseMarker(string? notes, out Guid leaveId)
     {
         leaveId = Guid.Empty;
-        return notes is not null && notes.Contains("Sent from ODIP", StringComparison.Ordinal)
+        return notes is not null && (notes.Contains("Sent from Bunya Support", StringComparison.Ordinal) || notes.Contains(LegacyMarkerStart, StringComparison.Ordinal))
             && MarkerPattern.Match(notes) is { Success: true } m && Guid.TryParse(m.Groups[1].Value, out leaveId);
     }
 

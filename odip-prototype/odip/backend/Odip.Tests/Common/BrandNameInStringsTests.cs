@@ -22,7 +22,7 @@ public class BrandNameInStringsTests
         ("MicrosoftAuthController.cs", "an ODIP user already has", "log message, never shown"),
         ("ProvisionalAgreementTemplate.cs", "ODIP-Service-Agreement-Blank-DRAFT", "persisted version and the names of the template files on disk"),
         ("IntakeIcs.cs", "-//ODIP//Intake visit//EN", "calendar PRODID, machine-read"),
-        ("EmploymentHeroLeave.cs", "Sent from ODIP", "marker already written into Employment Hero notes and matched on read"),
+        ("EmploymentHeroLeave.cs", "Sent from ODIP", "the old marker, already written into Employment Hero notes and still matched on read"),
         ("EmploymentHeroLeave.cs", "ODIP can't read this worker's Employment Hero id", "old LastError text still stored on outbox rows; IsWaiting matches it"),
         ("DemoIds.cs", "odip-demo/v1", "namespace the stable demo ids are hashed from; changing it re-keys every demo row"),
         ("DemoTickLock.cs", "odip-demo-data-tick", "advisory-lock key hashed from this text; every running instance must agree on it"),
