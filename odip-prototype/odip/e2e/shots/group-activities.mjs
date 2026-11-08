@@ -48,7 +48,7 @@ const A = {
     staffAssigned: 1, staffNeeded: 1, participants: [person('p-0001', 'Liam Okafor', ['gs-4'], { timesDiffer: true, agreementStartTime: '09:00:00', agreementEndTime: '13:00:00' })], staff: [staffRow('r6', 's-0003', "Jack O'Sullivan", '10:00:00', '13:00:00')],
   }),
   draft: act('act-draft', '2026-09-12', 'Picnic', '11:00:00', '15:00:00', { status: 'Draft', staffAssigned: 0, staffNeeded: 2, participants: [person('p-0001', 'Liam Okafor', ['gs-5'])], findings: [{ ...short, message: '2 more staff needed.' }] }),
-  cancelled: act('act-cancelled', '2026-09-13', 'Swim', '09:00:00', '11:00:00', { status: 'Cancelled', staffAssigned: 0, staffNeeded: 0, participants: [person('p-0001', 'Liam Okafor', ['gs-6'])] }),
+  cancelled: act('act-cancelled', '2026-09-08', 'Swim', '09:00:00', '11:00:00', { status: 'Cancelled', staffAssigned: 0, staffNeeded: 0, participants: [person('p-0001', 'Liam Okafor', ['gs-6'])] }),
 }
 const ALL = Object.values(A)
 const ATTACHED = [
@@ -57,7 +57,7 @@ const ATTACHED = [
   shiftOf('gs-3', 'p-0001', 'Liam Okafor', '2026-09-11', '13:00:00', '16:00:00', { groupActivityId: 'act-finding' }),
   shiftOf('gs-4', 'p-0001', 'Liam Okafor', '2026-09-07', '10:00:00', '13:00:00', { groupActivityId: 'act-differ' }),
   shiftOf('gs-5', 'p-0001', 'Liam Okafor', '2026-09-12', '11:00:00', '15:00:00', { groupActivityId: 'act-draft', status: 'Draft' }),
-  shiftOf('gs-6', 'p-0001', 'Liam Okafor', '2026-09-13', '09:00:00', '11:00:00', { groupActivityId: 'act-cancelled', status: 'Cancelled' }),
+  shiftOf('gs-6', 'p-0001', 'Liam Okafor', '2026-09-08', '09:00:00', '11:00:00', { groupActivityId: 'act-cancelled', status: 'Cancelled' }),
 ]
 const GRACE = [
   shiftOf('gs-1b', 'p-0004', 'Grace Palmer-Hughes', '2026-09-09', '10:00:00', '14:00:00', { groupActivityId: 'act-normal' }),
@@ -113,6 +113,7 @@ async function openBoard(browser, { width, height, touch, flag = true, theme, on
 const px = (page, locator) => locator.evaluate((el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height } })
 const controlH = (page) => page.evaluate(() => { const p = document.createElement('div'); p.style.height = 'var(--control-h)'; document.body.append(p); const h = p.getBoundingClientRect().height; p.remove(); return h })
 const shot = async (page, locator, file, opts = {}) => {
+  await locator.scrollIntoViewIfNeeded().catch(() => {})
   const crop = await cropElement(page, locator, path.join(OUT_DIR, file), opts)
   checks.push(checkCropHolds({ ...crop, touch: opts.touch ?? crop.touch }))
   return crop
@@ -178,32 +179,42 @@ await scene('board-1280', async () => {
   await page.evaluate(() => { delete document.documentElement.dataset.theme })
 
   // The New menu
-  const newBtn = page.getByRole('button', { name: 'New' })
+  const newBtn = page.getByRole('button', { name: 'New', exact: true }).first()
   await newBtn.click()
   const options = await page.getByRole('option').allTextContents()
   check('newmenu: Shift, Trip, Group activity', JSON.stringify(options) === JSON.stringify(['Shift', 'Trip', 'Group activity']), options)
   await shot(page, page.getByRole('listbox').first(), 'newmenu-open.png', { also: newBtn })
   await page.keyboard.press('Escape')
 
-  // Carrying: the card's text must not move and the day slot must not cover the card.
+  // Carrying: the card's text must not move and the day slot must not cover the card. Mei is not on Pool afternoon, so the drop is a real join.
+  const target = page.locator('[data-activity-card="act-short"]').first()
   const strip = page.getByRole('button', { name: /^Mei Zhang,/ }).first()
-  const before = await normal.evaluate((el) => ({ title: el.querySelector('[data-activity-title]').getBoundingClientRect().left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left }))
-  const s = await strip.boundingBox(), d = await normal.locator('[data-activity-drop]').boundingBox()
+  const textX = (el) => ({ title: el.querySelector('[data-activity-title]').getBoundingClientRect().left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left })
+  const before = await target.evaluate(textX)
+  const s = await strip.boundingBox()
+  const dropBox = () => target.locator('[data-activity-drop]').boundingBox()
+  let d = await dropBox()
   await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2)
   await page.mouse.down()
   await page.mouse.move(s.x + s.width / 2 + 8, s.y + s.height / 2, { steps: 4 })
   await page.mouse.move(d.x + d.width / 2, d.y + d.height / 2, { steps: 20 })
   await page.waitForTimeout(300)
-  const during = await normal.evaluate((el) => {
+  const during = await target.evaluate((el) => {
     const c = el.getBoundingClientRect()
-    const slot = el.parentElement.querySelector('[data-day-slot]')
+    let p = el.parentElement
+    while (p && !p.querySelector('[data-day-slot]')) p = p.parentElement
+    const slot = p ? p.querySelector('[data-day-slot]') : null
     const sb = slot ? slot.getBoundingClientRect() : null
     return { title: el.querySelector('[data-activity-title]').getBoundingClientRect().left, count: el.querySelector('[data-activity-count]').getBoundingClientRect().left, overlap: sb ? !(sb.right <= c.left || sb.left >= c.right || sb.bottom <= c.top || sb.top >= c.bottom) : false, hasSlot: Boolean(slot) }
   })
   check('4 carrying: card text x unchanged (title, count)', during.title === before.title && during.count === before.count, { before, during })
   check('4 carrying: the day slot does not overlap the card', !during.overlap, during)
-  await shot(page, normal, 'drop-hover.png')
-  const ring = await normal.locator('[data-activity-drop]').evaluate((el) => getComputedStyle(el).boxShadow)
+  // cropElement parks the mouse to settle, so the hover is restored inside `during` just before the shot.
+  const crop = await cropElement(page, target, path.join(OUT_DIR, 'drop-hover.png'), {
+    during: async () => { d = await dropBox(); await page.mouse.move(d.x + d.width / 2, d.y + d.height / 2, { steps: 6 }); await page.waitForTimeout(250) },
+  })
+  checks.push(checkCropHolds(crop))
+  const ring = await target.locator('[data-activity-drop]').evaluate((el) => getComputedStyle(el).boxShadow)
   check('drop-hover: the drop chip draws the ring', ring && ring !== 'none', ring)
   await page.mouse.up()
   await context.close()
@@ -221,7 +232,7 @@ for (const mode of ['pending', 'conflict']) {
         return r.fulfill({ status: 400, json: { success: false, data: null, message: 'Mei Zhang is already on a shift at this time.', errors: ['Mei Zhang is already on a shift at this time.'] } })
       },
     })
-    const card = page.locator('[data-activity-card="act-normal"]').first()
+    const card = page.locator('[data-activity-card="act-short"]').first()
     await card.waitFor({ state: 'visible', timeout: 30_000 })
     const s = await page.getByRole('button', { name: /^Mei Zhang,/ }).first().boundingBox()
     const d = await card.locator('[data-activity-drop]').boundingBox()
@@ -262,8 +273,9 @@ await scene('modal-1280', async () => {
   const card = page.locator('[data-activity-card="act-normal"]').first()
   await card.waitFor({ state: 'visible', timeout: 30_000 })
   await card.locator('[data-activity-open]').click()
-  const dlg = await modalChecks(page, 'modal-normal', true)
   await page.getByRole('heading', { name: /Staff · 3 of 3/ }).waitFor({ timeout: 10_000 })
+  await page.waitForTimeout(600) // the open animation scales the panel for a moment
+  const dlg = await modalChecks(page, 'modal-normal', true)
   const titleFocus = await page.evaluate(() => document.activeElement?.getAttribute('id') || document.activeElement?.tagName)
   console.log('[group-activities] focus on open:', titleFocus)
   await shot(page, dlg, 'modal-normal.png', { pad: 16 })
@@ -276,7 +288,7 @@ await scene('modal-1280', async () => {
 })
 await scene('modal-new-empty', async () => {
   const { context, page } = await openBoard(browser, { width: 1280, height: 900, touch: false })
-  await page.getByRole('button', { name: 'New' }).click()
+  await page.getByRole('button', { name: 'New', exact: true }).first().click()
   await page.getByRole('option', { name: 'Group activity' }).click()
   const dlg = page.getByRole('dialog', { name: 'New group activity' })
   await dlg.waitFor({ timeout: 10_000 })
@@ -307,6 +319,7 @@ await scene('modal-loading', async () => {
   await page.locator('[data-activity-card="act-normal"] [data-activity-open]').first().click()
   const dlg = page.getByRole('dialog').first()
   await dlg.waitFor({ timeout: 10_000 })
+  await page.addStyleTag({ content: '*,*::before,*::after{animation:none!important}' }) // a spinner never settles; the frozen frame is the capture
   await page.waitForTimeout(300)
   await shot(page, dlg, 'modal-loading.png')
   release()
@@ -322,10 +335,10 @@ await scene('modal-error', async () => {
   await context.close()
 })
 await scene('board-flag-off', async () => {
-  const { context, page } = await openBoard(browser, { width: 1280, height: 900, touch: false, flag: false })
+  const { context, page } = await openBoard(browser, { width: 1280, height: 1300, touch: false, flag: false })
   const n = await page.locator('[data-activity-card]').count()
   check('board-flag-off: no activity card', n === 0, n)
-  await page.getByRole('button', { name: 'New' }).click()
+  await page.getByRole('button', { name: 'New', exact: true }).first().click()
   const options = await page.getByRole('option').allTextContents()
   check('board-flag-off: New menu keeps two items', options.length === 2, options)
   await page.keyboard.press('Escape')
@@ -333,7 +346,7 @@ await scene('board-flag-off', async () => {
   await context.close()
 })
 await scene('full-1280', async () => {
-  const { context, page } = await openBoard(browser, { width: 1280, height: 900, touch: false })
+  const { context, page } = await openBoard(browser, { width: 1280, height: 1300, touch: false })
   await page.locator('[data-activity-card]').first().waitFor({ timeout: 30_000 })
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'board-1280.png'))).checks)
   await context.close()
@@ -354,6 +367,7 @@ await scene('touch-390', async () => {
   check('2 drop chip height == --control-h (coarse)', drop.h === ch, { drop: drop.h, controlH: ch })
   await shot(page, card, 'board-normal-390.png', { touch: true })
 
+  await scene('chooser-390', async () => {
   // chooser step 1 (same times) and step 2 (times differ) from a group-line shift's menu
   for (const [shiftId, tag] of [['gl-2', 'chooser-times-differ'], ['gl-1', 'chooser']]) {
     const chipEl = page.locator(`[data-shift-chip="${shiftId}"]`)
@@ -377,6 +391,9 @@ await scene('touch-390', async () => {
     await page.waitForTimeout(300)
   }
 
+  })
+  await scene('slideover-390', async () => {
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
   // slide-over: Make a group activity
   await page.locator('[data-shift-open="gl-1"]').click()
   const make = page.getByRole('button', { name: 'Make a group activity' })
@@ -386,6 +403,9 @@ await scene('touch-390', async () => {
   await page.keyboard.press('Escape')
   await page.waitForTimeout(300)
 
+  })
+  await scene('modal-390', async () => {
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
   // modal at 390
   await card.locator('[data-activity-open]').click()
   const dlg = page.getByRole('dialog').first()
@@ -416,7 +436,7 @@ await scene('touch-390', async () => {
   await dlg.evaluate((el) => el.scrollTo?.(0, 0))
   await shot(page, dlg, 'modal-390.png', { touch: true, natural: true })
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'modal-390.png'), { touch: true })).checks)
-  await page.keyboard.press('Escape')
+  })
   await context.close()
 })
 
