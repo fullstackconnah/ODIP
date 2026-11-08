@@ -123,7 +123,6 @@ try {
       await go(page, '/rostering/completions')
       const section = page.locator('section[aria-labelledby="group-staff-heading"]')
       await section.waitFor({ timeout: 45_000 })
-      await section.getByRole('checkbox', { name: /select all/i }).first().check({ force: true })
       await section.getByRole('button', { name: /^Approve Wendy Worker/ }).click()
       const dismiss = section.getByRole('button', { name: 'Dismiss' })
       await dismiss.waitFor({ timeout: 20_000 })
