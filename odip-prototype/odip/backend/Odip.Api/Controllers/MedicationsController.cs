@@ -551,7 +551,7 @@ public class MedicationsController : ControllerBase
             if (inRange != null) query = query.Where(a => inRange.Contains(a.Id));
         }
 
-        var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt);
+        var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt).ThenByDescending(a => a.Id);
 
         var totalCount = await ordered.CountAsync(ct);
         var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
