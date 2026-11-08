@@ -101,10 +101,10 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const focusAfter = useRef<{ id: string; didNotAttend: boolean } | null>(null)
   useEffect(() => {
     const want = focusAfter.current
-    if (!want || activity?.participants.find(p => p.participantId === want.id)?.didNotAttend !== want.didNotAttend) return
+    if (!want || pendingKey || activity?.participants.find(p => p.participantId === want.id)?.didNotAttend !== want.didNotAttend) return
     focusAfter.current = null
     document.querySelector<HTMLElement>(`[data-participant-row="${want.id}"] [data-attendance-action]`)?.focus()
-  }, [activity])
+  }, [activity, pendingKey])
   const saving = create.isPending || createFromShift.isPending || update.isPending
 
   const cancelled = activity?.status === 'Cancelled'

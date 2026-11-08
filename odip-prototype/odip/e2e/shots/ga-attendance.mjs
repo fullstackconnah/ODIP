@@ -118,8 +118,8 @@ async function modal(browser, vp) {
   await open('act-live')
   const fine = !vp.touch
   const heights = await participants().locator('[data-attendance-action]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10))
-  const controlH = await token(page, '--control-h'); const tapMin = await token(page, '--tap-min')
-  check(`1 attendance buttons: height ${fine ? '== --control-h' : '>= --tap-min'} (${vp.name})`, heights.length === 2 && heights.every((h) => (fine ? Math.abs(h - controlH) <= 0.5 : h >= tapMin - 0.5)), `${heights.join(',')} vs ${fine ? controlH : tapMin}`)
+  const controlH = await token(page, '--control-h-sm'); const tapMin = await token(page, '--tap-min')
+  check(`1 attendance buttons: height ${fine ? '== --control-h-sm (row-action size=sm, as the review rows)' : '>= --tap-min'} (${vp.name})`, heights.length === 3 && heights.every((h) => (fine ? Math.abs(h - controlH) <= 0.5 : h >= tapMin - 0.5)), `${heights.join(',')} vs ${fine ? controlH : tapMin}`)
   const overflow = await participants().locator('[data-participant-row]').evaluateAll((els) => els.map((e) => ({ sw: e.scrollWidth, cw: e.clientWidth })))
   check(`2 participant rows do not overflow, 40-char name included (${vp.name})`, overflow.length === 3 && overflow.every((o) => o.sw <= o.cw), JSON.stringify(overflow))
   const ratios = await badgeContrast(page, participants())
