@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
