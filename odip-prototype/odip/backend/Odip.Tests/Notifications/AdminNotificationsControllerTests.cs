@@ -81,6 +81,24 @@ public class AdminNotificationsControllerTests
         Assert.Equal("Ben Turner", row.RecipientName);
     }
 
+    [Fact]
+    public async Task GetAll_ReturnsAtMost500Rows_NewestFirst()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = TenantScopedDb(tenantId);
+        var user = SeedUser(db, tenantId);
+        var start = DateTime.UtcNow.AddDays(-2);
+        for (var i = 0; i < 501; i++) SeedOutboxRow(db, tenantId, user.Id).CreatedAt = start.AddMinutes(i);
+        db.SaveChanges();
+
+        var result = await new AdminNotificationsController(db, NoOpChannels()).GetAll(null, null, null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<NotificationOutboxDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(500, body.Data!.Count);
+        Assert.Equal(start.AddMinutes(500), body.Data[0].CreatedAt);
+        Assert.Equal(start.AddMinutes(1), body.Data[^1].CreatedAt);
+    }
+
     /// <summary>Mandatory cross-tenant negative test: an Admin (non-SuperAdmin) caller in tenant A must never see tenant B's outbox rows.</summary>
     [Fact]
     public async Task GetAll_NeverReturnsAnotherTenantsRows()

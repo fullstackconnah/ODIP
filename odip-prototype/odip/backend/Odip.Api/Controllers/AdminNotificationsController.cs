@@ -37,7 +37,7 @@ public class AdminNotificationsController : ControllerBase
         if (from.HasValue) query = query.Where(o => o.CreatedAt >= from.Value);
         if (to.HasValue) query = query.Where(o => o.CreatedAt <= to.Value);
 
-        var rows = await query.OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
+        var rows = await query.OrderByDescending(o => o.CreatedAt).Take(500).ToListAsync(ct);
 
         var recipientIds = rows.Select(o => o.RecipientUserId).Distinct().ToList();
         var names = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
