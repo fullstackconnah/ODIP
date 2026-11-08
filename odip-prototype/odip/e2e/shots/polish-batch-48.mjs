@@ -60,8 +60,7 @@ const leaveScene = async (page) => {
   await page.route('**/api/v1/settings/module-visibility', async (r) => {
     const response = await r.fetch()
     const body = await response.json()
-    if (body?.data) body.data.employmentHeroConnected = true
-    await r.fulfill({ response, json: body })
+    await r.fulfill({ json: { ...body, success: true, data: { ...(body?.data ?? {}), employmentHeroConnected: true } } })
   })
   await page.route('**/api/v1/portal/leave/balances', (r) => r.fulfill({ json: envelope({ status: 'Ready', balances: [
     { category: 'Annual leave', amount: 76, unit: 'Hours' }, { category: 'Long service leave', amount: null, unit: 'Hours' }, { category: 'Personal leave', amount: 0, unit: 'Hours' },
@@ -77,8 +76,10 @@ try {
       step = 'open shift'
       const { context, page, mobile } = await open(browser, st, '/portal/shifts/sh-next', inProgressShift)
       step = 'notes tab'
-      await page.getByRole('tab', { name: /^Notes/ }).click({ timeout: 60_000 })
+      const tab = page.getByRole('tab', { name: /^Notes/ })
       const field = page.getByLabel('Add a note')
+      await tab.or(field).first().waitFor({ state: 'visible', timeout: 60_000 })
+      if (await tab.count()) await tab.click()
       await field.waitFor({ state: 'visible', timeout: 30_000 })
       await field.fill('x'.repeat(1500))
       await page.waitForTimeout(300)
