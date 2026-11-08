@@ -470,6 +470,29 @@ public class ShiftBudgetCheckTests : IDisposable
         Assert.StartsWith("no catalogue rate covers", outcome.NotCheckedReason);   // the exact words are the estimator's own, and may change with it
     }
 
+    [Fact]
+    public async Task AGroupLineBroughtBackFromCancelled_IsPricedAsAGroupLine_NotOneToOne()
+    {
+        var (participant, _) = Seed(october: 1000m);
+        var line = _kit.SeedShift(participant, Mon12Oct, ShiftStatus.Cancelled);
+        line.GroupActivityId = Guid.NewGuid();
+        line.Ratio = SupportRatio.OneToThree;
+        _kit.Db.SaveChanges();
+        Mode(BudgetLimitMode.Warn);
+        var seen = new List<Guid?>();
+        var stub = new Mock<IShiftCostSource>();
+        stub.Setup(s => s.EstimateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyList<ShiftSpec>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, Guid _, IReadOnlyList<ShiftSpec> specs, CancellationToken _) =>
+            {
+                seen.Add(specs[0].GroupActivityId);
+                return specs.Select(s => (ShiftCostEstimate)new ShiftCostEstimate.Priced(new[] { new ShiftCostPart(s.ServiceDate, 8, 160m) })).ToList();
+            });
+
+        await Service(stub.Object).CheckAsync(Request(participant, Mon12Oct, shiftId: line.Id, status: ShiftStatus.Published) with { Ratio = SupportRatio.OneToThree }, default);
+
+        Assert.Equal(line.GroupActivityId, Assert.Single(seen));
+    }
+
     // Through the REAL estimator, as the budget fix (round 1b) leaves it: the shift claim engine prices one-to-one and two-to-one community access only, so a group shift, a sleepover and a passive night have no
     // price, are not checked and are never blocked, even where the same shift as one-to-one would be refused. When the engine prices them this test is where to decide what a hard limit does about them.
     [Theory]
