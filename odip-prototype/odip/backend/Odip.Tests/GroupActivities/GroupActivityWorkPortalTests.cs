@@ -143,6 +143,21 @@ public class GroupActivityWorkPortalTests
     }
 
     [Fact]
+    public async Task Start_DeactivatedWorker_IsRefusedLikeAMissingUser_AnActiveOneStarts()
+    {
+        var rig = new Rig();
+        rig.Fx.Seed.Users.Single(u => u.Id == rig.Worker.Id).IsActive = false;
+        rig.Fx.Seed.SaveChanges();
+        Assert.Null(Code(await rig.Controller(During).Start(rig.Row.Id, NoLocation, default), 404));
+        Assert.Null((await rig.SavedAsync()).ActualStart);
+
+        rig.Fx.Seed.Users.Single(u => u.Id == rig.Worker.Id).IsActive = true;
+        rig.Fx.Seed.SaveChanges();
+        Assert.IsType<ApiResponse<PortalActivityShiftDto>>(Assert.IsAssignableFrom<ObjectResult>((await rig.Controller(During).Start(rig.Row.Id, NoLocation, default)).Result).Value);
+        Assert.NotNull((await rig.SavedAsync()).ActualStart);
+    }
+
+    [Fact]
     public async Task Start_DraftActivity_Is404()
     {
         var rig = new Rig(ShiftStatus.Draft);
