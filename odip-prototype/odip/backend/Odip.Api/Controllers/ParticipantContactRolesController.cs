@@ -71,7 +71,7 @@ public class ParticipantContactRolesController : ControllerBase
         Person person;
         if (dto.PersonId.HasValue)
         {
-            var existing = await _db.People.FirstOrDefaultAsync(p => p.Id == dto.PersonId.Value, ct);
+            var existing = await _db.People.FirstOrDefaultAsync(p => p.Id == dto.PersonId.Value && p.TenantId == participant.TenantId, ct);
             if (existing == null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail("Selected person not found"));
             person = existing;
         }

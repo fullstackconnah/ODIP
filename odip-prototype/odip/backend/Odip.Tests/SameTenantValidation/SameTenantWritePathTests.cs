@@ -631,4 +631,28 @@ public class SameTenantWritePathTests
         db.SaveChanges();
         return trip;
     }
+
+    // ── Contact roles: linking an existing person ───────────────────────
+
+    [Fact]
+    public async Task ContactRoles_PersonFromAnotherTenant_SuperAdmin_IsRefused_AndSavesNothing()
+    {
+        var (_, tenantAId, tenantBId) = CreateDbWithTwoTenants();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        using var admin = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        admin.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = tenantAId, FirstName = "Sophie", LastName = "Brown", IsActive = true });
+        admin.SaveChanges();
+        var participant = admin.Participants.Single();
+        var foreign = new Person { Id = Guid.NewGuid(), TenantId = tenantBId, FirstName = "Frank", LastName = "Foreign" };
+        admin.People.Add(foreign);
+        admin.SaveChanges();
+
+        var result = await new ParticipantContactRolesController(admin).Create(participant.Id,
+            new CreateParticipantContactRoleDto { PersonId = foreign.Id, RoleType = ContactRoleType.NextOfKin }, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Selected person not found", Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(badRequest.Value).Errors![0]);
+        Assert.Empty(admin.ParticipantContactRoles);
+    }
 }

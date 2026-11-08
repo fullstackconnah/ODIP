@@ -61,7 +61,9 @@ public class InvoiceService
     internal Task<TripClaim?> LoadClaimAsync(Guid claimId, CancellationToken ct) => _db.TripClaims
         .Include(c => c.TripInstance)
         .Include(c => c.Participant).ThenInclude(p => p!.PlanManagerContact)
+        .Include(c => c.Participant).ThenInclude(p => p!.ContactRoles.Where(r => r.RoleType == ContactRoleType.PlanManager && r.Status == ContactRoleStatus.Active)).ThenInclude(r => r.Person)
         .Include(c => c.LineItems).ThenInclude(l => l.ParticipantBooking).ThenInclude(b => b!.Participant).ThenInclude(p => p.PlanManagerContact)
+        .Include(c => c.LineItems).ThenInclude(l => l.ParticipantBooking).ThenInclude(b => b!.Participant).ThenInclude(p => p.ContactRoles.Where(r => r.RoleType == ContactRoleType.PlanManager && r.Status == ContactRoleStatus.Active)).ThenInclude(r => r.Person)
         .FirstOrDefaultAsync(c => c.Id == claimId, ct);
 
     /// <summary>The claim's organisation: its trip's (a trip claim) or its participant's (a shift claim). Never the caller's: a SuperAdmin may have none, or their own.</summary>
@@ -113,7 +115,7 @@ public class InvoiceService
     public static Invoice BuildSnapshot(TripClaim claim, PayerGroup group, ProviderSettings settings)
     {
         var participant = group.Participant;
-        var planManager = group.PlanType == PlanType.PlanManaged ? participant.PlanManagerContact : null;
+        var billTo = group.PlanType == PlanType.PlanManaged ? PlanManagerBillTo(participant) : null;
         var subtotal = group.Lines.Sum(l => l.TotalAmount);
         var gst = GstFor(group.Lines, settings.GSTRegistered);
         return new Invoice
@@ -126,10 +128,9 @@ public class InvoiceService
                 ? string.Create(CultureInfo.InvariantCulture, $"Period: {claim.PeriodFrom:dd MMM yyyy} – {claim.PeriodTo:dd MMM yyyy}")
                 : $"Trip: {claim.TripInstance?.TripName}",
             PayerKind = group.PlanType,
-            BillToName = planManager == null ? participant.FullName
-                : planManager.Organisation != null ? $"{planManager.FullName} — {planManager.Organisation}" : planManager.FullName,
-            BillToAddress = planManager == null ? string.Empty : BuildContactAddress(planManager),
-            BillToEmail = planManager?.Email,
+            BillToName = billTo?.Name ?? participant.FullName,
+            BillToAddress = billTo?.Address ?? string.Empty,
+            BillToEmail = billTo?.Email,
             SellerOrganisationName = settings.OrganisationName, SellerAbn = settings.ABN, SellerRegistrationNumber = settings.RegistrationNumber,
             SellerAddress = settings.Address, SellerState = settings.State, GstRegistered = settings.GSTRegistered,
             BankAccountName = settings.BankAccountName, Bsb = settings.BSB, AccountNumber = settings.AccountNumber,
@@ -141,6 +142,19 @@ public class InvoiceService
                 Hours = l.Hours, UnitPrice = l.UnitPrice, LineTotal = l.TotalAmount, GSTCode = l.GSTCode,
             }).ToList(),
         };
+    }
+
+    /// <summary>The plan manager to bill: the legacy contact when set, else the participant's active Plan Manager contact role (the Contacts tab). Several: the most recently started, then the lowest id.</summary>
+    private static (string Name, string Address, string? Email)? PlanManagerBillTo(Participant participant)
+    {
+        static string NameOf(string person, string? organisation) => string.IsNullOrWhiteSpace(organisation) ? person : $"{person} — {organisation}";
+        if (participant.PlanManagerContact is { } c) return (NameOf(c.FullName, c.Organisation), BuildContactAddress(c), c.Email);
+        var role = participant.ContactRoles
+            .Where(r => r.RoleType == ContactRoleType.PlanManager && r.Status == ContactRoleStatus.Active && r.Person != null && r.Person.TenantId == participant.TenantId)
+            .OrderByDescending(r => r.StartDate).ThenBy(r => r.Id).FirstOrDefault();
+        if (role?.Person is not { } p) return null;
+        var address = string.Join(", ", new[] { p.AddressLine, p.Suburb, p.State, p.Postcode }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        return (NameOf(p.FullName, role.OrganisationName ?? p.Organisation), address, p.Email);
     }
 
     private static string Day(DateOnly date) => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
