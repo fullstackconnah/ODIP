@@ -245,7 +245,7 @@ export interface CreateIncidentDto {
   shiftNoteId?: string | null
 }
 
-export interface UpdateIncidentDto extends CreateIncidentDto {
+export interface UpdateIncidentDto extends Omit<CreateIncidentDto, 'idempotencyKey'> {
   status: IncidentStatus
   /** The `updatedAt` string the form was loaded from, sent back untouched; a different stored one is a 409. Omit to skip the check (restore). */
   expectedUpdatedAt?: string
