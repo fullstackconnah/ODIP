@@ -78,7 +78,7 @@ function ShiftLines({ id, shifts, canLink }: { id: string; shifts: PayrollShiftD
             <span className="min-w-0 [overflow-wrap:anywhere]">
               {calendarDate(s.serviceDate).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} {'·'} {s.participantName}
             </span>
-            <Word status={s.status} />
+            <span className="shrink-0 whitespace-nowrap"><Word status={s.status} /></span>
           </div>
           <span className="text-[13px] text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{shiftLine(s)}</span>
           {s.extraTimeHeld && <span className={`w-fit text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Extra time held</span>}

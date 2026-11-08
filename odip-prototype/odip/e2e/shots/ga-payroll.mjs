@@ -1,6 +1,6 @@
 // Group activities payroll shots: a group staff line on Payroll (the "Group activity" pill) and the dashboard's "Group activities" decision tab.
 // States: payroll 390 and 1280 expanded group lines (Sent, Waiting, Failed, Not linked), payroll 390 long title; dashboard 1280 and 390 group tab, dashboard 1280 flag off.
-// Numeric checks P1 to P5 (Payroll) and D1 to D4 (dashboard), each against a house token. Exit 1 on any failure.
+// Numeric checks P1 to P6 (Payroll) and D1 to D4 (dashboard), each against a house token. Exit 1 on any failure.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/ga-payroll.mjs <outdir>
 // The payroll, settings and review reads are stubbed with page.route; the rest of the dashboard reads the mock-api. The clock, theme and zone are pinned.
 import path from 'node:path'
@@ -117,6 +117,8 @@ try {
   const tapMin = await px(r.page, '--tap-min')
   const groupPill = r.page.getByText('Group activity', { exact: true }).first()
   const heldPill = r.page.getByText('Extra time held', { exact: true })
+  const badgeH = async (list) => (await list.locator('> li').first().locator('> div').first().locator('> *').last().boundingBox()).height
+  const sentH = await badgeH(r.list)   // the Sent badge on a short title: one line
   const gh = (await groupPill.boundingBox()).height, hh = (await heldPill.boundingBox()).height
   check('P2 Group pill box height equals the Extra time held pill', `${gh} vs ${hh}`, Math.abs(gh - hh) === 0)
   const link = r.page.getByRole('link', { name: /Link in Settings/ }).first()
@@ -135,6 +137,8 @@ try {
   await r.context.close()
 
   r = await payroll(browser, phone, payrollCheck(LONG_LINE), 'payroll-390-long-title', 'P1 payroll 390 long title')
+  const longH = await badgeH(r.list)
+  check('P6 the Not linked badge stays one line next to a 60-character title', `${longH} vs the Sent badge ${sentH}`, longH <= sentH + 0.5)
   await r.context.close()
 
   // Dashboard: the Group activities tab.

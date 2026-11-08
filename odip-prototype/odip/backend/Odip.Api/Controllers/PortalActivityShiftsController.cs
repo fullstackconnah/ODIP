@@ -119,7 +119,6 @@ public class PortalActivityShiftsController : ControllerBase
             row.LocationCheck = check.Status;
             row.LocationDistanceMetres = check.DistanceMetres;
             if (activity.Status == ShiftStatus.Published) { activity.Status = ShiftStatus.InProgress; activity.UpdatedAt = now; }
-            await RaiseFinishedAsync(row, activity, ct);
             await _db.SaveChangesAsync(ct);
             await board.CommitAsync(ct);
             return await AnswerAsync(row, ct);
@@ -179,6 +178,7 @@ public class PortalActivityShiftsController : ControllerBase
             row.BreakStartedAt = breakStart;
             row.BreakEndedAt = breakEnd;
             if (activity.Status == ShiftStatus.Published) { activity.Status = ShiftStatus.InProgress; activity.UpdatedAt = now; }
+            await RaiseFinishedAsync(row, activity, ct);
             await _db.SaveChangesAsync(ct);
             if (board is not null) await board.CommitAsync(ct); else await rowLock.CommitAsync(ct);
             return await AnswerAsync(row, ct);
@@ -193,7 +193,7 @@ public class PortalActivityShiftsController : ControllerBase
     /// <summary>Tells every active Admin and Coordinator of the organisation the hours are ready for review, in the Finish's own save (the audience and event of a shift's Finish).</summary>
     private async Task RaiseFinishedAsync(GroupActivityStaff row, GroupActivity activity, CancellationToken ct)
     {
-        var workerName = await _db.Users.Where(u => u.Id == row.UserId).Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
+        var workerName = await _db.Users.Where(u => u.TenantId == row.TenantId && u.Id == row.UserId).Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var recipients = await _db.Users.Where(u => u.TenantId == row.TenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator)).ToListAsync(ct);
         foreach (var recipient in recipients)
             await _notificationRaiser.RaiseAsync(Odip.Domain.Notifications.NotificationEventType.ShiftCompletionPendingReview, "GroupActivityStaff", row.Id, new[] { recipient.Id },

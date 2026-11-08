@@ -101,9 +101,11 @@ public class ReportsController : ControllerBase
             .ToListAsync(ct);   // shortcut: one read per range; page it if a tenant's group rows pass a few thousand
         foreach (var g in groupRows)
         {
-            var (shift, completion, shiftBreaks) = EmploymentHeroTimesheets.ForStaffRow(g.GroupActivity!, g)
-                ?? (new Shift { StartTime = g.StartTime, EndTime = g.EndTime, EndsNextDay = g.EndsNextDay }, new ShiftCompletion(), new List<ShiftBreak>());
-            var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks).PaidMinutes;
+            // No actual times: the rostered minutes of the row (a blank completion would measure from year 1).
+            var staffRow = EmploymentHeroTimesheets.ForStaffRow(g.GroupActivity!, g);
+            var paid = staffRow is { } t
+                ? ShiftBreakRules.PaidMinutes(t.Shift, t.Completion, now, t.Breaks).PaidMinutes
+                : ShiftBreakRules.PaidMinutes(new Shift { StartTime = g.StartTime, EndTime = g.EndTime, EndsNextDay = g.EndsNextDay }, new ShiftCompletion(), now, []).RosteredMinutes;
             var cur = perWorker.GetValueOrDefault(g.UserId);
             perWorker[g.UserId] = g.ReviewOutcome == ReviewOutcome.Approved
                 ? (cur.Shifts + 1, cur.Approved + paid, cur.Awaiting)

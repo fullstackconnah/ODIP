@@ -389,6 +389,30 @@ public class GroupActivityWorkPortalTests
     }
 
     [Fact]
+    public async Task Start_RaisesNothing()
+    {
+        var rig = new Rig();
+        StaffOf(rig, UserRole.Admin);
+        StaffOf(rig, UserRole.Coordinator);
+
+        await rig.Controller(During).Start(rig.Row.Id, NoLocation, default);
+
+        Assert.Empty(await NoticesAsync(rig));
+    }
+
+    [Fact]
+    public async Task Finish_NeverStarted_WithTypedStart_RaisesOnePerAdminAndCoordinator()
+    {
+        var rig = new Rig();
+        var admin = StaffOf(rig, UserRole.Admin);
+        var coordinator = StaffOf(rig, UserRole.Coordinator);
+
+        GroupActivityFixture.Body(await rig.Controller(During).Finish(rig.Row.Id, new FinishActivityShiftDto { ActualStart = During.UtcDateTime.AddHours(-2) }, default), 200);
+
+        Assert.Equal(new[] { admin.Id, coordinator.Id }.Order(), (await NoticesAsync(rig)).Select(n => n.RecipientUserId).Order());
+    }
+
+    [Fact]
     public async Task RecordTimes_RaisesNothing()
     {
         var rig = new Rig();

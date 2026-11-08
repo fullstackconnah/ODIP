@@ -84,6 +84,19 @@ public class ReportsControllerGroupTests
     }
 
     [Fact]
+    public async Task HoursByWorker_ApprovedGroupRowWithoutActualEnd_IsItsRosteredHours()
+    {
+        using var db = TestDb.Create();
+        var worker = AddUser(db, TenantA, "Sam");
+        AddRow(db, TenantA, AddActivity(db, TenantA), worker, approved: true, finished: false);
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(await HoursAsync(db));
+
+        Assert.Equal((1, 6m, 0m), (row.ApprovedShifts, row.ApprovedHours, row.AwaitingApprovalHours));
+    }
+
+    [Fact]
     public async Task HoursByWorker_FinishedGroupRow_IsAwaiting_NotStartedIsAbsent()
     {
         using var db = TestDb.Create();
