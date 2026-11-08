@@ -75,7 +75,8 @@ try {
       // The board's new-shift panel with a cut participant list.
       let s = await open('Coordinator')
       await s.page.goto(`${BASE_URL}/rostering`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-      await s.page.getByRole('button', { name: /^Add a shift for/ }).first().click({ timeout: 60_000 })
+      await s.page.getByRole('button', { name: 'New', exact: true }).click({ timeout: 60_000 })
+      await s.page.getByRole('menuitem', { name: 'Shift', exact: true }).or(s.page.getByRole('option', { name: 'Shift', exact: true })).first().click({ timeout: 30_000 })
       let dialog = s.page.getByRole('dialog').first()
       await shoot(s.page, st, 'shift-panel-notice', dialog.getByText(NOTE), dialog.locator('[data-shift-field="participant"]'), dialog)
       await s.context.close()
