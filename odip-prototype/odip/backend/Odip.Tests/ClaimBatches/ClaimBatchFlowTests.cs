@@ -264,6 +264,25 @@ public class ClaimBatchFlowTests
         Assert.Contains("isn't readable text", NdiaResultsFile.Parse([0xFF, 0xFE, 0x00, 0xC3, 0x28]).Error);
     }
 
+    [Theory]
+    [InlineData(2500, true)]
+    [InlineData(2000, false)]
+    public void A_results_file_over_the_reader_cap_is_refused_whole(int dataRows, bool refused)
+    {
+        var csv = "Reference,Result,Code\n" + string.Concat(Enumerable.Range(1, dataRows).Select(i => $"A{i},Successful,\n"));
+        var parsed = NdiaResultsFile.Parse(Encoding.UTF8.GetBytes(csv));
+        if (refused)
+        {
+            Assert.Equal("This results file has 2,500 rows; the importer reads up to 2,000. Split it into smaller files and import each.", parsed.Error);
+            Assert.Empty(parsed.Rows);
+        }
+        else
+        {
+            Assert.Null(parsed.Error);
+            Assert.Equal(2000, parsed.Rows.Count);
+        }
+    }
+
     // ---- paid ----
 
     private static async Task<(BatchFixture F, BatchDetailDto Batch)> AcceptedAsync(int lines = 1)

@@ -162,6 +162,9 @@ public record UpdateMedicationDto : CreateMedicationDto
 {
     public MedicationStatus Status { get; init; } = MedicationStatus.Active;
 
+    /// <summary>The medication's UpdatedAt the form loaded: the server answers 409 if the chart changed since. Absent from older open tabs, which save as before.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+
     /// <summary>The linked register entry's UpdatedAt the form loaded: the server answers 409 if the entry changed since. Absent from older open tabs, which save as before.</summary>
     public DateTime? ExpectedRestrictivePracticeUpdatedAt { get; init; }
 }

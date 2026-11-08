@@ -269,6 +269,21 @@ public class ComplaintsControllerTests
     }
 
     [Fact]
+    public async Task Update_ExpectedUpdatedAt_ThatDiffersOnlyBelowTheMicrosecond_Saves()
+    {
+        using var db = TestDb.Create();
+        var row = Row(TenantA);
+        db.Complaints.Add(row);
+        db.SaveChanges();
+        // SaveChanges stamps UpdatedAt, so move the token one tick inside the same microsecond (the stamp is read back after the save).
+        var token = row.UpdatedAt.AddTicks(row.UpdatedAt.Ticks % 10 == 9 ? -1 : 1);
+
+        var result = await Controller(db, TenantA).Update(row.Id, Save(v => { v["ExpectedUpdatedAt"] = token; v["Summary"] = "Changed"; }), default);
+
+        Assert.Equal("Changed", Value(result).Summary);
+    }
+
+    [Fact]
     public async Task Update_CurrentExpectedUpdatedAt_Saves_AndBumpsTheVersion()
     {
         using var db = TestDb.Create();

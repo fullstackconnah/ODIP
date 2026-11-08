@@ -122,7 +122,8 @@ public class ComplaintsController : ControllerBase
         var complaint = await _db.Complaints.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (complaint == null) return NotFound(ApiResponse<ComplaintDto>.Fail("Complaint not found"));
         // A form from an older tab sends no version and saves as before. A stale one is refused first; the concurrency token is the backstop for a racing save.
-        if (dto.ExpectedUpdatedAt is DateTime expected && expected != complaint.UpdatedAt)
+        // Compared to the microsecond (the column's precision), as bookings do, so a token read back from Postgres is never refused for the .NET tick.
+        if (dto.ExpectedUpdatedAt is DateTime expected && complaint.UpdatedAt.Ticks - complaint.UpdatedAt.Ticks % 10 != expected.Ticks - expected.Ticks % 10)
             return Conflict(ApiResponse<ComplaintDto>.Fail(ChangedByOther));
         if (!complaint.IsActive) return BadRequest(ApiResponse<ComplaintDto>.Fail("This complaint is archived. Restore it to change it."));
 

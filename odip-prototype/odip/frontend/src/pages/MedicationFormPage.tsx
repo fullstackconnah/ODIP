@@ -149,7 +149,8 @@ const medicationResolver: Resolver<MedicationFormData> = (values) => {
 
 function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
   if (httpStatusOf(err) === 409) {
-    return "This medicine's register entry was changed while you were editing. Reload the page to see the latest authorisation, then save again."
+    // The server names what changed: the chart, or the linked register entry.
+    return extractErrorMessage(err, "This medicine's register entry was changed while you were editing. Reload the page to see the latest authorisation, then save again.")
   }
   return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`)
 }
@@ -217,7 +218,10 @@ export default function MedicationFormPage() {
   const formMismatch = !!routeValue && !!formValue && !compatibleForms.includes(formValue as MedicationForm)
   const formOptions = formMismatch ? [...compatibleForms, formValue as MedicationForm] : compatibleForms
 
+  // The version this form was filled from; a later refetch never swaps it, so a real conflict still gets the 409.
+  const [loadedAt, setLoadedAt] = useState<string>()
   useFillOnce(existing, record => {
+    setLoadedAt(record.updatedAt)
     reset({
       name: record.name ?? '',
       strength: record.strength ?? '',
@@ -326,6 +330,7 @@ export default function MedicationFormPage() {
         const updatePayload: UpdateMedicationDto = {
           ...payload,
           status: (data.status || 'Active') as UpdateMedicationDto['status'],
+          expectedUpdatedAt: loadedAt,
           expectedRestrictivePracticeUpdatedAt: linkedEntry?.updatedAt,
         }
         const res = await updateMedication.mutateAsync({ id: id!, data: updatePayload })

@@ -167,7 +167,10 @@ export default function StaffCreatePage() {
 
   const typedEmail = useWatch({ control, name: 'email' })
 
+  // The version this form was filled from: a later refetch (the save re-reads isActive) never swaps it, so a real conflict still gets the 409.
+  const [loadedAt, setLoadedAt] = useState<string>()
   useFillOnce(existing, record => {
+    setLoadedAt(record.updatedAt)
     reset({
       firstName: record.firstName ?? '',
       lastName: record.lastName ?? '',
@@ -207,7 +210,7 @@ export default function StaffCreatePage() {
         // The page has no Active control, so the flag is read at save: a deactivation made since this page loaded is not undone.
         // If the re-read fails, the flag cached at page load is sent (never worse than before).
         const { data: current } = await refetchExisting()
-        const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: current?.isActive ?? existing?.isActive ?? true } })
+        const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: current?.isActive ?? existing?.isActive ?? true, expectedUpdatedAt: loadedAt } })
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/staff', { replace: true })
