@@ -598,6 +598,17 @@ public class IncidentsController : ControllerBase
             dto = dto with { ReportedByStaffId = callerId };
         }
 
+        if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
+        var reporterTenant = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
+        var key = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim();
+        if (key != null)
+        {
+            // Explicit tenant: a SuperAdmin passes the query filter for every organisation. The lookup runs before every other reference check on purpose,
+            // so a retry replays even if a referenced row changed between presses. It finds inactive rows too.
+            var prior = await _db.IncidentReports.FirstOrDefaultAsync(i => i.TenantId == reporterTenant && i.IdempotencyKey == key, ct);
+            if (prior != null) return await AnswerKeyMatchAsync(prior, dto.ReportedByStaffId, ct);
+        }
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
         if (crossFieldError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
@@ -609,17 +620,6 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Booking not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
-        if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
-            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
-        var reporterTenant = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
-        var key = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim();
-        if (key != null)
-        {
-            // Explicit tenant: a SuperAdmin passes the query filter for every organisation. The lookup runs before the reference checks on purpose,
-            // so a retry replays even if a referenced row changed between presses. It finds inactive rows too.
-            var prior = await _db.IncidentReports.FirstOrDefaultAsync(i => i.TenantId == reporterTenant && i.IdempotencyKey == key, ct);
-            if (prior != null) return await AnswerKeyMatchAsync(prior, dto.ReportedByStaffId, ct);
-        }
         var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
         if (rpLinkError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
@@ -789,7 +789,7 @@ public class IncidentsController : ControllerBase
     {
         if (prior.ReportedByUserId == reporterId)
             return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(prior.Id, ct)));
-        return Conflict(ApiResponse<IncidentListDto>.Fail("This incident was already submitted by another reporter. Reload the page and submit it again.", IncidentErrorCodes.IncidentIdempotencyKeyReused));
+        return Conflict(ApiResponse<IncidentListDto>.Fail("An incident from this form was already saved under another reporter. Check the incidents list before you submit again.", IncidentErrorCodes.IncidentIdempotencyKeyReused));
     }
 
     private const string ChangedByOther = "Someone else changed this incident after you opened it. Cancel, then edit it again to see their changes.";
