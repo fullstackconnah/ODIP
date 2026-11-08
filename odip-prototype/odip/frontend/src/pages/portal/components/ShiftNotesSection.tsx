@@ -19,6 +19,10 @@ const BODY_MAX_LENGTH = 1000
 
 const textareaClass = `w-full py-2 text-sm ${fieldSurface}`
 
+function Shortened() {
+  return <p role="status" className="text-xs text-[var(--color-muted-foreground)]">Note shortened to 1,000 characters</p>
+}
+
 function CharCount({ length }: { length: number }) {
   const nearCap = length >= BODY_MAX_LENGTH * 0.9
   return (
@@ -127,6 +131,7 @@ export function ShiftNotesSection({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editBody, setEditBody] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
+  const [shortened, setShortened] = useState<'add' | 'edit' | null>(null)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -209,12 +214,13 @@ export function ShiftNotesSection({
                   <textarea
                     id={`edit-note-${note.id}`}
                     value={editBody}
-                    onChange={e => setEditBody(e.target.value.slice(0, BODY_MAX_LENGTH))}
+                    onChange={e => { setShortened(e.target.value.length > BODY_MAX_LENGTH ? 'edit' : null); setEditBody(e.target.value.slice(0, BODY_MAX_LENGTH)) }}
                     rows={3}
                     className={textareaClass}
                     aria-invalid={!!editError}
                     aria-describedby={editError ? `edit-note-error-${note.id}` : undefined}
                   />
+                  {shortened === 'edit' && <Shortened />}
                   <div className="flex items-center justify-between gap-2">
                     <CharCount length={editBody.length} />
                     <div className="flex items-center gap-2">
@@ -273,13 +279,14 @@ export function ShiftNotesSection({
         <textarea
           id="new-shift-note-body"
           value={body}
-          onChange={e => setBody(e.target.value.slice(0, BODY_MAX_LENGTH))}
+          onChange={e => { setShortened(e.target.value.length > BODY_MAX_LENGTH ? 'add' : null); setBody(e.target.value.slice(0, BODY_MAX_LENGTH)) }}
           rows={3}
           placeholder="Anything worth handing over about this shift…"
           className={textareaClass}
           aria-invalid={!!createError}
           aria-describedby={createError ? 'new-shift-note-error' : undefined}
         />
+        {shortened === 'add' && <Shortened />}
         <div className="flex items-center justify-between gap-2">
           <CharCount length={body.length} />
           <Button type="submit" disabled={createNote.isPending || !body.trim()}>
