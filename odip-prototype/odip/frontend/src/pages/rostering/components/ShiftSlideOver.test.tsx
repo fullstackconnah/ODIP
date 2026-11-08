@@ -24,12 +24,12 @@ const {
 
 // Only the API layer is mocked — every other collaborator (FindingsList, SlideOver,
 // Dropdown, FormField) is the real component, so this exercises the actual override gate wiring.
-const { catalogue } = vi.hoisted(() => ({ catalogue: { current: { data: [] as unknown[], isLoading: false, isError: false } } }))
+const { catalogue, createPending } = vi.hoisted(() => ({ catalogue: { current: { data: [] as unknown[], isLoading: false, isError: false } }, createPending: { current: false } }))
 
 vi.mock('@/api/hooks', () => ({
   useSupportCatalogue: () => catalogue.current,
   useCheckShift: () => ({ mutate: mockCheckMutate, isPending: false }),
-  useCreateShift: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
+  useCreateShift: () => ({ mutateAsync: mockCreateMutateAsync, isPending: createPending.current }),
   useUpdateShift: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeleteShift: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
   useParticipantRoutines: mockUseParticipantRoutines,
@@ -77,6 +77,7 @@ function makeCompatibilityRow(overrides: Partial<CompatibilityRowDto> = {}): Com
 }
 
 beforeEach(() => {
+  createPending.current = false
   mockCheckMutate.mockClear()
   mockCreateMutateAsync.mockClear()
   mockUpdateMutateAsync.mockClear()
@@ -1600,6 +1601,35 @@ describe('ShiftSlideOver as a dialog', () => {
   it('renders nothing while there is no target', () => {
     render(<ShiftSlideOver {...props} target={null} onClose={noop} />)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('Escape while a create is saving leaves the panel open (a refusal must land where the user can see it)', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    createPending.current = true
+    render(<ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={onClose} />)
+    await user.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Escape on an idle, untouched create closes it', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={onClose} />)
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Escape on an idle, edited create still asks "Discard changes?"', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={onClose} />)
+    await user.type(screen.getByLabelText('Notes'), 'Bring the hoist sling')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('Escape closes an untouched panel without asking', async () => {

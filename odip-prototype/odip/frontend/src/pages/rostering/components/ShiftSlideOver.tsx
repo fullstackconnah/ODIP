@@ -449,6 +449,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         onClose={onClose}
         title={isEdit ? 'Shift details' : 'New shift'}
         dirty={dirty}
+        beforeClose={() => !isBusy} // a refusal must land on a panel the person can still see
         initialFocusRef={initialFocusRef}
         bodyClassName="flex flex-col gap-[var(--field-gap-y)]"
         footerClassName="flex flex-wrap items-center justify-between gap-3"

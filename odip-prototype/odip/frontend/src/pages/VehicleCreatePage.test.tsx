@@ -168,4 +168,14 @@ describe('VehicleCreatePage — editing a record that has not loaded', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
     expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('isActive')
   })
+
+  it('stops the vehicle name at the 100-character column cap', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    const name = screen.getByPlaceholderText('e.g. Blue Van 1')
+    await user.click(name)
+    await user.paste('x'.repeat(110))
+    expect(name).toHaveAttribute('maxlength', '100')
+    expect((name as HTMLInputElement).value).toHaveLength(100)
+  })
 })
