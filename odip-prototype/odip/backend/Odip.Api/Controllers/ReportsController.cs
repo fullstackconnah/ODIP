@@ -131,7 +131,7 @@ public class ReportsController : ControllerBase
         var (f, t) = (from!.Value, to!.Value);
 
         var shifts = await _db.Shifts.AsNoTracking()
-            .Where(s => s.TenantId == tid && s.Status != ShiftStatus.Draft && s.ServiceDate >= f && s.ServiceDate <= t)
+            .Where(s => s.TenantId == tid && s.GroupActivityId == null && s.Status != ShiftStatus.Draft && s.ServiceDate >= f && s.ServiceDate <= t)
             .Select(s => new { s.ServiceDate, s.Status, Staffed = s.UserId != null })
             .ToListAsync(ct);
 

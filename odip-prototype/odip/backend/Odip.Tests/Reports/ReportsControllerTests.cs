@@ -182,7 +182,35 @@ public class ReportsControllerTests
         Assert.Equal(10.00m, row.ApprovedHours);
     }
 
+    [Fact]
+    public async Task HoursByWorker_SleepoverOnTheSpringForwardNight_Counts7Hours()
+    {
+        using var db = TestDb.Create();
+        var w = AddUser(db, "Sam", "Sleeper");
+        var night = new DateOnly(2026, 10, 3);   // Sydney clocks go 02:00 -> 03:00 overnight
+        var shift = AddShift(db, night, ShiftStatus.Completed, w.Id, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), nextDay: true, night: SleepoverType.Sleepover);
+        AddCompletion(db, shift, w, 60);
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(Rows<HoursByWorkerRowDto>(await Call(Controller(db), "hours", night, night)));
+        Assert.Equal(7.00m, row.ApprovedHours);
+    }
+
     // ---------- shift fulfilment ----------
+
+    [Fact]
+    public async Task ShiftFulfilment_GroupActivityLinesAreLeftOutOfTheFillRate()
+    {
+        using var db = TestDb.Create();
+        AddShift(db, From, ShiftStatus.Published, Guid.NewGuid());
+        var line = AddShift(db, From, ShiftStatus.Published, null);   // a group line: staff live on GroupActivityStaff, not on the shift
+        line.GroupActivityId = Guid.NewGuid();
+        await db.SaveChangesAsync();
+
+        var week = Rows<ShiftFulfilmentWeekDto>(await Call(Controller(db), "fulfilment", From, To))[0];
+
+        Assert.Equal((1, 1, 0, 100), (week.Shifts, week.Filled, week.Unstaffed, week.FillRatePercent));
+    }
 
     [Theory]
     [InlineData(2026, 10, 25, 2026, 10, 19)]   // Sunday 23:30 shift stays in the week that began Monday 19th
