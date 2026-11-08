@@ -270,7 +270,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
                       {p.timesDiffer && (
                         <p className="flex items-start gap-1 text-xs text-muted-foreground"><Clock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>Times differ from agreement {p.agreementStartTime && p.agreementEndTime ? `(${noBreak(formatShiftTimeRange(p.agreementStartTime, p.agreementEndTime))})` : ''}</span></p>
                       )}
-                      {!started && <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending || p.ratio === 'TwoToOne'} onChange={e => void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`)}>{SUPPORT_RATIOS.filter(r => r !== 'TwoToOne' || p.ratio === r).map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>}
+                      {!started && <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending || p.ratio === 'TwoToOne'} onChange={e => { if (e.target.value !== p.ratio) void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`) }}>{SUPPORT_RATIOS.filter(r => r !== 'TwoToOne' || p.ratio === r).map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>}
                     </div>
                   )
                 })}
