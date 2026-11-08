@@ -32,6 +32,7 @@ import { NumberField } from '@/components/NumberField'
 import { apiErrorCode } from '@/lib/shiftPackageErrors'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
 import { detailLabel, travelLabel } from '@/pages/portal/shift/checklist'
+import { GroupStaffReviewSection } from './GroupStaffReviewSection'
 
 const PAGE_SIZE = 50
 const DASH = '–'
@@ -485,6 +486,8 @@ export default function CompletionReviewPage() {
           ))}
         </div>
       )}
+
+      <GroupStaffReviewSection canReview={canReviewCompletions} />
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-48">

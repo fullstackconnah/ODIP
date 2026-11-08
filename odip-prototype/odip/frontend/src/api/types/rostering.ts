@@ -834,3 +834,37 @@ export interface AutoRosterApplyResultDto {
   applied: string[]
   skipped: { shiftId: string; message: string }[]
 }
+
+// ── Group activity staff review (GA PR3) ────────────────────
+
+/** One staff row awaiting review: the planned and recorded times, and the flags a coordinator needs before approving. */
+export interface GroupStaffReviewDto {
+  rowId: string
+  groupActivityId: string
+  activityTitle: string
+  serviceDate: string
+  userId: string
+  staffName: string
+  role: string | null
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  actualStart: string | null
+  actualEnd: string | null
+  breakStartedAt: string | null
+  breakEndedAt: string | null
+  timeZoneId: string | null
+  state: 'NotStarted' | 'Started' | 'Finished' | 'Approved'
+  locationCheck: LocationCheckStatus | null
+  offRoster: boolean
+  adjustmentReason: string | null
+  payrollLinked: boolean
+  participantCount: number
+}
+
+/** The review list, capped: `total` is every unapproved row that matched. */
+export interface GroupStaffReviewListDto { rows: GroupStaffReviewDto[]; total: number }
+
+export interface GroupStaffApproveResultDto { rowId: string; ok: boolean; code: string | null; message: string | null }
+
+export interface SetGroupStaffActualsDto { actualStart: string; actualEnd: string; breakStart?: string; breakEnd?: string; reason: string }

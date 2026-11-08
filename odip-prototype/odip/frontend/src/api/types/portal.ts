@@ -74,6 +74,8 @@ export interface PortalShiftsResponseDto {
   tripAssignments: PortalTripAssignmentSummaryDto[]
   /** The provider's IANA zone: the shifts' dates and times are wall clock there. */
   timeZoneId: string
+  /** The caller's group activity shifts (GA PR3); absent from an older server. */
+  activityShifts?: PortalActivityShiftDto[]
 }
 
 // ── Shift detail ──────────────────────────────────────────
@@ -323,3 +325,33 @@ export interface PortalWitnessRequestDto {
   witnessRespondedAt: string | null
   createdAt: string
 }
+
+// ── Group activity shifts (GA PR3) ──────────────────────────
+
+export interface PortalActivityParticipantDto { shiftId: string; participantId: string; name: string }
+
+export type PortalActivityState = 'NotStarted' | 'Started' | 'Finished' | 'Approved'
+
+/** A worker's row on a group activity: planned times are the row's, actual times are what Start and Finish recorded. */
+export interface PortalActivityShiftDto {
+  id: string
+  groupActivityId: string
+  title: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  location: string | null
+  role: string | null
+  state: PortalActivityState
+  actualStart: string | null
+  actualEnd: string | null
+  breakStartedAt: string | null
+  breakEndedAt: string | null
+  participants: PortalActivityParticipantDto[]
+}
+
+export interface StartActivityShiftDto { latitude?: number; longitude?: number; accuracyMetres?: number; geolocationDeclined?: boolean }
+
+/** A typed start only when the worker never tapped Start; a break only as a pair (UTC instants). */
+export interface FinishActivityShiftDto { actualStart?: string; breakStart?: string; breakEnd?: string }
