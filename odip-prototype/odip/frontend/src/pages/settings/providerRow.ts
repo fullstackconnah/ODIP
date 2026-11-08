@@ -15,6 +15,9 @@ const SERVER_CHANGED_BY_OTHER = 'Settings were changed by someone else. Reload a
 /** The server's 400 for a blank required field names the field in an errors object, not a sentence, so the foot says this. */
 const REQUIRED_FIELDS = 'Fill in the registration number, ABN, legal name and address.'
 
+/** True when the 400 body carries ASP.NET's `errors` object ({ Field: [message] }), which the foot answers with REQUIRED_FIELDS rather than the raw field message. */
+const fieldsNamed = (e: unknown) => { const errors = (e as { response?: { data?: { errors?: unknown } } })?.response?.data?.errors; return !!errors && typeof errors === 'object' && !Array.isArray(errors) }
+
 /** The contact checks run on the trimmed value and a blank is always valid. The server applies the same two rules and the same sentences (ProviderSettingsController). */
 export const contactEmailProblem = (v: string) => (v && !EMAIL_PATTERN.test(v) ? 'Enter a full email address, like office@example.com.au.' : undefined)
 
@@ -96,7 +99,7 @@ export function useProviderRow<F extends Record<string, string | boolean | numbe
         const lostUpdate = apiErrorStatus(e) === 409 && (apiErrorCode(e) === CHANGED_BY_OTHER_CODE || apiErrorMessages(e).includes(SERVER_CHANGED_BY_OTHER))
         if (lostUpdate) setRefusedAt(sentVersion ?? null)
         else void query.refetch()
-        setResult({ error: lostUpdate ? CHANGED_BY_OTHER : notSavedText(e, REQUIRED_FIELDS) })
+        setResult({ error: lostUpdate ? CHANGED_BY_OTHER : fieldsNamed(e) ? `Not saved. ${REQUIRED_FIELDS}` : notSavedText(e, REQUIRED_FIELDS) })
       },
     })
   }

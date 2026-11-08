@@ -208,6 +208,23 @@ describe('ShiftNotesSection', () => {
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'note-1', body: 'Corrected note.' })
   })
 
+  it("shows the server's message when saving an edit is refused, and the connection line for a network error", async () => {
+    const user = userEvent.setup()
+    setCurrentUser('user-1')
+    mockUseShiftNotes.mockReturnValue({ data: [makeNote({ authorUserId: 'user-1' })], isLoading: false, isError: false, refetch: mockRefetch })
+    mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 400, data: { errors: { Body: ['The field Body must be a string with a maximum length of 1000.'] } } } })
+    renderSection()
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.type(screen.getByLabelText(/edit note/i), ' more')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(await screen.findByText('The field Body must be a string with a maximum length of 1000.')).toBeInTheDocument()
+
+    mockUpdateMutateAsync.mockRejectedValueOnce(new Error('Network Error'))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(await screen.findByText("Couldn't save your changes. Check your connection and try again.")).toBeInTheDocument()
+  })
+
   describe('NOTES-02 keyword flagging', () => {
     it('shows a banner on a flagged, unacknowledged note', () => {
       mockUseShiftNotes.mockReturnValue({
