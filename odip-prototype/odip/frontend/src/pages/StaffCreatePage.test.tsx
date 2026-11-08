@@ -186,6 +186,40 @@ describe('StaffCreatePage — PP-85 specific save-failure message', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('A user with this email already exists.')
   })
 
+  it('shows a 409 save failure in the warning tone', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: false })
+    const error = { response: { status: 409, data: { success: false, errors: ['Someone else saved this staff member first.'] } } }
+    mockCreateMutateAsync.mockRejectedValue(error)
+    mockUseCreateStaff.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: true, error })
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Someone else saved this staff member first.')
+    expect(screen.getByRole('alert').className).toMatch(/warning/)
+  })
+
+  it('shows a 500 save failure in the error tone', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: false })
+    const error = { response: { status: 500, data: { success: false, errors: ['Someone else saved this staff member first.'] } } }
+    mockCreateMutateAsync.mockRejectedValue(error)
+    mockUseCreateStaff.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: true, error })
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Someone else saved this staff member first.')
+    expect(screen.getByRole('alert').className).not.toMatch(/warning/)
+  })
+
   it('falls back to the generic message when the error carries no specific text', async () => {
     const user = userEvent.setup()
     mockUsePermissions.mockReturnValue({ isCoordinator: false })

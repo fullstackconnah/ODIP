@@ -277,8 +277,9 @@ public sealed class EmploymentHeroStaffSync
             // as long as the problem does; otherwise they would stay locked out unseen.
             if (!u.IsActive && !IsLeaver(e, today))
                 problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, ArchivedButCurrent));
-            if (!await UpdateAsync(db, creator, u, e, tenantDomain, problems, ct)) continue;
-            if (await SaveOneAsync(db, users, u, ct)) log.Updated++;
+            var afterSave = new List<Problem>();
+            if (!await UpdateAsync(db, creator, u, e, tenantDomain, problems, afterSave, ct)) continue;
+            if (await SaveOneAsync(db, users, u, ct)) { log.Updated++; problems.AddRange(afterSave); }
             else problems.Add(FixInEh(e, CouldNotSave));
         }
 
@@ -320,7 +321,7 @@ public sealed class EmploymentHeroStaffSync
                 FirstName = e.FirstName!.Trim(), LastName = e.Surname!.Trim(), Email = email, AddressConfirmed = true,
                 Role = UserRole.SupportWorker, Position = Position.SupportWorker, Mobile = MobileOf(e), IsActive = true,
             }, caller: null, tenantId, ct);
-            if (staged.User is not { } created) { problems.Add(FixInEh(e, CreateRefusal(staged))); continue; }
+            if (staged.User is not { } created) { problems.Add(FixInEh(e, CreateRefusal(staged, users.Any(u => EmailIdentity.Normalise(u.Email) == email)))); continue; }
             created.TenantId = tenantId;
             created.ExternalPayrollId = Id(e);
             created.EmploymentStartDate = StartOf(e);
@@ -355,8 +356,8 @@ public sealed class EmploymentHeroStaffSync
         return problems;
     }
 
-    /// <summary>EH's values onto one linked person; returns whether anything changed. A value ODIP can't take becomes a problem and leaves the person as they were.</summary>
-    private async Task<bool> UpdateAsync(OdipDbContext db, StaffCreateService creator, User u, EhEmployee e, string? tenantDomain, List<Problem> problems, CancellationToken ct)
+    /// <summary>EH's values onto one linked person; returns whether anything changed. The email-changed item goes to <paramref name="afterSave"/>: the caller adds it only once the save has worked. A value ODIP can't take becomes a problem and leaves the person as they were.</summary>
+    private async Task<bool> UpdateAsync(OdipDbContext db, StaffCreateService creator, User u, EhEmployee e, string? tenantDomain, List<Problem> problems, List<Problem> afterSave, CancellationToken ct)
     {
         var changed = false;
         var email = EmailOf(e);
@@ -383,7 +384,7 @@ public sealed class EmploymentHeroStaffSync
                     u.SignInAddressUnconfirmed = null;   // a new address is assessed afresh
                     if (Holds(u, tenantDomain)) u.SignInAddressUnconfirmed = true;
                     changed = true;
-                    problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, $"{EmailChangedStart}{email}. " +
+                    afterSave.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, $"{EmailChangedStart}{email}. " +
                         (u.SignInAddressUnconfirmed is true ? "Confirm it on their staff page, then send a sign-in invite." : "Send them a new sign-in invite.")));
                 }
             }
@@ -449,9 +450,9 @@ public sealed class EmploymentHeroStaffSync
         return await creator.OtherOrganisationAddressErrorAsync(null, email, tenantId, ct) is null ? null : OtherOrganisationEmail;
     }
 
-    /// <summary>A refusal from StaffCreateService, as the item says it. Same-organisation addresses were matched in step 1, so "taken" means another organisation.</summary>
-    private static string CreateRefusal(StaffCreateResult staged) =>
-        staged.IsConflict || staged.Error == StaffCreateService.OtherOrganisationMessage ? OtherOrganisationEmail : $"We couldn't add them: {staged.Error}";
+    /// <summary>A refusal from StaffCreateService, as the item says it. Same-organisation addresses were matched in step 1, so "taken" means another organisation, unless a person added earlier in this run holds it.</summary>
+    private static string CreateRefusal(StaffCreateResult staged, bool takenInThisOrganisation) =>
+        staged.IsConflict && !takenInThisOrganisation || staged.Error == StaffCreateService.OtherOrganisationMessage ? OtherOrganisationEmail : $"We couldn't add them: {staged.Error}";
 
     /// <summary>Why ODIP can't take EH's name, email or mobile as they are (the column limits and the staff form's rules), or null.</summary>
     private static string? ValueProblem(EhEmployee e, string? email)
