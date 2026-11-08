@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import { closestCenter, pointerWithin, type Announcements, type CollisionDetection, type Modifier, type ScreenReaderInstructions } from '@dnd-kit/core'
 import { addDays, format, parseISO } from 'date-fns'
-import type { PublishWeekResultDto, RosterStaffRowDto, ShiftDto, ShiftStatus, StaffAvailableDayDto, StaffLeaveDto, StaffListDto } from '@/api/types'
+import type { GroupActivityDto, PublishWeekResultDto, RosterStaffRowDto, ShiftDto, ShiftStatus, StaffAvailableDayDto, StaffLeaveDto, StaffListDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatShiftTime } from '@/lib/utils'
 import { formatDayAccessibleName, formatShiftTimeRange, isUnfilledShift } from './roster'
@@ -15,8 +15,11 @@ export type DragCarry = { staffId: string; staffName: string; fromShift?: ShiftD
 /** A day of a participant's row: a drop there opens the create form, prefilled. `beside` counts the shifts the day already holds (a drop on its new-shift slot); absent for an empty day. */
 export type DayTarget = { kind: 'day'; participantId: string; participantName: string; day: string; beside?: number }
 
-/** What a carried person can land on: a shift's puck, or an empty day. */
-export type DropTarget = { kind: 'shift'; shift: ShiftDto } | DayTarget
+/** A group activity's card on a participant's day: a drop adds the carried person to the activity (add-only: it never moves them off their shift). */
+export type ActivityTarget = { kind: 'activity'; activity: GroupActivityDto; participantId: string }
+
+/** What a carried person can land on: a shift's puck, an activity's card, or an empty day. */
+export type DropTarget = { kind: 'shift'; shift: ShiftDto } | ActivityTarget | DayTarget
 
 export type DropOutcome =
   | { kind: 'none' }                                                              // over nothing, their own puck, or a shift they already hold
@@ -25,6 +28,7 @@ export type DropOutcome =
   | { kind: 'move'; from: ShiftDto; shift: ShiftDto; mode: 'Move' | 'Replace' }   // off a puck onto a hole: Move onto Needs staff, Replace an on-leave worker
   | { kind: 'prompt'; shift: ShiftDto; canSwap: boolean }                       // onto a filled puck: Replace, Swap (only when carried off a puck) or Cancel
   | { kind: 'create'; participantId: string; day: string }
+  | { kind: 'join'; activity: GroupActivityDto }                                 // onto an activity's card: add the person to it
 
 /** While a drop's request is out: the target reads "Assigning {first name}…", a move's source fades, and every drag waits. */
 export type PendingDrop = { targetId: string; sourceId?: string; staffName: string }
@@ -67,6 +71,11 @@ export const hoursText = (n: number) => (Number.isInteger(n) ? String(n) : n.toF
 export function dropOutcome(carry: DragCarry, target: DropTarget | undefined): DropOutcome {
   if (!target) return { kind: 'none' }
   if (target.kind === 'day') return { kind: 'create', participantId: target.participantId, day: target.day }
+  if (target.kind === 'activity') {
+    const { activity } = target
+    if (isLockedShift(activity)) return { kind: 'locked', status: activity.status }
+    return activity.staff.some(row => row.staffId === carry.staffId) ? { kind: 'none' } : { kind: 'join', activity }
+  }
   const { shift } = target
   if (isLockedShift(shift)) return { kind: 'locked', status: shift.status }
   if (shift.id === carry.fromShift?.id || shift.staffId === carry.staffId) return { kind: 'none' }
@@ -84,6 +93,7 @@ export function carriedLine(carry: DragCarry, outcome: DropOutcome): string | nu
   switch (outcome.kind) {
     case 'locked': return `${lockedWords(outcome.status)}: can't change`
     case 'create': return `New shift, ${format(parseISO(outcome.day), 'EEE d')}`
+    case 'join': return outcome.activity.status === 'Published' ? `Published: tells ${firstName(carry.staffName)}` : `Add to ${outcome.activity.title}`
     case 'prompt': return outcome.canSwap ? 'Replace or swap…' : `Replace ${firstName(outcome.shift.staffName)}…`
     case 'assign':
     case 'move':
@@ -126,7 +136,7 @@ export const rosterCollision: CollisionDetection = args => {
     if (!slot || slotTarget?.kind !== 'day' || !slotTarget.beside) return nearest
     const inCell = nearest.filter(hit => {
       const container = droppableContainers.find(c => c.id === hit.id)
-      return (container?.data?.current as DropTarget | undefined)?.kind === 'shift' && slot.node.current?.parentElement?.contains(container?.node.current ?? null)
+      return ['shift', 'activity'].includes((container?.data?.current as DropTarget | undefined)?.kind ?? '') && slot.node.current?.parentElement?.contains(container?.node.current ?? null)
     })
     return inCell.length > 0 ? inCell : nearest
   }
@@ -157,6 +167,7 @@ export const keepInWindow: Modifier = ({ transform, overlayNodeRect, draggingNod
 const spokenRange = (s: ShiftDto) => `${formatShiftTime(s.startTime)} to ${formatShiftTime(s.endTime)}`
 /** "Mia Chen, Tuesday 9am to 3pm" */
 const shiftSpeech = (s: ShiftDto) => `${s.participantName}, ${format(parseISO(s.serviceDate), 'EEEE')} ${spokenRange(s)}`
+const activitySpokenRange = (a: GroupActivityDto) => `${formatShiftTime(a.startTime)} to ${formatShiftTime(a.endTime)}`
 const shortDay = (iso: string) => format(parseISO(iso), 'EEE d MMM')
 const CANCELLED = 'Cancelled. Nothing changed.'
 
@@ -170,6 +181,11 @@ const targetOf = (over: { data: { current?: unknown } } | null) => over?.data.cu
 function overSentence(carry: DragCarry, target: DropTarget | undefined): string {
   if (!target) return 'Not over a shift.'
   if (target.kind === 'day') return `Over ${target.participantName}, ${formatDayAccessibleName(target.day)}, ${target.beside ? `beside ${plural(target.beside, 'shift')}` : 'empty'}. Dropping starts a new shift.`
+  if (target.kind === 'activity') {
+    const { activity } = target
+    if (isLockedShift(activity)) return `Over ${activity.title}, ${lockedWords(activity.status).toLowerCase()}. It can't be changed.`
+    return `Over ${activity.title}, ${activitySpokenRange(activity)}. ${dropOutcome(carry, target).kind === 'join' ? `Drop to add ${firstName(carry.staffName)}.` : `${firstName(carry.staffName)} is already on it.`}`
+  }
   const { shift } = target
   if (isLockedShift(shift)) return `Over a ${lockedWords(shift.status).toLowerCase()} shift. It can't be changed.`
   const where = `Over ${shift.participantName}, ${formatDayAccessibleName(shift.serviceDate)}, ${spokenRange(shift)}`
@@ -198,6 +214,11 @@ export function assignedSentence(carry: DragCarry, shift: ShiftDto): string {
   return `${carry.staffName} assigned to ${shiftSpeech(shift)}.${shift.status === 'Published' ? ` ${firstName(carry.staffName)} has been notified.` : ''}`
 }
 
+/** "Sam Wilson added to Bowling, Monday 10am to 2pm. Sam has been notified." (the last sentence only on a Published activity) */
+export function joinedSentence(carry: DragCarry, activity: GroupActivityDto): string {
+  return `${carry.staffName} added to ${activity.title}, ${format(parseISO(activity.serviceDate), 'EEEE')} ${activitySpokenRange(activity)}.${activity.status === 'Published' ? ` ${firstName(carry.staffName)} has been notified.` : ''}`
+}
+
 /** "Sam Wilson moved to Mia Chen, Tuesday 9am to 3pm. Monday 9am to 3pm now needs staff." */
 export function movedSentence(carry: DragCarry, to: ShiftDto): string {
   const from = carry.fromShift
@@ -221,7 +242,7 @@ export function publishedShiftSentence(shift: ShiftDto): string {
 /** "Published 14 shifts. 9 people notified." and, when a blocking problem kept some back (gap 2), how many stayed in draft. */
 export function publishedSentence(result: PublishWeekResultDto, requested?: number): string {
   const kept = result.skipped > 0
-    ? ` ${plural(result.skipped, 'shift')} stayed in draft: a rule that can't be overridden stops ${result.skipped === 1 ? 'it' : 'them'}.`
+    ? ` ${plural(result.skipped, 'shift')} stayed in draft: a rule that can't be overridden, or an archived worker, stops ${result.skipped === 1 ? 'it' : 'them'}.`
     : ''
   // Chosen shifts someone published, deleted or unstaffed since the pick are left alone by the server (R3).
   const changed = requested === undefined ? 0 : requested - result.published - result.skipped

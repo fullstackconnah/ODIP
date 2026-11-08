@@ -369,7 +369,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         </div>
 
         <FormField label="Notes">
-          <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this pattern" />
+          <textarea rows={3} maxLength={2000} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this pattern" />
         </FormField>
 
         {error && !error.noLength && (

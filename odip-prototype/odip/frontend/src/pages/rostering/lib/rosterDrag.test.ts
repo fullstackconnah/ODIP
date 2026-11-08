@@ -1,8 +1,8 @@
 import { afterEach, describe, it, expect } from 'vitest'
-import { makeShift, makeStaffRow, makeUnfilledShift } from '../test-fixtures'
+import { makeActivity, makeShift, makeStaffRow, makeUnfilledShift } from '../test-fixtures'
 import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
 import {
-  assignedSentence, carriedLine, dropOutcome, keepInWindow, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
+  assignedSentence, carriedLine, dropOutcome, joinedSentence, keepInWindow, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
   staffWeekHours, swappedSentence, type DragCarry, type DropTarget,
   hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapOptionName, type PickRow,
 } from './rosterDrag'
@@ -229,7 +229,7 @@ describe('sentences', () => {
     expect(swappedSentence(onShift(mon), tue)).toBe('Swapped: Sam is on Mia Chen, Tuesday 9am to 3pm and Alex on Jo Park, Monday 9am to 3pm.')
     expect(publishedSentence({ published: 14, notified: 9, unfilled: 3, skipped: 0 })).toBe('Published 14 shifts. 9 people notified.')
     expect(publishedSentence({ published: 1, notified: 1, unfilled: 0, skipped: 2 }))
-      .toBe("Published 1 shift. 1 person notified. 2 shifts stayed in draft: a rule that can't be overridden stops them.")
+      .toBe("Published 1 shift. 1 person notified. 2 shifts stayed in draft: a rule that can't be overridden, or an archived worker, stops them.")
   })
 
   it('publishedSentence names the chosen shifts that had changed and were left alone (R3)', () => {
@@ -454,5 +454,33 @@ describe('pickerGroups availability', () => {
   it('adds "prefers this day" to a Preferred option name', () => {
     const groups = pickerGroups(target, [person('amy')], [], [], none, [day('amy', '2026-08-18', true)])
     expect(pickOptionName(groups.available[0], 38)).toContain('prefers this day')
+  })
+})
+
+describe('joining a group activity', () => {
+  const activity = makeActivity({ id: 'act', title: 'Bowling', status: 'Draft' })
+  const target: DropTarget = { kind: 'activity', activity, participantId: 'participant-1' }
+
+  it('joins from the strip and from a puck, and the puck keeps its shift (add-only)', () => {
+    expect(dropOutcome(sam, target)).toEqual({ kind: 'join', activity })
+    expect(dropOutcome(onShift(), target)).toEqual({ kind: 'join', activity })
+  })
+
+  it('does nothing for someone already on it, and refuses a cancelled or started activity', () => {
+    expect(dropOutcome({ staffId: 'staff-1', staffName: 'Alex Rivera' }, target)).toEqual({ kind: 'none' })
+    expect(dropOutcome(sam, { ...target, activity: makeActivity({ status: 'Cancelled' }) })).toEqual({ kind: 'locked', status: 'Cancelled' })
+    expect(dropOutcome(sam, { ...target, activity: makeActivity({ status: 'InProgress' }) })).toEqual({ kind: 'locked', status: 'InProgress' })
+  })
+
+  it('says the outcome before the drop, and tells the worker of a Published activity', () => {
+    expect(carriedLine(sam, { kind: 'join', activity })).toBe('Add to Bowling')
+    expect(carriedLine(sam, { kind: 'join', activity: makeActivity({ title: 'Bowling', status: 'Published' }) })).toBe('Published: tells Sam')
+  })
+
+  it('announces the card and the result in plain words', () => {
+    const active = { id: 'a', data: { current: sam } } as never
+    expect(rosterAnnouncements.onDragOver({ active, over: { id: 'o', data: { current: target } } as never })).toBe('Over Bowling, 10am to 2pm. Drop to add Sam.')
+    expect(joinedSentence(sam, makeActivity({ status: 'Published' }))).toBe('Sam Wilson added to Bowling, Monday 10am to 2pm. Sam has been notified.')
+    expect(joinedSentence(sam, activity)).toBe('Sam Wilson added to Bowling, Monday 10am to 2pm.')
   })
 })
