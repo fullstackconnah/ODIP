@@ -19,7 +19,7 @@ const row = (over: Partial<GroupStaffReviewDto> = {}): GroupStaffReviewDto => ({
   rowId: 'r1', groupActivityId: 'ga1', activityTitle: 'Bowling', serviceDate: '2026-11-16', userId: 'u1', staffName: 'Wendy Worker', role: null,
   startTime: '09:00:00', endTime: '15:00:00', endsNextDay: false,
   actualStart: '2026-11-15T22:02:00Z', actualEnd: '2026-11-16T04:10:00Z', breakStartedAt: null, breakEndedAt: null, timeZoneId: 'Australia/Sydney',
-  state: 'Finished', locationCheck: null, offRoster: false, adjustmentReason: null, payrollLinked: true, participantCount: 2,
+  state: 'Finished', locationCheck: null, offRoster: false, adjustmentReason: null, payrollLinked: true, participantCount: 2, didNotAttendCount: 0,
   ...over,
 })
 
@@ -92,5 +92,40 @@ describe('GroupStaffReviewSection', () => {
     expect(saveMutate.mock.calls[0][0].data).toMatchObject({ actualStart: '2026-11-15T22:02:00Z', actualEnd: '2026-11-16T04:10:00Z', reason: 'Phone died' })
     expect(within(modal).getByRole('alert')).toHaveTextContent('These times are over 24 hours. Record times first.')
     expect(within(modal).getByLabelText('Finish')).toHaveAttribute('aria-invalid', 'true')
+  })
+})
+
+describe('GroupStaffReviewSection attendance', () => {
+  const APPROVE_LINE = 'Approving marks everyone still on this activity as attended.'
+
+  it("summarises who is attending under the activity, and who did not come only when someone did not", () => {
+    show([row({ participantCount: 2, didNotAttendCount: 1 }), row({ rowId: 'r2', groupActivityId: 'ga2', activityTitle: 'Swimming', participantCount: 3 })])
+    expect(screen.getAllByText("2 attending · 1 didn't attend").length).toBeGreaterThan(0)
+    expect(screen.getAllByText('3 attending').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/0 didn't attend/)).toBeNull()
+  })
+
+  it('says approving completes the activity only on a Finished row no other listed row shares', () => {
+    show([row(), row({ rowId: 'r2', groupActivityId: 'ga2', activityTitle: 'Swimming', staffName: 'Sam Started', state: 'Started', actualEnd: null })])
+    expect(screen.getAllByText(APPROVE_LINE).length).toBeGreaterThan(0)
+  })
+
+  it('leaves the line off when another listed row is on the same activity, or the row is not Finished', () => {
+    show([row(), row({ rowId: 'r2', staffName: 'Fred Finished' }), row({ rowId: 'r3', groupActivityId: 'ga3', staffName: 'Sam Started', state: 'Started', actualEnd: null })])
+    expect(screen.queryByText(APPROVE_LINE)).toBeNull()
+  })
+
+  it('adds the same sentence to the Approve selected confirm when a selected row completes its activity', () => {
+    show([row(), row({ rowId: 'r2', groupActivityId: 'ga2', activityTitle: 'Swimming', staffName: 'Fred Finished' })])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select all/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Approve selected \(2\)/ }))
+    expect(within(screen.getByRole('alertdialog')).getByText('Approving marks everyone still on these activities as attended.')).toBeInTheDocument()
+  })
+
+  it('keeps the confirm unchanged when no selected row completes its activity', () => {
+    show([row(), row({ rowId: 'r2', staffName: 'Fred Finished' })])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select all/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Approve selected \(2\)/ }))
+    expect(within(screen.getByRole('alertdialog')).queryByText(/marks everyone still on/)).toBeNull()
   })
 })
