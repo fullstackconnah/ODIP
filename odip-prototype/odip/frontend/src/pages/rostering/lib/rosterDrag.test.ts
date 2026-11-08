@@ -229,7 +229,7 @@ describe('sentences', () => {
     expect(swappedSentence(onShift(mon), tue)).toBe('Swapped: Sam is on Mia Chen, Tuesday 9am to 3pm and Alex on Jo Park, Monday 9am to 3pm.')
     expect(publishedSentence({ published: 14, notified: 9, unfilled: 3, skipped: 0 })).toBe('Published 14 shifts. 9 people notified.')
     expect(publishedSentence({ published: 1, notified: 1, unfilled: 0, skipped: 2 }))
-      .toBe("Published 1 shift. 1 person notified. 2 shifts stayed in draft: a rule that can't be overridden stops them.")
+      .toBe("Published 1 shift. 1 person notified. 2 shifts stayed in draft: a rule that can't be overridden, or an archived worker, stops them.")
   })
 
   it('publishedSentence names the chosen shifts that had changed and were left alone (R3)', () => {
