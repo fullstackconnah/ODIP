@@ -84,9 +84,10 @@ async function open(browser, vp, { periodsAndCheck, reviews, flag = true }) {
 async function payroll(browser, vp, data, file, tag) {
   const { context, page } = await open(browser, vp, { periodsAndCheck: data })
   await page.goto(`${BASE_URL}/rostering/payroll`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  const toggle = page.getByRole('button', { name: 'Show shifts: Wendy Worker' })
+  // A worker with any unsent line opens by default; only a closed one needs the click.
+  const toggle = page.getByRole('button', { name: /^(Show|Hide) shifts: Wendy Worker$/ })
   await toggle.waitFor({ timeout: 60_000 })
-  await toggle.click()
+  if (/^Show/.test(await toggle.getAttribute('aria-label'))) await toggle.click()
   const list = page.locator('ul[id^="shifts-"]')
   await list.waitFor()
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
