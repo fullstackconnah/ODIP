@@ -345,6 +345,11 @@ describe('PatternSlideOver as a dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Edit pattern' })).toBeInTheDocument()
   })
 
+  it('limits the notes to the 2000 characters the server accepts', () => {
+    render(<PatternSlideOver {...props} target={{ mode: 'create' }} onClose={noop} />)
+    expect(screen.getByPlaceholderText('Optional notes for this pattern')).toHaveAttribute('maxLength', '2000')
+  })
+
   it('Escape closes an untouched panel straight away', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
