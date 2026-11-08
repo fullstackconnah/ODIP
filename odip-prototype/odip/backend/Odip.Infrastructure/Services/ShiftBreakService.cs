@@ -126,6 +126,9 @@ public sealed class ShiftBreakService
 
     public async Task<ShiftBreakResult> EndAsync(ShiftCompletion completion, Guid breakId, CancellationToken ct, DateTime? endedAtUtc = null)
     {
+        // Same shift row lock as Start Break and Finish, so an end cannot land on a break that Finish has already read as running.
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
+        if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
         var breaks = await LoadAsync(completion.Id, ct);
         var target = breaks.FirstOrDefault(b => b.Id == breakId);
         if (target is null) return new ShiftBreakResult(ShiftBreakOutcome.NotFound);
@@ -144,6 +147,7 @@ public sealed class ShiftBreakService
         target.EndedAt = end;
         target.UpdatedAt = now;
         await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
         return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);
     }
 

@@ -475,7 +475,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
 
         foreach (var (item, amount) in paying)
         {
-            if (item.Status != ClaimLineItemStatus.Paid) item.PaidAt = clock.GetUtcNow().UtcDateTime;
+            item.PaidAt = clock.GetUtcNow().UtcDateTime;
             item.Status = ClaimLineItemStatus.Paid;
             item.PaidAmount = amount;
         }
