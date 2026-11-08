@@ -188,6 +188,16 @@ describe('RiskEntriesSection', () => {
     })
   })
 
+  it('shows a support worker Edit but no Delete, because only Admin and Coordinator can remove a risk', () => {
+    setUserRole('SupportWorker')
+    mockUseParticipantRiskEntries.mockReturnValue({ data: [makeEntry()], isLoading: false })
+
+    render(<RiskEntriesSection participantId="participant-1" />)
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
   it('deletes a risk entry after confirmation', async () => {
     const user = userEvent.setup()
     const entry = makeEntry()

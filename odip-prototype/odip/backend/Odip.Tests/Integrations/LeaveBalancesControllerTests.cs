@@ -97,6 +97,21 @@ public class LeaveBalancesControllerTests
         Assert.Single(eh.Requests, r => r.RequestUri!.AbsolutePath == Path);
     }
 
+    [Fact]
+    public async Task A_deactivated_caller_is_NotLinked_without_calling_EH()
+    {
+        var (db, _, tenant, sam) = await OrganisationAsync();
+        await using var _ = db;
+        sam.IsActive = false;
+        await db.SaveChangesAsync();
+        var eh = Eh();
+
+        var data = Data(await Controller(db, tenant, sam.Id, eh).Mine(CancellationToken.None));
+
+        Assert.Equal(LeaveBalancesDto.NotLinked, data.Status);
+        Assert.Empty(eh.Requests);
+    }
+
     [Theory]
     [InlineData(false, "42", LeaveBalancesDto.NotConnected)]
     [InlineData(true, null, LeaveBalancesDto.NotLinked)]

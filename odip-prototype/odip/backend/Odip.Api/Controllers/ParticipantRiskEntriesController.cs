@@ -13,8 +13,8 @@ namespace Odip.Api.Controllers;
 /// INTAKE-09 — potential risks in supporting a participant, categorised by who is at risk (the
 /// participant, other participants, the public, or staff). Shape (routes, role gate, active/
 /// inactive handling, hard-delete) deliberately mirrors <see cref="ParticipantRoutinesController"/>:
-/// like routines, this is not a compliance record, so a DELETE endpoint hard-removes rather than
-/// archiving. A new participant's risk rows are instead created transactionally via
+/// like routines, this is not a compliance record. Unlike routines (which retire on DELETE), a DELETE here hard-removes the row,
+/// and only Admin and Coordinator may call it. A new participant's risk rows are instead created transactionally via
 /// <see cref="ParticipantsController.Create"/> (<see cref="CreateParticipantDto.RiskEntries"/>) —
 /// this controller is the write path for everything after that, i.e. edit-mode.
 /// </summary>
@@ -96,7 +96,7 @@ public class ParticipantRiskEntriesController : ControllerBase
     }
 
     [HttpDelete("participants/risk-entries/{id:guid}")]
-    [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
         var entry = await _db.ParticipantRiskEntries.FirstOrDefaultAsync(r => r.Id == id, ct);

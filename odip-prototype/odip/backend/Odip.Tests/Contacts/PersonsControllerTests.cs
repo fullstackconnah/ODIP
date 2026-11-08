@@ -116,6 +116,104 @@ public class PersonsControllerTests
         Assert.Equal("0412 999 999", body.Data!.Mobile);
     }
 
+    // 02:00 UTC on 8 Nov 2026 is 13:00 on 8 Nov in Sydney, so tomorrow there is 9 Nov.
+    private sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => new(2026, 11, 8, 2, 0, 0, TimeSpan.Zero); }
+
+    private static CreatePersonDto Contact(string? email = null, DateOnly? dob = null) => new() { FirstName = "Karen", LastName = "Johnson", Email = email, DateOfBirth = dob };
+
+    [Theory]
+    [InlineData("x")]
+    [InlineData("karen@")]
+    public async Task Create_InvalidEmail_IsRefusedAndSavesNothing(string email)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        var result = await new PersonsController(db, null, new FixedClock()).Create(Contact(email), CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Enter an email address like name@example.com.", Assert.Single(Assert.IsType<ApiResponse<PersonDto>>(bad.Value).Errors!));
+        Assert.Empty(db.People);
+    }
+
+    [Theory]
+    [InlineData("karen@example.com")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task Create_ValidOrBlankEmail_Saves(string? email)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        var result = await new PersonsController(db, null, new FixedClock()).Create(Contact(email), CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(email, Assert.Single(db.People).Email);
+    }
+
+    [Fact]
+    public async Task Create_DateOfBirthTomorrowInSydney_IsRefusedAndSavesNothing_TodaySaves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new PersonsController(db, null, new FixedClock());
+
+        var tomorrow = await controller.Create(Contact(dob: new DateOnly(2026, 11, 9)), CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(tomorrow.Result);
+        Assert.Equal("Choose a date of birth that isn't in the future.", Assert.Single(Assert.IsType<ApiResponse<PersonDto>>(bad.Value).Errors!));
+        Assert.Empty(db.People);
+
+        var today = await controller.Create(Contact(dob: new DateOnly(2026, 11, 8)), CancellationToken.None);
+        Assert.IsType<CreatedAtActionResult>(today.Result);
+        Assert.Single(db.People);
+    }
+
+    [Fact]
+    public async Task Update_ChangedToAnInvalidEmailOrFutureDob_IsRefusedAndKeepsTheStoredRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson", Email = "karen@example.com" };
+        db.People.Add(person);
+        db.SaveChanges();
+        var controller = new PersonsController(db, null, new FixedClock());
+
+        Assert.IsType<BadRequestObjectResult>((await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Karen", LastName = "Johnson", Email = "nope" }, CancellationToken.None)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Karen", LastName = "Johnson", Email = "karen@example.com", DateOfBirth = new DateOnly(2026, 11, 9) }, CancellationToken.None)).Result);
+
+        var stored = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(("karen@example.com", null), (stored.Email, stored.DateOfBirth));
+    }
+
+    [Fact]
+    public async Task Update_NameOnly_SavesWhenTheStoredDobIsAlreadyInTheFuture_AChangedFutureDobStillRefused()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var future = new DateOnly(2026, 11, 9);
+        var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson", DateOfBirth = future };
+        db.People.Add(person);
+        db.SaveChanges();
+        var controller = new PersonsController(db, null, new FixedClock());
+
+        Assert.IsType<OkObjectResult>((await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Kay", LastName = "Johnson", DateOfBirth = future }, CancellationToken.None)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Kay", LastName = "Johnson", DateOfBirth = future.AddDays(1) }, CancellationToken.None)).Result);
+
+        var stored = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(("Kay", future), (stored.FirstName, stored.DateOfBirth));
+    }
+
+    [Fact]
+    public async Task Update_NotesOnly_SavesWhenTheStoredEmailIsAlreadyInvalid()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson", Email = "legacy-not-an-email" };
+        db.People.Add(person);
+        db.SaveChanges();
+        var controller = new PersonsController(db, null, new FixedClock());
+
+        var result = await controller.Update(person.Id, new UpdatePersonDto { FirstName = "Karen", LastName = "Johnson", Email = "legacy-not-an-email", Notes = "Prefers texts" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var stored = await db.People.AsNoTracking().SingleAsync();
+        Assert.Equal(("legacy-not-an-email", "Prefers texts"), (stored.Email, stored.Notes));
+    }
+
     [Fact]
     public async Task GetAll_TenantScoped_DoesNotReturnOtherTenantsPeople()
     {
