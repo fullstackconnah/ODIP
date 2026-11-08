@@ -220,6 +220,19 @@ public class BookingsController : ControllerBase
             }));
     }
 
+    /// <summary>Confirming a booking's insurance (PUT or PATCH) completes its open InsuranceConfirmation task. Saved with the caller's SaveChanges.</summary>
+    private async Task CompleteInsuranceTaskAsync(Guid bookingId, CancellationToken ct)
+    {
+        var insuranceTask = await _db.BookingTasks
+            .FirstOrDefaultAsync(t => t.ParticipantBookingId == bookingId
+                && t.TaskType == TaskType.InsuranceConfirmation
+                && t.Status != TaskItemStatus.Completed
+                && t.Status != TaskItemStatus.Cancelled, ct);
+        if (insuranceTask == null) return;
+        insuranceTask.Status = TaskItemStatus.Completed;
+        insuranceTask.CompletedDate = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+    }
+
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Update(Guid id, [FromBody] UpdateBookingDto dto, CancellationToken ct)
@@ -242,20 +255,7 @@ public class BookingsController : ControllerBase
         b.InsuranceStatus = dto.InsuranceStatus;
         b.UpdatedAt = DateTime.UtcNow;
 
-        // Auto-complete insurance task when status changes to Confirmed
-        if (dto.InsuranceStatus == InsuranceStatus.Confirmed)
-        {
-            var insuranceTask = await _db.BookingTasks
-                .FirstOrDefaultAsync(t => t.ParticipantBookingId == id
-                    && t.TaskType == TaskType.InsuranceConfirmation
-                    && t.Status != TaskItemStatus.Completed
-                    && t.Status != TaskItemStatus.Cancelled, ct);
-            if (insuranceTask != null)
-            {
-                insuranceTask.Status = TaskItemStatus.Completed;
-                insuranceTask.CompletedDate = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-            }
-        }
+        if (dto.InsuranceStatus == InsuranceStatus.Confirmed) await CompleteInsuranceTaskAsync(id, ct);
 
         await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
@@ -292,6 +292,7 @@ public class BookingsController : ControllerBase
         if (dto.BookingStatus.HasValue) b.BookingStatus = dto.BookingStatus.Value;
         if (dto.InsuranceStatus.HasValue) b.InsuranceStatus = dto.InsuranceStatus.Value;
         if (dto.PaymentStatus.HasValue) b.PaymentStatus = dto.PaymentStatus.Value;
+        if (dto.InsuranceStatus == InsuranceStatus.Confirmed) await CompleteInsuranceTaskAsync(id, ct);
 
         b.UpdatedAt = DateTime.UtcNow;
         await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);

@@ -349,4 +349,30 @@ public class BookingsControllerTests
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.False(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
     }
+
+    // H44-2: confirming insurance with PATCH completes the open InsuranceConfirmation task, as PUT does.
+    [Fact]
+    public async Task Patch_InsuranceConfirmed_CompletesTheInsuranceTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        var task = new BookingTask { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantBookingId = b.Id, TaskType = TaskType.InsuranceConfirmation, Title = "Confirm travel insurance", Status = TaskItemStatus.NotStarted };
+        db.BookingTasks.Add(task);
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Patch(b.Id, new PatchBookingDto { InsuranceStatus = InsuranceStatus.Confirmed }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.BookingTasks.AsNoTracking().SingleAsync(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.Completed, saved.Status);
+        Assert.NotNull(saved.CompletedDate);
+    }
+
+    private static UpdateBookingDto UpdateDto(ParticipantBooking b, DateTime? expectedUpdatedAt = null, DateOnly? coverStart = null, DateOnly? coverEnd = null, string? cancellationReason = null) => new()
+    {
+        TripInstanceId = b.TripInstanceId, ParticipantId = b.ParticipantId, BookingStatus = b.BookingStatus,
+        PaymentStatus = PaymentStatus.NotInvoiced, ExpectedUpdatedAt = expectedUpdatedAt,
+        InsuranceCoverageStart = coverStart, InsuranceCoverageEnd = coverEnd, CancellationReason = cancellationReason,
+    };
 }
