@@ -242,7 +242,7 @@ export function publishedShiftSentence(shift: ShiftDto): string {
 /** "Published 14 shifts. 9 people notified." and, when a blocking problem kept some back (gap 2), how many stayed in draft. */
 export function publishedSentence(result: PublishWeekResultDto, requested?: number): string {
   const kept = result.skipped > 0
-    ? ` ${plural(result.skipped, 'shift')} stayed in draft: a rule that can't be overridden stops ${result.skipped === 1 ? 'it' : 'them'}.`
+    ? ` ${plural(result.skipped, 'shift')} stayed in draft: a rule that can't be overridden, or an archived worker, stops ${result.skipped === 1 ? 'it' : 'them'}.`
     : ''
   // Chosen shifts someone published, deleted or unstaffed since the pick are left alone by the server (R3).
   const changed = requested === undefined ? 0 : requested - result.published - result.skipped
