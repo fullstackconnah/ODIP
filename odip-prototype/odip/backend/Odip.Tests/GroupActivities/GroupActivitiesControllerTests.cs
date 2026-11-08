@@ -344,6 +344,29 @@ public class GroupActivitiesControllerTests
     }
 
     [Fact]
+    public async Task RemoveStaff_RowGoneBetweenLoadAndSave_404_NotAConcurrency500()
+    {
+        var fx = new GroupActivityFixture();
+        var a = fx.AddActivity();
+        var other = fx.AddUser("Olly");
+        var dto = GroupActivityFixture.Body(await fx.Controller().AddStaff(a.Id, new AddGroupStaffDto { StaffId = fx.AddUser().Id }, default), 200);
+        GroupActivityFixture.Body(await fx.Controller().AddStaff(a.Id, new AddGroupStaffDto { StaffId = other.Id }, default), 200);
+        var rowId = dto.Staff.Single(r => r.StaffId != other.Id).Id;
+        // The second coordinator loaded the row, then the first removed it before the second one saved.
+        var db = fx.Fresh();
+        var removed = false;
+        db.ChangeTracker.Tracked += (_, e) =>
+        {
+            if (removed || e.Entry.Entity is not GroupActivityStaff row || row.Id != rowId) return;
+            removed = true;
+            fx.Seed.GroupActivityStaff.Remove(fx.Seed.GroupActivityStaff.Single(r => r.Id == rowId));
+            fx.Seed.SaveChanges();
+        };
+        Assert.Equal("GA_STAFF_ROW_NOT_FOUND", GroupActivityFixture.Error(await fx.Controller(db).RemoveStaff(a.Id, rowId, default), 404));
+        Assert.Equal(1, await fx.Seed.GroupActivityStaff.CountAsync());
+    }
+
+    [Fact]
     public async Task Cancel_DetachesShifts_KeepsStaffRows_AndIsIdempotent()
     {
         var fx = new GroupActivityFixture();
