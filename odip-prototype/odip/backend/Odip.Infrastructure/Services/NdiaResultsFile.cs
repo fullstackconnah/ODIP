@@ -29,11 +29,15 @@ public static class NdiaResultsFile
     public static ResultsParse Parse(byte[] bytes)
     {
         List<IReadOnlyList<string>> records;
-        try { records = ImportCsvReader.Read(bytes).Records; }
+        int nonBlank;
+        try { (records, nonBlank) = ImportCsvReader.Read(bytes); }
         catch (ImportException)
         {
             return Refuse("This file isn't readable text. Download the results file from the portal again and upload it unchanged.");
         }
+        // The reader keeps only the first MaxRows data rows; applying those and dropping the rest would leave claim lines pending with no word why.
+        if (nonBlank - 1 > ImportFileReader.MaxRows)
+            return Refuse(FormattableString.Invariant($"This results file has {nonBlank - 1:N0} rows; the importer reads up to {ImportFileReader.MaxRows:N0}. Split it into smaller files and import each."));
 
         var headerIndex = records.FindIndex(r => r.Count > 0);
         if (headerIndex < 0) return Refuse("We couldn't read this results file. It has no rows.");
