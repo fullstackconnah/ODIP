@@ -462,13 +462,16 @@ public class LeaveController : ControllerBase
         _ => "This request has already been decided.",
     };
 
+    private const string TooFarMessage = "Choose an end date within 5 years of the start.";
+
     internal static string? ValidateLeaveDates(DateOnly start, DateOnly end) =>
-        end < start ? "End date must be on or after the start date." : null;
+        end < start ? "End date must be on or after the start date." : end > start.AddYears(5) ? TooFarMessage : null;
 
     internal static string? ValidateRecurringWindow(TimeOnly start, TimeOnly end, DateOnly effectiveFrom, DateOnly? effectiveTo)
     {
         if (start >= end) return "Start time must be before end time.";
         if (effectiveTo.HasValue && effectiveTo.Value < effectiveFrom) return "Effective-to must be on or after effective-from.";
+        if (effectiveTo.HasValue && effectiveTo.Value > effectiveFrom.AddYears(5)) return TooFarMessage;
         return null;
     }
 
