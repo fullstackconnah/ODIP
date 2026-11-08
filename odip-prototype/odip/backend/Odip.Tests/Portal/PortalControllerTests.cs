@@ -153,6 +153,27 @@ public class PortalControllerTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
+    public async Task GetMyShifts_DeactivatedCaller_IsRefusedLikeAMissingUser_AnActiveOneStillReads()
+    {
+        var (db, tenant) = CreateDb();
+        var gone = SeedUser(db, "Ben", "Turner");
+        var kept = SeedUser(db, "Cara", "Lee");
+        var participant = SeedParticipant(db);
+        SeedShift(db, participant.Id, gone.Id);
+        SeedShift(db, participant.Id, kept.Id);
+        gone.IsActive = false;
+        db.SaveChanges();
+
+        var goneBody = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(
+            (await MakeController(db, tenant.Object, gone.Id).GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None)).Result).Value);
+        var keptBody = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(
+            (await MakeController(db, tenant.Object, kept.Id).GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None)).Result).Value);
+
+        Assert.Empty(goneBody.Data!.Shifts);
+        Assert.Single(keptBody.Data!.Shifts);
+    }
+
+    [Fact]
     public async Task GetMyShifts_ReturnsOnlyCallersOwnShifts()
     {
         var (db, tenant) = CreateDb();

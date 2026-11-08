@@ -184,6 +184,9 @@ export function usePermissions() {
      */
     canWriteRisks: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
+    /** Removing a risk entry hard-deletes it, so it is narrower than writing one. Mirrors ParticipantRiskEntriesController.Delete exactly. */
+    canDeleteRisks: isSuperAdmin || isAdmin || isCoordinator,
+
     /**
      * Restrictive practice register entries carry authorisation/compliance information — same
      * clinical/coordination gate as medication management, narrower than routines/notes.
