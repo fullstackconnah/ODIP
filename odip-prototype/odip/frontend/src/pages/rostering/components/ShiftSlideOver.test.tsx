@@ -2198,3 +2198,28 @@ describe('ShiftSlideOver: Make a group activity', () => {
     expect(screen.queryByRole('button', { name: 'Make a group activity' })).not.toBeInTheDocument()
   })
 })
+
+describe('ShiftSlideOver: a failed staff or participant list', () => {
+  const renderCreate = (props: Partial<React.ComponentProps<typeof ShiftSlideOver>> = {}) =>
+    render(<ShiftSlideOver target={{ mode: 'create' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} {...props} />)
+
+  it('says the staff list failed, in place of the Staff picker, and retries it', async () => {
+    const retry = vi.fn()
+    renderCreate({ loadFailed: { staff: retry } })
+    expect(screen.getByText(/Couldn't load this staff list/)).toBeInTheDocument()
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(retry).toHaveBeenCalled()
+  })
+
+  it('says the participant list failed, in place of the Participant picker', () => {
+    renderCreate({ loadFailed: { participants: vi.fn() } })
+    expect(screen.getByText(/Couldn't load this participant list/)).toBeInTheDocument()
+    expect(screen.queryByText(/Couldn't load this staff list/)).not.toBeInTheDocument()
+  })
+
+  it('shows no failure message when both lists loaded', () => {
+    renderCreate()
+    expect(screen.queryByText(/Couldn't load this/)).not.toBeInTheDocument()
+  })
+})
