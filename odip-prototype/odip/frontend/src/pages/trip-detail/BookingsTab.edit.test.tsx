@@ -35,6 +35,8 @@ let patches: Record<string, unknown>[] = []
 let detailFailures = 0
 let detailStatus = 500
 let putFails = false
+let putPending = false
+let putInvalid = false
 let putConflict = false
 let servedUpdatedAt = detail.updatedAt
 let client: QueryClient
@@ -48,6 +50,8 @@ beforeEach(() => {
   detailFailures = 0
   detailStatus = 500
   putFails = false
+  putPending = false
+  putInvalid = false
   putConflict = false
   servedUpdatedAt = detail.updatedAt
   const adapter: AxiosAdapter = async config => {
@@ -64,6 +68,11 @@ beforeEach(() => {
       puts.push(JSON.parse(config.data as string))
       const res = reply(config, 409, { success: false, errors: ['Someone else just changed this booking. Close it and open it again to see their changes.'] })
       throw Object.assign(new Error('Request failed with status code 409'), { isAxiosError: true, response: res, config })
+    }
+    if (method === 'put' && putPending) return new Promise<AxiosResponse>(() => {})
+    if (method === 'put' && putInvalid) {
+      const res = reply(config, 400, { title: 'One or more validation errors occurred.', status: 400, errors: { BookingNotes: ['The field BookingNotes must be a string with a maximum length of 4000.'] } })
+      throw Object.assign(new Error('Request failed with status code 400'), { isAxiosError: true, response: res, config })
     }
     if (method === 'put' && putFails) {
       const res = reply(config, 500, { success: false })
@@ -229,6 +238,71 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
 })
 
 describe('BookingsTab — Edit Booking: support requirements are house checkbox rows', () => {
+  it("shows the server's validation message from an ASP.NET errors object, not the connection line", async () => {
+    const user = userEvent.setup()
+    putInvalid = true
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    await user.type(await screen.findByPlaceholderText('Optional notes...'), ' more')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('The field BookingNotes must be a string with a maximum length of 4000.')).toBeInTheDocument()
+    expect(screen.queryByText(/check your connection/i)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Optional notes...', 4000],
+    ['e.g. Allianz', 200],
+    ['e.g. POL-12345', 100],
+  ] as const)('stops typing in the %s field at the server limit of %i', async (placeholder, limit) => {
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    const field = await screen.findByPlaceholderText(placeholder)
+    await user.clear(field)
+    await user.click(field)
+    await user.paste('x'.repeat(limit + 5))
+    expect((field as HTMLInputElement).value).toHaveLength(limit)
+  })
+
+  describe('closing the dialog', () => {
+    it('does nothing on Escape while the save is pending, so the budget notice can still show', async () => {
+      const user = userEvent.setup()
+      putPending = true
+      renderTab()
+      await user.click(screen.getByTitle('Edit booking'))
+      await user.type(await screen.findByPlaceholderText('Optional notes...'), ' more')
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      await screen.findByRole('button', { name: 'Saving…' })
+      await user.keyboard('{Escape}')
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.queryByText('Discard changes?')).not.toBeInTheDocument()
+    })
+
+    it('asks before discarding unsaved edits on Escape', async () => {
+      const user = userEvent.setup()
+      renderTab()
+      await user.click(screen.getByTitle('Edit booking'))
+      await user.type(await screen.findByPlaceholderText('Optional notes...'), ' more')
+      await user.keyboard('{Escape}')
+
+      expect(await screen.findByText('Discard changes?')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+      expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Original note more')
+    })
+
+    it('closes on Escape when nothing was edited', async () => {
+      const user = userEvent.setup()
+      renderTab()
+      await user.click(screen.getByTitle('Edit booking'))
+      await screen.findByPlaceholderText('Optional notes...')
+      await user.keyboard('{Escape}')
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    })
+  })
+
   it('renders each requirement as a CheckboxField row (one label, control-height floor)', async () => {
     const user = userEvent.setup()
     renderTab()
