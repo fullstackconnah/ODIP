@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePatchParticipant, useStaff } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
+import { PageState } from '@/components/PageState'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
@@ -47,7 +48,7 @@ function readIdentity(p: ParticipantDetailDto): IdentityDraft {
 
 export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
-  const { data: staffList = [] } = useStaff()
+  const { data: staffList = [], isError: staffFailed, refetch: refetchStaff } = useStaff()
   const activeStaff = staffList.filter((s) => s.isActive)
   const saved = readIdentity(p)
   const [draft, setDraft] = useState<IdentityDraft>(saved)
@@ -125,11 +126,11 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
             </FormField>
           </div>
           <FormField label="Preferred Staff Member">
-            <SearchableSelect
+            {staffFailed ? <PageState kind="error" noun="staff list" onRetry={() => refetchStaff()} /> : <SearchableSelect
               value={draft.preferredStaffId}
               onChange={(v) => setDraft((d) => ({ ...d, preferredStaffId: v }))}
               items={[{ value: '', label: 'None' }, ...activeStaff.map((s) => ({ value: s.id, label: s.fullName }))]}
-            />
+            />}
           </FormField>
         </div>
       ) : (

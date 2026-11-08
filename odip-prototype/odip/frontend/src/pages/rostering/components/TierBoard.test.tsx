@@ -11,9 +11,10 @@ vi.mock('@/lib/permissions', () => ({ usePermissions: () => perms }))
 vi.mock('@/api/client', async orig => ({ ...(await orig<object>()), apiGet: mockApiGet, apiPut: mockApiPut }))
 
 const STAFF = ['Ava Hill', 'Ben Cole', 'Cara Dunn', 'Dev Rao', 'Eli Fox', 'Fay Gray', 'Gus Holt', 'Hal Ives'].map((fullName, i) => ({ id: `s${i + 1}`, fullName, isActive: true }))
+const staffQuery = vi.hoisted(() => ({ failed: false, refetch: vi.fn() }))
 vi.mock('@/api/hooks', async orig => ({
   ...(await orig<object>()),
-  useStaff: () => ({ data: STAFF, isLoading: false, isError: false, refetch: vi.fn() }),
+  useStaff: () => (staffQuery.failed ? { data: undefined, isLoading: false, isError: true, refetch: staffQuery.refetch } : { data: STAFF, isLoading: false, isError: false, refetch: staffQuery.refetch }),
 }))
 
 const row = (n: number, level: CompatibilityRowDto['level'], rank: number, reason: string | null = null): CompatibilityRowDto =>
@@ -37,6 +38,8 @@ const column = (name: string) => screen.getByRole('region', { name })
 
 beforeEach(() => {
   perms.canWrite = true
+  staffQuery.failed = false
+  staffQuery.refetch.mockReset()
   rows = [
     row(2, 'Preferred', 2),
     row(1, 'Preferred', 1, 'Knows the routine'),
@@ -153,6 +156,21 @@ describe('TierBoard', () => {
     await user.click(screen.getByRole('button', { name: 'Add to Emergency' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getAllByRole('checkbox')).toHaveLength(8 - 4)
+  })
+
+  it('says the staff list failed to load, with a retry, so Add never opens an empty list', async () => {
+    staffQuery.failed = true
+    renderBoard()
+    await screen.findByText('Knows the routine')
+    expect(screen.getByText(/Couldn't load this staff list/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(staffQuery.refetch).toHaveBeenCalled()
+  })
+
+  it('shows no staff-list message when the list loaded', async () => {
+    renderBoard()
+    await screen.findByText('Knows the routine')
+    expect(screen.queryByText(/Couldn't load this/)).not.toBeInTheDocument()
   })
 
   it('gives a reader plain chips: no menus, no Add buttons', async () => {

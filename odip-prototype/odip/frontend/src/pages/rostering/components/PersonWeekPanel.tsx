@@ -11,8 +11,8 @@ import { ShiftSlideOver, type ShiftSlideOverTarget } from './ShiftSlideOver'
  */
 export function PersonWeekPanel({ kind, target, onClose }: { kind: 'staff' | 'participant'; target: ShiftSlideOverTarget | null; onClose: () => void }) {
   const { canWrite } = usePermissions()
-  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
-  const { data: staff = [] } = useStaff()
+  const { data: participants = [], isError: participantsFailed, refetch: refetchParticipants } = useParticipants(CAN_RECEIVE_SERVICES)
+  const { data: staff = [], isError: staffFailed, refetch: refetchStaff } = useStaff()
   const participantOptions = useMemo(() => participants.map(p => ({ value: p.id, label: p.fullName })), [participants])
   const participantReadiness = useMemo(
     () => Object.fromEntries(participants.map(p => [p.id, p.readinessIssues ?? []])) as Record<string, string[]>,
@@ -27,6 +27,7 @@ export function PersonWeekPanel({ kind, target, onClose }: { kind: 'staff' | 'pa
       canWrite={canWrite}
       participantOptions={participantOptions}
       staffOptions={staffOptions}
+      loadFailed={{ participants: participantsFailed ? refetchParticipants : undefined, staff: staffFailed ? refetchStaff : undefined }}
       groupBy={kind}
       participantReadiness={participantReadiness}
     />
