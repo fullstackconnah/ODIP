@@ -89,7 +89,7 @@ public class AuditController : ControllerBase
 
         var query = _db.AuditLogs
             .Where(a => a.EntityType == canonicalEntityType && a.EntityId == entityId)
-            .OrderByDescending(a => a.ChangedAt);
+            .OrderByDescending(a => a.ChangedAt).ThenByDescending(a => a.Id);
 
         var total = await query.CountAsync(ct);
 

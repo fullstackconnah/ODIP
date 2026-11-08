@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -35,6 +35,9 @@ let patches: Record<string, unknown>[] = []
 let detailFailures = 0
 let detailStatus = 500
 let putFails = false
+let putConflict = false
+let servedUpdatedAt = detail.updatedAt
+let client: QueryClient
 
 const reply = (config: InternalAxiosRequestConfig, status: number, body: unknown): AxiosResponse =>
   ({ data: body, status, statusText: String(status), headers: {}, config }) as AxiosResponse
@@ -45,6 +48,8 @@ beforeEach(() => {
   detailFailures = 0
   detailStatus = 500
   putFails = false
+  putConflict = false
+  servedUpdatedAt = detail.updatedAt
   const adapter: AxiosAdapter = async config => {
     const method = (config.method ?? 'get').toLowerCase()
     if (method === 'get' && config.url?.endsWith('/bookings/booking-1')) {
@@ -53,7 +58,12 @@ beforeEach(() => {
         const res = reply(config, detailStatus, { success: false, message: 'boom' })
         throw Object.assign(new Error(`Request failed with status code ${detailStatus}`), { isAxiosError: true, response: res, config })
       }
-      return reply(config, 200, { success: true, data: detail })
+      return reply(config, 200, { success: true, data: { ...detail, updatedAt: servedUpdatedAt } })
+    }
+    if (method === 'put' && putConflict) {
+      puts.push(JSON.parse(config.data as string))
+      const res = reply(config, 409, { success: false, errors: ['Someone else just changed this booking. Close it and open it again to see their changes.'] })
+      throw Object.assign(new Error('Request failed with status code 409'), { isAxiosError: true, response: res, config })
     }
     if (method === 'put' && putFails) {
       const res = reply(config, 500, { success: false })
@@ -75,7 +85,7 @@ beforeEach(() => {
 afterEach(() => { apiClient.defaults.adapter = original })
 
 function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -121,6 +131,36 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
 
     expect(await screen.findByText("Couldn't update this booking. Check your connection and try again.")).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Changed note')
+  })
+
+  it('sends the updatedAt it loaded, and a stale-edit 409 shows the server message, keeps the modal open and leaves Save enabled', async () => {
+    const user = userEvent.setup()
+    putConflict = true
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    const notes = await screen.findByPlaceholderText('Optional notes...')
+    await user.type(notes, ' more')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Someone else just changed this booking. Close it and open it again to see their changes.')).toBeInTheDocument()
+    expect(puts[0]).toMatchObject({ expectedUpdatedAt: '2026-10-02T00:00:00Z' })
+    expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Original note more')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  it('sends the updatedAt the form was built from, not a newer one a background refetch brought in', async () => {
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    const notes = await screen.findByPlaceholderText('Optional notes...')
+    await user.type(notes, ' more')
+
+    servedUpdatedAt = '2026-10-03T00:00:00Z'
+    await act(() => client.refetchQueries({ queryKey: ['bookings', 'detail', 'booking-1'] }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ expectedUpdatedAt: '2026-10-02T00:00:00Z' })
   })
 
   it('shows the load failure with Try again, never an empty editable form, and recovers on retry', async () => {
