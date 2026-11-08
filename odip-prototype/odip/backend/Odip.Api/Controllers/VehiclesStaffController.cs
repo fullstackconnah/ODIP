@@ -908,7 +908,7 @@ public class StaffController : ControllerBase
         // reuses that timezone-aware variance calc rather than duplicating it; the "newest 10"
         // selection and ordering happen here since BuildQueueItemsAsync doesn't sort.
         var recentCompletionShiftIds = await _db.ShiftCompletions
-            .Where(c => c.SubmittedByUserId == id && c.IsActive)
+            .Where(c => c.SubmittedByUserId == id && c.IsActive && c.Shift!.GroupActivityId == null)
             .OrderByDescending(c => c.SubmittedAt ?? c.StartedAt)
             .Take(10)
             .Select(c => c.ShiftId)

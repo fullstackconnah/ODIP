@@ -25,6 +25,9 @@ const {
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useGroupStaffReviews: () => ({ data: { rows: [], total: 0 }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useApproveGroupStaffRows: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetGroupStaffActuals: () => ({ mutate: vi.fn(), isPending: false }),
   useCompletions: mockUseCompletions,
   useCompletion: mockUseCompletion,
   useStaff: mockUseStaff,

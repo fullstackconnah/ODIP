@@ -5,6 +5,7 @@ import type {
   PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto, FinishDetailsDto, LocationReasonDto,
   EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
 } from '../types'
+import type { PortalActivityShiftDto, StartActivityShiftDto, FinishActivityShiftDto } from '../types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { offlineQueue, type NewRecord } from '@/lib/offline/queue'
@@ -404,3 +405,23 @@ export function useDeclineIncidentWitnessRequest() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-witness-requests'] }),
   })
 }
+
+// ══════════════════════════════════════════════════════════════
+// GROUP ACTIVITY SHIFTS (GA PR3) — Start/Finish on the worker's own row. Live only: no queue, so both fail offline and the card says so.
+// ══════════════════════════════════════════════════════════════
+
+function useActivityWrite(action: 'start' | 'finish') {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: StartActivityShiftDto | FinishActivityShiftDto }) =>
+      apiPost<PortalActivityShiftDto>(`/portal/activity-staff/${id}/${action}`, data),
+    // A refusal (409 already finished, 404 gone) also refetches, so the card shows what the server now holds.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['portal-my-shifts'] }),
+  })
+}
+
+/** POST portal/activity-staff/{rowId}/start — the tap and, when the phone gave one, its position. */
+export const useStartActivityShift = () => useActivityWrite('start')
+
+/** POST portal/activity-staff/{rowId}/finish — a typed start only when Start was never tapped; a break only as a pair. */
+export const useFinishActivityShift = () => useActivityWrite('finish')

@@ -148,8 +148,9 @@ public class PortalController : ControllerBase
             a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status,
             NullIfBlank(a.TripInstance.Destination), NullIfBlank(a.AssignmentRole))).ToList();
 
+        var activityDtos = await PortalActivityShifts.ListAsync(_db, staffId.Value, start, end, ProviderLocalTime.TodayIn(NowUtc, provider.Zone), ct);
         return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-            new PortalShiftsResponseDto(shiftDtos, tripDtos, provider.Id)));
+            new PortalShiftsResponseDto(shiftDtos, tripDtos, provider.Id, activityDtos)));
     }
 
     /// <summary>
@@ -321,6 +322,15 @@ public class PortalController : ControllerBase
     /// <summary>How long before the rostered start a worker may tap Start. Earlier taps get 409 SHIFT_START_TOO_EARLY.</summary>
     public const int EarliestStartLeadMinutes = 60;
 
+    /// <summary>The refusal text for a Start before the window opens (a shift, or a group activity row), in the shift's own zone.</summary>
+    public static string TooEarlyMessage(DateTime earliestStartUtc, string timeZoneId)
+    {
+        var openLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(earliestStartUtc, DateTimeKind.Utc), ProviderLocalTime.ResolveZone(timeZoneId));
+        var openClock = openLocal.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
+        var openDay = openLocal.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture);
+        return $"It's too early to start this shift. You can start from {openClock} on {openDay}.";
+    }
+
     /// <summary>How far either actual time may move at Finish (owner decision 3, 2026-10-14). The portal's finish flow mirrors it.</summary>
     public const int MaxTimeAdjustmentMinutes = 15;
     /// <summary>How old an online re-sent finish tap (<c>EndTappedAt</c>) may be.</summary>
@@ -404,12 +414,7 @@ public class PortalController : ControllerBase
         var earliestStartUtc = rosteredStartUtc.AddMinutes(-EarliestStartLeadMinutes);
         if (startStamp < earliestStartUtc)
         {
-            var openLocal = TimeZoneInfo.ConvertTimeFromUtc(
-                DateTime.SpecifyKind(earliestStartUtc, DateTimeKind.Utc), ProviderLocalTime.ResolveZone(timeZoneId));
-            var openClock = openLocal.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
-            var openDay = openLocal.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture);
-            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                $"It's too early to start this shift. You can start from {openClock} on {openDay}.", ShiftErrorCodes.ShiftStartTooEarly));
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(TooEarlyMessage(earliestStartUtc, timeZoneId), ShiftErrorCodes.ShiftStartTooEarly));
         }
 
         // The location check (location PR2): the coordinates live only in `dto` here. They go into Evaluate by value and nothing keeps them - the
@@ -1262,7 +1267,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
-        var ownsShift = await _db.Shifts.Where(Shift.VisibleToWorker).AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        var ownsShift = await NotableShifts(staffId.Value).AnyAsync(s => s.Id == id, ct);
         if (!ownsShift)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
@@ -1285,7 +1290,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
-        var shiftTenantId = await _db.Shifts.Where(Shift.VisibleToWorker).Where(s => s.Id == id && s.UserId == staffId.Value)
+        var shiftTenantId = await NotableShifts(staffId.Value).Where(s => s.Id == id)
             .Select(s => (Guid?)s.TenantId).FirstOrDefaultAsync(ct);
         if (shiftTenantId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
@@ -1386,6 +1391,10 @@ public class PortalController : ControllerBase
             .FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
     }
+
+    /// <summary>The shifts whose notes the caller may read and write: their own, plus the non-cancelled participant shifts of a group activity they are rostered on (GA PR3). A removed worker loses it at once, as their row is gone.</summary>
+    private IQueryable<Shift> NotableShifts(Guid staffId) => _db.Shifts.Where(Shift.VisibleToWorker).Where(s => s.UserId == staffId
+        || (s.GroupActivityId != null && s.Status != ShiftStatus.Cancelled && _db.GroupActivityStaff.Any(r => r.GroupActivityId == s.GroupActivityId && r.UserId == staffId)));
 
     /// <summary>The caller's own note, unless its shift is a Draft: a Draft is invisible to the worker (L1), so an open edit of an older note stops there too. Missing, not-yours and Draft are one 404.</summary>
     private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct)

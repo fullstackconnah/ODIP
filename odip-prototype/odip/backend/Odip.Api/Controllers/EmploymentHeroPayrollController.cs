@@ -139,7 +139,7 @@ public class EmploymentHeroPayrollController : ControllerBase
 
         var completions = await _db.ShiftCompletions.Include(c => c.Shift)
             .Where(c => c.TenantId == tenantId && c.IsActive && c.ReviewOutcome == ReviewOutcome.Approved
-                        && c.Shift!.Status == ShiftStatus.Completed && c.Shift.ServiceDate >= from && c.Shift.ServiceDate <= to)
+                        && c.Shift!.Status == ShiftStatus.Completed && c.Shift.GroupActivityId == null && c.Shift.ServiceDate >= from && c.Shift.ServiceDate <= to)
             .ToListAsync(ct);
         var ids = completions.Select(c => c.Id).ToList();
         var workerIds = completions.Select(c => c.SubmittedByUserId).Distinct().ToList();

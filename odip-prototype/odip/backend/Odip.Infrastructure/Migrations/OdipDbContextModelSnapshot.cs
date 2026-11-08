@@ -6744,6 +6744,25 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("ActualEnd")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ActualStart")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("AdjustedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdjustmentReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("BreakEndedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("BreakStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time without time zone");
 
@@ -6753,6 +6772,12 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("GroupActivityId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("LocationCheck")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LocationDistanceMetres")
+                        .HasColumnType("integer");
+
                     b.Property<string>("OverrideReason")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -6761,11 +6786,30 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("ReviewOutcome")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time without time zone");
 
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TimeZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

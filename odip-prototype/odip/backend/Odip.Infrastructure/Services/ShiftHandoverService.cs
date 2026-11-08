@@ -52,7 +52,7 @@ public sealed class ShiftHandoverService
         var rows = await (
                 from c in _db.ShiftCompletions
                 join s in _db.Shifts on c.ShiftId equals s.Id
-                where s.ParticipantId == shift.ParticipantId && s.Id != shift.Id && c.IsActive && c.SubmittedAt != null
+                where s.ParticipantId == shift.ParticipantId && s.Id != shift.Id && s.GroupActivityId == null && c.IsActive && c.SubmittedAt != null
                     && (s.ServiceDate < shift.ServiceDate || (s.ServiceDate == shift.ServiceDate && s.StartTime < shift.StartTime))
                 orderby s.ServiceDate descending, s.StartTime descending, c.SubmittedAt descending, c.Id
                 select new

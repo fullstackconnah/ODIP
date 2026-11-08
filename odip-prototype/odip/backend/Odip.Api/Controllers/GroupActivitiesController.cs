@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Catalogue;
@@ -24,7 +25,7 @@ namespace Odip.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "SuperAdmin,Admin,Coordinator")]
 [Route("api/v1/rostering/group-activities")]
-public class GroupActivitiesController : ControllerBase
+public partial class GroupActivitiesController : ControllerBase
 {
     private const int TitleMax = 200, LocationMax = 200, NotesMax = 2000, RoleMax = 100, ReasonMax = 2000, MinStaffMax = 20, MaxShiftsPerRequest = 20;
     private const string DefaultTitle = "Group activity";
@@ -50,7 +51,7 @@ public class GroupActivitiesController : ControllerBase
     // ── Refusals: the codes are message keys (plan section 6) ───────────────────────────────────────
     private static readonly Dictionary<string, (int Status, string Message)> Refusals = new()
     {
-        ["GA_DISABLED"] = (409, "Group activities are turned off for this organisation."),
+        ["GA_DISABLED"] = (409, DisabledMessage),
         ["GA_NOT_FOUND"] = (404, "Group activity not found."),
         ["GA_CHOOSE_ORG"] = (400, "Choose an organisation first."),
         ["GA_TITLE"] = (400, "Give the activity a title of up to 200 characters."),
@@ -79,7 +80,23 @@ public class GroupActivitiesController : ControllerBase
         ["GA_STAFF_NOT_FOUND"] = (400, "Staff member not found."),
         ["GA_STAFF_IN"] = (409, "That staff member is already on this activity."),
         ["GA_STAFF_ROW_NOT_FOUND"] = (404, "Staff row not found."),
+        ["GA_STAFF_NOT_FINISHED"] = (409, "Record times before approving."),
+        ["GA_STAFF_APPROVED"] = (409, "This shift is approved and can't be changed."),
+        ["GA_STAFF_STARTED"] = (409, "This staff member has started, so they can't be removed. Record their times instead."),
+        ["GA_NOT_PUBLISHED"] = (409, "Publish the activity first."),
+        ["GA_BATCH_SIZE"] = (400, "Choose between 1 and 100 shifts."),
+        ["GA_REASON"] = (400, "Enter a reason."),
+        ["GA_ACTUALS_LONG"] = (409, "These times are over 24 hours. Record times first."),
+        ["GA_ACTUALS_FUTURE"] = (400, "Times can't be in the future."),
+        ["GA_BREAK"] = (400, "Enter both break times, or neither."),
+        ["GA_BREAK_RANGE"] = (400, "The break must fall between the start and finish."),
     };
+
+    public const string DisabledMessage = "Group activities are turned off for this organisation.";
+
+    /// <summary>The switch, read by every group activity write (here and the worker's Start and Finish). Don't turn it off while an activity is InProgress: its staff could no longer finish.</summary>
+    internal static Task<bool> FlagOnAsync(OdipDbContext db, Guid tenantId, CancellationToken ct) =>
+        db.AppSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.GroupActivitiesEnabled).FirstOrDefaultAsync(ct);
 
     /// <summary>A refusal raised anywhere under the locks: nothing is saved and the tracked changes are dropped.</summary>
     private sealed class Refusal(ActionResult result) : Exception
@@ -87,10 +104,12 @@ public class GroupActivitiesController : ControllerBase
         public ActionResult Result { get; } = result;
     }
 
-    private ActionResult<ApiResponse<GroupActivityDto>> RefuseResult(string code, string? message = null)
+    private ActionResult<ApiResponse<GroupActivityDto>> RefuseResult(string code, string? message = null) => RefuseResult<GroupActivityDto>(code, message);
+
+    private ActionResult<ApiResponse<T>> RefuseResult<T>(string code, string? message = null)
     {
         var (status, text) = Refusals[code];
-        var body = ApiResponse<GroupActivityDto>.Fail(message ?? text, code);
+        var body = ApiResponse<T>.Fail(message ?? text, code);
         return status switch
         {
             404 => NotFound(body),
@@ -119,12 +138,17 @@ public class GroupActivitiesController : ControllerBase
     /// Every write: no tenant, then the switch, then the participant ids the write needs are read, the organisation's board lock and those participants' locks are taken (ascending Guid, as the agreement
     /// approval does), and only then does <paramref name="body"/> read what it changes. A <see cref="Refusal"/> or a busy lock answers without saving. Body saves once and returns Ok to commit.
     /// </summary>
-    private async Task<ActionResult<ApiResponse<GroupActivityDto>>> WriteAsync(
+    private Task<ActionResult<ApiResponse<GroupActivityDto>>> WriteAsync(
         Func<Guid, CancellationToken, Task<IEnumerable<Guid>>> participantsToLock,
-        Func<Guid, CancellationToken, Task<ActionResult<ApiResponse<GroupActivityDto>>>> body, CancellationToken ct)
+        Func<Guid, CancellationToken, Task<ActionResult<ApiResponse<GroupActivityDto>>>> body, CancellationToken ct) => WriteAsync<GroupActivityDto>(participantsToLock, body, ct);
+
+    /// <summary>The same pipeline for a write that answers with its own body (the staff review writes of GA PR3). A <see cref="Refusal"/> carries no typed body: the JSON shape is the same for every T.</summary>
+    private async Task<ActionResult<ApiResponse<T>>> WriteAsync<T>(
+        Func<Guid, CancellationToken, Task<IEnumerable<Guid>>> participantsToLock,
+        Func<Guid, CancellationToken, Task<ActionResult<ApiResponse<T>>>> body, CancellationToken ct)
     {
-        if (_tenant.TenantId is not { } tenantId) return RefuseResult("GA_CHOOSE_ORG");
-        if (!await _db.AppSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.GroupActivitiesEnabled).FirstOrDefaultAsync(ct)) return RefuseResult("GA_DISABLED");
+        if (_tenant.TenantId is not { } tenantId) return RefuseResult<T>("GA_CHOOSE_ORG");
+        if (!await FlagOnAsync(_db, tenantId, ct)) return RefuseResult<T>("GA_DISABLED");
         try
         {
             await using var held = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, _generator.LockWait, scope: "roster-board");
@@ -144,7 +168,7 @@ public class GroupActivitiesController : ControllerBase
         catch (RosterBusyException)
         {
             _db.ChangeTracker.Clear();
-            return Conflict(ApiResponse<GroupActivityDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
+            return Conflict(ApiResponse<T>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -169,6 +193,12 @@ public class GroupActivitiesController : ControllerBase
         ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed => Deny("GA_STARTED"),
         _ => null,
     };
+
+    /// <summary>Staff can be added or removed until the activity is cancelled or finished: an InProgress activity keeps its roster open (GA PR3).</summary>
+    private void EnsureStaffChangeable(GroupActivity activity)
+    {
+        if (activity.Status is ShiftStatus.Cancelled or ShiftStatus.PendingReview or ShiftStatus.Completed) throw StateRefusal(activity) ?? Deny("GA_STARTED");
+    }
 
     private void EnsureChangeable(GroupActivity activity)
     {
@@ -425,7 +455,8 @@ public class GroupActivitiesController : ControllerBase
     public Task<ActionResult<ApiResponse<GroupActivityDto>>> AddStaff(Guid id, [FromBody] AddGroupStaffDto dto, CancellationToken ct) =>
         WriteAsync(Attached(id), async (tenantId, token) =>
         {
-            var activity = await LoadActivityAsync(id, tenantId, forChange: true, token);
+            var activity = await LoadActivityAsync(id, tenantId, forChange: false, token);
+            EnsureStaffChangeable(activity);   // GA PR3: staff may be added while the activity is InProgress, so a replacement worker can be rostered
             if (dto.StaffId == Guid.Empty) throw Deny("GA_STAFF_NOT_FOUND");
             var (start, end, endsNextDay) = StaffTimes(activity, dto);
             var role = TidyRole(dto.Role);
@@ -462,10 +493,19 @@ public class GroupActivitiesController : ControllerBase
     public Task<ActionResult<ApiResponse<GroupActivityDto>>> RemoveStaff(Guid id, Guid rowId, CancellationToken ct) =>
         WriteAsync(Attached(id), async (tenantId, token) =>
         {
-            var activity = await LoadActivityAsync(id, tenantId, forChange: true, token);
+            var activity = await LoadActivityAsync(id, tenantId, forChange: false, token);
+            EnsureStaffChangeable(activity);
             var row = activity.Staff.FirstOrDefault(r => r.Id == rowId) ?? throw Deny("GA_STAFF_ROW_NOT_FOUND");
+            await using var rowLock = await GroupStaffRowLock.AcquireAsync(_db, row.Id, token);
+            await _db.Entry(row).ReloadAsync(token);   // re-check under the row lock: an approval or a Finish may have landed first
+            if (row.State == GroupStaffRowState.Approved) throw Deny("GA_STAFF_APPROVED");
+            if (row.State != GroupStaffRowState.NotStarted) throw Deny("GA_STAFF_STARTED");   // a row with times stays; record its times instead
+            var now = DateTime.UtcNow;
             _db.GroupActivityStaff.Remove(row);
-            activity.UpdatedAt = DateTime.UtcNow;
+            activity.UpdatedAt = now;
+            // The last unapproved row going can complete the activity.
+            var attached = await AttachedLockedAsync(activity, token);
+            await GroupActivityCompletion.CompleteIfAllApprovedAsync(_db, activity, activity.Staff.Where(r => r.Id != rowId).ToList(), attached, CurrentUserId, now, token);
             return await SavedAsync(activity.Id, token);
         }, ct);
 

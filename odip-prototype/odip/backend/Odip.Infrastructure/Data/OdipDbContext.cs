@@ -1263,6 +1263,9 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Role).HasMaxLength(100);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            entity.Property(e => e.TimeZoneId).HasMaxLength(64);
+            entity.Property(e => e.AdjustmentReason).HasMaxLength(500);
+            entity.Ignore(e => e.State);
             // Cascade: an activity is never deleted, so this only ever removes rows with a test database's teardown.
             entity.HasOne(e => e.GroupActivity).WithMany(a => a.Staff).HasForeignKey(e => e.GroupActivityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);

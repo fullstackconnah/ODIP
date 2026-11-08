@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDelete } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
 import { UNCLAIMED_SHIFTS_KEY } from './claimHub'
+import type { GroupStaffReviewListDto, GroupStaffApproveResultDto, SetGroupStaffActualsDto, GroupStaffReviewDto } from '../types'
 import { awaitsData } from '@/lib/queryPhase'
 import { providerSettingsQuery } from './catalogue'
 import type {
@@ -561,4 +562,39 @@ export function getRosterFindings(err: unknown): RosterFindingDto[] | null {
   if (axiosErr?.response?.status !== 422) return null
   const findings = axiosErr.response.data?.data
   return Array.isArray(findings) ? (findings as RosterFindingDto[]) : null
+}
+
+// ══════════════════════════════════════════════════════════════
+// GROUP ACTIVITY STAFF REVIEW (GA PR3)
+// ══════════════════════════════════════════════════════════════
+
+const STAFF_REVIEW_KEY = ['rostering-group-staff-reviews']
+
+/** GET rostering/group-activities/staff-reviews — every unapproved worker row up to today, oldest first (capped; `total` says if more wait). */
+export function useGroupStaffReviews(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: STAFF_REVIEW_KEY,
+    queryFn: () => apiGet<GroupStaffReviewListDto>('/rostering/group-activities/staff-reviews'),
+    refetchInterval: 60_000,
+    enabled: options?.enabled ?? true,
+  })
+}
+
+/** POST staff-reviews/approve — a batch of 1 to 100 row ids; each row answers for itself. */
+export function useApproveGroupStaffRows() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (rowIds: string[]) => apiPost<GroupStaffApproveResultDto[]>('/rostering/group-activities/staff-reviews/approve', { rowIds }),
+    onSettled: () => qc.invalidateQueries({ queryKey: STAFF_REVIEW_KEY }),
+  })
+}
+
+/** PUT group-activities/{id}/staff/{rowId}/actuals — the coordinator records a row's times, with a required reason. */
+export function useSetGroupStaffActuals() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ row, data }: { row: Pick<GroupStaffReviewDto, 'groupActivityId' | 'rowId'>; data: SetGroupStaffActualsDto }) =>
+      apiPut<GroupStaffReviewDto>(`/rostering/group-activities/${row.groupActivityId}/staff/${row.rowId}/actuals`, data),
+    onSettled: () => qc.invalidateQueries({ queryKey: STAFF_REVIEW_KEY }),
+  })
 }

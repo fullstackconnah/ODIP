@@ -62,7 +62,7 @@ public class ReportsController : ControllerBase
 
         // Approved: reviewed and completed. Awaiting: finished by the worker, not yet reviewed (InProgress has no finish, so it is left out).
         var completions = await _db.ShiftCompletions.AsNoTracking()
-            .Where(c => c.TenantId == tid && c.IsActive && c.Shift!.ServiceDate >= f && c.Shift.ServiceDate <= t
+            .Where(c => c.TenantId == tid && c.IsActive && c.Shift!.GroupActivityId == null && c.Shift.ServiceDate >= f && c.Shift.ServiceDate <= t
                 && ((c.ReviewOutcome == ReviewOutcome.Approved && c.Shift.Status == ShiftStatus.Completed) || c.Shift.Status == ShiftStatus.PendingReview))
             .Select(c => new
             {

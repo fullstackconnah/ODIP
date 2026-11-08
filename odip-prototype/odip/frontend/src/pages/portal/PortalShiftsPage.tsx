@@ -20,6 +20,7 @@ import { SyncBar } from './sync/SyncBar'
 import { savedAtFor } from '@/api/hooks/portal'
 import { clockTime } from '@/lib/offline/reasons'
 import { CurrentShiftCard } from './components/CurrentShiftCard'
+import { ActivityShiftCard } from './components/ActivityShiftCard'
 import type { IntakeVisitDto, PortalShiftSummaryDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
 import { isPastVisit, visitsByDay, withVisits } from '@/lib/intakeBooking'
@@ -177,6 +178,8 @@ export default function PortalShiftsPage() {
   const shifts = useMemo(() => (data?.shifts ?? []).filter(s => !needsDetails(s) && inWeek(s.serviceDate.slice(0, 10))), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
   const tripAssignments = (data?.tripAssignments ?? []).filter(a => a.assignmentStart.slice(0, 10) <= weekEnd && a.assignmentEnd.slice(0, 10) >= weekStart)
   // Intake visits you are going to, in the browsed week: their own query beside the shifts (a non-shift entry, not billable work).
+  // Group activity rows in the browsed week (GA PR3), above the shifts; an older server sends none.
+  const activityShifts = useMemo(() => (data?.activityShifts ?? []).filter(a => inWeek(a.serviceDate.slice(0, 10))).sort((a, b) => a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime)), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
   const { id: myId } = usePermissions()
   const visitsQuery = useIntakeVisits({ from: weekStart, to: weekEnd, staffUserId: myId ?? undefined }, !!myId)
   const visits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data])
@@ -258,7 +261,7 @@ export default function PortalShiftsPage() {
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
         </Callout>
-      ) : needs.length === 0 && shifts.length === 0 && tripAssignments.length === 0 && visits.length === 0 && !current && !visitsQuery.isError ? (
+      ) : needs.length === 0 && shifts.length === 0 && tripAssignments.length === 0 && visits.length === 0 && activityShifts.length === 0 && !current && !visitsQuery.isError ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Nothing rostered this week"
@@ -270,6 +273,12 @@ export default function PortalShiftsPage() {
             <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => visitsQuery.refetch()}>Try again</Button>}>
               Couldn't load your intake visits.
             </Callout>
+          )}
+          {activityShifts.length > 0 && (
+            <section aria-labelledby="group-activities" className="space-y-3">
+              <h2 id="group-activities" className="text-base font-semibold">Group activities</h2>
+              <div className="space-y-2">{activityShifts.map(a => <ActivityShiftCard key={a.id} shift={a} tz={tz || 'Australia/Sydney'} now={now} />)}</div>
+            </section>
           )}
           {needs.length > 0 && (
             <section aria-labelledby="needs-details" className="space-y-3">
