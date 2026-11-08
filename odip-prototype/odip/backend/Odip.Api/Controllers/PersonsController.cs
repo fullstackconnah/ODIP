@@ -137,15 +137,8 @@ public class PersonsController : ControllerBase
             : null;
 
     /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
-    internal static async Task<string?> ValidateContactAsync(OdipDbContext db, TimeProvider clock, CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct)
-    {
-        var email = dto.Email?.Trim();
-        if (!string.IsNullOrEmpty(email) && email != storedEmail?.Trim() && !new EmailAddressAttribute().IsValid(email))
-            return "Enter an email address like name@example.com.";
-        if (dto.DateOfBirth is { } dob && dob != storedDob && dob > await ProviderTimeZoneResolver.TodayAsync(db, clock, ct))
-            return "Choose a date of birth that isn't in the future.";
-        return null;
-    }
+    internal static async Task<string?> ValidateContactAsync(OdipDbContext db, TimeProvider clock, CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct) =>
+        ParticipantPatchApplier.ValidatePersonContact(dto.Email, dto.DateOfBirth, storedEmail, storedDob, await ProviderTimeZoneResolver.TodayAsync(db, clock, ct));
 
     private static PersonDto ToDto(Person p) => new()
     {

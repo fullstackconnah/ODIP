@@ -120,7 +120,7 @@ async function createParticipant(session: Session, name: string): Promise<string
       addressSuburb: 'Newtown',
       addressState: 'NSW',
       addressPostcode: '2042',
-      ndisNumber: `420${Math.floor(100000000 + Math.random() * 899999999)}`,
+      ndisNumber: `420${Math.floor(100000 + Math.random() * 899999)}`,
       planType: 1, // PlanManaged: an agency-managed plan can hold pools the provider is paid from
       isDraft: false,
     }),

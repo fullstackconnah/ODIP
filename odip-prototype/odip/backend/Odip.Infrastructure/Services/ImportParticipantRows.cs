@@ -130,6 +130,7 @@ public static class ImportParticipantRows
                 [nameof(contact.NewPersonFirstName)] = $"Contact {n} name", [nameof(contact.NewPersonLastName)] = $"Contact {n} name",
                 [nameof(contact.NewPersonPhone)] = $"Contact {n} phone", [nameof(contact.NewPersonEmail)] = $"Contact {n} email",
             }));
+            if (ParticipantPatchApplier.ValidatePersonContact(email, null, null, null, asOf) is { } personError) reasons.Add($"Contact {n}: {personError}");
             // The manual create's contact rules, against the file's plan type (self-managed when it gives none, the manual create's default).
             if (ContactRoleRules.Validate(roleType, planType ?? PlanType.SelfManaged, dateOfBirth, null, asOf) is { } gate) reasons.Add($"Contact {n}: {gate}");
             if (ContactRoleRules.ValidateUniqueness(roleType, false, ContactRoleStatus.Active, rolesSoFar) is { } unique) reasons.Add($"Contact {n}: {unique}");
@@ -152,12 +153,14 @@ public static class ImportParticipantRows
         {
             ParticipantPatchApplier.ValidateNames(dto), ParticipantPatchApplier.ValidatePhone(dto),
             ParticipantPatchApplier.ValidateEmail(dto), ParticipantPatchApplier.ValidateAddressPostcode(dto),
+            ParticipantPatchApplier.ValidateDateOfBirthRange(dto.DateOfBirth, asOf),
         }.OfType<string>());
         reasons.AddRange(ImportValues.AnnotationErrors(dto, Labels));
 
-        // "N/A", "TBC" or "-" are not numbers: keying on them would make every such row a repeat of the first, or match a stored "TBC".
+        // "N/A", "TBC" or "-" are not numbers: they are left blank (the create refuses a non-9-digit value), and a real one is stored as its 9 digits.
         var ndisKey = NdisKey(ndis);
-        if (ndis.Length > 0 && !IsNdisNumber(ndisKey)) warnings.Add("The NDIS number isn't 9 digits, so this row isn't checked against existing participants. Check the number.");
+        if (ndis.Length > 0 && !IsNdisNumber(ndisKey)) warnings.Add("The NDIS number isn't 9 digits, so it's left blank. Add it on the participant later.");
+        dto = dto with { NdisNumber = IsNdisNumber(ndisKey) ? ndisKey : null };
         var plan = new ImportRowPlan
         {
             RowNumber = rowNumber, Name = $"{first} {last}".Trim(), Participant = dto,

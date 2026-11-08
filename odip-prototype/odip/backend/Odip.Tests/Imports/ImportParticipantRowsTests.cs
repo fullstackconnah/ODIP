@@ -26,7 +26,7 @@ public class ImportParticipantRowsTests
         Assert.Equal("Ava Stone", plan.Name);
         Assert.Equal("430000001", plan.DuplicateKey);
         var dto = plan.Participant!;
-        Assert.Equal((new DateOnly(1990, 4, 3), Gender.Female, "NSW", "2000", "430 000 001"), (dto.DateOfBirth!.Value, dto.Gender!.Value, dto.AddressState, dto.AddressPostcode, dto.NdisNumber));
+        Assert.Equal((new DateOnly(1990, 4, 3), Gender.Female, "NSW", "2000", "430000001"), (dto.DateOfBirth!.Value, dto.Gender!.Value, dto.AddressState, dto.AddressPostcode, dto.NdisNumber));
         var contact = Assert.Single(dto.ContactRoles);
         Assert.Equal(("Ben", "Stone", ContactRoleType.NextOfKin), (contact.NewPersonFirstName, contact.NewPersonLastName, contact.RoleType));
         Assert.False(dto.IsDraft);
@@ -122,9 +122,35 @@ public class ImportParticipantRowsTests
         {
             Assert.Equal(ImportRowStatus.Ready, p.Status);
             Assert.Null(p.DuplicateKey);
-            Assert.Equal("The NDIS number isn't 9 digits, so this row isn't checked against existing participants. Check the number.", Assert.Single(p.Warnings));
+            Assert.Equal("The NDIS number isn't 9 digits, so it's left blank. Add it on the participant later.", Assert.Single(p.Warnings));
+            Assert.Null(p.Participant!.NdisNumber);
         });
-        Assert.Equal("N/A", plans[0].Participant!.NdisNumber);
+    }
+
+    [Fact]
+    public void A_dashed_nine_digit_NDIS_number_is_kept_as_its_nine_digits()
+    {
+        var plan = Build(["Ava", "Stone", "", "", "430-000-001", "", "", "", ""]).Single();
+        Assert.Equal(ImportRowStatus.Ready, plan.Status);
+        Assert.Empty(plan.Warnings);
+        Assert.Equal("430000001", plan.Participant!.NdisNumber);
+        Assert.Equal("430000001", plan.DuplicateKey);
+    }
+
+    [Fact]
+    public void A_future_date_of_birth_is_a_reason_with_the_commits_message()
+    {
+        var plan = Build(["Ava", "Stone", "01/01/2027", "", "", "", "", "", ""]).Single();
+        Assert.Equal(ImportRowStatus.Invalid, plan.Status);
+        Assert.Contains("The date of birth can't be in the future.", plan.Reasons);
+    }
+
+    [Fact]
+    public void A_plan_end_before_the_plan_start_is_a_reason_with_the_commits_message()
+    {
+        var plan = BuildOne(PlanHeaders, ["Ava", "Stone", "", "01/06/2026", "01/05/2026", "", ""]);
+        Assert.Equal(ImportRowStatus.Invalid, plan.Status);
+        Assert.Contains("Plan end is before Plan start.", plan.Reasons);
     }
 
     [Fact]
