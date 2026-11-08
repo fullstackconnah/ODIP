@@ -407,3 +407,20 @@ describe('BookingsTab — Add Booking: support requirements are house checkbox r
     }
   })
 })
+
+describe('BookingsTab — Add Booking: text fields stop at the server limits', () => {
+  it('stops the notes, provider and policy number at 4000, 200 and 100 characters', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant])
+    await openModalAndPick(user)
+    await user.click(screen.getByRole('button', { name: 'Status' }))
+    await user.click(screen.getByRole('option', { name: 'Pending' }))
+
+    for (const [placeholder, limit] of [['Optional notes...', 4000], ['e.g. Allianz', 200], ['e.g. POL-12345', 100]] as const) {
+      const field = screen.getByPlaceholderText(placeholder) as HTMLInputElement
+      await user.click(field)
+      await user.paste('x'.repeat(limit + 5))
+      expect(field.value).toHaveLength(limit)
+    }
+  })
+})

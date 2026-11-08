@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatDateAu } from './utils'
+import { extractErrorMessage, formatDateAu } from './utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
 afterEach(restoreZone)
@@ -29,5 +29,25 @@ describe('formatDateAu', () => {
     expect(formatDateAu('2026-08-13T20:00:00Z')).toBe('14/08/2026') // 06:00 on the 14th in Sydney
     if (!setZone('America/New_York')) return
     expect(formatDateAu('2026-08-14T02:00:00Z')).toBe('13/08/2026') // 22:00 on the 13th in New York
+  })
+})
+
+describe('extractErrorMessage', () => {
+  const fail = (data: unknown) => ({ response: { data } })
+
+  it('reads the first item of an errors array, then message', () => {
+    expect(extractErrorMessage(fail({ errors: ['one', 'two'], message: 'm' }), 'fb')).toBe('one')
+    expect(extractErrorMessage(fail({ message: 'm' }), 'fb')).toBe('m')
+  })
+
+  it('reads the first message of the first non-empty entry of an errors object (ASP.NET validation 400)', () => {
+    const note = 'The field Notes must be a string with a maximum length of 4000.'
+    expect(extractErrorMessage(fail({ title: 'One or more validation errors occurred.', errors: { Notes: [note] } }), 'fb')).toBe(note)
+    expect(extractErrorMessage(fail({ errors: { Empty: [], Notes: [note, 'x'] } }), 'fb')).toBe(note)
+  })
+
+  it('never shows the generic ProblemDetails title, and falls back for a network error', () => {
+    expect(extractErrorMessage(fail({ title: 'One or more validation errors occurred.' }), 'fb')).toBe('fb')
+    expect(extractErrorMessage(new Error('Network Error'), 'fb')).toBe('fb')
   })
 })
