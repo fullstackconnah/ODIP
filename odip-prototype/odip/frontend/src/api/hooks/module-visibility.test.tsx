@@ -45,6 +45,16 @@ describe('tenant workspace visibility transport', () => {
     expect(client.getQueryData(['module-visibility', 'tenant-a'])).toEqual({ hiddenAccommodation: true, hiddenVehicles: false, hiddenTrips: false })
     expect(client.getQueryData(['module-visibility', 'tenant-b'])).toEqual(visible)
   })
+  it('refreshes the settings and roster board reads so a group activities change shows without a reload', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantId: 'tenant-a' }))
+    const client = new QueryClient()
+    for (const key of [['settings'], ['roster-board']]) client.setQueryData(key, {})
+    apiClient.defaults.adapter = async config => ({ data: { data: { ...visible, groupActivitiesEnabled: true } }, status: 200, statusText: 'OK', headers: {}, config })
+    const hook = renderHook(() => useUpdateModuleVisibility(), { wrapper: wrapper(client) })
+    await act(async () => { await hook.result.current.mutateAsync({ ...visible, groupActivitiesEnabled: true }) })
+    expect(client.getQueryState(['settings'])?.isInvalidated).toBe(true)
+    expect(client.getQueryState(['roster-board'])?.isInvalidated).toBe(true)
+  })
 })
 
 

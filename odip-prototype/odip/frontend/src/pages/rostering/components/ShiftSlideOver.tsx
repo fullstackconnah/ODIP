@@ -641,7 +641,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         </FormField>
 
         <FormField label="Notes" hint="The support worker sees this on their shift.">
-          <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />
+          <textarea rows={3} maxLength={2000} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />
         </FormField>
 
         {onMakeActivity && existing && canWrite && !isLockedShift(existing) && !existing.groupActivityId && (

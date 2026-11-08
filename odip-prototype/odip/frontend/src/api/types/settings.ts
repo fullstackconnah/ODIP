@@ -48,6 +48,8 @@ export interface ModuleVisibilityDto {
   hiddenAccommodation: boolean
   hiddenVehicles: boolean
   hiddenTrips: boolean
+  /** Group activities are on for the organisation; absent counts as off. Sent back unchanged by the other switches. */
+  groupActivitiesEnabled?: boolean
   /** Whether payslips apply (presentation only: the server refuses on its own). Optional so existing fixtures still type-check. */
   employmentHeroConnected?: boolean
 }

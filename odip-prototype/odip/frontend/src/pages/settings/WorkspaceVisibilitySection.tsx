@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useModuleVisibility, useUpdateModuleVisibility } from '@/api/hooks'
 import type { ModuleVisibilityDto } from '@/api/types'
 import { CheckboxField } from '@/components/CheckboxField'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PageState } from '@/components/PageState'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
@@ -13,10 +14,14 @@ export default function WorkspaceVisibilitySection(frame: SectionFrame) {
   const [draft, setDraft] = useState<ModuleVisibilityDto | null>(null)
   const [saved, setSaved] = useState<ModuleVisibilityDto | null>(null)
   const [result, setResult] = useState<SaveResult>(null)
-  const dirty = draft?.hiddenTrips !== saved?.hiddenTrips || draft?.hiddenAccommodation !== saved?.hiddenAccommodation || draft?.hiddenVehicles !== saved?.hiddenVehicles
+  const [confirmingOff, setConfirmingOff] = useState(false)
+  const dirty = draft?.groupActivitiesEnabled !== saved?.groupActivitiesEnabled || draft?.hiddenTrips !== saved?.hiddenTrips || draft?.hiddenAccommodation !== saved?.hiddenAccommodation || draft?.hiddenVehicles !== saved?.hiddenVehicles
   if (query.data && !query.isError && !query.isFetching && !dirty && query.data !== saved) { setDraft(query.data); setSaved(query.data) }
   const save = () => {
     if (!draft) return
+    // Turning group activities off hides them from the board, so ask first; turning on needs no confirm.
+    if (saved?.groupActivitiesEnabled === true && draft.groupActivitiesEnabled === false && !confirmingOff) { setConfirmingOff(true); return }
+    setConfirmingOff(false)
     setResult(null)
     update.mutate(draft, {
       onSuccess: () => { setSaved(draft); setResult('saved') },
@@ -44,10 +49,21 @@ export default function WorkspaceVisibilitySection(frame: SectionFrame) {
             <CheckboxField label="Show trips and holidays" hint="Trips, Bookings, upcoming trips on the dashboard, Event templates and Activity library. Trip records and links stay available." checked={!draft.hiddenTrips} disabled={update.isPending} onChange={e => toggleTrips(e.target.checked)} />
             <CheckboxField label="Show Accommodation" hint="Trip accommodation and reservations stay available even when this menu link is hidden." checked={!draft.hiddenAccommodation} disabled={update.isPending} onChange={e => { setDraft({ ...draft, hiddenAccommodation: !e.target.checked }); setResult(null) }} />
             <CheckboxField label="Show Vehicles" hint="Schedule assignments and vehicle warnings stay available even when this menu link is hidden." checked={!draft.hiddenVehicles} disabled={update.isPending} onChange={e => { setDraft({ ...draft, hiddenVehicles: !e.target.checked }); setResult(null) }} />
+            <CheckboxField label="Group activities" hint="Run group sessions on the roster board: several participants and staff in one activity, with ratios, attendance, payroll and billing." checked={draft.groupActivitiesEnabled === true} disabled={update.isPending} onChange={e => { setDraft({ ...draft, groupActivitiesEnabled: e.target.checked }); setResult(null) }} />
           </div>
           <p role="status" className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">{moved.length ? `After saving, ${movedList} will move to Other workspaces.${draft.hiddenTrips ? ' Event templates and Activity library will leave Settings.' : ''}` : 'After saving, every workspace will appear in the usual menu.'}</p>
         </>
       )}
+      <ConfirmDialog
+        open={confirmingOff}
+        variant="danger"
+        title="Turn off group activities?"
+        confirmLabel="Turn off"
+        loading={update.isPending}
+        onCancel={() => { setConfirmingOff(false); if (draft) setDraft({ ...draft, groupActivitiesEnabled: true }) }}
+        onConfirm={save}
+        message="Existing activities are hidden from the board and can't be changed until you turn this back on. Their shifts stay on the roster."
+      />
     </SettingsSection>
   )
 }
