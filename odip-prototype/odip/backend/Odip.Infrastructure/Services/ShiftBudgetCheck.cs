@@ -12,7 +12,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>One shift to be priced: when it is, how long, and the support it gives. Plain data, so a source of prices needs no entity.</summary>
-public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null, Guid? ShiftPatternId = null, Guid? ShiftId = null);
+public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null, Guid? ShiftPatternId = null, Guid? ShiftId = null, Guid? GroupActivityId = null);
 
 /// <summary>What a shift is estimated to cost, or why it cannot be: nothing is ever invented for a shift the estimator cannot price.</summary>
 public abstract record ShiftCostEstimate

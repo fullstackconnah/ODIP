@@ -127,6 +127,20 @@ public class ShiftTravelClaimTests
     }
 
     [Fact]
+    public async Task GA4_AnAttachedOneToThreeShiftWithNoBlock_SharesItsTravelByThree()
+    {
+        var fx = Fx.Create();
+        var shift = fx.Shift();
+        shift.Ratio = SupportRatio.OneToThree;
+        shift.GroupActivityId = Guid.NewGuid();
+        fx.Completion(shift, preMin: 20, preKm: 30m);
+        var lines = await fx.Lines(await fx.Generate());
+
+        var km = Assert.Single(lines, l => l.SupportItemCode == KmNumber);
+        Assert.Equal(9.90m, km.Hours);   // a third of the 30 km leg, floor(10 km x 0.99): never the whole leg claimed by each participant
+    }
+
+    [Fact]
     public async Task T3_OrgOff_TheClaimIsTheSameAsWithNoTravel()
     {
         var withTravel = Fx.Create(orgClaims: false);
