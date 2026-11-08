@@ -85,6 +85,7 @@ try {
       s = await open('Coordinator')
       await s.page.goto(`${BASE_URL}/staff`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
       await s.page.locator('a[href^="/staff/"]:not([href$="/new"]):not([href$="/edit"])').first().click({ timeout: 60_000 })
+      await s.page.getByRole('tab', { name: 'Week' }).or(s.page.getByRole('button', { name: 'Week', exact: true })).first().click({ timeout: 60_000 })
       await s.page.getByRole('button', { name: 'Add shift' }).click({ timeout: 60_000 })
       dialog = s.page.getByRole('dialog').first()
       await shoot(s.page, st, 'person-week-notice', dialog.getByText(NOTE), dialog.locator('[data-shift-field="participant"]'), dialog)
