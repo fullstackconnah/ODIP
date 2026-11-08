@@ -733,3 +733,31 @@ describe('RosterBoardPage: the New menu', () => {
     expect(router.state.location.pathname).toBe('/trips/new')
   })
 })
+
+describe('RosterBoardPage: group activities (flag)', () => {
+  const renderWith = async (board: ReturnType<typeof makeParticipantBoard>) => {
+    mockUseRosterBoard.mockReturnValue({ data: board, isLoading: false, isError: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: ['/rostering'] })
+    render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
+    await user.click(screen.getByRole('button', { name: 'New' }))
+    return user
+  }
+
+  it('lists Group activity as the third New item when the flag is on', async () => {
+    await renderWith(makeParticipantBoard({ groupActivitiesEnabled: true, groupActivities: [] }) as never)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Shift', 'Trip', 'Group activity'])
+  })
+
+  it('keeps two items when the flag is off', async () => {
+    await renderWith(makeParticipantBoard({ groupActivitiesEnabled: false, groupActivities: [] }) as never)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Shift', 'Trip'])
+  })
+
+  it('opens the new activity modal from the item', async () => {
+    const user = await renderWith(makeParticipantBoard({ groupActivitiesEnabled: true, groupActivities: [] }) as never)
+    await user.click(screen.getByRole('option', { name: 'Group activity' }))
+    expect(await screen.findByRole('dialog', { name: 'New group activity' })).toBeInTheDocument()
+  })
+})

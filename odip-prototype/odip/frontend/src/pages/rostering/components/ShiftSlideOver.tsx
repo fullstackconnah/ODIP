@@ -67,9 +67,9 @@ export type ShiftSlideOverProps = {
    * line under the Participant field for whoever is selected. A participant the list does not know about falls back to the shift's own
    * `readinessIssues` in edit mode; an entry holding an empty list means "ready", and wins over that fallback.
    */
+  participantReadiness?: Record<string, string[]>
   /** Group activities (flag on): "Make a group activity" starts one from the shift being edited. Absent with the flag off, and the button with it. */
   onMakeActivity?: (shift: ShiftDto) => void
-  participantReadiness?: Record<string, string[]>
   /** Called with the saved shift after a successful save, before onClose; never on Cancel. The board uses it to clear the shift a person was carried off (roster drag and drop, decision 6). */
   onSaved?: (shift: ShiftDto) => void
 }
