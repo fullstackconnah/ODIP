@@ -373,43 +373,6 @@ await scene('touch-390', async () => {
   check('2 drop chip height == --control-h (coarse)', drop.h === ch, { drop: drop.h, controlH: ch })
   await shot(page, card, 'board-normal-390.png', { touch: true })
 
-  await scene('chooser-390', async () => {
-  // chooser step 1 (same times) and step 2 (times differ) from a group-line shift's menu
-  for (const [shiftId, tag] of [['gl-2', 'chooser-times-differ'], ['gl-1', 'chooser']]) {
-    const chipEl = page.locator(`[data-shift-chip="${shiftId}"]`)
-    await chipEl.scrollIntoViewIfNeeded()
-    await chipEl.getByRole('button', { name: /^Actions for/ }).click()
-    await page.getByRole('option', { name: 'Add to an activity…' }).click()
-    const dlg = page.getByRole('dialog').first()
-    await dlg.waitFor({ timeout: 10_000 })
-    const radio = dlg.getByRole('radio').first()
-    await radio.check({ force: true })
-    if (tag === 'chooser') {
-      await shot(page, dlg, 'chooser-390.png', { touch: true })
-      const tall = await dlg.getByRole('radio').evaluateAll((els) => els.map((e) => { const l = e.closest('label') ?? e; const b = l.getBoundingClientRect(); return [b.width, b.height] }))
-      check('8 chooser radios >= 44 both ways', tall.length > 0 && tall.every(([w, h]) => w >= 44 && h >= 44), tall)
-    } else {
-      await dlg.getByRole('button', { name: 'Continue' }).click()
-      await dlg.getByText(/Agreement .*activity /).waitFor({ timeout: 10_000 })
-      await shot(page, dlg, 'chooser-times-differ-390.png', { touch: true })
-    }
-    await page.keyboard.press('Escape')
-    await page.waitForTimeout(300)
-  }
-
-  })
-  await scene('slideover-390', async () => {
-    for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
-  // slide-over: Make a group activity
-  await page.locator('[data-shift-open="gl-1"]').click()
-  const make = page.getByRole('button', { name: 'Make a group activity' })
-  await make.waitFor({ timeout: 10_000 }).catch(async (e) => { console.log('[group-activities] slide-over debug:', JSON.stringify({ dialogs: (await page.getByRole('dialog').allTextContents()).map((t) => t.slice(0, 160)), headings: await page.getByRole('heading').allTextContents() })); throw e })
-  await make.scrollIntoViewIfNeeded()
-  await shot(page, make.locator('xpath=..'), 'slideover-make-activity-390.png', { touch: true })
-  await page.keyboard.press('Escape')
-  await page.waitForTimeout(300)
-
-  })
   await scene('modal-390', async () => {
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
   // modal at 390
@@ -443,6 +406,52 @@ await scene('touch-390', async () => {
   await shot(page, dlg, 'modal-390.png', { touch: true, natural: true })
   checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', 'modal-390.png'), { touch: true })).checks)
   })
+  await context.close()
+})
+
+await scene('chooser-390', async () => {
+  const { context, page } = await openBoard(browser, { width: 390, height: 844, touch: true })
+  await page.locator('[data-activity-card]').first().waitFor({ state: 'visible', timeout: 30_000 })
+  // chooser step 1 (same times) and step 2 (times differ) from a group-line shift's menu
+  for (const [shiftId, tag] of [['gl-2', 'chooser-times-differ'], ['gl-1', 'chooser']]) {
+    const chipEl = page.locator(`[data-shift-chip="${shiftId}"]`)
+    await chipEl.scrollIntoViewIfNeeded()
+    await chipEl.getByRole('button', { name: /^Actions for/ }).click()
+    await page.getByRole('option', { name: 'Add to an activity…' }).click()
+    const dlg = page.getByRole('dialog').first()
+    await dlg.waitFor({ timeout: 10_000 })
+    const radio = dlg.getByRole('radio').first()
+    await radio.check({ force: true })
+    if (tag === 'chooser') {
+      await shot(page, dlg, 'chooser-390.png', { touch: true })
+      const tall = await dlg.getByRole('radio').evaluateAll((els) => els.map((e) => { const l = e.closest('label') ?? e; const b = l.getBoundingClientRect(); return [b.width, b.height] }))
+      check('8 chooser radios >= 44 both ways', tall.length > 0 && tall.every(([w, h]) => w >= 44 && h >= 44), tall)
+    } else {
+      await dlg.getByRole('button', { name: 'Continue' }).click()
+      await dlg.getByText(/Agreement .*activity /).waitFor({ timeout: 10_000 })
+      await shot(page, dlg, 'chooser-times-differ-390.png', { touch: true })
+    }
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+  }
+
+  await context.close()
+})
+await scene('slideover-390', async () => {
+  const { context, page } = await openBoard(browser, { width: 390, height: 844, touch: true })
+  page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log('[group-activities] console', m.type(), m.text().slice(0, 200)) })
+  page.setDefaultTimeout(8000)
+  await page.locator('[data-activity-card]').first().waitFor({ state: 'visible', timeout: 30_000 })
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150) }
+  // slide-over: Make a group activity
+  await page.locator('[data-shift-open="gl-1"]').click()
+  const make = page.getByRole('button', { name: 'Make a group activity' })
+  await make.waitFor({ timeout: 10_000 }).catch(async (e) => { console.log('[group-activities] slide-over debug:', JSON.stringify({ dialogs: (await page.getByRole('dialog').allTextContents()).map((t) => t.slice(0, 160)), headings: await page.getByRole('heading').allTextContents() })); throw e })
+  await make.scrollIntoViewIfNeeded()
+  await shot(page, make.locator('xpath=..'), 'slideover-make-activity-390.png', { touch: true })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+
   await context.close()
 })
 
