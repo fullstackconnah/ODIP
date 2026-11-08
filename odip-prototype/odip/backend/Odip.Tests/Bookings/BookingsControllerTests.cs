@@ -307,4 +307,46 @@ public class BookingsControllerTests
         Assert.Empty(page1Ids.Intersect(page2Ids)); // disjoint — no row duplicated across pages
         Assert.Equal(3, page1Ids.Concat(page2Ids).Distinct().Count()); // exhaustive — every row appears exactly once
     }
+
+    private static ParticipantBooking SeedBooking(OdipDbContext db, TripInstance trip, Participant p, InsuranceStatus insurance = InsuranceStatus.None)
+    {
+        var b = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = p.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 9, 1), InsuranceStatus = insurance };
+        db.ParticipantBookings.Add(b);
+        db.SaveChanges();
+        return b;
+    }
+
+    // H44-1: a claim line or invoice that points at the booking makes the delete a message, not an FK 500.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Delete_BookingOnAClaimLineOrInvoice_Is409AndKeepsTheBooking(bool claimLine)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var p = SeedParticipant(db);
+        var b = SeedBooking(db, trip, p);
+        if (claimLine) db.ClaimLineItems.Add(new ClaimLineItem { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
+        else db.Invoices.Add(new Invoice { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("This booking is on a claim or invoice, so it can't be deleted. Cancel it instead.", Assert.IsType<ApiResponse<bool>>(conflict.Value).Errors![0]);
+        Assert.True(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
+    }
+
+    [Fact]
+    public async Task Delete_BookingWithNoClaimOrInvoice_StillDeletes()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+
+        var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
+    }
 }
