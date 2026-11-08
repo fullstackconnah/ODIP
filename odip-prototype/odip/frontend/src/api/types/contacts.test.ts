@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { unionRelevantFields, CONTACT_ROLE_FIELD_MAP, CONTACT_ROLE_TYPE_LABELS, planTypeComplianceWarning } from './contacts'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { unionRelevantFields, CONTACT_ROLE_FIELD_MAP, CONTACT_ROLE_TYPE_LABELS, planTypeComplianceWarning, calculateAge } from './contacts'
 
 /**
  * PF-5 (SPEC-02): unionRelevantFields dedups CONTACT_ROLE_FIELD_MAP entries across a multi-role
@@ -116,5 +116,25 @@ describe('I3: Key Worker and Other', () => {
   it("I3: labels are 'Key Worker' and 'Other'", () => {
     expect(CONTACT_ROLE_TYPE_LABELS.KeyWorker).toBe('Key Worker')
     expect(CONTACT_ROLE_TYPE_LABELS.Other).toBe('Other')
+  })
+})
+
+describe('calculateAge', () => {
+  afterEach(() => vi.useRealTimers())
+  // The viewer's local calendar day; run under TZ=America/New_York and Australia/Sydney (a UTC-midnight parse is off a day west of UTC).
+  const ageOn = (y: number, m: number, d: number) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(y, m - 1, d, 12))
+    return calculateAge('2000-06-10')
+  }
+
+  it('is one less the day before the birthday and exact on it', () => {
+    expect(ageOn(2020, 6, 9)).toBe(19)
+    expect(ageOn(2020, 6, 10)).toBe(20)
+  })
+
+  it('is null for a blank or malformed date', () => {
+    expect(calculateAge(null)).toBeNull()
+    expect(calculateAge('nope')).toBeNull()
   })
 })
