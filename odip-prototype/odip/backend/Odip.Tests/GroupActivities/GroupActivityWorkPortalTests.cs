@@ -286,6 +286,21 @@ public class GroupActivityWorkPortalTests
         Assert.Empty(await PortalActivityShiftsLookup(rig, other.Id));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PortalMyShifts_ListsTheActivityOnlyWhileTheSwitchIsOn_OrdinaryShiftsEitherWay(bool enabled)
+    {
+        var rig = new Rig(enabled: enabled);
+        var ordinary = rig.Fx.AddShift(rig.Fx.AddParticipant("Pat"), userId: rig.Worker.Id, status: ShiftStatus.Published);
+
+        var result = await NotesController(rig, rig.Worker.Id).GetMyShifts(GroupActivityFixture.Day.AddDays(-7), GroupActivityFixture.Day.AddDays(7), default);
+
+        var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal(ordinary.Id, Assert.Single(body.Shifts).Id);
+        Assert.Equal(enabled ? 1 : 0, body.ActivityShifts?.Count ?? 0);
+    }
+
     private PortalController NotesController(Rig rig, Guid userId)
     {
         var tenant = new Mock<ICurrentTenant>();

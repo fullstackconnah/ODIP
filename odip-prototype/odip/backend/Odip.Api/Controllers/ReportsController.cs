@@ -68,7 +68,7 @@ public class ReportsController : ControllerBase
                 && ((c.ReviewOutcome == ReviewOutcome.Approved && c.Shift.Status == ShiftStatus.Completed) || c.Shift.Status == ShiftStatus.PendingReview))
             .Select(c => new
             {
-                c.Id, c.SubmittedByUserId, c.ActualStart, c.ActualEnd,
+                c.Id, c.SubmittedByUserId, c.ActualStart, c.ActualEnd, c.ExtraTime, c.TimeZoneId, c.VarianceMinutesStart, c.VarianceMinutesEnd,
                 Awaiting = c.Shift!.Status == ShiftStatus.PendingReview,
                 c.Shift.ServiceDate, c.Shift.ServiceLocationId, c.Shift.StartTime, c.Shift.EndTime, c.Shift.EndsNextDay, c.Shift.NightType,
             })
@@ -93,9 +93,12 @@ public class ReportsController : ControllerBase
         foreach (var c in completions)
         {
             var shift = new Shift { ServiceDate = c.ServiceDate, ServiceLocationId = c.ServiceLocationId, StartTime = c.StartTime, EndTime = c.EndTime, EndsNextDay = c.EndsNextDay, NightType = c.NightType };
-            var completion = new ShiftCompletion { ActualStart = c.ActualStart, ActualEnd = c.ActualEnd };
+            var completion = new ShiftCompletion { ActualStart = c.ActualStart, ActualEnd = c.ActualEnd, ExtraTime = c.ExtraTime, TimeZoneId = c.TimeZoneId, VarianceMinutesStart = c.VarianceMinutesStart, VarianceMinutesEnd = c.VarianceMinutesEnd };
             var shiftBreaks = breaks[c.Id].Select(b => new ShiftBreak { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = b.WithParticipant });
-            var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks, ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone)).PaidMinutes;
+            var shiftZone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone);
+            var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks, shiftZone).PaidMinutes;
+            var (paidStart, paidEnd, held) = EmploymentHeroTimesheets.PaidWindow(shift, completion, shiftZone);   // unapproved extra time is held at rostered hours, as on the Payroll page
+            if (held) (_, _, paid) = ShiftBreakRules.NetWorked(paidStart, paidEnd, now, shiftBreaks);
             var cur = perWorker.GetValueOrDefault(c.SubmittedByUserId);
             perWorker[c.SubmittedByUserId] = c.Awaiting
                 ? (cur.Shifts, cur.Approved, cur.Awaiting + paid)
@@ -131,7 +134,7 @@ public class ReportsController : ControllerBase
         var (f, t) = (from!.Value, to!.Value);
 
         var shifts = await _db.Shifts.AsNoTracking()
-            .Where(s => s.TenantId == tid && s.Status != ShiftStatus.Draft && s.ServiceDate >= f && s.ServiceDate <= t)
+            .Where(s => s.TenantId == tid && s.GroupActivityId == null && s.Status != ShiftStatus.Draft && s.ServiceDate >= f && s.ServiceDate <= t)
             .Select(s => new { s.ServiceDate, s.Status, Staffed = s.UserId != null })
             .ToListAsync(ct);
 

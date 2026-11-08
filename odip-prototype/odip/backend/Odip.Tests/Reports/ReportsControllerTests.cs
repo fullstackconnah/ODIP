@@ -182,7 +182,56 @@ public class ReportsControllerTests
         Assert.Equal(10.00m, row.ApprovedHours);
     }
 
+    [Fact]
+    public async Task HoursByWorker_SleepoverOnTheSpringForwardNight_Counts7Hours()
+    {
+        using var db = TestDb.Create();
+        var w = AddUser(db, "Sam", "Sleeper");
+        var night = new DateOnly(2026, 10, 3);   // Sydney clocks go 02:00 -> 03:00 overnight
+        var shift = AddShift(db, night, ShiftStatus.Completed, w.Id, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), nextDay: true, night: SleepoverType.Sleepover);
+        AddCompletion(db, shift, w, 60);
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(Rows<HoursByWorkerRowDto>(await Call(Controller(db), "hours", night, night)));
+        Assert.Equal(7.00m, row.ApprovedHours);
+    }
+
+    // [H54-1] Rostered 09:00-17:00 Sydney (AEDT), worked 08:30-17:00, no break: 30 min of extra time. Payroll holds it at rostered (480) unless approved (510).
+    [Theory]
+    [InlineData(ExtraTimeDecision.Pending, 8.00)]
+    [InlineData(ExtraTimeDecision.Declined, 8.00)]
+    [InlineData(ExtraTimeDecision.Approved, 8.50)]
+    public async Task HoursByWorker_UnapprovedExtraTimeIsHeldAtRostered_AsPayrollDoes(ExtraTimeDecision decision, double hours)
+    {
+        using var db = TestDb.Create();
+        var w = AddUser(db, "Eve", "Extra");
+        var shift = AddShift(db, new DateOnly(2026, 10, 20), ShiftStatus.Completed, w.Id, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var c = AddCompletion(db, shift, w, 0);
+        c.ActualStart = new DateTime(2026, 10, 19, 21, 30, 0, DateTimeKind.Utc);   // 08:30 AEDT
+        c.ActualEnd = new DateTime(2026, 10, 20, 6, 0, 0, DateTimeKind.Utc);       // 17:00 AEDT
+        c.VarianceMinutesStart = -30;
+        c.ExtraTime = decision;
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(Rows<HoursByWorkerRowDto>(await Call(Controller(db), "hours", From, To)));
+        Assert.Equal((decimal)hours, row.ApprovedHours);   // the same 480 / 510 Payroll's PaidWindow + NetWorked give for this data
+    }
+
     // ---------- shift fulfilment ----------
+
+    [Fact]
+    public async Task ShiftFulfilment_GroupActivityLinesAreLeftOutOfTheFillRate()
+    {
+        using var db = TestDb.Create();
+        AddShift(db, From, ShiftStatus.Published, Guid.NewGuid());
+        var line = AddShift(db, From, ShiftStatus.Published, null);   // a group line: staff live on GroupActivityStaff, not on the shift
+        line.GroupActivityId = Guid.NewGuid();
+        await db.SaveChangesAsync();
+
+        var week = Rows<ShiftFulfilmentWeekDto>(await Call(Controller(db), "fulfilment", From, To))[0];
+
+        Assert.Equal((1, 1, 0, 100), (week.Shifts, week.Filled, week.Unstaffed, week.FillRatePercent));
+    }
 
     [Theory]
     [InlineData(2026, 10, 25, 2026, 10, 19)]   // Sunday 23:30 shift stays in the week that began Monday 19th
