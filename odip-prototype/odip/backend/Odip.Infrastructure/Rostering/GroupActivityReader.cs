@@ -4,13 +4,15 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
+using Odip.Infrastructure.Services;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Rostering;
 
 /// <summary>
 /// Builds <see cref="GroupActivityDto"/> (group activities D2): the activity, its participants (one per person, from their attached shifts), its workers and the findings. Cancelled shifts are
-/// ignored, so a participant whose shift was cancelled neither counts for staff needed nor appears. Shared by the group-activity endpoints and the roster board.
+/// ignored on a Draft or Published activity (a participant whose shift was cancelled neither counts nor appears). Once the activity has started, a participant whose every shift is cancelled is listed
+/// with <see cref="GroupActivityParticipantDto.DidNotAttend"/>, and still counts for nothing: staff needed and the staff findings judge only the people who are attending. Shared by the group-activity endpoints and the roster board.
 /// </summary>
 public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability availability)
 {
@@ -23,11 +25,16 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
             .Where(a => a.ServiceDate >= from && a.ServiceDate <= to && a.Status != ShiftStatus.Cancelled)
             .OrderBy(a => a.ServiceDate).ThenBy(a => a.StartTime).ToListAsync(ct), ct);
 
+    /// <summary>A cancelled shift is a "didn't attend" only when it was cancelled (CancelledAt, UTC) on or after the activity's service day in <paramref name="zone"/>; one cancelled earlier through the board never took part and stays hidden and unbillable. shortcut: the organisation's zone, not each place's; revisit if a provider spans zones.</summary>
+    public static bool IsNoShow(Shift shift, TimeZoneInfo zone) =>
+        shift.Status == ShiftStatus.Cancelled && shift.CancelledAt is { } at && ProviderLocalTime.TodayIn(DateTime.SpecifyKind(at, DateTimeKind.Utc), zone) >= shift.ServiceDate;
+
     private async Task<List<GroupActivityDto>> BuildAsync(List<GroupActivity> activities, CancellationToken ct)
     {
         if (activities.Count == 0) return [];
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(db, activities[0].TenantId, ct)).Zone;
         var ids = activities.Select(a => a.Id).ToList();
-        var shifts = await db.Shifts.AsNoTracking().Where(s => s.GroupActivityId != null && ids.Contains(s.GroupActivityId.Value) && s.Status != ShiftStatus.Cancelled).ToListAsync(ct);
+        var shifts = await db.Shifts.AsNoTracking().Where(s => s.GroupActivityId != null && ids.Contains(s.GroupActivityId.Value)).ToListAsync(ct);
         var staffRows = await db.GroupActivityStaff.AsNoTracking().Where(r => ids.Contains(r.GroupActivityId)).ToListAsync(ct);
         var participantIds = shifts.Select(s => s.ParticipantId).Distinct().ToList();
         var userIds = staffRows.Select(r => r.UserId).Distinct().ToList();
@@ -45,31 +52,34 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
         var result = new List<GroupActivityDto>();
         foreach (var activity in activities)
         {
-            var mine = shifts.Where(s => s.GroupActivityId == activity.Id).ToList();
+            var started = activity.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed;
+            var mine = shifts.Where(s => s.GroupActivityId == activity.Id && (s.Status != ShiftStatus.Cancelled || (started && IsNoShow(s, zone)))).ToList();
             var people = mine.GroupBy(s => s.ParticipantId).Select(g =>
             {
                 var first = g.First();
+                var didNotAttend = g.All(s => IsNoShow(s, zone));
                 var pattern = g.Select(s => s.ShiftPatternId).FirstOrDefault(p => p != null) is { } patternId ? patterns.GetValueOrDefault(patternId) : null;
                 var differs = pattern is not null && (pattern.StartTime != activity.StartTime || pattern.EndTime != activity.EndTime || pattern.EndsNextDay != activity.EndsNextDay);
                 return new GroupActivityParticipantDto
                 {
                     ParticipantId = g.Key, ParticipantName = participants.GetValueOrDefault(g.Key)?.FullName ?? string.Empty, Ratio = first.Ratio,
-                    ShiftIds = g.Select(s => s.Id).ToList(), TimesDiffer = differs,
+                    ShiftIds = g.Where(s => didNotAttend || s.Status != ShiftStatus.Cancelled).Select(s => s.Id).ToList(), TimesDiffer = differs, DidNotAttend = didNotAttend,
                     AgreementStartTime = differs ? pattern!.StartTime : null, AgreementEndTime = differs ? pattern!.EndTime : null,
                 };
             }).OrderBy(p => p.ParticipantName).ToList();
 
+            var attending = people.Where(p => !p.DidNotAttend).ToList();
             var rows = staffRows.Where(r => r.GroupActivityId == activity.Id).ToList();
             var staff = rows.Select(r => new GroupActivityStaffDto
             {
                 Id = r.Id, StaffId = r.UserId, StaffName = users.GetValueOrDefault(r.UserId)?.FullName ?? string.Empty,
                 StartTime = r.StartTime, EndTime = r.EndTime, EndsNextDay = r.EndsNextDay, Role = r.Role,
                 Findings = snapshot is null || activity.Status == ShiftStatus.Cancelled ? []
-                    : GroupActivityRules.CheckStaffPart(snapshot, activity, people.Select(p => p.ParticipantId), r.Id, r.UserId, r.StartTime, r.EndTime, r.EndsNextDay, null, null)
+                    : GroupActivityRules.CheckStaffPart(snapshot, activity, attending.Select(p => p.ParticipantId), r.Id, r.UserId, r.StartTime, r.EndTime, r.EndsNextDay, null, null)
                         .Select(RosterGate.ToFindingDto).ToList(),
             }).OrderBy(s => s.StaffName).ToList();
 
-            var needed = GroupActivityStaffing.StaffNeeded(people.Select(p => p.Ratio), activity.MinStaffRequired);
+            var needed = GroupActivityStaffing.StaffNeeded(attending.Select(p => p.Ratio), activity.MinStaffRequired);
             var findings = new List<RosterFindingDto>();
             if (activity.Status != ShiftStatus.Cancelled && staff.Count < needed)
                 findings.Add(new RosterFindingDto

@@ -7,7 +7,7 @@ const { mockApiPost, mockApiPut, mockApiDelete } = vi.hoisted(() => ({ mockApiPo
 
 vi.mock('../client', () => ({ apiGet: vi.fn(), apiPost: mockApiPost, apiPut: mockApiPut, apiDelete: mockApiDelete }))
 
-import { useAddGroupParticipant, useAddGroupStaff, useCancelGroupActivity, useCreateGroupActivity, useDetachShift, useRemoveGroupStaff, useSetGroupRatio, useUpdateGroupActivity } from './groupActivities'
+import { useAddGroupParticipant, useAddGroupStaff, useCancelGroupActivity, useCreateGroupActivity, useDetachShift, useRemoveGroupStaff, useSetGroupAttendance, useSetGroupRatio, useUpdateGroupActivity } from './groupActivities'
 
 const wrapper = (qc: QueryClient) => ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
 const keysInvalidated = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map(c => (c[0] as { queryKey?: unknown[] } | undefined)?.queryKey)
@@ -25,6 +25,7 @@ describe('group activity writes (PR2): each one refetches the board and the acti
     ['add a participant', () => useAddGroupParticipant(), { id: 'a1', participantId: 'p1', ratio: 'OneToOne' }, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/participants', { participantId: 'p1', ratio: 'OneToOne' })],
     ['set a ratio', () => useSetGroupRatio(), { id: 'a1', participantId: 'p1', ratio: 'TwoToOne' }, () => expect(mockApiPut).toHaveBeenCalledWith('/rostering/group-activities/a1/participants/p1/ratio', { ratio: 'TwoToOne' })],
     ['add staff', () => useAddGroupStaff(), { id: 'a1', data: { staffId: 'st1' } }, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/staff', { staffId: 'st1' })],
+    ['mark attendance', () => useSetGroupAttendance(), { id: 'a1', participantId: 'p1', attended: false }, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/participants/p1/attendance', { attended: false })],
     ['remove staff', () => useRemoveGroupStaff(), { id: 'a1', rowId: 'r1' }, () => expect(mockApiDelete).toHaveBeenCalledWith('/rostering/group-activities/a1/staff/r1')],
   ]
   it.each(cases)('%s', async (_name, useHook, vars, expectCall) => {

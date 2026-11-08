@@ -39,7 +39,7 @@ public partial class GroupActivitiesController
         Id = r.Id, TenantId = r.TenantId, ServiceDate = a.ServiceDate, StartTime = r.StartTime, EndTime = r.EndTime, EndsNextDay = r.EndsNextDay, ServiceLocationId = a.ServiceLocationId,
     };
 
-    private static GroupStaffReviewDto ToReview(GroupActivity a, GroupActivityStaff r, string staffName, string? payrollId, int participants, string rowZoneId)
+    private static GroupStaffReviewDto ToReview(GroupActivity a, GroupActivityStaff r, string staffName, string? payrollId, int participants, int didNotAttend, string rowZoneId)
     {
         var offRoster = false;
         if (r.ActualStart is { } start && r.ActualEnd is { } end)
@@ -50,16 +50,23 @@ public partial class GroupActivitiesController
         return new GroupStaffReviewDto(
             r.Id, a.Id, a.Title, a.ServiceDate, r.UserId, staffName, r.Role, r.StartTime, r.EndTime, r.EndsNextDay,
             r.ActualStart, r.ActualEnd, r.BreakStartedAt, r.BreakEndedAt, r.TimeZoneId ?? rowZoneId,
-            r.State.ToString(), r.LocationCheck, offRoster, r.AdjustmentReason, !string.IsNullOrWhiteSpace(payrollId), participants);
+            r.State.ToString(), r.LocationCheck, offRoster, r.AdjustmentReason, !string.IsNullOrWhiteSpace(payrollId), participants, didNotAttend);
     }
 
     private async Task<GroupStaffReviewDto> ReviewOneAsync(GroupActivity a, GroupActivityStaff r, CancellationToken ct)
     {
         var user = await _db.Users.AsNoTracking().Where(u => u.Id == r.UserId).Select(u => new { u.FirstName, u.LastName, u.ExternalPayrollId }).FirstOrDefaultAsync(ct);
         var participants = await _db.Shifts.AsNoTracking().CountAsync(s => s.GroupActivityId == a.Id && s.Status != ShiftStatus.Cancelled, ct);
+        var didNotAttend = (await DidNotAttendCountsAsync([a.Id], (await ProviderTimeZoneResolver.ResolveAsync(_db, a.TenantId, ct)).Zone, ct)).GetValueOrDefault(a.Id);
         var zone = await ProviderTimeZoneResolver.ForShiftAsync(_db, RowShift(a, r), ct);   // the zone the row is stamped with when it starts
-        return ToReview(a, r, $"{user?.FirstName} {user?.LastName}".Trim(), user?.ExternalPayrollId, participants, zone.Id);
+        return ToReview(a, r, $"{user?.FirstName} {user?.LastName}".Trim(), user?.ExternalPayrollId, participants, didNotAttend, zone.Id);
     }
+
+    /// <summary>Per activity, the participants whose every attached shift is cancelled (marked didn't attend): the count the review list summarises. Distinct people, unlike the shift count beside it. A shift cancelled before the activity's day never took part (<see cref="GroupActivityReader.IsNoShow"/>) and is left out.</summary>
+    private async Task<Dictionary<Guid, int>> DidNotAttendCountsAsync(List<Guid> activityIds, TimeZoneInfo zone, CancellationToken ct) =>
+        (await _db.Shifts.AsNoTracking().Where(s => s.GroupActivityId != null && activityIds.Contains(s.GroupActivityId.Value)).ToListAsync(ct))
+        .Where(s => s.Status != ShiftStatus.Cancelled || GroupActivityReader.IsNoShow(s, zone))
+        .GroupBy(s => s.GroupActivityId!.Value).ToDictionary(g => g.Key, g => g.GroupBy(s => s.ParticipantId).Count(p => p.All(s => GroupActivityReader.IsNoShow(s, zone))));
 
     // ── C1 the review list ──────────────────────────────────────────────────────────────────────────
 
@@ -85,8 +92,9 @@ public partial class GroupActivitiesController
         var activityIds = rows.Select(r => r.GroupActivityId).Distinct().ToList();
         var counts = (await _db.Shifts.AsNoTracking().Where(s => s.GroupActivityId != null && activityIds.Contains(s.GroupActivityId.Value) && s.Status != ShiftStatus.Cancelled)
             .GroupBy(s => s.GroupActivityId!.Value).Select(g => new { Id = g.Key, N = g.Count() }).ToListAsync(ct)).ToDictionary(g => g.Id, g => g.N);
+        var didNotAttend = await DidNotAttendCountsAsync(activityIds, zone.Zone, ct);
         var byLocation = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, rows.Select(r => r.GroupActivity!.ServiceLocationId), ct);
-        var dtos = rows.Select(r => ToReview(r.GroupActivity!, r, $"{r.User?.FirstName} {r.User?.LastName}".Trim(), r.User?.ExternalPayrollId, counts.GetValueOrDefault(r.GroupActivityId),
+        var dtos = rows.Select(r => ToReview(r.GroupActivity!, r, $"{r.User?.FirstName} {r.User?.LastName}".Trim(), r.User?.ExternalPayrollId, counts.GetValueOrDefault(r.GroupActivityId), didNotAttend.GetValueOrDefault(r.GroupActivityId),
             ProviderTimeZoneResolver.ZoneOf(r.GroupActivity!.ServiceLocationId, byLocation, zone.Zone).Id)).ToList();
         return Ok(ApiResponse<GroupStaffReviewListDto>.Ok(new GroupStaffReviewListDto(dtos, total)));
     }
