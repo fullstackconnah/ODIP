@@ -215,4 +215,20 @@ public class AgreementPatternMapperTests
             else Assert.True(ratio is SupportRatio.SharedSupport or SupportRatio.Other, ratio.ToString());
         }
     }
+
+    [Theory]
+    [InlineData(SupportRatio.OneToTwo, 2)]
+    [InlineData(SupportRatio.OneToThree, 3)]
+    [InlineData(SupportRatio.OneToFour, 4)]
+    [InlineData(SupportRatio.OneToFive, 5)]
+    [InlineData(SupportRatio.OneToOne, null)]
+    [InlineData(SupportRatio.TwoToOne, null)]
+    [InlineData(SupportRatio.SharedSupport, null)]
+    [InlineData(SupportRatio.Other, null)]
+    [InlineData((SupportRatio)99, null)]
+    public void GroupSizeOf_AnAttachedShift_IsItsNOnlyAtOneToN(SupportRatio ratio, int? expected)
+    {
+        Assert.Equal(expected, AgreementPatternMapper.GroupSizeOf(Guid.NewGuid(), ratio));
+        Assert.Null(AgreementPatternMapper.GroupSizeOf(null, ratio));   // unattached: priced or refused as before
+    }
 }

@@ -139,4 +139,56 @@ public class TaskStatusTests
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(admin, db.BookingTasks.Single().OwnerId);
     }
+
+    private static UpdateTaskDto Edit(BookingTask t, TaskItemStatus status, DateOnly? completed) =>
+        new() { TaskType = t.TaskType, Title = t.Title, Priority = t.Priority, Status = status, CompletedDate = completed };
+
+    [Fact]
+    public async System.Threading.Tasks.Task Update_ToNotStarted_ClearsTheCompletedDate()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db, status: TaskItemStatus.Completed);
+        task.CompletedDate = new DateOnly(2026, 10, 30); db.SaveChanges();
+
+        await As(db, "Coordinator").Update(task.Id, Edit(task, TaskItemStatus.NotStarted, new DateOnly(2026, 10, 30)), CancellationToken.None);
+
+        Assert.Null(db.BookingTasks.Single(t => t.Id == task.Id).CompletedDate);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Update_ToCompletedWithNoDate_StampsToday()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db);
+
+        await As(db, "Coordinator").Update(task.Id, Edit(task, TaskItemStatus.Completed, null), CancellationToken.None);
+
+        Assert.NotNull(db.BookingTasks.Single(t => t.Id == task.Id).CompletedDate);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task SetStatus_CompletedOnALeaveCoverTask_IsAConflictAndTheTaskIsUnchanged()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db, TaskType.LeaveCoverage);
+
+        var result = await As(db, "Coordinator").SetStatus(task.Id, new SetTaskStatusDto { Status = TaskItemStatus.Completed, CompletedDate = new DateOnly(2026, 10, 30) }, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        var stored = db.BookingTasks.Single(t => t.Id == task.Id);
+        Assert.Equal(TaskItemStatus.NotStarted, stored.Status);
+        Assert.Null(stored.CompletedDate);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task SetStatus_OnADeletedTask_IsAConflictAndTheTaskStaysCancelled()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db, status: TaskItemStatus.Cancelled);
+
+        var result = await As(db, "Coordinator").SetStatus(task.Id, new SetTaskStatusDto { Status = TaskItemStatus.NotStarted }, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(TaskItemStatus.Cancelled, db.BookingTasks.Single(t => t.Id == task.Id).Status);
+    }
 }

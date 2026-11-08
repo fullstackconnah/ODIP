@@ -136,6 +136,7 @@ public class BookingsController : ControllerBase
         // booking fields can never assert readiness. A participant who does not exist, is a draft
         // or is inactive is refused in either mode. Warn lets the booking proceed and reports what
         // is missing on the response; Enforce refuses it unless the strict gate accepts the participant.
+        if (CoverEndsBeforeStart(dto)) return BadRequest(ApiResponse<BookingDetailDto>.Fail(CoverDatesMessage));
         var readiness = await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct);
         if (!readiness.Allowed)
             return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
@@ -220,6 +221,22 @@ public class BookingsController : ControllerBase
             }));
     }
 
+    private const string CoverDatesMessage = "Choose a cover end date on or after the start date.";
+    private static bool CoverEndsBeforeStart(CreateBookingDto dto) => dto.InsuranceCoverageStart is { } start && dto.InsuranceCoverageEnd is { } end && end < start;
+
+    /// <summary>Confirming a booking's insurance (PUT or PATCH) completes its open InsuranceConfirmation task. Saved with the caller's SaveChanges.</summary>
+    private async Task CompleteInsuranceTaskAsync(Guid bookingId, CancellationToken ct)
+    {
+        var insuranceTask = await _db.BookingTasks
+            .FirstOrDefaultAsync(t => t.ParticipantBookingId == bookingId
+                && t.TaskType == TaskType.InsuranceConfirmation
+                && t.Status != TaskItemStatus.Completed
+                && t.Status != TaskItemStatus.Cancelled, ct);
+        if (insuranceTask == null) return;
+        insuranceTask.Status = TaskItemStatus.Completed;
+        insuranceTask.CompletedDate = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+    }
+
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Update(Guid id, [FromBody] UpdateBookingDto dto, CancellationToken ct)
@@ -227,6 +244,12 @@ public class BookingsController : ControllerBase
         var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
+        // The editor read the booking at ExpectedUpdatedAt; a PATCH or another edit since then moved UpdatedAt, and this whole-row save would write over it. Absent: saved as before.
+        // Compared to the microsecond (the column's precision), as IntakeBookingsController.IsStale does.
+        if (dto.ExpectedUpdatedAt is { } expected && b.UpdatedAt.Ticks - b.UpdatedAt.Ticks % 10 != expected.Ticks - expected.Ticks % 10)
+            return Conflict(ApiResponse<BookingDetailDto>.Fail("Someone else just changed this booking. Close it and open it again to see their changes."));
+
+        if (CoverEndsBeforeStart(dto)) return BadRequest(ApiResponse<BookingDetailDto>.Fail(CoverDatesMessage));
 
         var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
         b.BookingStatus = dto.BookingStatus; b.SupportRatioOverride = dto.SupportRatioOverride;
@@ -242,20 +265,7 @@ public class BookingsController : ControllerBase
         b.InsuranceStatus = dto.InsuranceStatus;
         b.UpdatedAt = DateTime.UtcNow;
 
-        // Auto-complete insurance task when status changes to Confirmed
-        if (dto.InsuranceStatus == InsuranceStatus.Confirmed)
-        {
-            var insuranceTask = await _db.BookingTasks
-                .FirstOrDefaultAsync(t => t.ParticipantBookingId == id
-                    && t.TaskType == TaskType.InsuranceConfirmation
-                    && t.Status != TaskItemStatus.Completed
-                    && t.Status != TaskItemStatus.Cancelled, ct);
-            if (insuranceTask != null)
-            {
-                insuranceTask.Status = TaskItemStatus.Completed;
-                insuranceTask.CompletedDate = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-            }
-        }
+        if (dto.InsuranceStatus == InsuranceStatus.Confirmed) await CompleteInsuranceTaskAsync(id, ct);
 
         await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
@@ -292,6 +302,7 @@ public class BookingsController : ControllerBase
         if (dto.BookingStatus.HasValue) b.BookingStatus = dto.BookingStatus.Value;
         if (dto.InsuranceStatus.HasValue) b.InsuranceStatus = dto.InsuranceStatus.Value;
         if (dto.PaymentStatus.HasValue) b.PaymentStatus = dto.PaymentStatus.Value;
+        if (dto.InsuranceStatus == InsuranceStatus.Confirmed) await CompleteInsuranceTaskAsync(id, ct);
 
         b.UpdatedAt = DateTime.UtcNow;
         await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
@@ -322,6 +333,9 @@ public class BookingsController : ControllerBase
         // ParticipantBooking has no organisation column or query filter: a booking is the caller's only if its trip is.
         var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (b == null) return NotFound(ApiResponse<bool>.Fail("Booking not found"));
+        // A claim line keeps its booking (a restricting foreign key): say so instead of failing the save. Invoice.ParticipantBookingId is a snapshot with no FK, so it does not.
+        if (await _db.ClaimLineItems.AnyAsync(l => l.ParticipantBookingId == id, ct))
+            return Conflict(ApiResponse<bool>.Fail("This booking is on a claim, so it can't be deleted. Cancel it instead."));
         var tripId = b.TripInstanceId;
         _db.ParticipantBookings.Remove(b);
         await _db.SaveChangesAsync(ct);           // save deletion first
