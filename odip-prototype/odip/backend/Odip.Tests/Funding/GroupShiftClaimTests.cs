@@ -167,7 +167,7 @@ public class GroupShiftClaimTests
 
         var left = Assert.Single(generated.LeftOut);
         Assert.Equal(shift.Id, left.ShiftId);
-        Assert.Contains("no catalogue rate", left.Reason);
+        Assert.Contains("No catalogue rate", left.Reason);
         Assert.Empty(await LinesOf(kit, shift.Id));
     }
 
