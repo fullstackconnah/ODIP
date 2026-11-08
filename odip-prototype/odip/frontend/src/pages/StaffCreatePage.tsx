@@ -326,11 +326,11 @@ export default function StaffCreatePage() {
         <Card title="Personal information">
           <div className={formGrid}>
             <FormField label="First Name" required error={errors.firstName?.message} className={span.medium}>
-              <input {...register('firstName')} placeholder="e.g. Sarah" autoFocus />
+              <input {...register('firstName')} maxLength={100} placeholder="e.g. Sarah" autoFocus />
             </FormField>
 
             <FormField label="Last Name" required error={errors.lastName?.message} className={span.medium}>
-              <input {...register('lastName')} placeholder="e.g. Mitchell" />
+              <input {...register('lastName')} maxLength={100} placeholder="e.g. Mitchell" />
             </FormField>
 
             <FormField label="Position" required error={errors.position?.message} className={span.medium}>
@@ -383,7 +383,7 @@ export default function StaffCreatePage() {
             />
 
             <FormField label="Region" className={span.short}>
-              <input {...register('region')} placeholder="e.g. South East QLD" />
+              <input {...register('region')} maxLength={100} placeholder="e.g. South East QLD" />
             </FormField>
           </div>
         </Card>
@@ -404,7 +404,7 @@ export default function StaffCreatePage() {
                       : 'Used to sign in to the app.')
                   : undefined
               } className={span.medium}>
-              <input type="email" {...register('email')} placeholder="e.g. sarah@example.com.au" />
+              <input type="email" {...register('email')} maxLength={200} placeholder="e.g. sarah@example.com.au" />
             </FormField>
 
             <FormField

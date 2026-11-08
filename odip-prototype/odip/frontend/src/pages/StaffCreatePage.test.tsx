@@ -103,6 +103,18 @@ describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () 
     expect(await screen.findByLabelText(/mobile/i)).toHaveAttribute('maxlength', '20')
   })
 
+  it('stops the First name field at the 100 characters the server accepts', async () => {
+    const user = userEvent.setup()
+    renderEditPage('staff-1')
+
+    const first = await screen.findByLabelText(/first name/i)
+    await user.clear(first)
+    await user.click(first)
+    await user.paste('x'.repeat(150))
+
+    expect(first).toHaveValue('x'.repeat(100))
+  })
+
   it('still allows editing and saving other fields (Mobile), with the role unchanged in the payload', async () => {
     const user = userEvent.setup()
     renderEditPage('staff-1')

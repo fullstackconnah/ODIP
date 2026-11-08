@@ -48,6 +48,19 @@ beforeEach(() => {
   mockUseCreateMedication.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
 })
 
+describe('MedicationFormPage field limits', () => {
+  it('stops the Pharmacy phone field at the 30 characters the server accepts', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    const phone = await screen.findByLabelText(/pharmacy phone/i)
+    await user.click(phone)
+    await user.paste('9'.repeat(45))
+
+    expect(phone).toHaveValue('9'.repeat(30))
+  })
+})
+
 describe('MedicationFormPage frequency controls', () => {
   it('defaults to Daily with SpecificDays/EveryNDays controls hidden', () => {
     renderCreatePage()
