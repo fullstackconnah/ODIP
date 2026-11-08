@@ -1,3 +1,4 @@
+import { localIsoDate, parseDateOnly } from '@/lib/dateOnly'
 import type { ContactRoleType, ContactRoleStatus, NomineeScope, PlanType, PreferredContactMethod } from './enums'
 
 // ══════════════════════════════════════════════════════════════
@@ -153,15 +154,11 @@ export const CONTACT_ROLE_STATUS_LABELS: Record<ContactRoleStatus, string> = {
 /** Mirrors Odip.Domain.Enums.ContactRoleRules.CalculateAge — whole years as of today, or null
  * when dateOfBirth is unset. */
 export function calculateAge(dateOfBirth: string | null | undefined): number | null {
-  if (!dateOfBirth) return null
-  const dob = new Date(dateOfBirth)
-  if (Number.isNaN(dob.getTime())) return null
-  const today = new Date()
-  let age = today.getFullYear() - dob.getFullYear()
-  const beforeBirthdayThisYear = today.getMonth() < dob.getMonth()
-    || (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())
-  if (beforeBirthdayThisYear) age--
-  return age
+  if (parseDateOnly(dateOfBirth) === null) return null
+  // Calendar numbers, never an instant: "YYYY-MM-DD" parsed as UTC midnight is the day before west of UTC.
+  const [by, bm, bd] = dateOfBirth!.slice(0, 10).split('-').map(Number)
+  const [ty, tm, td] = localIsoDate().split('-').map(Number)
+  return ty - by - (tm < bm || (tm === bm && td < bd) ? 1 : 0)
 }
 
 /**
