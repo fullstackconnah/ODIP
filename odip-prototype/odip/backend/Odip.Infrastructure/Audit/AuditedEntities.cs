@@ -31,6 +31,10 @@ public static class AuditedEntities
         // recoverable after the fact, so Shift is audited like the other operational entities.
         typeof(Shift),
 
+        // A group activity and its staff rows: who staffed or changed an outing is the same question as who rostered a shift, and the staff row carries the same OverrideReason.
+        typeof(GroupActivity),
+        typeof(GroupActivityStaff),
+
         // ShiftPattern is the origination point for a recurring staff/participant pairing:
         // every Shift the pattern later expands into inherits DefaultUserId from it, so who
         // set up (or changed) that pairing, and when, is the same class of question as who

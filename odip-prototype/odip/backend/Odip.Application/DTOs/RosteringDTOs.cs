@@ -135,6 +135,10 @@ public record ShiftDto
     /// quiet warning and never blocks a save; see <c>ParticipantReadiness</c>.
     /// </summary>
     public List<string>? ReadinessIssues { get; init; }
+    /// <summary>The group activity this shift is part of (group activities D2); null for an ordinary shift. An attached shift has no worker: its workers are on the activity.</summary>
+    public Guid? GroupActivityId { get; init; }
+    /// <summary>True when the shift is a group-activity line (support type GRP_GROUP_ACTIVITIES): the board hints "Add to an activity" on it. Omitted otherwise.</summary>
+    public bool? IsGroupLine { get; init; }
 }
 
 public record TripBarDto
@@ -346,6 +350,10 @@ public record RosterBoardDto
     /// <summary>Both modes: the days of the week (and the day after, for an overnight Sunday shift) each active staff member marked Available or Preferred and is not away. Empty, never null.</summary>
     public List<StaffAvailableDayDto> StaffAvailableDays { get; init; } = new();
     public List<RosterExceptionDto> Exceptions { get; init; } = new();
+    /// <summary>The week's group activities that are not cancelled (group activities D2). Empty while the feature is off or none are made.</summary>
+    public List<GroupActivityDto> GroupActivities { get; init; } = new();
+    /// <summary>Whether this organisation has group activities turned on (AppSettings.GroupActivitiesEnabled); the screens hide their entry points while it is false.</summary>
+    public bool GroupActivitiesEnabled { get; init; }
 }
 
 // ── Shift write DTOs ─────────────────────────────────────────────
@@ -617,4 +625,136 @@ public record RosterFillWeekDto
     public decimal HoursOpen { get; init; }
     /// <summary>Draft shifts, filled or not.</summary>
     public int Draft { get; init; }
+}
+
+// ── Group activities (D2) ────────────────────────────────────────
+
+public record GroupActivityDto
+{
+    public Guid Id { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public Guid? ActivityId { get; init; }
+    public string? ActivityName { get; init; }
+    public string? Location { get; init; }
+    public Guid? ServiceLocationId { get; init; }
+    public string? Notes { get; init; }
+    public int? MinStaffRequired { get; init; }
+    public ShiftStatus Status { get; init; }
+    /// <summary>Workers the activity needs: the participants' ratios summed in sixtieths, rounded up, never below MinStaffRequired.</summary>
+    public int StaffNeeded { get; init; }
+    /// <summary>Workers on the activity (its staff rows).</summary>
+    public int StaffAssigned { get; init; }
+    public List<GroupActivityParticipantDto> Participants { get; init; } = new();
+    public List<GroupActivityStaffDto> Staff { get; init; } = new();
+    /// <summary>ACTIVITY_STAFF_SHORT (a warning, never stored) while fewer workers are on than are needed and the activity is not cancelled.</summary>
+    public List<RosterFindingDto> Findings { get; init; } = new();
+}
+
+public record GroupActivityParticipantDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public SupportRatio Ratio { get; init; }
+    /// <summary>The participant's attached shifts: two for a 2:1 participant.</summary>
+    public List<Guid> ShiftIds { get; init; } = new();
+    /// <summary>True when the shift's agreement pattern has other times than the activity.</summary>
+    public bool TimesDiffer { get; init; }
+    public TimeOnly? AgreementStartTime { get; init; }
+    public TimeOnly? AgreementEndTime { get; init; }
+}
+
+public record GroupActivityStaffDto
+{
+    public Guid Id { get; init; }
+    public Guid StaffId { get; init; }
+    public string StaffName { get; init; } = string.Empty;
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public string? Role { get; init; }
+    /// <summary>The roster findings of this worker's part against each attached participant, merged by code.</summary>
+    public List<RosterFindingDto> Findings { get; init; } = new();
+}
+
+public record CreateGroupActivityDto
+{
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public string? Title { get; init; }
+    public Guid? ActivityId { get; init; }
+    public string? Location { get; init; }
+    public Guid? ServiceLocationId { get; init; }
+    public string? Notes { get; init; }
+    public int? MinStaffRequired { get; init; }
+}
+
+public record UpdateGroupActivityDto
+{
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public string? Title { get; init; }
+    public Guid? ActivityId { get; init; }
+    public string? Location { get; init; }
+    public Guid? ServiceLocationId { get; init; }
+    public string? Notes { get; init; }
+    public int? MinStaffRequired { get; init; }
+    /// <summary>Draft or Published only; cancel has its own endpoint.</summary>
+    public ShiftStatus Status { get; init; }
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+}
+
+public record ConvertShiftDto
+{
+    public string? Title { get; init; }
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+}
+
+public record AttachShiftsDto
+{
+    public List<Guid> ShiftIds { get; init; } = new();
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+}
+
+public record AddGroupParticipantDto
+{
+    public Guid ParticipantId { get; init; }
+    public SupportRatio Ratio { get; init; }
+}
+
+public record SetGroupRatioDto
+{
+    public SupportRatio Ratio { get; init; }
+}
+
+public record AddGroupStaffDto
+{
+    public Guid StaffId { get; init; }
+    /// <summary>Both times given or both left out (then the activity's); a worker may arrive before the activity starts.</summary>
+    public TimeOnly? StartTime { get; init; }
+    public TimeOnly? EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public string? Role { get; init; }
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+}
+
+public record UpdateGroupStaffDto
+{
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public string? Role { get; init; }
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
 }

@@ -107,6 +107,7 @@ public class SettingsController : ControllerBase
             HiddenAccommodation = s?.HiddenAccommodation ?? false,
             HiddenVehicles = s?.HiddenVehicles ?? false,
             HiddenTrips = s?.HiddenTrips ?? false,
+            GroupActivitiesEnabled = s?.GroupActivitiesEnabled ?? false,
             EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct),
         }));
     }
@@ -136,6 +137,12 @@ public class SettingsController : ControllerBase
         if (s.HiddenTrips != trips)
             _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(AppSettings), s.Id,
                 nameof(AppSettings.HiddenTrips), s.HiddenTrips.ToString(), trips.ToString(), User));
+        if (dto.GroupActivitiesEnabled is { } groupActivities && s.GroupActivitiesEnabled != groupActivities)
+        {
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(AppSettings), s.Id,
+                nameof(AppSettings.GroupActivitiesEnabled), s.GroupActivitiesEnabled.ToString(), groupActivities.ToString(), User));
+            s.GroupActivitiesEnabled = groupActivities;
+        }
         s.HiddenAccommodation = accommodation;
         s.HiddenVehicles = vehicles;
         s.HiddenTrips = trips;
@@ -145,6 +152,7 @@ public class SettingsController : ControllerBase
             HiddenAccommodation = accommodation,
             HiddenVehicles = vehicles,
             HiddenTrips = trips,
+            GroupActivitiesEnabled = s.GroupActivitiesEnabled,
             EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct),
         }));
     }}

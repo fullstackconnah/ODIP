@@ -17,15 +17,17 @@ public static class RosterFill
         // DurationHours is Ignore()d in the model: project the columns and sum in memory.
         var rows = await db.Shifts
             .Where(s => s.ServiceDate >= firstMonday && s.ServiceDate <= last && s.Status != ShiftStatus.Cancelled)
-            .Select(s => new { s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime, s.EndsNextDay })
+            .Select(s => new { s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime, s.EndsNextDay, s.GroupActivityId })
             .ToListAsync(ct);
+        // A shift on a group activity has no worker of its own: it is covered when its activity has a worker, and never Open (the activity warns when it is short instead).
+        var staffed = (await db.GroupActivityStaff.Select(r => r.GroupActivityId).Distinct().ToListAsync(ct)).ToHashSet();
         var byWeek = rows.ToLookup(r => RosterWeek.MondayOf(r.ServiceDate));
 
         return Enumerable.Range(0, weeks).Select(i => firstMonday.AddDays(7 * i)).Select(w =>
         {
             var week = byWeek[w].ToList();
-            var open = week.Where(r => r.UserId is null).ToList();
-            var filled = week.Where(r => r.UserId is not null).ToList();
+            var open = week.Where(r => r.UserId is null && r.GroupActivityId is null).ToList();
+            var filled = week.Where(r => r.UserId is not null || (r.GroupActivityId is { } activityId && staffed.Contains(activityId))).ToList();
             return new RosterFillWeekDto
             {
                 WeekStart = w,

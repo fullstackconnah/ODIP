@@ -136,6 +136,8 @@ public class OdipDbContext : DbContext
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
+    public DbSet<GroupActivity> GroupActivities => Set<GroupActivity>();
+    public DbSet<GroupActivityStaff> GroupActivityStaff => Set<GroupActivityStaff>();
     public DbSet<RosterWeek> RosterWeeks => Set<RosterWeek>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
@@ -1235,6 +1237,37 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.ShiftPatternId, e.ServiceDate });
             // Review-queue filter (design spec §2, GetCompletions): status + date-range scan, tenant-scoped.
             entity.HasIndex(e => new { e.TenantId, e.Status, e.ServiceDate });
+
+            // Restrict: activities are cancelled, never deleted, so a participant's shift keeps its link (group activities D2).
+            entity.HasOne(e => e.GroupActivity).WithMany().HasForeignKey(e => e.GroupActivityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.GroupActivityId);
+        });
+
+        // ── Group activities (D2) ────────────────────────────────
+        modelBuilder.Entity<GroupActivity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Location).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.HasOne(e => e.Activity).WithMany().HasForeignKey(e => e.ActivityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ServiceLocation).WithMany().HasForeignKey(e => e.ServiceLocationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.ActivityId);
+            entity.HasIndex(e => e.ServiceLocationId);
+            entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
+        });
+
+        modelBuilder.Entity<GroupActivityStaff>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.Property(e => e.OverrideReason).HasMaxLength(2000);
+            entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            // Cascade: an activity is never deleted, so this only ever removes rows with a test database's teardown.
+            entity.HasOne(e => e.GroupActivity).WithMany(a => a.Staff).HasForeignKey(e => e.GroupActivityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.GroupActivityId, e.UserId }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.UserId });
         });
 
         // ── ShiftPattern ─────────────────────────────────────────
@@ -2381,6 +2414,11 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Shift>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<GroupActivity>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<GroupActivityStaff>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<ShiftPattern>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

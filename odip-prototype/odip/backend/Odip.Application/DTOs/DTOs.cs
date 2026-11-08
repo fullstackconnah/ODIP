@@ -2711,6 +2711,8 @@ public record ModuleVisibilityDto
     public bool HiddenTrips { get; init; }
     /// <summary>Whether payslips (and, later, payroll pages) apply: presentation only, the server refuses on its own.</summary>
     public bool EmploymentHeroConnected { get; init; }
+    /// <summary>Group activities switch (PR1): off until the screens ship; the server refuses every group-activity write while it is off.</summary>
+    public bool GroupActivitiesEnabled { get; init; }
 }
 
 public record UpdateModuleVisibilityDto
@@ -2721,6 +2723,8 @@ public record UpdateModuleVisibilityDto
     public bool? HiddenVehicles { get; init; }
     [System.ComponentModel.DataAnnotations.Required]
     public bool? HiddenTrips { get; init; }
+    /// <summary>Optional: left out, the switch is unchanged (the Settings screen does not send it yet).</summary>
+    public bool? GroupActivitiesEnabled { get; init; }
 }
 
 // ── Incident trend (incidents and restrictive practice uses by month)

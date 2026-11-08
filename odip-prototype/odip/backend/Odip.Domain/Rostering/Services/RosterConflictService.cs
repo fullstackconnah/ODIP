@@ -106,6 +106,8 @@ public sealed class RosterConflictService
     public const string RatioShortfall = "RATIO_SHORTFALL";
     public const string OverHours = "OVER_HOURS";
     public const string CasualFortnightHours = "CASUAL_FORTNIGHT_HOURS";
+    /// <summary>A group activity has fewer workers than it needs (group activities D7). On the activity only: never blocks and is never stored.</summary>
+    public const string ActivityStaffShort = "ACTIVITY_STAFF_SHORT";
 
     /// <summary>Rostered hours in a fortnight above which a casual worker gets <c>CASUAL_FORTNIGHT_HOURS</c>. Fixed, not an org setting (R6).</summary>
     public const decimal CasualFortnightHoursCap = 76m;
@@ -451,7 +453,8 @@ public sealed class RosterConflictService
     private static void CheckRatioShortfall(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         var participant = ctx.Participant;
-        if (candidate.Ratio != SupportRatio.TwoToOne || participant is null) return;
+        // A group activity covers its 2:1 participants with its own staff rows, so the sibling-shift rule does not apply (group activities D7).
+        if (candidate.Ratio != SupportRatio.TwoToOne || participant is null || candidate.GroupActivityId is not null) return;
 
         var window = ToWindow(candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay);
 
