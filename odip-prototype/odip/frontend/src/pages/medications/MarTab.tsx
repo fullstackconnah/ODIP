@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
+import type { ParticipantListDto } from '@/api/types/participants'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import { fieldSurface } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
@@ -91,6 +93,7 @@ export default function MarTab() {
   const { data: mar, isLoading, isError, refetch } = pageQuery
   // INTAKE-08: the medication picker excludes drafts.
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
+  const { isTruncated = false, totalCount = 0 } = participants as Partial<TruncatableList<ParticipantListDto>>
   const recordPrnOutcome = useRecordPrnOutcome()
 
   const [recordingSlot, setRecordingSlot] = useState<MarEntryDto | null>(null)
@@ -183,6 +186,11 @@ export default function MarTab() {
             searchable
             label="All participants"
           />
+          {isTruncated && (
+            <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+              Showing the first {participants.length} of {totalCount} participants.
+            </p>
+          )}
         </div>
       </div>
 

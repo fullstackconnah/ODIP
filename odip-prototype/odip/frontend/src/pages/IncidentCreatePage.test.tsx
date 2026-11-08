@@ -428,6 +428,17 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
     })
   })
 
+  it('names a prefilled participant on Review when they are not in the participant list', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: { ...marPrefill, participantId: 'participant-250', participantName: 'Taylor Nguyen' } })
+
+    await clickNext(user) // Basics -> Incident Details
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
+
+    expect(reviewValueFor('Involved Participant')).toBe('Taylor Nguyen')
+  })
+
   it('shows a compact "Linked to" line naming the medication and outcome', () => {
     renderCreatePage({ pathname: '/incidents/new', state: marPrefill })
 

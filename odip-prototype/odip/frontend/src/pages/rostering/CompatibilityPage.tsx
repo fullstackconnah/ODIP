@@ -61,12 +61,22 @@ export default function CompatibilityPage() {
     () => (staff.data ?? []).filter(s => s.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
     [staff.data],
   )
+  // A list cut at the server ceiling must not hide a restriction: anyone with a listed pairing joins it, under the name the row carries.
+  const isTruncated = !!participants.data?.isTruncated
+  const people = useMemo(() => {
+    const list = participants.data ?? []
+    if (!participants.data?.isTruncated) return list
+    const have = new Set(list.map(p => p.id))
+    const extra = new Map<string, { id: string; fullName: string }>()
+    for (const r of all.data ?? []) if (r.level !== 'Allowed' && !have.has(r.participantId)) extra.set(r.participantId, { id: r.participantId, fullName: r.participantName })
+    return [...list, ...extra.values()] as typeof list
+  }, [participants.data, all.data])
   const inScope = useMemo(() => {
     const staffIds = new Set(activeStaff.map(s => s.id))
-    const participantIds = new Set((participants.data ?? []).map(p => p.id))
+    const participantIds = new Set(people.map(p => p.id))
     // Allowed rows are kept by the server (the upsert never deletes): they are the default, not an exception.
     return (all.data ?? []).filter(r => r.level !== 'Allowed' && staffIds.has(r.staffId) && participantIds.has(r.participantId))
-  }, [all.data, activeStaff, participants.data])
+  }, [all.data, activeStaff, people])
 
   // The board's participant list: the same scope, filtered by the search, with each one's counts.
   const counts = useMemo(() => {
@@ -81,9 +91,9 @@ export default function CompatibilityPage() {
   }, [inScope])
   const listed = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return (participants.data ?? []).filter(p => !q || p.fullName.toLowerCase().includes(q))
-  }, [participants.data, query])
-  const chosen = (participants.data ?? []).find(p => p.id === params.get('participant'))
+    return people.filter(p => !q || p.fullName.toLowerCase().includes(q))
+  }, [people, query])
+  const chosen = people.find(p => p.id === params.get('participant'))
   const current = chosen ?? listed[0]   // from md up the first participant shows without writing the URL
   const setParam = (key: string, value: string | null) =>
     setParams(p => { const n = new URLSearchParams(p); if (value) n.set(key, value); else n.delete(key); return n }, { replace: true })
@@ -95,11 +105,11 @@ export default function CompatibilityPage() {
 
   const isLoading = participants.isLoading || staff.isLoading || all.isLoading
   const isError = participants.isError || staff.isError || all.isError
-  const noPeopleYet = !isLoading && !isError && (activeStaff.length === 0 || (participants.data ?? []).length === 0)
+  const noPeopleYet = !isLoading && !isError && (activeStaff.length === 0 || people.length === 0)
 
   const pair = draft && inScope.find(r => r.staffId === draft.staffId && r.participantId === draft.participantId)
   const staffName = (id: string) => activeStaff.find(s => s.id === id)?.fullName ?? ''
-  const participantName = (id: string) => (participants.data ?? []).find(p => p.id === id)?.fullName ?? ''
+  const participantName = (id: string) => people.find(p => p.id === id)?.fullName ?? ''
   // Only a pair that is already No is an edit: marking No from a chip fixes both people but is still a new mark.
   const editing = pair?.level === 'Excluded'
 
@@ -177,6 +187,12 @@ export default function CompatibilityPage() {
       />
 
       <CompatibilityReachLine canChange={isAdmin} />
+
+      {isTruncated && (
+        <p className="text-xs text-[var(--color-muted-foreground)]">
+          Showing the first {participants.data?.length} of {participants.data?.totalCount} participants, plus anyone with a listed pairing.
+        </p>
+      )}
 
       {!noPeopleYet && (
         <ToggleGroup
@@ -256,7 +272,7 @@ export default function CompatibilityPage() {
       {!noPeopleYet && showTable && !isLoading && !isError && (
         <CompatibilityMatrix
           rows={all.data ?? []}
-          participants={participants.data ?? []}
+          participants={people}
           staff={activeStaff}
           canWrite={canWrite}
           participantQuery={query}

@@ -397,3 +397,17 @@ describe('MarTab — recording a PRN outcome the server refuses', () => {
     expect(screen.getByRole('button', { name: 'Save outcome' }).hasAttribute('disabled')).toBe(final)
   })
 })
+
+describe('MarTab — a participant list cut at the server ceiling', () => {
+  const list = (truncated: boolean) => Object.assign([{ id: 'p1', fullName: 'Alex Rivera' }], truncated ? { totalCount: 250, isTruncated: true } : { totalCount: 1, isTruncated: false })
+
+  it.each([[true, 1], [false, 0]])('truncated=%s shows the notice %i time(s) by the participant filter', (truncated, count) => {
+    mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [] }, isLoading: false })
+    mockUseParticipants.mockReturnValue({ data: list(truncated) })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
+
+    renderTab()
+
+    expect(screen.queryAllByText(/Showing the first 1 of 250 participants/)).toHaveLength(count)
+  })
+})
