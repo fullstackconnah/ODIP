@@ -43,6 +43,19 @@ public class OnboardingImportCommitTests
     }
 
     [Fact]
+    public async Task A_placeholder_NDIS_cell_imports_the_row_with_no_NDIS_number()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+
+        var result = await Commit(db, tenantId, Csv(Header, "Ava,Stone,,N/A,,", "Ben,Stone,,430-000-001,,"));
+
+        Assert.Equal((2, 0), (result.CreatedCount, result.FailedCount));
+        Assert.Null((await db.Participants.SingleAsync(p => p.FirstName == "Ava")).NdisNumber);
+        Assert.Equal("430000001", (await db.Participants.SingleAsync(p => p.FirstName == "Ben")).NdisNumber);
+    }
+
+    [Fact]
     public async Task New_onboarding_completes_intake_through_the_manual_path()
     {
         var (db, tenantId) = Organisation();
