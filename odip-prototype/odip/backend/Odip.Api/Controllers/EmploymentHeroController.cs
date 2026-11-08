@@ -551,15 +551,19 @@ public class EmploymentHeroController : ControllerBase
         if (!connected) return (0, 0, []);
         var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(_clock.GetUtcNow().UtcDateTime, zone));
-        var rows = await _db.EmploymentHeroOutbox.AsNoTracking()
-            .Where(r => r.TenantId == tenantId && (r.Kind == EmploymentHeroOutboxKind.Leave || r.Kind == EmploymentHeroOutboxKind.LeaveCancel)).ToListAsync(ct);
-        var cancelByLeave = rows.Where(r => r.Kind == EmploymentHeroOutboxKind.LeaveCancel).ToDictionary(r => r.EntityId);
+        var leaveRows = _db.EmploymentHeroOutbox.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && (r.Kind == EmploymentHeroOutboxKind.Leave || r.Kind == EmploymentHeroOutboxKind.LeaveCancel));
+        var cancelledLeave = (await leaveRows.Where(r => r.Kind == EmploymentHeroOutboxKind.LeaveCancel).Select(r => r.EntityId).ToListAsync(ct)).ToHashSet();
+        // A Sent row only ever adds to the count (a Sent cancel adds nothing), so count Sent Leave rows in SQL and load the rest.
+        var sent = await leaveRows.CountAsync(r => r.Kind == EmploymentHeroOutboxKind.Leave && r.Status == EmploymentHeroOutboxStatus.Sent
+            && !_db.EmploymentHeroOutbox.Any(c => c.TenantId == tenantId && c.Kind == EmploymentHeroOutboxKind.LeaveCancel && c.EntityId == r.EntityId)
+            && _db.LeaveRequests.Any(l => l.TenantId == tenantId && l.Id == r.EntityId && l.Status == LeaveStatus.Approved), ct);
+        var rows = await leaveRows.Where(r => r.Status != EmploymentHeroOutboxStatus.Sent).ToListAsync(ct);
         var leaveIds = rows.Select(r => r.EntityId).Distinct().ToList();
         var leaves = await _db.LeaveRequests.AsNoTracking().Where(l => l.TenantId == tenantId && leaveIds.Contains(l.Id))
             .Select(l => new { l.Id, l.LeaveType, l.StartDate, l.EndDate, l.Status, Name = l.User != null ? l.User.FirstName + " " + l.User.LastName : "" }).ToListAsync(ct);
         var byId = leaves.ToDictionary(l => l.Id);
 
-        var sent = 0;
         var waiting = 0;
         var problems = new List<(DateOnly Start, EmploymentHeroLeaveProblemDto Dto)>();
         foreach (var r in rows)
@@ -567,12 +571,7 @@ public class EmploymentHeroController : ControllerBase
             if (!byId.TryGetValue(r.EntityId, out var leave)) continue;
             var cancelling = r.Kind == EmploymentHeroOutboxKind.LeaveCancel;
             // The cancel row speaks for a cancelled leave; a Leave row of leave that is no longer Approved says nothing.
-            if (!cancelling && (cancelByLeave.ContainsKey(r.EntityId) || leave.Status != LeaveStatus.Approved)) continue;
-            if (r.Status == EmploymentHeroOutboxStatus.Sent)
-            {
-                if (!cancelling) sent++;
-                continue;
-            }
+            if (!cancelling && (cancelledLeave.Contains(r.EntityId) || leave.Status != LeaveStatus.Approved)) continue;
             var heldForCategory = !cancelling && r.Status == EmploymentHeroOutboxStatus.Pending && EmploymentHeroLeave.IsWaiting(r.LastError);
             if (r.Status == EmploymentHeroOutboxStatus.Pending) waiting++;
             if (leave.EndDate < today.AddDays(-62)) continue;

@@ -54,7 +54,7 @@ export function LeaveBalances({ query, noneMessage, notLinked, footer = 'From Em
           <p className={MUTED}>{noneMessage}</p>
         ) : (
           <>
-            <FactList items={data.balances.map(b => ({ label: b.category, value: <span className="tabular-nums [overflow-wrap:anywhere]">{formatBalance(b)}</span> }))} />
+            <FactList items={data.balances.map(b => ({ label: b.category, value: <span className="tabular-nums [overflow-wrap:anywhere]">{b.amount === null ? <><span aria-hidden="true">{formatBalance(b)}</span><span className="sr-only">Not available</span></> : formatBalance(b)}</span> }))} />
             <p className={`${MUTED} mt-2`}>{footer}</p>
           </>
         )}
