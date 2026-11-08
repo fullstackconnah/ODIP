@@ -123,6 +123,19 @@ public class EmploymentHeroPayrollControllerTests
     }
 
     [Fact]
+    public async Task A_sleepover_on_the_night_the_clocks_go_forward_is_paid_its_real_420_minutes()
+    {
+        var (db, tenant) = await OrgAsync();
+        await using var _ = db;
+        var sam = await EhTimesheetFixture.WorkerAsync(db, tenant, "42");
+        await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, sam, new DateOnly(2026, 10, 3), new TimeOnly(22, 0), new TimeOnly(6, 0), SleepoverType.Sleepover);
+
+        var shift = Data(await Controller(db, tenant, new StubHttpHandler()).Check(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 10), CancellationToken.None)).Workers.Single().Shifts.Single();
+
+        Assert.Equal((420, 420), (shift.RosteredMinutes, shift.PaidMinutes));
+    }
+
+    [Fact]
     public async Task The_check_lists_this_organisations_approved_shifts_per_worker_worst_word_first()
     {
         var name = Guid.NewGuid().ToString();
