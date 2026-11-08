@@ -46,6 +46,18 @@ describe('extractErrorMessage', () => {
     expect(extractErrorMessage(fail({ errors: { Empty: [], Notes: [note, 'x'] } }), 'fb')).toBe(note)
   })
 
+  it('drops model-binding text (a $.path converter error, a System. type name) and falls through', () => {
+    const converter = 'The JSON value could not be converted to System.DateOnly. Path: $.dateOfBirth | LineNumber: 0 | BytePositionInLine: 30.'
+    expect(extractErrorMessage(fail({ errors: { '$.dateOfBirth': [converter] } }), 'fb')).toBe('fb')
+    expect(extractErrorMessage(fail({ errors: { Dob: [converter] }, message: 'm' }), 'fb')).toBe('m')
+    const note = 'The field Notes must be a string with a maximum length of 4000.'
+    expect(extractErrorMessage(fail({ errors: { '$.x': [converter], Notes: [note] } }), 'fb')).toBe(note)
+  })
+
+  it('leaves an ApiResponse errors array unchanged', () => {
+    expect(extractErrorMessage(fail({ errors: ['Participant is archived.'] }), 'fb')).toBe('Participant is archived.')
+  })
+
   it('never shows the generic ProblemDetails title, and falls back for a network error', () => {
     expect(extractErrorMessage(fail({ title: 'One or more validation errors occurred.' }), 'fb')).toBe('fb')
     expect(extractErrorMessage(new Error('Network Error'), 'fb')).toBe('fb')

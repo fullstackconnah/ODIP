@@ -57,6 +57,7 @@ public class SupportCatalogueController : ControllerBase
 
     // SuperAdmin only, like the Settings tab: the catalogue is global (a group or an item carries no tenant) and an import end-dates rows for every tenant.
     [HttpPost("import/preview")]
+    [RequestSizeLimit(11 * 1024 * 1024)] // a 10 MB file plus multipart overhead; the client refuses over 10 MB first
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<CatalogueImportPreviewDto>>> PreviewImport(
         IFormFile file, [FromServices] CatalogueImportService importer, CancellationToken ct)

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { apiClient } from '@/api/client'
 import { useSupportCatalogue } from '@/api/hooks'
 import type { CatalogueFileFormat, CatalogueImportPreviewDto, CatalogueImportRowDto, SupportActivityGroupDto, SupportCatalogueItemDto } from '@/api/types'
@@ -10,6 +11,9 @@ import { labelClass } from '@/components/FormField'
 import { Modal } from '@/components/Modal'
 import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { retryingAfterError } from '@/lib/queryPhase'
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024 // the server caps the request at 11 MB (file plus multipart overhead)
+const FILE_TOO_BIG = 'This file is over 10 MB. Choose the NDIS support catalogue .xlsx file.'
 
 /** What the uploaded workbook's header row showed: the 2026-27 layout (zone prices) or the 2025-26 one (a column per state). */
 function catalogueFormatLabel(format: CatalogueFileFormat): string {
@@ -43,6 +47,11 @@ export default function SupportCatalogueSection() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > MAX_FILE_BYTES) {
+      e.target.value = '' // so the same file can be chosen again after it is trimmed
+      setImportError(FILE_TOO_BIG)
+      return
+    }
     setUploading(true)
     setImportError(null)
     try {
@@ -56,7 +65,7 @@ export default function SupportCatalogueSection() {
       setPreviewStep('preview')
     } catch (err: unknown) {
       // The API explains a refusal in errors[0] (ApiResponse.Fail); the old `data.message` read always fell back to the generic text.
-      setImportError(extractErrorMessage(err, 'Upload failed'))
+      setImportError(isAxiosError(err) && err.response?.status === 413 ? FILE_TOO_BIG : extractErrorMessage(err, 'Upload failed'))
     } finally {
       setUploading(false)
     }

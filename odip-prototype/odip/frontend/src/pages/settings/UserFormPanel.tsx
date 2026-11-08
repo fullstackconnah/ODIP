@@ -367,6 +367,7 @@ export default function UserFormPanel({
           </label>
           <input
             id="uf-firstName"
+            maxLength={100}
             value={firstName}
             onChange={e => setFirstName(e.target.value)}
             className={inputClass}
@@ -379,6 +380,7 @@ export default function UserFormPanel({
           </label>
           <input
             id="uf-lastName"
+            maxLength={100}
             value={lastName}
             onChange={e => setLastName(e.target.value)}
             className={inputClass}
@@ -395,6 +397,7 @@ export default function UserFormPanel({
         <input
           id="uf-email"
           type="email"
+          maxLength={200}
           value={email}
           onChange={e => setEmail(e.target.value)}
           className={inputClass}
@@ -409,6 +412,7 @@ export default function UserFormPanel({
         </label>
         <input
           id="uf-username"
+          maxLength={100}
           value={username}
           onChange={e => setUsername(e.target.value)}
           className={inputClass}
