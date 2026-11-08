@@ -1069,7 +1069,7 @@ public class RosteringController : ControllerBase
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             // Only a draft whose worker's screening has lapsed, who has not started by its day, or who is marked No for its participant can hit a Blocking finding, so only those need the full roster check: one query for every worker, one for the Nos.
             var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
-            var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate), ct);
+            var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate, Active: u.IsActive), ct);
             var excluded = (await _db.StaffParticipantCompatibilities.Where(c => c.Level == CompatibilityLevel.Excluded && workerIds.Contains(c.UserId) && shown.Contains(c.ParticipantId)).Select(c => new { c.UserId, c.ParticipantId }).ToListAsync(ct))
                 .Select(c => (c.UserId, c.ParticipantId)).ToHashSet();
 
@@ -1077,6 +1077,8 @@ public class RosteringController : ControllerBase
             var skipped = 0;
             foreach (var shift in drafts.Where(s => s.UserId.HasValue))
             {
+                // An archived worker gets no notice, so their draft stays Draft and counts as skipped (H42B-1).
+                if (shift.UserId is { } holder && gates.TryGetValue(holder, out var hg) && !hg.Active) { skipped++; continue; }
                 // shortcut: only a lapsed screening, a start date ahead or a No is re-checked (the Blocking rules today); check every filled draft again if another Blocking rule is added.
                 var mayBeBlocked = shift.UserId is { } worker && ((gates.TryGetValue(worker, out var g) && (g.Expiry < shift.ServiceDate || g.Start > shift.ServiceDate)) || excluded.Contains((worker, shift.ParticipantId)));
                 if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }

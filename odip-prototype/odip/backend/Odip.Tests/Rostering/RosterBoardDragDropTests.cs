@@ -1295,6 +1295,31 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task PublishWeek_SkipsADraftHeldByAnArchivedWorker_AndStillPublishesAndTellsTheActiveOne()   // H42B-1
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var sam = SeedStaff(db);
+        var gone = SeedStaff(db, "Gus", "Archer");
+        gone.IsActive = false;
+        var mia = SeedParticipant(db);
+        var active = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var archived = SeedShift(db, mia.Id, gone.Id, ShiftStatus.Draft, day: Monday.AddDays(1));
+        var before = (await Reload(db, archived.Id)).UpdatedAt;
+        await db.SaveChangesAsync();
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal((1, 1, 1), (result.Published, result.Skipped, result.Notified));
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, active.Id)).Status);
+        var kept = await Reload(db, archived.Id);
+        Assert.Equal(ShiftStatus.Draft, kept.Status);
+        Assert.Equal(before, kept.UpdatedAt);
+        Assert.Equal(1, await db.NotificationOutbox.CountAsync());
+    }
+
+
+    [Fact]
     public async Task PublishWeek_StillTellsAWorkerWhoseEarliestShiftWasJustAssigned()   // the 5-minute dedupe must not swallow the digest
     {
         var dbName = Guid.NewGuid().ToString();
