@@ -527,6 +527,24 @@ public class PortalBreaksTests
     }
 
     [Fact]
+    public async Task ABreakEndThatArrivesAfterFinish_IsRefused_AndLeavesTheBreakRunning()
+    {
+        var f = Create();
+        var brk = new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = f.Completion!.Id, StartedAt = NowUtc.AddMinutes(-20), CreatedByUserId = f.Worker.Id };
+        f.Db.ShiftBreaks.Add(brk);
+        await f.Db.SaveChangesAsync();
+        var stale = await f.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.Id == f.Completion.Id);
+        f.Shift.Status = ShiftStatus.PendingReview;   // another device's Finish committed first
+        f.Completion.SubmittedAt = NowUtc;
+        await f.Db.SaveChangesAsync();
+
+        var result = await new ShiftBreakService(f.Db, f.Clock).EndAsync(stale, brk.Id, default);
+
+        Assert.Equal(ShiftBreakOutcome.ShiftNotInProgress, result.Outcome);
+        Assert.Null((await f.Db.ShiftBreaks.SingleAsync()).EndedAt);
+    }
+
+    [Fact]
     public void ABreakLeftRunningOnASubmittedCompletion_StopsGrowingAtTheActualEnd_InTheBreakDto()
     {
         var running = new ShiftBreak { Id = Guid.NewGuid(), StartedAt = NowUtc.AddMinutes(-60) };
