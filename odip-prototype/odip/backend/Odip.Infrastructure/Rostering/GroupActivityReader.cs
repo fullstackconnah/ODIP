@@ -4,6 +4,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
+using Odip.Infrastructure.Services;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Rostering;
@@ -24,9 +25,14 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
             .Where(a => a.ServiceDate >= from && a.ServiceDate <= to && a.Status != ShiftStatus.Cancelled)
             .OrderBy(a => a.ServiceDate).ThenBy(a => a.StartTime).ToListAsync(ct), ct);
 
+    /// <summary>A cancelled shift is a "didn't attend" only when it was cancelled (CancelledAt, UTC) on or after the activity's service day in <paramref name="zone"/>; one cancelled earlier through the board never took part and stays hidden and unbillable. shortcut: the organisation's zone, not each place's; revisit if a provider spans zones.</summary>
+    public static bool IsNoShow(Shift shift, TimeZoneInfo zone) =>
+        shift.Status == ShiftStatus.Cancelled && shift.CancelledAt is { } at && ProviderLocalTime.TodayIn(DateTime.SpecifyKind(at, DateTimeKind.Utc), zone) >= shift.ServiceDate;
+
     private async Task<List<GroupActivityDto>> BuildAsync(List<GroupActivity> activities, CancellationToken ct)
     {
         if (activities.Count == 0) return [];
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(db, activities[0].TenantId, ct)).Zone;
         var ids = activities.Select(a => a.Id).ToList();
         var shifts = await db.Shifts.AsNoTracking().Where(s => s.GroupActivityId != null && ids.Contains(s.GroupActivityId.Value)).ToListAsync(ct);
         var staffRows = await db.GroupActivityStaff.AsNoTracking().Where(r => ids.Contains(r.GroupActivityId)).ToListAsync(ct);
@@ -47,11 +53,11 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
         foreach (var activity in activities)
         {
             var started = activity.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed;
-            var mine = shifts.Where(s => s.GroupActivityId == activity.Id && (started || s.Status != ShiftStatus.Cancelled)).ToList();
+            var mine = shifts.Where(s => s.GroupActivityId == activity.Id && (s.Status != ShiftStatus.Cancelled || (started && IsNoShow(s, zone)))).ToList();
             var people = mine.GroupBy(s => s.ParticipantId).Select(g =>
             {
                 var first = g.First();
-                var didNotAttend = g.All(s => s.Status == ShiftStatus.Cancelled);
+                var didNotAttend = g.All(s => IsNoShow(s, zone));
                 var pattern = g.Select(s => s.ShiftPatternId).FirstOrDefault(p => p != null) is { } patternId ? patterns.GetValueOrDefault(patternId) : null;
                 var differs = pattern is not null && (pattern.StartTime != activity.StartTime || pattern.EndTime != activity.EndTime || pattern.EndsNextDay != activity.EndsNextDay);
                 return new GroupActivityParticipantDto

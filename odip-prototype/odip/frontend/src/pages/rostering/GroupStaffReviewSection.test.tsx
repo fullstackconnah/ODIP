@@ -124,8 +124,22 @@ describe('GroupStaffReviewSection attendance', () => {
 
   it('keeps the confirm unchanged when no selected row completes its activity', () => {
     show([row(), row({ rowId: 'r2', staffName: 'Fred Finished' })])
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select row r1' }))
+    fireEvent.click(screen.getByRole('button', { name: /Approve selected \(1\)/ }))
+    expect(within(screen.getByRole('alertdialog')).queryByText(/marks everyone still on/)).toBeNull()
+  })
+
+  it('reads "this activity" when one activity completes, even with two rows selected on it', () => {
+    show([row(), row({ rowId: 'r2', staffName: 'Fred Finished' })])
     fireEvent.click(screen.getAllByRole('checkbox', { name: /select all/i })[0])
     fireEvent.click(screen.getByRole('button', { name: /Approve selected \(2\)/ }))
-    expect(within(screen.getByRole('alertdialog')).queryByText(/marks everyone still on/)).toBeNull()
+    expect(within(screen.getByRole('alertdialog')).getByText(APPROVE_LINE)).toBeInTheDocument()
+  })
+
+  it('reads "these activities" when two activities complete, one of them through two selected rows', () => {
+    show([row(), row({ rowId: 'r2', groupActivityId: 'ga2', activityTitle: 'Swimming', staffName: 'Fred Finished' }), row({ rowId: 'r3', groupActivityId: 'ga2', activityTitle: 'Swimming', staffName: 'Gus Finished' })])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select all/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Approve selected \(3\)/ }))
+    expect(within(screen.getByRole('alertdialog')).getByText('Approving marks everyone still on these activities as attended.')).toBeInTheDocument()
   })
 })

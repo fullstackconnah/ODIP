@@ -152,7 +152,11 @@ async function modal(browser, vp) {
   // error
   mode = 'closed'
   await row('Liam Okafor').getByRole('button', { name: /^Mark/ }).click()
-  await dlg().getByText('Attendance is final once every staff shift is approved.').waitFor({ timeout: 10_000 })
+  const refusalLine = dlg().getByText('Attendance is final once every staff shift is approved.')
+  await refusalLine.waitFor({ timeout: 10_000 })
+  await refusalLine.scrollIntoViewIfNeeded()   // the refusal sits below the sections in a scrolling dialog: bring it into the crop
+  const seen = await refusalLine.evaluate((e) => { const r = e.getBoundingClientRect(); const d = e.closest('[role="dialog"]').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, dTop: d.top, dBottom: d.bottom, vh: innerHeight } })
+  check(`5 the refusal text is visible inside the dialog and the viewport in modal-error (${vp.name})`, seen.top >= Math.max(seen.dTop, 0) && seen.bottom <= Math.min(seen.dBottom, seen.vh), JSON.stringify(seen))
   check(`5 after a refusal the button is usable again (${vp.name})`, await row('Liam Okafor').getByRole('button', { name: /^Mark/ }).isEnabled())
   await shot(page, dlg(), 'modal-error', vp, 8)
   mode = 'ok'
@@ -214,6 +218,12 @@ async function reviews(browser, vp) {
   check(`4 approve line: --text-xs, --color-muted-foreground, <= ${vp.touch ? 3 : 2} lines (${vp.name})`, Math.abs(metrics.size - textXs) <= 0.5 && metrics.color === muted && metrics.lines <= (vp.touch ? 3 : 2), JSON.stringify({ ...metrics, textXs, muted }))
   const o = await section.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
   check(`review section does not overflow (${vp.name})`, o.sw <= o.cw + 1, JSON.stringify(o))
+  if (!vp.touch) {
+    const cell = await line.first().evaluate((el) => { const c = el.parentElement; return { sw: c.scrollWidth, cw: c.clientWidth } })
+    check('4 the Actions cell does not overflow at 1280', cell.sw <= cell.cw, JSON.stringify(cell))
+    const wide = await section.locator('table').first().evaluate((table, host) => { let worst = 0; for (let e = table; e && e !== host.parentElement; e = e.parentElement) worst = Math.max(worst, e.scrollWidth - e.clientWidth); return worst }, await section.elementHandle())
+    check('4 the review table has no horizontal scroll at 1280', wide <= 0, wide)
+  }
   const rows = await shot(page, section, 'review-attendance', vp, 12)
 
   await (vp.touch ? section.getByRole('checkbox').first() : page.getByRole('checkbox', { name: /select all/i }).first()).click()

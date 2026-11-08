@@ -154,7 +154,9 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
 
   // The last listed Finished row of an activity completes it on approve (the server completes once every staff row is approved; a row hidden by the list cap is the one case this misses).
   const completesActivity = (r: GroupStaffReviewDto) => r.state === 'Finished' && !rows.some(o => o.rowId !== r.rowId && o.groupActivityId === r.groupActivityId)
-  const completing = new Set(rows.filter(r => selected.has(r.rowId) && completesActivity(r)).map(r => r.groupActivityId))
+  // An activity completes when every one of its listed rows is selected (and finished), however many rows it has.
+  const completing = new Set(rows.filter(r => selected.has(r.rowId)).map(r => r.groupActivityId)
+    .filter(id => rows.filter(o => o.groupActivityId === id).every(o => selected.has(o.rowId) && o.state === 'Finished')))
 
   const columns: Column<GroupStaffReviewDto>[] = [
     { key: 'serviceDate', header: 'Date', render: r => formatDateAu(r.serviceDate) },
@@ -189,12 +191,12 @@ export function GroupStaffReviewSection({ canReview }: { canReview: boolean }) {
     },
     ...(canReview ? [{
       key: 'actions', header: 'Actions', render: (r: GroupStaffReviewDto) => (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex min-w-0 flex-wrap justify-end gap-2">
           <Button variant="secondary" size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" onClick={() => setRecording(r)} aria-label={`Record times for ${r.staffName} on ${r.activityTitle}`}>Record times</Button>
           {r.state === 'Finished' && (
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex min-w-0 flex-col items-start gap-1">
               <Button size="sm" className="pointer-coarse:min-h-[var(--tap-min)]" disabled={approve.isPending} onClick={() => run([r.rowId], () => {})} aria-label={`Approve ${r.staffName} on ${r.activityTitle}`}>Approve</Button>
-              {completesActivity(r) && <p className="max-w-[32ch] text-right text-xs text-[var(--color-muted-foreground)]">{APPROVE_COMPLETES}</p>}
+              {completesActivity(r) && <p className="max-w-[32ch] whitespace-normal text-xs text-[var(--color-muted-foreground)]">{APPROVE_COMPLETES}</p>}
             </div>
           )}
         </div>

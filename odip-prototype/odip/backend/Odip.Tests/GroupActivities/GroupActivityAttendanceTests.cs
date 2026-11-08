@@ -239,4 +239,46 @@ public class GroupActivityAttendanceTests
         var row = Assert.Single(GroupActivityFixture.Body(await rig.Controller().StaffReviews(null, null, default), 200).Rows);
         Assert.Equal(1, row.DidNotAttendCount);
     }
+
+    /// <summary>A person whose one shift was cancelled through the board the day before the activity started.</summary>
+    private static Guid EarlyCancelled(Rig rig, out Guid shiftId)
+    {
+        var (person, shifts) = rig.Person("Dee", status: ShiftStatus.Cancelled);
+        var tracked = rig.Fx.Seed.Shifts.Single(s => s.Id == shifts[0].Id);
+        tracked.CancelledAt = rig.Activity.ServiceDate.AddDays(-1).ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+        rig.Fx.Seed.SaveChanges();
+        shiftId = tracked.Id;
+        return person.Id;
+    }
+
+    [Fact]
+    public async Task EarlyCancelledShift_IsNotListedNorCounted_AndItsUndoIsRefusedSavingNothing()
+    {
+        var rig = new Rig();
+        rig.Person("Ann");
+        rig.Row();
+        var early = EarlyCancelled(rig, out var shiftId);
+        var dto = GroupActivityFixture.Body(await rig.Controller().Get(rig.Activity.Id, default), 200);
+        Assert.Equal("Ann Test", Assert.Single(dto.Participants).ParticipantName);
+        var row = Assert.Single(GroupActivityFixture.Body(await rig.Controller().StaffReviews(null, null, default), 200).Rows);
+        Assert.Equal(0, row.DidNotAttendCount);
+
+        Assert.Equal("GA_SHIFT_LOCKED", GroupActivityFixture.Error(await rig.Mark(early, true), 409));
+        var saved = await rig.Saved(shiftId);
+        Assert.Equal(ShiftStatus.Cancelled, saved.Status);
+        Assert.NotNull(saved.CancelledAt);
+    }
+
+    [Fact]
+    public async Task NoShowMarkedOnTheDay_StillListsCountsAndUndoes()
+    {
+        var rig = new Rig();
+        var (gone, shifts) = rig.Person("Ann");
+        rig.Row();
+        GroupActivityFixture.Body(await rig.Mark(gone.Id, false), 200);
+        Assert.True(Assert.Single(GroupActivityFixture.Body(await rig.Controller().Get(rig.Activity.Id, default), 200).Participants).DidNotAttend);
+        Assert.Equal(1, Assert.Single(GroupActivityFixture.Body(await rig.Controller().StaffReviews(null, null, default), 200).Rows).DidNotAttendCount);
+        GroupActivityFixture.Body(await rig.Mark(gone.Id, true), 200);
+        Assert.Equal(ShiftStatus.Published, (await rig.Saved(shifts[0].Id)).Status);
+    }
 }

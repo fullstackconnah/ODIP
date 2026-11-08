@@ -481,6 +481,9 @@ public partial class GroupActivitiesController : ControllerBase
             }
             else if (shifts.Any(s => s.Status == ShiftStatus.Cancelled))
             {
+                // Only a no-show can be undone: a shift cancelled through the board before the day was never marked, and reopening it could make a never-billable cancellation claimable.
+                var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, activity.TenantId, token)).Zone;
+                if (shifts.Any(s => s.Status == ShiftStatus.Cancelled && !GroupActivityReader.IsNoShow(s, zone))) throw Deny("GA_SHIFT_LOCKED");
                 // A no-show on a cancellation claim bills that claim, so it can't be reopened until the claim is deleted (the shift PUT's rule, taken under the same lock).
                 await using var claimLock = await RosterGenerationLock.AcquireAsync(_db, participantId, token, scope: "claim-generate");
                 var claim = await _db.ClaimLineItems.AsNoTracking().Where(BudgetLedgerService.ClaimLineStillCounts).Where(l => l.ShiftId != null && shiftIds.Contains(l.ShiftId.Value))
