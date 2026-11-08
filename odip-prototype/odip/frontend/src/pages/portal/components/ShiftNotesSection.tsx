@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { MessageSquare, AlertCircle, FileCheck } from 'lucide-react'
 import { useShiftNotes, useCreateShiftNote, useUpdateShiftNote, useAcknowledgeShiftNoteFlags } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 import { formatNoteTimestamp, formatRatio } from '@/lib/format'
 import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
@@ -153,8 +154,8 @@ export function ShiftNotesSection({
     try {
       await updateNote.mutateAsync({ id, body: trimmed })
       setEditingId(null)
-    } catch {
-      setEditError("Couldn't save your changes. Check your connection and try again.")
+    } catch (err) {
+      setEditError(extractErrorMessage(err, "Couldn't save your changes. Check your connection and try again."))
     }
   }
 
