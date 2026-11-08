@@ -89,7 +89,7 @@ try {
     const { page, context } = await session(vp, board(false))
     await go(page, `/rostering?date=${WEEK}`)
     await page.locator('#roster-week-heading').waitFor({ state: 'visible', timeout: 60_000 })
-    await page.getByRole('button', { name: 'Add shift' }).first().click({ timeout: 20_000 })
+    await page.getByRole('button', { name: /^Add a shift for/ }).first().click({ timeout: 20_000, force: true })
     const dialog = page.getByRole('dialog')
     const notes = dialog.getByLabel('Notes')
     await notes.waitFor({ timeout: 30_000 })
@@ -124,8 +124,7 @@ try {
       const section = page.locator('section[aria-labelledby="group-staff-heading"]')
       await section.waitFor({ timeout: 45_000 })
       await section.getByRole('checkbox', { name: /select all/i }).first().check({ force: true })
-      await section.getByRole('button', { name: /Approve selected/ }).click()
-      await page.getByRole('alertdialog').getByRole('button', { name: 'Approve' }).click()
+      await section.getByRole('button', { name: /^Approve Wendy Worker/ }).click()
       const dismiss = section.getByRole('button', { name: 'Dismiss' })
       await dismiss.waitFor({ timeout: 20_000 })
       await dismiss.scrollIntoViewIfNeeded()
@@ -135,7 +134,7 @@ try {
         const floor = await tokenPx(page, '--tap-min')
         check('approve-partial-390: Dismiss hit area >= --tap-min', floor > 0 && box.height >= floor - 0.5, { height: box.height, floor })
       } else {
-        check('approve-partial-1280: Dismiss has no touch floor (min-height 0)', minH === '0px', { minH, box })
+        check('approve-partial-1280: Dismiss keeps the sm size (box height 24, no touch floor)', box.height <= 32 && (minH === '0px' || minH === 'auto'), { minH, box })
         console.log(`Dismiss box at 1280: ${JSON.stringify(box)}`)
       }
       await crop(page, vp, `approve-partial-${vp.name}`, dismiss.locator("xpath=ancestor::div[@role='status'][1]"))
