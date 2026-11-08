@@ -9,6 +9,10 @@ namespace Odip.Domain.Entities;
 /// </summary>
 public class IncidentReport
 {
+    /// <summary>Database name of the filtered unique index on (TenantId, IdempotencyKey) WHERE the key is not null. The Create action matches this name on
+    /// PostgresException.ConstraintName to turn a racing duplicate submit into an idempotent replay instead of a 500.</summary>
+    public const string IdempotencyIndexName = "IX_IncidentReports_TenantId_IdempotencyKey";
+
     public Guid Id { get; set; }
 
     /// <summary>
@@ -186,6 +190,9 @@ public class IncidentReport
     public DateTime? FamilyNotifiedAt { get; set; }
     public bool SupportCoordinatorNotified { get; set; }
     public DateTime? SupportCoordinatorNotifiedAt { get; set; }
+
+    /// <summary>The client-generated key of the form session that filed this incident; a retried submit with the same key replays this row instead of making a second incident. Null for rows made before the key existed and for rows from callers that send none.</summary>
+    public string? IdempotencyKey { get; set; }
 
     // Standard fields
     public bool IsActive { get; set; } = true;
