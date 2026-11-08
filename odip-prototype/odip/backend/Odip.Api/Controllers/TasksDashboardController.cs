@@ -606,8 +606,9 @@ public class DashboardController : ControllerBase
             .OrderBy(s => s.ServiceDate).Select(s => (DateOnly?)s.ServiceDate).FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<SetupStatusDto>.Ok(new SetupStatusDto(
             StaffCount: await _db.Users.CountAsync(u => u.IsActive && u.Role != UserRole.Admin && u.Role != UserRole.SuperAdmin, ct),
-            ParticipantCount: await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
-            ParticipantsWithPlanCount: await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft && _db.FundingPlans.Any(f => f.ParticipantId == p.Id), ct),
+            // Drafts count: an imported or half-entered participant ticks "add a participant" (onboarding plan, shape step 3).
+            ParticipantCount: await _db.Participants.CountAsync(p => p.IsActive, ct),
+            ParticipantsWithPlanCount: await _db.Participants.CountAsync(p => p.IsActive && _db.FundingPlans.Any(f => f.ParticipantId == p.Id), ct),
             FirstPublishedWeekStart: firstPublished is { } d ? RosterWeek.MondayOf(d) : null,
             HasInvoice: await _db.Invoices.AnyAsync(i => i.Status != InvoiceStatus.Voided, ct),
             EmploymentHeroAvailable: keys.IsConfigured)));

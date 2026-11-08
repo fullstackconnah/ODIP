@@ -77,17 +77,6 @@ public class SetupStatusTests
     }
 
     [Fact]
-    public async Task Setup_DraftParticipantsAreNotCounted()
-    {
-        var db = Db(A);
-        var draft = Participant(db, A);
-        draft.IsDraft = true;
-        PlanFor(db, A, draft);
-        var got = await Get(db);
-        Assert.Equal((0, 0), (got.ParticipantCount, got.ParticipantsWithPlanCount));
-    }
-
-    [Fact]
     public async Task Setup_DraftShiftIsNotFinishLine()
     {
         var db = Db(A);
@@ -148,6 +137,15 @@ public class SetupStatusTests
         User(db, A).Role = UserRole.Coordinator;
         db.SaveChanges();
         Assert.Equal(1, (await Get(db)).StaffCount);
+    }
+
+    [Fact]
+    public async Task Setup_DraftParticipantsCount()
+    {
+        var db = Db(A);
+        Participant(db, A).IsDraft = true;
+        db.SaveChanges();
+        Assert.Equal(1, (await Get(db)).ParticipantCount);
     }
 
     [Fact]
