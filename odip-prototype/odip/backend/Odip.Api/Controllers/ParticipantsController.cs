@@ -141,7 +141,7 @@ public class ParticipantsController : ControllerBase
             query = ParticipantReadiness.OperationalRegister(_db, query);
         }
 
-        var projectedQuery = query.OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
+        var projectedQuery = query.OrderBy(p => p.LastName).ThenBy(p => p.FirstName).ThenBy(p => p.Id)
             .Select(p => new ParticipantListDto
             {
                 Id = p.Id, FirstName = p.FirstName, LastName = p.LastName,
