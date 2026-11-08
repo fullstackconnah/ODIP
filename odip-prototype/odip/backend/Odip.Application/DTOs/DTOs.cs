@@ -1007,6 +1007,8 @@ public record UpdateTripDto : CreateTripDto
     public TripStatus? Status { get; init; }
     public TimeOnly? DepartureTime { get; init; }
     public TimeOnly? ReturnTime { get; init; }
+    /// <summary>The UpdatedAt the editor read; when it no longer matches the stored row the save is refused (409). Omitted: saved as before.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 public record PatchTripDto

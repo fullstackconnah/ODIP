@@ -10,6 +10,7 @@ import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
 import { RefreshBoardAction } from './RefreshBoardAction'
 import { compareCompatibility } from '../lib/compatibilityOrder'
 import { BOARD_REFRESHED, moveGoneSentence } from '../lib/boardChanged'
@@ -60,6 +61,8 @@ export type ShiftSlideOverProps = {
   canWrite: boolean
   participantOptions: { value: string; label: string }[]
   staffOptions: { value: string; label: string }[]
+  /** A list that failed to load, with its retry: the picker gives way to the failure message, so an empty list can't pass for "no staff" or "no participants". */
+  loadFailed?: { participants?: () => unknown; staff?: () => unknown }
   /** Which board grouping opened this panel — only changes the "leave unassigned" hint copy, since an unfilled shift has no separate lane to point to in participant view. */
   groupBy?: 'participant' | 'staff'
   /**
@@ -98,7 +101,7 @@ const BUDGET_REASON_COPY = {
 /** "Backup #2" for a ranked tier, the bare level for an unranked one. */
 const tierPlace = (level: string, rank: number) => (rank > 0 ? `${level} #${rank}` : level)
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness, onMakeActivity, onSaved }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, loadFailed, groupBy = 'participant', participantReadiness, onMakeActivity, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
   const refusalId = useId()
   const open = target !== null
@@ -493,7 +496,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
         <div data-shift-field="participant" ref={participantFieldRef}>
           <FormField label="Participant" required hint={isEdit ? 'A shift stays with its participant. To roster another participant, add a new shift.' : undefined}>
-            <Dropdown
+            {loadFailed?.participants ? <PageState kind="error" noun="participant list" onRetry={loadFailed.participants} /> : <Dropdown
               variant="form"
               value={participantId}
               // A save's refusal ("not ready") is about the participant it was for: picking another one clears it.
@@ -502,7 +505,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               searchable
               label="Select a participant"
               items={participantOptions}
-            />
+            />}
           </FormField>
           <ReadinessNote issues={readinessIssues} className="mt-1.5" />
         </div>
@@ -521,13 +524,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               selectedStaffCompatibility && selectedStaffCompatibility.level !== 'Allowed' ? staffCompatibilityNoticeId : undefined
             }
           >
-            <SearchableSelect
+            {loadFailed?.staff ? <PageState kind="error" noun="staff list" onRetry={loadFailed.staff} /> : <SearchableSelect
               value={staffId ?? ''}
               onChange={v => { setStaffId(v || null); if (!v && status === 'Published' && existing?.status !== 'Published') setStatus('Draft') }}
               disabled={!canWrite || statusLocked}
               placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
-            />
+            />}
           </FormField>
           {selectedStaffCompatibility?.level === 'Excluded' && (
             // status, not alert: the Blocking finding below is the assertive one; this says why
