@@ -333,9 +333,9 @@ public class BookingsController : ControllerBase
         // ParticipantBooking has no organisation column or query filter: a booking is the caller's only if its trip is.
         var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (b == null) return NotFound(ApiResponse<bool>.Fail("Booking not found"));
-        // A claim line or invoice keeps its booking (a restricting foreign key): say so instead of failing the save.
-        if (await _db.ClaimLineItems.AnyAsync(l => l.ParticipantBookingId == id, ct) || await _db.Invoices.AnyAsync(i => i.ParticipantBookingId == id, ct))
-            return Conflict(ApiResponse<bool>.Fail("This booking is on a claim or invoice, so it can't be deleted. Cancel it instead."));
+        // A claim line keeps its booking (a restricting foreign key): say so instead of failing the save. Invoice.ParticipantBookingId is a snapshot with no FK, so it does not.
+        if (await _db.ClaimLineItems.AnyAsync(l => l.ParticipantBookingId == id, ct))
+            return Conflict(ApiResponse<bool>.Fail("This booking is on a claim, so it can't be deleted. Cancel it instead."));
         var tripId = b.TripInstanceId;
         _db.ParticipantBookings.Remove(b);
         await _db.SaveChangesAsync(ct);           // save deletion first

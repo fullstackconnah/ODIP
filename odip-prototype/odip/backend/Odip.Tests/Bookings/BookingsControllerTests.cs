@@ -316,25 +316,38 @@ public class BookingsControllerTests
         return b;
     }
 
-    // H44-1: a claim line or invoice that points at the booking makes the delete a message, not an FK 500.
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Delete_BookingOnAClaimLineOrInvoice_Is409AndKeepsTheBooking(bool claimLine)
+    // H44-1: a claim line that points at the booking makes the delete a message, not an FK 500.
+    [Fact]
+    public async Task Delete_BookingOnAClaimLine_Is409AndKeepsTheBooking()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var trip = SeedTrip(db);
         var p = SeedParticipant(db);
         var b = SeedBooking(db, trip, p);
-        if (claimLine) db.ClaimLineItems.Add(new ClaimLineItem { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
-        else db.Invoices.Add(new Invoice { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
+        db.ClaimLineItems.Add(new ClaimLineItem { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
         await db.SaveChangesAsync();
 
         var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
-        Assert.Equal("This booking is on a claim or invoice, so it can't be deleted. Cancel it instead.", Assert.IsType<ApiResponse<bool>>(conflict.Value).Errors![0]);
+        Assert.Equal("This booking is on a claim, so it can't be deleted. Cancel it instead.", Assert.IsType<ApiResponse<bool>>(conflict.Value).Errors![0]);
         Assert.True(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
+    }
+
+    // Invoice.ParticipantBookingId has no FK on purpose (a snapshot), so an invoice alone must not stop the delete.
+    [Fact]
+    public async Task Delete_BookingReferencedOnlyByAnInvoiceSnapshot_Deletes()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var trip = SeedTrip(db);
+        var b = SeedBooking(db, trip, SeedParticipant(db));
+        db.Invoices.Add(new Invoice { Id = Guid.NewGuid(), ParticipantBookingId = b.Id });
+        await db.SaveChangesAsync();
+
+        var result = await new BookingsController(db).Delete(b.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False(await db.ParticipantBookings.AnyAsync(x => x.Id == b.Id));
     }
 
     [Fact]
