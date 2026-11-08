@@ -12,6 +12,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
 
@@ -132,6 +133,76 @@ public class ModuleVisibilityTests
         Assert.Equal(nameof(AppSettings.GroupActivitiesEnabled), JsonDocument.Parse(audit.Changes).RootElement.EnumerateArray().Single().GetProperty("Field").GetString());
         Assert.True(Data(await controller.UpdateModuleVisibility(new() { HiddenAccommodation = true, HiddenVehicles = false, HiddenTrips = false }, default)).GroupActivitiesEnabled);
         Assert.True((await db.AppSettings.SingleAsync()).GroupActivitiesEnabled);
+    }
+    private static async Task<(OdipDbContext Db, SettingsController Controller)> OnWithActivityAsync(Guid tenant, ShiftStatus status, Action<GroupActivityStaff>? row = null, Guid? activityTenant = null)
+    {
+        var (db, controller) = Create(tenant);
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = tenant, GroupActivitiesEnabled = true });
+        var activity = new GroupActivity { Id = Guid.NewGuid(), TenantId = activityTenant ?? tenant, ServiceDate = new DateOnly(2026, 11, 16), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Title = "Bowling", Status = status };
+        db.GroupActivities.Add(activity);
+        if (row != null)
+        {
+            var r = new GroupActivityStaff { Id = Guid.NewGuid(), TenantId = activity.TenantId, GroupActivityId = activity.Id, UserId = Guid.NewGuid(), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0) };
+            row(r);
+            db.GroupActivityStaff.Add(r);
+        }
+        await db.SaveChangesAsync();
+        return (db, controller);
+    }
+
+    private static UpdateModuleVisibilityDto Off(bool hideTrips = false) => new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = hideTrips, GroupActivitiesEnabled = false };
+
+    private static string Refused(ActionResult<ApiResponse<ModuleVisibilityDto>> response)
+    {
+        var obj = Assert.IsType<ConflictObjectResult>(response.Result);
+        return Assert.IsType<ApiResponse<ModuleVisibilityDto>>(obj.Value).Errors!.Single();
+    }
+
+    [Fact]
+    public async Task SwitchingGroupActivitiesOff_WhileAnActivityIsInProgress_Is409_AndSavesNothing()
+    {
+        var (db, controller) = await OnWithActivityAsync(A, ShiftStatus.InProgress);
+        Assert.Equal("Group activities can't be turned off while 1 activity is in progress or waiting for review. Finish and review it first, then try again.", Refused(await controller.UpdateModuleVisibility(Off(hideTrips: true), default)));
+        var saved = await db.AppSettings.SingleAsync();
+        Assert.True(saved.GroupActivitiesEnabled); Assert.False(saved.HiddenTrips);
+        Assert.Empty(db.AuditLogs);
+    }
+
+    [Fact]
+    public async Task SwitchingGroupActivitiesOff_WithOneFinishedRowWaitingForReview_Is409_ForOneActivity()
+    {
+        var (_, controller) = await OnWithActivityAsync(A, ShiftStatus.Published, r => { r.ActualStart = DateTime.UtcNow; r.SubmittedAt = DateTime.UtcNow; });
+        Assert.StartsWith("Group activities can't be turned off while 1 activity is in progress", Refused(await controller.UpdateModuleVisibility(Off(), default)));
+    }
+
+    [Fact]
+    public async Task SwitchingGroupActivitiesOff_NamesTheCount_ForSeveralActivities()
+    {
+        var (db, controller) = await OnWithActivityAsync(A, ShiftStatus.InProgress);
+        db.GroupActivities.Add(new GroupActivity { Id = Guid.NewGuid(), TenantId = A, ServiceDate = new DateOnly(2026, 11, 17), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Title = "Pool", Status = ShiftStatus.InProgress });
+        await db.SaveChangesAsync();
+        Assert.Equal("Group activities can't be turned off while 2 activities are in progress or waiting for review. Finish and review them first, then try again.", Refused(await controller.UpdateModuleVisibility(Off(), default)));
+    }
+
+    [Fact]
+    public async Task SwitchingGroupActivitiesOff_WithNothingInFlight_IgnoringApprovedRowsAndOtherTenants_Saves()
+    {
+        var (db, controller) = await OnWithActivityAsync(A, ShiftStatus.Completed, r => { r.ActualStart = DateTime.UtcNow; r.SubmittedAt = DateTime.UtcNow; r.ReviewOutcome = ReviewOutcome.Approved; });
+        db.GroupActivities.Add(new GroupActivity { Id = Guid.NewGuid(), TenantId = B, ServiceDate = new DateOnly(2026, 11, 16), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Title = "Other", Status = ShiftStatus.InProgress });
+        await db.SaveChangesAsync();
+        Assert.False(Data(await controller.UpdateModuleVisibility(Off(), default)).GroupActivitiesEnabled);
+        Assert.False((await db.AppSettings.SingleAsync()).GroupActivitiesEnabled);
+    }
+
+    [Fact]
+    public async Task SavingOtherFields_WithTheSwitchAlreadyOff_Or_TurningItOn_IsNeverRefused()
+    {
+        var (db, controller) = await OnWithActivityAsync(A, ShiftStatus.InProgress);
+        Assert.True(Data(await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = true, GroupActivitiesEnabled = true }, default)).GroupActivitiesEnabled);
+        Assert.True(Data(await controller.UpdateModuleVisibility(new() { HiddenAccommodation = false, HiddenVehicles = false, HiddenTrips = false }, default)).GroupActivitiesEnabled);
+        (await db.AppSettings.SingleAsync()).GroupActivitiesEnabled = false;
+        await db.SaveChangesAsync();
+        Assert.False(Data(await controller.UpdateModuleVisibility(Off(hideTrips: true), default)).GroupActivitiesEnabled);
     }
 }
 

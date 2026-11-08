@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
@@ -127,6 +128,14 @@ public class SettingsController : ControllerBase
         {
             s = new AppSettings { Id = Guid.NewGuid(), TenantId = tenantId };
             _db.AppSettings.Add(s);
+        }
+        // H55-2: switching off would strand an activity a worker has started or finished, since Finish and approval both answer 409 while it is off. Refused before anything is saved.
+        if (dto.GroupActivitiesEnabled == false && s.GroupActivitiesEnabled)
+        {
+            var stranded = await _db.GroupActivities.AsNoTracking().CountAsync(a => a.TenantId == tenantId && a.Status != ShiftStatus.Cancelled
+                && (a.Status == ShiftStatus.InProgress || _db.GroupActivityStaff.Any(r => r.GroupActivityId == a.Id && r.SubmittedAt != null && r.ReviewOutcome != ReviewOutcome.Approved)), ct);
+            if (stranded > 0)
+                return Conflict(ApiResponse<ModuleVisibilityDto>.Fail($"Group activities can't be turned off while {stranded} {(stranded == 1 ? "activity is" : "activities are")} in progress or waiting for review. Finish and review {(stranded == 1 ? "it" : "them")} first, then try again."));
         }
         if (s.HiddenAccommodation != accommodation)
             _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(AppSettings), s.Id,
