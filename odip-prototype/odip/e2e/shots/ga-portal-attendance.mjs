@@ -177,7 +177,7 @@ async function run(browser, vp) {
     for (const [name, state] of [['notstarted-coordinator-marked', activity({ participants: people(true) })], ['finished-marked', activity({ state: 'Finished', ...done, participants: people(true) })], ['approved-marked', activity({ state: 'Approved', ...done, participants: people(true) })]]) {
       card = await show(state)
       await crop(page, card, name, vp)
-      const ok = (await card.getByRole('button', { name: /didn't attend/ }).count()) === 0 && (await card.locator('[data-status-badge]').filter({ hasText: "Didn't attend" }).count()) === 1
+      const ok = (await card.getByRole('button', { name: /^(Mark .* as didn't attend|Undo didn't attend for .*)$/ }).count()) === 0 && (await card.locator('[data-status-badge]').filter({ hasText: "Didn't attend" }).count()) === 1
       readOnlyOk = readOnlyOk && ok
     }
     check('8 read-only states: no attendance Button, exactly one "Didn\'t attend" badge', '', readOnlyOk)
