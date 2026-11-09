@@ -163,7 +163,7 @@ function create({ respond, failEnvelope, FILE }) {
     counts(b)
     return {
       successful: Math.max(0, pending.length - 1), rejected: pending.length ? 1 : 0, unchanged: pending.length ? 0 : ls.length, leftAlone: 0,
-      conflicts: [], unknownReferences: pending.length ? ['BPR-OTHER-0001', 'BPR-OTHER-0002', 'BPR-OTHER-0003'] : [], unreadRows: [], batch: b,
+      conflicts: [], unknownReferences: pending.length ? ['BPR-OTHER-0001', 'BPR-OTHER-0002', 'BPR-OTHER-0003'] : [], unreadRows: [], batch: b, amountDiffers: 0,
     }
   }
 
@@ -220,7 +220,7 @@ function create({ respond, failEnvelope, FILE }) {
         const over = lines[id].filter((l) => l.outcome === 'Successful' && (amounts.get(l.batchLineId) ?? l.amount) > l.amount)
         if (over.length) return fail(400, "Can't be more than the amount claimed.", { problems: over.map((l) => ({ batchLineId: l.batchLineId, message: "Can't be more than the amount claimed." })) })
         lines[id].filter((l) => l.outcome === 'Successful').forEach((l) => { l.paidAmount = amounts.get(l.batchLineId) ?? l.amount; l.lineStatus = 'Paid' })
-        return counts(b)
+        return { ...counts(b), leftOut: [] }
       }],
       ['claim-batch-lines/:id/dismiss', (id) => {
         const r = rejected.find((l) => l.batchLineId === id)
