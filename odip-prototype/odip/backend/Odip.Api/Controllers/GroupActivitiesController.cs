@@ -28,6 +28,7 @@ namespace Odip.Api.Controllers;
 public partial class GroupActivitiesController : ControllerBase
 {
     private const int TitleMax = 200, LocationMax = 200, NotesMax = 2000, RoleMax = 100, ReasonMax = 2000, MinStaffMax = 20, MaxShiftsPerRequest = 20;
+    private const int MaxListDays = 93;
     private const string DefaultTitle = "Group activity";
 
     private readonly OdipDbContext _db;
@@ -52,6 +53,7 @@ public partial class GroupActivitiesController : ControllerBase
     private static readonly Dictionary<string, (int Status, string Message)> Refusals = new()
     {
         ["GA_DISABLED"] = (409, DisabledMessage),
+        ["GA_LIST_QUERY"] = (400, "Choose a from and to date (from first) and a valid status."),
         ["GA_NOT_FOUND"] = (404, "Group activity not found."),
         ["GA_CHOOSE_ORG"] = (400, "Choose an organisation first."),
         ["GA_TITLE"] = (400, "Give the activity a title of up to 200 characters."),
@@ -126,6 +128,21 @@ public partial class GroupActivitiesController : ControllerBase
     private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;
 
     // ── Reads ───────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>The list page: one page of the organisation's activities in a date range (at most 93 days), Cancelled included unless a status is given. Refuses like the writes while the switch is off.</summary>
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<PagedResult<GroupActivityDto>>>> List(
+        [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] ShiftStatus? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default)
+    {
+        if (_tenant.TenantId is not { } tenantId) return RefuseResult<PagedResult<GroupActivityDto>>("GA_CHOOSE_ORG");
+        if (!await FlagOnAsync(_db, tenantId, ct)) return RefuseResult<PagedResult<GroupActivityDto>>("GA_DISABLED");
+        if (from is not { } start || to is not { } end || end < start) return RefuseResult<PagedResult<GroupActivityDto>>("GA_LIST_QUERY");
+        if (end.DayNumber - start.DayNumber >= MaxListDays) return RefuseResult<PagedResult<GroupActivityDto>>("GA_LIST_QUERY", $"Choose a range of {MaxListDays} days or fewer.");
+        if (status is { } given && !Enum.IsDefined(given)) return RefuseResult<PagedResult<GroupActivityDto>>("GA_LIST_QUERY");
+        (page, pageSize) = PagingParams.Clamp(page, pageSize, 100);
+        var (items, total) = await _reader.ListAsync(tenantId, start, end, status, page, pageSize, ct);
+        return Ok(ApiResponse<PagedResult<GroupActivityDto>>.Ok(new PagedResult<GroupActivityDto> { Items = items, TotalCount = total, Page = page, PageSize = pageSize }));
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<GroupActivityDto>>> Get(Guid id, CancellationToken ct)
