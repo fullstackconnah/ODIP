@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
+import { Button, type ButtonVariant } from './Button'
 
 export type EmptyStateAction =
-  | { label: string; to: string; onClick?: never }
-  | { label: string; onClick: () => void; to?: never }
+  | { label: string; to: string; onClick?: never; variant?: ButtonVariant }
+  | { label: string; onClick: () => void; to?: never; variant?: ButtonVariant }
 
 export type EmptyStateProps = {
   icon: React.ComponentType<{ className?: string }>
@@ -22,6 +23,8 @@ export type EmptyStateProps = {
 const ACTION_CLASS = 'inline-flex min-h-[44px] items-center justify-center px-2 text-sm font-bold text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg'
 
 function ActionLink({ action }: { action: EmptyStateAction }) {
+  // A variant opts into the house Button; without one the quiet text action stays.
+  if (action.variant) return action.to ? <Button variant={action.variant} to={action.to}>{action.label}</Button> : <Button variant={action.variant} onClick={action.onClick}>{action.label}</Button>
   return action.to ? (
     <Link to={action.to} className={ACTION_CLASS}>{action.label}</Link>
   ) : (

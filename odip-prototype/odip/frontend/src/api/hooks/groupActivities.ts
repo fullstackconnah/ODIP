@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut } from '../client'
-import type { AddGroupStaffDto, GroupActivityDto, GroupActivityFormDto, ShiftStatus, SupportRatio } from '../types'
+import type { AddGroupStaffDto, GroupActivityDto, GroupActivityFormDto, PagedResult, ShiftStatus, SupportRatio } from '../types'
 
 const BASE = '/rostering/group-activities'
 
@@ -9,12 +9,17 @@ export function useGroupActivity(id: string | null) {
   return useQuery({ queryKey: ['group-activity', id], queryFn: () => apiGet<GroupActivityDto>(`${BASE}/${id}`), enabled: Boolean(id) })
 }
 
+/** One page of the list page: activities dated in [from, to] (at most 93 days), every status unless one is given. Cancelled ones are in it. */
+export function useGroupActivities(filters: { from: string; to: string; status?: ShiftStatus }, page: number, pageSize: number, enabled = true) {
+  return useQuery({ queryKey: ['group-activities', filters, page, pageSize], queryFn: () => apiGet<PagedResult<GroupActivityDto>>(BASE, { ...filters, page, pageSize }), enabled })
+}
+
 function useActivityWrite<V, R = unknown>(send: (v: V) => Promise<R>) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: send,
     // onSettled: a refused write refetches too, so the board never keeps a stale card.
-    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ['roster-board'] }), qc.invalidateQueries({ queryKey: ['group-activity'] })]),
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ['roster-board'] }), qc.invalidateQueries({ queryKey: ['group-activity'] }), qc.invalidateQueries({ queryKey: ['group-activities'] })]),
   })
 }
 

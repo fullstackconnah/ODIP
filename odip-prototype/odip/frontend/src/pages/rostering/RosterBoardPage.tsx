@@ -168,6 +168,16 @@ export default function RosterBoardPage() {
     const shift = allBoardShifts(board).find(s => s.id === pendingShiftId)
     if (shift) setSlideOverTarget({ mode: 'edit', shift })
   }
+  // `?activity=<id>` (a row on the Group activities list) opens that activity's modal once its week has loaded. An id that is not on the loaded board (cancelled, another week, Staff view) opens the board plain.
+  // The param stays while the modal is open and is dropped once nothing is open or pending.
+  const [pendingActivityId, setPendingActivityId] = useState(() => searchParams.get('activity'))
+  if (pendingActivityId && board && board.weekStart === weekStart) {
+    setPendingActivityId(null)
+    if (groupActivities?.some(a => a.id === pendingActivityId)) setActivityTarget({ mode: 'edit', id: pendingActivityId })
+  }
+  useEffect(() => {
+    if (pendingActivityId === null && activityTarget === null && searchParams.has('activity')) setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('activity'); return p }, { replace: true })
+  }, [pendingActivityId, activityTarget, searchParams, setSearchParams])
   // A refetch that fails (Refresh the board, a refocus) keeps the week on screen with the data it has: only a week that never loaded is the load-error page.
   const loadFailed = isError && !board
   // INTAKE-08: the board's participant filter/assignment picker excludes drafts (the board

@@ -60,7 +60,8 @@ const AgreementsPage = React.lazy(() => import('@/pages/AgreementsPage'))
 const ClaimsHubPage = React.lazy(() => import('./pages/claims-hub/ClaimsHubPage'))
 const InvoicesPage = React.lazy(() => import('@/pages/InvoicesPage'))
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
-const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
+const GroupActivitiesPage = React.lazy(() => import('@/pages/rostering/GroupActivitiesPage'))
+const PatternsPage =React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
 const LeaveApprovalsPage = React.lazy(() => import('@/pages/rostering/LeaveApprovalsPage'))
 const CompletionReviewPage = React.lazy(() => import('@/pages/rostering/CompletionReviewPage'))
@@ -192,7 +193,8 @@ const router = createBrowserRouter(
         <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />
         <Route path="/invoices" element={<PrivateRoute page="claims"><InvoicesPage /></PrivateRoute>} />
         <Route path="/rostering" element={<PrivateRoute page="rostering"><RosterBoardPage /></PrivateRoute>} />
-        <Route path="/rostering/patterns" element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
+        <Route path="/rostering/group-activities" element={<PrivateRoute page="rostering"><GroupActivitiesPage /></PrivateRoute>} />
+        <Route path="/rostering/patterns"element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
         <Route path="/rostering/leave" element={<PrivateRoute page="leave-approvals"><LeaveApprovalsPage /></PrivateRoute>} />
         <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />

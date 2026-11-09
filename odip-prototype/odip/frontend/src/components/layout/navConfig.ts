@@ -48,6 +48,8 @@ export type NavLeaf = {
   hideForRoles?: UserRole[]
   /** Only for an organisation connected to Employment Hero (module visibility). */
   requiresEmploymentHero?: boolean
+  /** Only while the organisation has the Group activities switch on (module visibility). */
+  requiresGroupActivities?: boolean
   matchActive?: NavMatch
   badge?: NavBadge
   bar?: NavBarSlot
@@ -130,6 +132,7 @@ export const navItems: NavEntry[] = [
     bar: { order: 3, label: 'Roster', audience: 'office' },
     children: [
       { to: '/rostering', label: 'Roster board', msIcon: 'calendar_view_week', page: 'rostering' },
+      { to: '/rostering/group-activities', label: 'Group activities', msIcon: 'groups', page: 'rostering', requiresGroupActivities: true },
       { to: '/rostering/patterns', label: 'Shift patterns', msIcon: 'event_repeat', page: 'rostering' },
       { to: '/rostering/compatibility', label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
       {
@@ -239,12 +242,12 @@ export function resolveNav(entries: NavEntry[], access: NavAccess, visibility?: 
   const resolved: ResolvedEntry[] = []
   for (const entry of entries) {
     if (!isGroup(entry)) {
-      if (isLeafVisible(entry, access) && !isWorkspaceHidden(entry, visibility) && !needsEmploymentHero(entry, visibility)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
+      if (isLeafVisible(entry, access) && !isWorkspaceHidden(entry, visibility) && !needsEmploymentHero(entry, visibility) && !needsGroupActivities(entry, visibility)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
       continue
     }
     // Trips off: what is left of the group (Schedule, and Accommodation or Vehicles if kept) is no longer "Trips".
     const group = entry.id === 'trips' && visibility?.hiddenTrips === true ? { ...entry, label: 'Schedule', msIcon: 'calendar_month' } : entry
-    const children = entry.children.filter(child => isLeafVisible(child, access) && !isWorkspaceHidden(child, visibility) && !needsEmploymentHero(child, visibility))
+    const children = entry.children.filter(child => isLeafVisible(child, access) && !isWorkspaceHidden(child, visibility) && !needsEmploymentHero(child, visibility) && !needsGroupActivities(child, visibility))
     if (children.length === 0) continue
     if (children.length === 1) resolved.push({ kind: 'link', leaf: children[0], bar: entry.bar ?? children[0].bar })
     else resolved.push({ kind: 'group', group, children })
@@ -334,4 +337,9 @@ export function isWorkspaceHidden(leaf: NavLeaf, visibility?: ModuleVisibilityDt
 /** A leaf only a connected organisation has. Hidden until the answer is known (`!== true`), so an unconnected organisation never sees it flash. Not a hidden workspace: AppLayout lists those under "other workspaces". */
 export function needsEmploymentHero(leaf: NavLeaf, visibility?: ModuleVisibilityDto): boolean {
   return leaf.requiresEmploymentHero === true && visibility?.employmentHeroConnected !== true
+}
+
+/** A leaf only an organisation with Group activities switched on has. Hidden until the answer is known. */
+export function needsGroupActivities(leaf: NavLeaf, visibility?: ModuleVisibilityDto): boolean {
+  return leaf.requiresGroupActivities === true && visibility?.groupActivitiesEnabled !== true
 }
