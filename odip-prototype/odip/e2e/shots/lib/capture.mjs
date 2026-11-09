@@ -146,10 +146,68 @@ export async function overlapCheck(locator, clip, file) {
   return { name: `crop is clear of fixed or sticky chrome: ${file}`, pass: detail.inClip && !detail.covered, detail }
 }
 
+// Layout faults the document-level checks miss. layoutFaults is pure (plain snapshot in, faults out); collectLayout builds the snapshot in the browser.
+// Snapshot: { elements: [{ selector, overflowX, scrollWidth, clientWidth, ownText, textOverflow, matchedBy }], controls: [{ selector, rect }], texts: [{ selector, rect, inControls: [index into controls] }] }.
+function scanLayout(snapshot, { allow = [] } = {}) {
+  const faults = [], allowed = []
+  const put = (el, fault) => (el.matchedBy?.some((s) => allow.includes(s)) ? allowed : faults).push({ ...fault, selector: el.selector })
+  for (const el of snapshot.elements) {
+    if (el.scrollWidth <= el.clientWidth + 1) continue
+    const detail = { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }
+    if (el.overflowX === 'auto' || el.overflowX === 'scroll') put(el, { kind: 'inner-scroll', detail })
+    else if ((el.overflowX === 'hidden' || el.overflowX === 'clip') && el.ownText && el.textOverflow !== 'ellipsis') put(el, { kind: 'clipped-text', detail })
+  }
+  snapshot.controls.forEach((c, i) => {
+    for (const t of snapshot.texts) {
+      if (t.inControls.includes(i)) continue
+      const ox = Math.min(c.rect.right, t.rect.right) - Math.max(c.rect.left, t.rect.left)
+      const oy = Math.min(c.rect.bottom, t.rect.bottom) - Math.max(c.rect.top, t.rect.top)
+      if (ox > 2 && oy > 2) faults.push({ kind: 'control-over-text', selector: c.selector, detail: { text: t.selector, overlap: { x: Math.round(ox), y: Math.round(oy) } } })
+    }
+  })
+  return { faults, allowed }
+}
+
+// kind: inner-scroll | clipped-text | control-over-text. `allow`: CSS selectors of containers meant to scroll sideways.
+export const layoutFaults = (snapshot, opts) => scanLayout(snapshot, opts).faults
+
+// One evaluate inside `root`: skips hidden or sub-2px elements (sr-only), clips text rects to their scrolling/clipping ancestors, excludes the document scrollers (fullPage measures those).
+export function collectLayout(root, allow = []) {
+  return root.evaluate((rootEl, allowSel) => {
+    const name = (e) => e.tagName.toLowerCase() + (e.id ? `#${e.id}` : '') + [...e.classList].slice(0, 2).map((c) => `.${c}`).join('')
+    const box = (r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
+    const seen = (e) => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.visibility !== 'hidden' && s.display !== 'none' && r.width >= 2 && r.height >= 2 }
+    const all = [rootEl, ...rootEl.querySelectorAll('*')].filter((e) => !['SCRIPT', 'STYLE', 'OPTION', 'HTML', 'BODY'].includes(e.tagName) && seen(e))
+    const controls = all.filter((e) => e.matches('button,a[href],[role=button],input,select'))
+    const elements = all.map((e) => {
+      const s = getComputedStyle(e)
+      return { selector: name(e), overflowX: s.overflowX, scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, textOverflow: s.textOverflow, ownText: [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()), matchedBy: allowSel.filter((a) => e.matches(a)) }
+    })
+    const clipRects = (e) => { const out = []; for (let a = e; a && a !== rootEl.parentElement; a = a.parentElement) if (getComputedStyle(a).overflowX !== 'visible' && a !== document.documentElement && a !== document.body) out.push(a.getBoundingClientRect()); return out }
+    const texts = []
+    for (const e of all) for (const n of e.childNodes) {
+      if (n.nodeType !== 3 || !n.textContent.trim()) continue
+      const range = document.createRange(); range.selectNodeContents(n)
+      const clips = clipRects(e)
+      for (const r of range.getClientRects()) {
+        if (r.width < 1 || r.height < 1 || clips.some((c) => r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom)) continue
+        texts.push({ selector: name(e), rect: box(r), inControls: controls.flatMap((c, i) => (c.contains(e) ? [i] : [])) })
+      }
+    }
+    return { elements, controls: controls.map((c) => ({ selector: name(c), rect: box(c.getBoundingClientRect()) })), texts }
+  }, allow)
+}
+
+// A check record for writeChecks: pass = no faults; detail lists the faults and the ones `allow` skipped.
+export async function layoutCheck(page, root, label, { allow = [] } = {}) {
+  const { faults, allowed } = scanLayout(await collectLayout(root, allow), { allow })
+  return { name: `layout holds: ${label}`, pass: faults.length === 0, detail: { faults, allowed } }
+}
+
 // Whole page: the viewport is grown to the page height (a fullPage clip drops touch emulation and resizes without settling),
 // settled again, and checked for horizontal overflow before the shot. Put the file under <outDir>/full/.
-// Returns { file, coarse, checks }: checks are records for writeChecks.
-export async function fullPage(page, file, { touch } = {}) {
+// Also runs layoutCheck on <main> (else <body>); `allow` is passed through. Returns { file, coarse, checks }: checks are records for writeChecks.
+export async function fullPage(page, file, { touch, allow } = {}) {
   touch ??= await isCoarse(page)
   await settle(page)
   const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
@@ -164,6 +222,8 @@ export async function fullPage(page, file, { touch } = {}) {
       { name: `full page not truncated: ${name}`, pass: m.scrollHeight <= vh, detail: { scrollHeight: m.scrollHeight, viewportHeight: vh } },
     ]
     if (touch) checks.push({ name: `full page keeps touch emulation: ${name}`, pass: coarse, detail: { coarse } })
+    const main = page.locator('main').first()
+    checks.push(await layoutCheck(page, (await main.count()) ? main : page.locator('body'), name, { allow }))
     await page.screenshot({ path: file })
     return { file, coarse, checks }
   })
