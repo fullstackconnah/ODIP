@@ -93,11 +93,15 @@ try {
           const span = [...table.querySelectorAll('tbody span')].find((el) => el.textContent === title)
           const pills = [...table.querySelectorAll('tbody td:last-child *')].filter((el) => /^(Published|Draft|Pending review|Cancelled)$/.test(el.textContent) && el.children.length === 0).map((el) => Math.round(el.getBoundingClientRect().right))
           const head = [...table.querySelectorAll('th')].find((th) => th.textContent.trim() === 'Status')
-          return { scrollWidth: box.scrollWidth, clientWidth: box.clientWidth, titleWidth: Math.round(span.getBoundingClientRect().width), titleAttr: span.title, pills, head: Math.round(head.getBoundingClientRect().right), viewport: innerWidth }
+          const col = [...table.querySelectorAll('th')].findIndex((th) => th.textContent.trim() === 'Staff')
+          const staff = [...table.querySelectorAll('tbody tr')].map((tr) => { const td = tr.children[col]; const el = td.firstElementChild || td; const lh = parseFloat(getComputedStyle(el).lineHeight); return { w: Math.round(td.getBoundingClientRect().width), lines: Math.round(el.getBoundingClientRect().height / lh) } })
+          return { scrollWidth: box.scrollWidth, clientWidth: box.clientWidth, titleWidth: Math.round(span.getBoundingClientRect().width), titleAttr: span.title, pills, head: Math.round(head.getBoundingClientRect().right), viewport: innerWidth, staff }
         }, LONG_TITLE)
         add('table fits without horizontal scroll [1280]', t, t.scrollWidth <= t.clientWidth)
         add('every Status pill and the header are inside the viewport [1280]', t, t.pills.length === ROWS.length && t.pills.every((r) => r <= t.viewport) && t.head <= t.viewport)
         add('the long title is wider than the old 256 px cap [1280]', t, t.titleWidth > 256)
+        add('every Staff cell is at least 176 px wide [1280]', t.staff, t.staff.length === ROWS.length && t.staff.every((c) => c.w >= 176))
+        add('no Staff cell text is over 2 lines [1280]', t.staff, t.staff.every((c) => c.lines <= 2))
         add('the long title keeps its tooltip [1280]', t, t.titleAttr === LONG_TITLE)
       } else {
         add('no horizontal page scroll [390]', null, await s.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))

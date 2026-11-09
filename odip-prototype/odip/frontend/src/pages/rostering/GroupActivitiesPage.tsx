@@ -67,7 +67,7 @@ const columns: Column<GroupActivityDto>[] = [
       </div>
     ),
   },
-  { key: 'staff', header: 'Staff', mobile: 'meta', wrap: true, className: 'max-md:basis-full max-md:max-w-none!', render: a => <StaffCell activity={a} /> },
+  { key: 'staff', header: 'Staff', mobile: 'meta', wrap: true, className: 'max-md:basis-full max-md:max-w-none! md:min-w-44', render: a => <StaffCell activity={a} /> },
   { key: 'participants', header: 'Participants', align: 'right', mobile: 'trail', render: a => <span className="tabular-nums">{a.participants.filter(p => !p.didNotAttend).length}</span> },
   { key: 'status', header: 'Status', mobile: 'status', render: a => <StatusBadge status={a.status} label={labelOf(a.status)} className="whitespace-nowrap" /> },
 ]
