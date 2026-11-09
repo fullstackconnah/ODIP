@@ -598,4 +598,15 @@ public class ParticipantContactRolesControllerTests
         Assert.Equal(1, await db.People.CountAsync());
         Assert.Equal(1, await db.ParticipantContactRoles.CountAsync());
     }
+
+    [Fact]
+    public async Task Create_NewPersonWithPaddedEmail_StoresItTrimmed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+
+        await new ParticipantContactRolesController(db).Create(participant.Id, NewPersonDto() with { NewPersonEmail = " karen@example.com " }, CancellationToken.None);
+
+        Assert.Equal("karen@example.com", (await db.People.AsNoTracking().SingleAsync()).Email);
+    }
 }

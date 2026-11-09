@@ -85,7 +85,7 @@ public class ParticipantContactRolesController : ControllerBase
             {
                 Id = Guid.NewGuid(), TenantId = participant.TenantId,
                 FirstName = (dto.NewPersonFirstName ?? "").Trim(), LastName = (dto.NewPersonLastName ?? "").Trim(),
-                Phone = dto.NewPersonPhone, Mobile = dto.NewPersonMobile, Email = dto.NewPersonEmail,
+                Phone = dto.NewPersonPhone, Mobile = dto.NewPersonMobile, Email = PersonsController.StoredEmail(dto.NewPersonEmail),
                 Organisation = dto.NewPersonOrganisation,
                 // PF-6 (SPEC-02): closes the gap where the wizard's "new person" branch only ever
                 // captured a name — the search-first AddContactRoleForm now offers the rest of
