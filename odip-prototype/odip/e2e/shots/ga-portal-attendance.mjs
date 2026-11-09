@@ -101,7 +101,7 @@ async function run(browser, vp) {
   await attendBtn(card, 'Mia Chen').click()
   await row(card, 'Mia Chen').locator('button[aria-disabled="true"]').waitFor({ timeout: 10_000 })
   const sv = await measure(card, 'Mia Chen')
-  const savingOk = (await attendBtn(card, 'Mia Chen').getAttribute('aria-disabled')) === 'true' && !(await attendBtn(card, 'Mia Chen').isDisabled())
+  const savingOk = (await attendBtn(card, 'Mia Chen').getAttribute('aria-disabled')) === 'true' && !(await attendBtn(card, 'Mia Chen').evaluate((e) => e.disabled))
   await crop(page, card, 'started-saving', vp)
 
   card = await show(started(people(true)))

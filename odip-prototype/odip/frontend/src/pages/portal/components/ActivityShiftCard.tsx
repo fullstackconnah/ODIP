@@ -150,7 +150,7 @@ function ParticipantAttendance({ rowId, person, editable, online, onDone }: { ro
   return (
     <>
       <div className="flex min-h-[var(--control-h)] items-center justify-between gap-2">
-        <span>{person.didNotAttend && <StatusBadge tone="neutral" label="Didn't attend" />}</span>
+        <span className="flex items-center">{person.didNotAttend && <StatusBadge tone="neutral" label="Didn't attend" />}</span>
         {editable && (
           <Button
             variant="secondary" size="md" className="whitespace-nowrap" disabled={!online} aria-disabled={set.isPending || undefined} onClick={tap}
@@ -240,7 +240,7 @@ export function ActivityShiftCard({ shift, tz, now }: { shift: PortalActivityShi
             <ul id={`people-${shift.id}`} className="divide-y divide-[var(--color-border)]">
               {shift.participants.map(p => (
                 <li key={p.shiftId} className="py-1">
-                  <div className="flex min-h-[var(--tap-min)] items-center justify-between gap-2">
+                  <div className="flex min-h-[var(--control-h)] items-center justify-between gap-2">
                     <span className="min-w-0 flex-1 break-words text-sm [overflow-wrap:anywhere]">{p.name}</span>
                     {/* A marked person's shift is cancelled, so the server has no notes for them (the mark must be undone first). */}
                     {!p.didNotAttend && <Button variant="ghost" size="md" aria-expanded={notesFor === p.shiftId} onClick={() => setNotesFor(n => (n === p.shiftId ? null : p.shiftId))}>Notes</Button>}
