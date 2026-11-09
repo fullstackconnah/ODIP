@@ -145,13 +145,13 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
         return entries;
     }
 
-    // The entity's own tenant (also the nullable ones: IncidentReport, TripClaim, ClaimLineItem), else the request's. A global table's row belongs to no organisation.
+    // The entity's own tenant (also the nullable ones: IncidentReport, TripClaim, ClaimLineItem), else the request's (a null or empty own tenant too, so its deletion still lists under Deleted records). A global table's row belongs to no organisation.
     private static Guid? TenantOf(EntityEntry entry, Guid? ambient)
     {
         if (AuditedEntities.Global.Contains(entry.Entity.GetType().Name)) return null;
         var p = entry.Properties.FirstOrDefault(x => x.Metadata.Name == "TenantId");
         if (p is null) return ambient;
-        return (entry.State == EntityState.Deleted ? p.OriginalValue : p.CurrentValue) is Guid g && g != Guid.Empty ? g : null;
+        return (entry.State == EntityState.Deleted ? p.OriginalValue : p.CurrentValue) is Guid g && g != Guid.Empty ? g : ambient;
     }
 
     private static Guid GetEntityId(EntityEntry entry)

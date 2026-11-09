@@ -94,15 +94,22 @@ public class AuditInterceptorTenantTests
     }
 
     [Fact]
-    public async Task An_entity_with_an_empty_tenant_id_gets_an_audit_row_with_no_tenant()
+    public async Task An_entity_with_an_empty_tenant_id_takes_the_requests_tenant()
     {
-        Assert.Null((await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = Guid.Empty })).TenantId);
+        Assert.Equal(A, (await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = Guid.Empty })).TenantId);
+    }
+
+    // H76-2: a claim with a null TenantId was deleted into an audit row no organisation could list under Deleted records.
+    [Fact]
+    public async Task A_nullable_own_tenant_that_is_null_takes_the_requests_tenant()
+    {
+        Assert.Equal(A, (await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = null })).TenantId);
     }
 
     [Fact]
-    public async Task A_nullable_own_tenant_that_is_null_stays_null()
+    public async Task A_claim_with_a_tenant_keeps_it_under_a_view_as_of_that_organisation()
     {
-        Assert.Null((await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = null })).TenantId);
+        Assert.Equal(A, (await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = A })).TenantId);
     }
 
     [Fact]
