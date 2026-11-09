@@ -15,6 +15,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications.Templates;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Support;
 using Xunit;
 
 namespace Odip.Tests.GroupActivities;
@@ -145,6 +146,23 @@ public class GroupActivityPublishTests
         Assert.Equal((1, 1), (data.Activities, data.Notified));
         Assert.Equal(okay.Id, Assert.Single(await Outbox(fx)).RecipientUserId);
         Assert.Equal(ShiftStatus.Published, (await fx.Seed.GroupActivities.AsNoTracking().SingleAsync(a => a.Id == activity.Id)).Status);
+    }
+
+    [Fact]
+    public async Task PublishWeek_AsSuperAdmin_DoesNotTellAnotherTenantsUser_OnAnActivityStaffRow()
+    {
+        // A SuperAdmin context has no tenant filter, so only the explicit tenant term in PublishNotices keeps the foreign user out.
+        var fx = new GroupActivityFixture();
+        var foreign = fx.AddUser("Foreign", tenantId: Guid.NewGuid());
+        Activity(fx, foreign);
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(fx.TenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var db = TestDb.Create(fx.DbName, fx.TenantId);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), tenant: tenant.Object, clock: Before);
+        var result = Assert.IsType<OkObjectResult>((await controller.PublishWeek(Monday, default, null)).Result);
+        Assert.Equal(1, Assert.IsType<ApiResponse<PublishWeekResultDto>>(result.Value).Data!.Activities);
+        Assert.Empty(await Outbox(fx));
     }
 
     [Fact]

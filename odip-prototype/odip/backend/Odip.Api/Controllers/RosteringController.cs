@@ -1046,7 +1046,7 @@ public class RosteringController : ControllerBase
     /// shows, that has someone on it, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A Draft nobody is on stays Draft (counted as unfilled, owner
     /// 2026-10-28: hold until staffed) and goes out at the first publish after someone is put on it. A staffed Draft whose worker now has a Blocking finding stays Draft and is counted as skipped,
     /// as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
-    /// tells nobody twice. An optional <c>shiftIds</c> body narrows the publish to those Drafts (R3, 2026-11-04); an empty list is refused so it can never mean the whole week.
+    /// tells nobody twice. An optional <c>shiftIds</c> body narrows the publish to those Drafts (R3, 2026-11-04); an empty list is refused so it can never mean the whole week. Group activities in the week follow the same Draft-to-Published rule (whole-week mode only) and their staff are told in the same notice, one per worker.
     /// </summary>
     [HttpPost("weeks/{weekStart}/publish")]
     public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PublishShiftsRequest? body = null)
