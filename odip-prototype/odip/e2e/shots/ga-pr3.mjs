@@ -133,7 +133,7 @@ async function worker(browser) {
   card = await show(STATES.notStarted)
   await context.setOffline(true)
   await page.waitForTimeout(300)
-  check('offline: Start is disabled with the helper text', '', await card.getByRole('button', { name: 'Start' }).isDisabled() && (await card.getByText("You're offline. Start and finish need a connection.").count()) === 1)
+  check('offline: Start is disabled with the helper text', '', await card.getByRole('button', { name: 'Start' }).isDisabled() && (await card.getByText("You're offline. Start, finish and attendance need a connection.").count()) === 1)
   await crop(page, card, 'offline-disabled', vp)
   await context.setOffline(false)
 
