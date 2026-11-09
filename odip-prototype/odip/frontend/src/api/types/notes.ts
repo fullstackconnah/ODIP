@@ -18,6 +18,8 @@ export interface CreateParticipantNoteDto {
   title: string
   description: string
   isPinned: boolean
+  /** One per add-note modal opening: a re-press after a lost response replays the first note instead of adding a second. */
+  idempotencyKey?: string | null
 }
 
 export interface UpdateParticipantNoteDto {
