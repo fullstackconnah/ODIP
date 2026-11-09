@@ -24,7 +24,7 @@ const crop = async (page, locator, name, vp, pad = 8) => {
   checks.push(checkCropHolds({ ...r, touch: vp.touch }))
 }
 
-const PEOPLE = [{ shiftId: 'sh-1', participantId: 'p-1', name: 'Mia Chen' }, { shiftId: 'sh-2', participantId: 'p-2', name: 'Sam Lee' }]
+const PEOPLE = [{ shiftId: 'sh-1', participantId: 'p-1', name: 'Mia Chen', didNotAttend: false }, { shiftId: 'sh-2', participantId: 'p-2', name: 'Sam Lee', didNotAttend: false }]
 const activity = (over = {}) => ({
   id: 'row-1', groupActivityId: 'ga-1', title: 'Ten-pin bowling', serviceDate: '2026-11-16', startTime: '13:00:00', endTime: '17:00:00', endsNextDay: false,
   location: 'Strike Lanes, Parramatta', role: 'Driver', state: 'NotStarted', actualStart: null, actualEnd: null, breakStartedAt: null, breakEndedAt: null, participants: PEOPLE, ...over,
@@ -133,7 +133,7 @@ async function worker(browser) {
   card = await show(STATES.notStarted)
   await context.setOffline(true)
   await page.waitForTimeout(300)
-  check('offline: Start is disabled with the helper text', '', await card.getByRole('button', { name: 'Start' }).isDisabled() && (await card.getByText("You're offline. Start and finish need a connection.").count()) === 1)
+  check('offline: Start is disabled with the helper text', '', await card.getByRole('button', { name: 'Start' }).isDisabled() && (await card.getByText("You're offline. Start, finish and attendance need a connection.").count()) === 1)
   await crop(page, card, 'offline-disabled', vp)
   await context.setOffline(false)
 

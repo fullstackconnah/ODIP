@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react'
 import { ChevronDown, MapPin, WifiOff } from 'lucide-react'
 import { addDays, format, parseISO } from 'date-fns'
-import { useFinishActivityShift, useStartActivityShift } from '@/api/hooks'
+import { useFinishActivityShift, useSetActivityAttendance, useStartActivityShift } from '@/api/hooks'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { fieldSurface } from '@/components/FormField'
 import { formatShiftTimeRange, formatDayAccessibleName } from '@/pages/rostering/lib/roster'
+import { firstName } from '@/pages/rostering/lib/rosterDrag'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { formatWithTimeZone } from '@/lib/utils'
 import { requestGeolocation } from '../shift/geolocation'
@@ -28,7 +30,7 @@ export const ACTIVITY_START_MESSAGE = 'Enter a start time in the last 24 hours.'
 export const ACTIVITY_BREAK_PAIR_MESSAGE = 'Enter both break times, or neither.'
 export const ACTIVITY_BREAK_RANGE_MESSAGE = 'The break must fall between the start and finish.'
 const DAY_MS = 24 * 60 * 60 * 1000
-const OFFLINE_HELP = "You're offline. Start and finish need a connection."
+const OFFLINE_HELP = "You're offline. Start, finish and attendance need a connection."
 
 const fieldClass = `w-full py-2 min-h-[var(--control-h)] text-sm ${fieldSurface}`
 const muted = 'text-sm text-[var(--color-muted-foreground)]'
@@ -130,6 +132,45 @@ function FinishSheet({ shift, tz, now, onClose, onFinished }: { shift: PortalAct
 }
 
 /**
+ * One participant's attendance (ga-portal-attendance): a badge when they did not attend, and one persistent button that marks or undoes it.
+ * Only the server's answer flips the badge (no optimistic change), so a refusal never flips back. Saving and the error are this row's own.
+ */
+function ParticipantAttendance({ rowId, person, editable, online, onDone }: { rowId: string; person: PortalActivityShiftDto['participants'][number]; editable: boolean; online: boolean; onDone: (message: string) => void }) {
+  const set = useSetActivityAttendance()
+  const [error, setError] = useState<string | null>(null)
+  const marking = !person.didNotAttend
+  const tap = () => {
+    if (set.isPending) return
+    setError(null)
+    set.mutate({ id: rowId, participantId: person.participantId, attended: !marking }, {
+      onSuccess: () => onDone(marking ? `Marked ${person.name} as didn't attend.` : `Undid didn't attend for ${person.name}.`),
+      onError: e => setError(apiErrorMessages(e)[0] ?? (apiErrorStatus(e) === 404 ? 'This shift is no longer available.' : marking ? `Couldn't mark ${firstName(person.name)} as didn't attend.` : `Couldn't undo for ${firstName(person.name)}.`)),
+    })
+  }
+  return (
+    <>
+      <div className="flex min-h-[var(--control-h)] items-center justify-between gap-2">
+        <span className="flex items-center">{person.didNotAttend && <StatusBadge tone="neutral" label="Didn't attend" />}</span>
+        {editable && (
+          <Button
+            variant="secondary" size="md" className="whitespace-nowrap" disabled={!online} aria-disabled={set.isPending || undefined} onClick={tap}
+            aria-label={marking ? `Mark ${person.name} as didn't attend` : `Undo didn't attend for ${person.name}`}
+          >
+            {/* One grid holds every label so the button is as wide as the widest and never resizes under the finger. */}
+            <span className="grid">
+              {([["Didn't attend", marking && !set.isPending], ['Undo', !marking && !set.isPending], ['Saving…', set.isPending]] as const).map(([label, on]) => (
+                <span key={label} className={`[grid-area:1/1] ${on ? '' : 'invisible'}`}>{label}</span>
+              ))}
+            </span>
+          </Button>
+        )}
+      </div>
+      {error && <p role="alert" className="text-xs text-[var(--color-destructive)]">{error}</p>}
+    </>
+  )
+}
+
+/**
  * A worker's row on a group activity (GA PR3): Start, Finish, the planned and recorded times, and the participants with their notes.
  * Live only: with no signal both buttons are disabled and the card says why. A refused write shows the server's words under the button
  * and the list refetches, so a row the server no longer has drops out.
@@ -141,6 +182,7 @@ export function ActivityShiftCard({ shift, tz, now }: { shift: PortalActivityShi
   const [error, setError] = useState<string | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [notesFor, setNotesFor] = useState<string | null>(null)
+  const [announce, setAnnounce] = useState('')
   const finishButton = useRef<HTMLButtonElement>(null)
 
   const showFinish = shift.state === 'Started' || (shift.state === 'NotStarted' && plannedEndPassed(shift, now, tz))
@@ -186,6 +228,7 @@ export function ActivityShiftCard({ shift, tz, now }: { shift: PortalActivityShi
 
       {shift.participants.length > 0 && (
         <div>
+          <AnnouncementRegion message={announce} />
           <button
             type="button" aria-expanded={peopleOpen} aria-controls={`people-${shift.id}`} onClick={() => setPeopleOpen(o => !o)}
             className="flex min-h-[var(--tap-min)] w-full items-center justify-between gap-2 text-sm font-medium"
@@ -197,10 +240,14 @@ export function ActivityShiftCard({ shift, tz, now }: { shift: PortalActivityShi
             <ul id={`people-${shift.id}`} className="divide-y divide-[var(--color-border)]">
               {shift.participants.map(p => (
                 <li key={p.shiftId} className="py-1">
-                  <div className="flex min-h-[var(--tap-min)] items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-sm">{p.name}</span>
-                    <Button variant="ghost" size="md" aria-expanded={notesFor === p.shiftId} onClick={() => setNotesFor(n => (n === p.shiftId ? null : p.shiftId))}>Notes</Button>
+                  <div className="flex min-h-[var(--control-h)] items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 break-words text-sm [overflow-wrap:anywhere]">{p.name}</span>
+                    {/* A marked person's shift is cancelled, so the server has no notes for them (the mark must be undone first). */}
+                    {!p.didNotAttend && <Button variant="ghost" size="md" aria-expanded={notesFor === p.shiftId} onClick={() => setNotesFor(n => (n === p.shiftId ? null : p.shiftId))}>Notes</Button>}
                   </div>
+                  {(shift.state === 'Started' || p.didNotAttend) && (
+                    <ParticipantAttendance rowId={shift.id} person={p} editable={shift.state === 'Started'} online={online} onDone={setAnnounce} />
+                  )}
                   {notesFor === p.shiftId && (
                     <ShiftNotesSection
                       shiftId={p.shiftId} participantId={p.participantId} participantName={p.name}

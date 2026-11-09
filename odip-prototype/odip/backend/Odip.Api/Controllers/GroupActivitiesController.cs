@@ -494,47 +494,60 @@ public partial class GroupActivitiesController : ControllerBase
         {
             var activity = await LoadActivityAsync(id, tenantId, forChange: false, token);
             EnsureAttendanceWindow(activity);
-            var shiftIds = await _db.Shifts.AsNoTracking().Where(s => s.GroupActivityId == id && s.TenantId == activity.TenantId && s.ParticipantId == participantId).Select(s => s.Id).OrderBy(i => i).ToListAsync(token);
-            if (shiftIds.Count == 0) throw Deny("GA_SHIFT_NOT_FOUND");
-            foreach (var shiftId in shiftIds) await ShiftRowLock.AcquireAsync(_db, shiftId, token);   // joins the board lock's transaction
-            await _db.Entry(activity).ReloadAsync(token);
-            EnsureAttendanceWindow(activity);   // an approval may have completed the activity while this waited
-            var shifts = await _db.Shifts.Where(s => shiftIds.Contains(s.Id)).ToListAsync(token);
-            var now = DateTime.UtcNow;
-
-            if (shifts.Any(s => s.Status == ShiftStatus.Completed) || await _db.ShiftCompletions.AsNoTracking().AnyAsync(c => shiftIds.Contains(c.ShiftId) && c.IsActive, token)) throw Deny("GA_ATTENDANCE_CLOSED");
-            if (shifts.Any(s => s.Status is not (ShiftStatus.Published or ShiftStatus.Cancelled))) throw Deny("GA_SHIFT_LOCKED");
-
-            if (!dto.Attended)
-            {
-                foreach (var shift in shifts.Where(s => s.Status == ShiftStatus.Published)) { RosteringController.ApplyStatus(shift, ShiftStatus.Cancelled, now); shift.UpdatedAt = now; }
-            }
-            else if (shifts.Any(s => s.Status == ShiftStatus.Cancelled))
-            {
-                // Only a no-show can be undone: a shift cancelled through the board before the day was never marked, and reopening it could make a never-billable cancellation claimable.
-                var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, activity.TenantId, token)).Zone;
-                if (shifts.Any(s => s.Status == ShiftStatus.Cancelled && !GroupActivityReader.IsNoShow(s, zone))) throw Deny("GA_SHIFT_LOCKED");
-                // A no-show on a cancellation claim bills that claim, so it can't be reopened until the claim is deleted (the shift PUT's rule, taken under the same lock).
-                await using var claimLock = await RosterGenerationLock.AcquireAsync(_db, participantId, token, scope: "claim-generate");
-                var claim = await _db.ClaimLineItems.AsNoTracking().Where(BudgetLedgerService.ClaimLineStillCounts).Where(l => l.ShiftId != null && shiftIds.Contains(l.ShiftId.Value))
-                    .Select(l => l.TripClaim.ClaimReference).FirstOrDefaultAsync(token);
-                if (claim is not null) throw Deny(ShiftErrorCodes.ShiftClaimLocked, $"This shift is on claim {claim}, so it can't be reopened or moved. Delete that claim first.");
-                foreach (var shift in shifts.Where(s => s.Status == ShiftStatus.Cancelled)) { RosteringController.ApplyStatus(shift, ShiftStatus.Published, now); shift.UpdatedAt = now; }
-            }
-
+            if (await ApplyAttendanceAsync(_db, activity, participantId, dto.Attended, token) is { } no) throw Deny(no.Code, no.Message);
             return await SavedAsync(activity.Id, token);
         }, ct);
 
     /// <summary>Attendance is marked while the activity is InProgress: not before it starts, not once it has finished or been cancelled.</summary>
+    internal static string? AttendanceWindowCode(GroupActivity activity) => activity.Status switch
+    {
+        ShiftStatus.Cancelled => "GA_CANCELLED",
+        ShiftStatus.Completed => "GA_ATTENDANCE_CLOSED",
+        ShiftStatus.Draft or ShiftStatus.Published => "GA_NOT_STARTED",
+        _ => null,
+    };
+
     private void EnsureAttendanceWindow(GroupActivity activity)
     {
-        switch (activity.Status)
-        {
-            case ShiftStatus.Cancelled: throw Deny("GA_CANCELLED");
-            case ShiftStatus.Completed: throw Deny("GA_ATTENDANCE_CLOSED");
-            case ShiftStatus.Draft or ShiftStatus.Published: throw Deny("GA_NOT_STARTED");
-        }
+        if (AttendanceWindowCode(activity) is { } code) throw Deny(code);
     }
+
+    /// <summary>E13's body, shared with the worker's portal mark (ga-portal-attendance). Call it after the board and participant locks; it takes the shift row locks
+    /// and, for an undo, the claim lock. It saves nothing. Returns the refusal (Code, and Message when it isn't the table's), or null when the caller may save.</summary>
+    internal static async Task<(string Code, string? Message)?> ApplyAttendanceAsync(OdipDbContext db, GroupActivity activity, Guid participantId, bool attended, CancellationToken ct)
+    {
+        var shiftIds = await db.Shifts.AsNoTracking().Where(s => s.GroupActivityId == activity.Id && s.TenantId == activity.TenantId && s.ParticipantId == participantId).Select(s => s.Id).OrderBy(i => i).ToListAsync(ct);
+        if (shiftIds.Count == 0) return ("GA_SHIFT_NOT_FOUND", null);
+        foreach (var shiftId in shiftIds) await ShiftRowLock.AcquireAsync(db, shiftId, ct);   // joins the board lock's transaction
+        await db.Entry(activity).ReloadAsync(ct);
+        if (AttendanceWindowCode(activity) is { } closed) return (closed, null);   // an approval may have completed the activity while this waited
+        var shifts = await db.Shifts.Where(s => shiftIds.Contains(s.Id)).ToListAsync(ct);
+        var now = DateTime.UtcNow;
+
+        if (shifts.Any(s => s.Status == ShiftStatus.Completed) || await db.ShiftCompletions.AsNoTracking().AnyAsync(c => shiftIds.Contains(c.ShiftId) && c.IsActive, ct)) return ("GA_ATTENDANCE_CLOSED", null);
+        if (shifts.Any(s => s.Status is not (ShiftStatus.Published or ShiftStatus.Cancelled))) return ("GA_SHIFT_LOCKED", null);
+
+        if (!attended)
+        {
+            foreach (var shift in shifts.Where(s => s.Status == ShiftStatus.Published)) { RosteringController.ApplyStatus(shift, ShiftStatus.Cancelled, now); shift.UpdatedAt = now; }
+        }
+        else if (shifts.Any(s => s.Status == ShiftStatus.Cancelled))
+        {
+            // Only a no-show can be undone: a shift cancelled through the board before the day was never marked, and reopening it could make a never-billable cancellation claimable.
+            var zone = (await ProviderTimeZoneResolver.ResolveAsync(db, activity.TenantId, ct)).Zone;
+            if (shifts.Any(s => s.Status == ShiftStatus.Cancelled && !GroupActivityReader.IsNoShow(s, zone))) return ("GA_SHIFT_LOCKED", null);
+            // A no-show on a cancellation claim bills that claim, so it can't be reopened until the claim is deleted (the shift PUT's rule, taken under the same lock).
+            await using var claimLock = await RosterGenerationLock.AcquireAsync(db, participantId, ct, scope: "claim-generate");
+            var claim = await db.ClaimLineItems.AsNoTracking().Where(BudgetLedgerService.ClaimLineStillCounts).Where(l => l.ShiftId != null && shiftIds.Contains(l.ShiftId.Value))
+                .Select(l => l.TripClaim.ClaimReference).FirstOrDefaultAsync(ct);
+            if (claim is not null) return (ShiftErrorCodes.ShiftClaimLocked, $"This shift is on claim {claim}, so it can't be reopened or moved. Delete that claim first.");
+            foreach (var shift in shifts.Where(s => s.Status == ShiftStatus.Cancelled)) { RosteringController.ApplyStatus(shift, ShiftStatus.Published, now); shift.UpdatedAt = now; }
+        }
+        return null;
+    }
+
+    /// <summary>A refusal code's status and text, for the portal's mark.</summary>
+    internal static (int Status, string Message) RefusalFor(string code) => Refusals[code];
 
     // ── E10-E12 workers ─────────────────────────────────────────────────────────────────────────────
 
