@@ -17,7 +17,7 @@ export function extractErrorMessage(err: unknown, fallback: string): string {
   const data = (err as AxiosError<{ message?: string; errors?: string[] | Record<string, string[]> }>)?.response?.data
   const errors = data?.errors
   // An object-shaped errors map is ASP.NET model binding: skip its JSON converter entries (key `$.path`) and any text naming a .NET type.
-  const first = Array.isArray(errors) ? errors[0] : errors && Object.entries(errors).filter(([key]) => !key.startsWith('$')).map(([, messages]) => messages?.[0]).find(m => m && !m.includes('System.'))
+  const first = Array.isArray(errors) ? errors[0] : errors && Object.entries(errors).filter(([key]) => !key.startsWith('$')).map(([, messages]) => messages?.[0]).find(m => m && !/\bSystem\.[A-Z]/.test(m))
   return first || data?.message || fallback
 }
 

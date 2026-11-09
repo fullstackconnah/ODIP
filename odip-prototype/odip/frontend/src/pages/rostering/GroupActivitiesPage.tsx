@@ -58,15 +58,16 @@ const columns: Column<GroupActivityDto>[] = [
   { key: 'serviceDate', header: 'Date', mobile: 'meta', render: a => format(parseISO(a.serviceDate), 'EEE d MMM') },
   { key: 'startTime', header: 'Time', mobile: 'meta', render: timeRange },
   {
-    key: 'title', header: 'Activity', mobile: 'primary',
+    // md:w-full takes the room the other columns leave; md:max-w-0 stops the text widening the column, so CellText truncates to the cell.
+    key: 'title', header: 'Activity', mobile: 'primary', className: 'md:w-full md:max-w-0',
     render: a => (
       <div className="min-w-0">
-        <CellText className="font-semibold md:max-w-64">{a.title}</CellText>
-        {a.location && <CellText className="text-xs text-[var(--color-muted-foreground)] md:max-w-64">{a.location}</CellText>}
+        <CellText className="font-semibold">{a.title}</CellText>
+        {a.location && <CellText className="text-xs text-[var(--color-muted-foreground)]">{a.location}</CellText>}
       </div>
     ),
   },
-  { key: 'staff', header: 'Staff', mobile: 'meta', wrap: true, className: 'max-md:basis-full max-md:max-w-none!', render: a => <StaffCell activity={a} /> },
+  { key: 'staff', header: 'Staff', mobile: 'meta', wrap: true, className: 'max-md:basis-full max-md:max-w-none! md:min-w-44', render: a => <StaffCell activity={a} /> },
   { key: 'participants', header: 'Participants', align: 'right', mobile: 'trail', render: a => <span className="tabular-nums">{a.participants.filter(p => !p.didNotAttend).length}</span> },
   { key: 'status', header: 'Status', mobile: 'status', render: a => <StatusBadge status={a.status} label={labelOf(a.status)} className="whitespace-nowrap" /> },
 ]
@@ -91,6 +92,7 @@ export default function GroupActivitiesPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Group activities" />
 
+      {!off && (
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="sm:w-48">
           <FormField label="Status">
@@ -100,6 +102,7 @@ export default function GroupActivitiesPage() {
         <TextField label="From" type="date" value={from} max={to || undefined} onChange={e => { setFrom(e.target.value); setPage(1) }} />
         <TextField label="To" type="date" value={to} min={from || undefined} onChange={e => { setTo(e.target.value); setPage(1) }} />
       </div>
+      )}
 
       {visibility.isLoading || (on && isLoading) ? (
         <PageState kind="loading" noun="group activities" />
