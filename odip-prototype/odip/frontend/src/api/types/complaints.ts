@@ -65,6 +65,8 @@ export interface SaveComplaintDto {
   closedOn: string | null
   handledByUserId: string | null
   incidentReportId: string | null
+  /** POST only: one key per form session; a retried submit with the same key gets the first complaint back. */
+  idempotencyKey?: string | null
   /** PUT only: the version the form loaded; a stale one is a 409. */
   expectedUpdatedAt?: string | null
 }

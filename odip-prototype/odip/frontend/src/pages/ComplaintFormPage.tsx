@@ -26,6 +26,7 @@ import { TextField } from '@/components/TextField'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 import { localIsoDate } from '@/lib/dateOnly'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
@@ -119,7 +120,7 @@ function validate(v: FormValues, isEdit: boolean, today: string): FieldErrors {
 
 const orNull = (s: string): string | null => (s.trim() ? s.trim() : null)
 
-function toDto(v: FormValues, isEdit: boolean, expectedUpdatedAt?: string): SaveComplaintDto {
+function toDto(v: FormValues, isEdit: boolean, expectedUpdatedAt: string | undefined, idempotencyKey: string): SaveComplaintDto {
   const anonymous = v.complainantKind === 'Anonymous'
   const participant = v.complainantKind === 'Participant'
   const closed = isEdit && v.status === 'Closed'
@@ -141,7 +142,7 @@ function toDto(v: FormValues, isEdit: boolean, expectedUpdatedAt?: string): Save
     closedOn: closed ? v.closedOn || null : null,
     handledByUserId: v.handledByUserId || null,
     incidentReportId: v.incidentReportId || null,
-    ...(isEdit ? { expectedUpdatedAt: expectedUpdatedAt ?? null } : {}),
+    ...(isEdit ? { expectedUpdatedAt: expectedUpdatedAt ?? null } : { idempotencyKey }),
   }
 }
 
@@ -182,6 +183,8 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
   const [refusal, setRefusal] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const [createdId, setCreatedId] = useState<string | null>(null)
+  // One retry key per form mount (the form is keyed by complaint id, so the next new complaint mounts afresh): a re-press after a lost response replays the first complaint instead of filing a second.
+  const [idempotencyKey] = useState(() => newCompletionRequestId())
   const isDirty = JSON.stringify(values) !== JSON.stringify(saved)
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
@@ -275,7 +278,7 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
       focusFirstInvalid.current = true
       return
     }
-    const dto = toDto(values, isEdit, version)
+    const dto = toDto(values, isEdit, version, idempotencyKey)
     try {
       const res = isEdit
         ? await update.mutateAsync({ id: complaint!.id, data: dto })

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Odip.Domain.Enums;
 
 namespace Odip.Application.DTOs;
@@ -71,6 +72,9 @@ public record SaveComplaintDto
     public DateOnly? ClosedOn { get; init; }
     public Guid? HandledByUserId { get; init; }
     public Guid? IncidentReportId { get; init; }
+    /// <summary>POST only: the form session's retry key. A second POST with the same key replays the first complaint; PUT ignores it.</summary>
+    [StringLength(100)]
+    public string? IdempotencyKey { get; init; }
     /// <summary>PUT only: the version the form loaded. Null saves as before (an older tab); a stale one is a 409.</summary>
     public DateTime? ExpectedUpdatedAt { get; init; }
 }

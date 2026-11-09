@@ -2064,6 +2064,12 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ComplainantName).HasMaxLength(200);
             entity.Property(e => e.ActionsTaken).HasMaxLength(4000);
             entity.Property(e => e.Outcome).HasMaxLength(4000);
+            // Retried submits: unique per tenant over NON-NULL keys only, so every existing row (all NULL) is outside the index.
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TenantId, e.IdempotencyKey })
+                .IsUnique()
+                .HasDatabaseName(Complaint.IdempotencyIndexName)
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL");
             // The version a save must still match: the PUT answers 409 if the complaint changed since the form loaded it.
             entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
 
