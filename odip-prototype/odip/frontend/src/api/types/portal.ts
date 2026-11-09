@@ -328,7 +328,7 @@ export interface PortalWitnessRequestDto {
 
 // ── Group activity shifts (GA PR3) ──────────────────────────
 
-export interface PortalActivityParticipantDto { shiftId: string; participantId: string; name: string }
+export interface PortalActivityParticipantDto { shiftId: string; participantId: string; name: string; didNotAttend: boolean }
 
 export type PortalActivityState = 'NotStarted' | 'Started' | 'Finished' | 'Approved'
 

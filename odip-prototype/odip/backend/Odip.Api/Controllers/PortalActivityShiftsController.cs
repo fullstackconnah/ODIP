@@ -26,6 +26,7 @@ public class PortalActivityShiftsController : ControllerBase
 {
     private const string ShiftNotFoundMessage = "Shift not found.";
     private const string NotStartedMessage = "Start this shift before you finish it.";
+    private const string NotStartedAttendanceMessage = "Start this shift before you mark attendance.";
     private const string StartTimeMessage = "Enter a start time in the last 24 hours.";
     private static readonly TimeSpan MaxTypedStartAge = TimeSpan.FromHours(24);
 
@@ -74,6 +75,30 @@ public class PortalActivityShiftsController : ControllerBase
             GroupStaffRowState.Started when !finishing => (null, true),
             _ => (null, false),
         };
+    }
+
+    /// <summary>GateAsync's refusals (Draft 404, switch off, Cancelled, Approved, Finished); a row that isn't Started yet is 409. Here GateAsync's replay means "the row is Started", the only state let through.</summary>
+    private async Task<ActionResult<ApiResponse<PortalActivityShiftDto>>?> AttendanceGateAsync(GroupActivityStaff? row, CancellationToken ct)
+    {
+        var (early, started) = await GateAsync(row, finishing: false, ct);
+        if (early is not null) return early;
+        if (!started) return Refuse(409, NotStartedAttendanceMessage, ShiftErrorCodes.ShiftNotInProgress);
+        // E13's own window lets a PendingReview activity through; the worker's mark is stricter.
+        return row!.GroupActivity!.Status == ShiftStatus.InProgress ? null : RefuseAttendance("GA_ATTENDANCE_CLOSED", null);
+    }
+
+    /// <summary>The static's refusal in the portal's shape. The static's "shift not found" means the participant here: 404 "Shift not found." already means "not your row". Two refusals tell the reader to do coordinator things, so the worker gets their own wording.</summary>
+    private ActionResult<ApiResponse<PortalActivityShiftDto>> RefuseAttendance(string code, string? message)
+    {
+        if (code == "GA_SHIFT_NOT_FOUND") code = "GA_PARTICIPANT_NOT_FOUND";
+        var (status, text) = GroupActivitiesController.RefusalFor(code);
+        var worker = code switch
+        {
+            "GA_SHIFT_LOCKED" => "Your coordinator needs to change this.",
+            ShiftErrorCodes.ShiftClaimLocked => "This person's support has already been claimed, so ask your coordinator.",
+            _ => null,
+        };
+        return Refuse(status, worker ?? message ?? text, code);
     }
 
     private async Task<ActionResult<ApiResponse<PortalActivityShiftDto>>> AnswerAsync(GroupActivityStaff row, CancellationToken ct) =>
@@ -181,6 +206,42 @@ public class PortalActivityShiftsController : ControllerBase
             await RaiseFinishedAsync(row, activity, ct);
             await _db.SaveChangesAsync(ct);
             if (board is not null) await board.CommitAsync(ct); else await rowLock.CommitAsync(ct);
+            return await AnswerAsync(row, ct);
+        }
+        catch (RosterBusyException)
+        {
+            _db.ChangeTracker.Clear();
+            return Refuse(409, RosterGenerationLock.RosterBoardBusyMessage);
+        }
+    }
+
+    /// <summary>
+    /// A Started worker marks a participant as didn't attend, or undoes it (ga-portal-attendance). The work is E13's (GroupActivitiesController.ApplyAttendanceAsync); the locks are approve's order for one participant:
+    /// board, participant, this row, then the static's shift rows and claim lock. The gate runs again under the row lock, so a Finish cannot land between the check and the save. Idempotent: a repeat saves nothing.
+    /// </summary>
+    [HttpPost("{rowId:guid}/attendance")]
+    public async Task<ActionResult<ApiResponse<PortalActivityShiftDto>>> SetAttendance(Guid rowId, [FromBody] SetActivityAttendanceDto dto, CancellationToken ct)
+    {
+        if (await StaffIdAsync(ct) is not { } staffId) return Refuse(404, ShiftNotFoundMessage);
+        var row = await LoadRowAsync(rowId, staffId, ct);
+        if (await AttendanceGateAsync(row, ct) is { } early) return early;
+
+        try
+        {
+            await using var board = await RosterGenerationLock.AcquireAsync(_db, row!.TenantId, ct, RosterGenerationLock.DefaultWait, scope: "roster-board");
+            await RosterGenerationLock.AcquireAsync(_db, dto.ParticipantId!.Value, ct, RosterGenerationLock.DefaultWait);   // E13's participant lock; joins the board lock's transaction
+            await using var rowLock = await GroupStaffRowLock.AcquireAsync(_db, row.Id, ct);
+            await _db.Entry(row).ReloadAsync(ct);
+            if (_db.Entry(row).State == EntityState.Detached) return Refuse(404, ShiftNotFoundMessage);   // removed while we waited for the lock
+            await _db.Entry(row.GroupActivity!).ReloadAsync(ct);
+            if (await AttendanceGateAsync(row, ct) is { } late) return late;
+            if (await GroupActivitiesController.ApplyAttendanceAsync(_db, row.GroupActivity!, dto.ParticipantId.Value, dto.Attended!.Value, ct) is { } no)
+            {
+                _db.ChangeTracker.Clear();
+                return RefuseAttendance(no.Code, no.Message);
+            }
+            await _db.SaveChangesAsync(ct);
+            await board.CommitAsync(ct);
             return await AnswerAsync(row, ct);
         }
         catch (RosterBusyException)
