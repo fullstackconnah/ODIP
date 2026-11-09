@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { Button } from '@/components/Button'
-import { FieldDiff } from '@/components/AuditHistoryTab'
+import AuditHistoryTab, { FieldDiff } from '@/components/AuditHistoryTab'
 import { DELETED_RECORDS_PAGE_SIZE, useDeletedRecords, type DeletedRecord } from '@/api/hooks'
 import { formatDateTimeAu } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -14,8 +14,12 @@ type Row = DeletedRecord & { label: string }
 
 const detailId = (row: Row) => `deleted-detail-${row.id}`
 
+// The types whose audit history the server still serves once the record is gone (AuditController's deleted-record fallback).
+const FULL_HISTORY_TYPES = ['Shift', 'ShiftPattern']
+
 /** The held values of a deleted record, as the history tabs show a Deleted entry, and a way back to its participant when it had one. */
 function Detail({ row }: { row: Row }) {
+  const [history, setHistory] = useState(false)
   const participantId = row.fields.find(f => f.field === 'ParticipantId')?.old
   return (
     <div id={detailId(row)} className="min-w-0 [overflow-wrap:anywhere] py-2">
@@ -27,7 +31,19 @@ function Detail({ row }: { row: Row }) {
         {participantId && (
           <Link className="mt-1 flex w-fit items-center text-xs underline pointer-coarse:min-h-[var(--tap-min)]" to={`/participants/${participantId}`}>Open participant</Link>
         )}
+        {FULL_HISTORY_TYPES.includes(row.entityType) && (
+          <Button
+            variant="ghost" size="sm" className="mt-1 w-fit min-h-[var(--tap-min)]"
+            aria-expanded={history}
+            aria-controls={history ? `${detailId(row)}-history` : undefined}
+            onClick={() => setHistory(h => !h)}
+          >
+            {history ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+            {history ? 'Hide full history' : 'Show full history'}
+          </Button>
+        )}
       </div>
+      {history && <div id={`${detailId(row)}-history`} className="pt-2"><AuditHistoryTab entityType={row.entityType} entityId={row.entityId} /></div>}
     </div>
   )
 }

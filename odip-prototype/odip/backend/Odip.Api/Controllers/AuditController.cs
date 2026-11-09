@@ -57,6 +57,8 @@ public class AuditController : ControllerBase
             ["TripClaim"] = "TripClaim",
             ["ClaimLineItem"] = "ClaimLineItem",
             ["Complaint"] = "Complaint",
+            ["Shift"] = "Shift",
+            ["ShiftPattern"] = "ShiftPattern",
         };
 
         if (!allowedTypes.TryGetValue(entityType, out var canonicalEntityType))
@@ -79,8 +81,20 @@ public class AuditController : ControllerBase
             "TripClaim" => await _db.TripClaims.AnyAsync(e => e.Id == entityId, ct),
             "ClaimLineItem" => await _db.ClaimLineItems.AnyAsync(e => e.Id == entityId, ct),
             "Complaint" => await _db.Complaints.AnyAsync(e => e.Id == entityId, ct),
+            "Shift" => await _db.Shifts.AnyAsync(e => e.Id == entityId, ct),
+            "ShiftPattern" => await _db.ShiftPatterns.AnyAsync(e => e.Id == entityId, ct),
             _ => false,
         };
+        // A hard-deleted record is gone from its table. Its history stays readable to its own organisation while the newest row says Deleted.
+        if (!visible && _db.CurrentTenantId is Guid tid)
+        {
+            var newest = await _db.AuditLogs
+                .Where(a => a.EntityType == canonicalEntityType && a.EntityId == entityId)
+                .OrderByDescending(a => a.ChangedAt).ThenByDescending(a => a.Id)
+                .Select(a => new { a.Action, a.TenantId })
+                .FirstOrDefaultAsync(ct);
+            visible = newest is { Action: AuditAction.Deleted } && newest.TenantId == tid;
+        }
         if (!visible) return NotFound(new { error = "Entity not found." });
 
         // Deliberately a lower ceiling (100, not the house 200) — audit history pages are

@@ -7,6 +7,7 @@ using Odip.Api.Controllers;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
 
@@ -118,5 +119,78 @@ public class DeletedRecordsTests
 
         var second = await ListAsync(name, A, page: 2, pageSize: 2);
         Assert.Equal([oldest.EntityId], second.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("entityId").GetGuid()));
+    }
+
+    private static async Task<(int Status, int Entries)> HistoryAsync(string name, Guid? tenantId, string type, Guid id, bool superAdmin = false)
+    {
+        await using var db = Db(name, tenantId, superAdmin);
+        var result = await new AuditController(db, NullLogger<AuditController>.Instance).GetAuditHistory(type, id, ct: CancellationToken.None);
+        if (result is not OkObjectResult ok) return (Assert.IsType<NotFoundObjectResult>(result).StatusCode ?? 404, 0);
+        return (200, JsonDocument.Parse(JsonSerializer.Serialize(ok.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web))).RootElement.GetProperty("entries").GetArrayLength());
+    }
+
+    private static AuditLog Hist(Guid id, string type, AuditAction action, int minutes, Guid? tenant = null) =>
+        new() { Id = Guid.NewGuid(), EntityType = type, EntityId = id, Action = action, ChangedAt = T0.AddMinutes(minutes), TenantId = tenant ?? A, Changes = "[]" };
+
+    private static AuditLog[] Life(Guid id, string type) =>
+        [Hist(id, type, AuditAction.Created, 0), Hist(id, type, AuditAction.Updated, 5), Hist(id, type, AuditAction.Deleted, 9)];
+
+    // A hard-deleted shift or pattern is gone from its table; its history stays readable to its own organisation while the newest row says Deleted.
+    [Theory]
+    [InlineData("Shift"), InlineData("ShiftPattern")]
+    public async Task A_deleted_records_history_is_readable_by_an_admin_of_its_organisation(string type)
+    {
+        var id = Guid.NewGuid();
+        var name = await SeedAsync(Life(id, type));
+
+        Assert.Equal((200, 3), await HistoryAsync(name, A, type, id));
+    }
+
+    [Fact]
+    public async Task A_deleted_records_history_is_hidden_from_another_organisation_and_an_unscoped_SuperAdmin_but_open_to_a_SuperAdmin_viewing_the_organisation()
+    {
+        var id = Guid.NewGuid();
+        var name = await SeedAsync(Life(id, "Shift"));
+
+        Assert.Equal(404, (await HistoryAsync(name, B, "Shift", id)).Status);
+        Assert.Equal(404, (await HistoryAsync(name, A, "Shift", id, superAdmin: true)).Status);
+        Assert.Equal((200, 3), await HistoryAsync(name, A, "Shift", id, superAdmin: false));
+    }
+
+    // Written again after the delete: the newest row is not Deleted, so the fallback stays shut. (InMemory, a hand-written newer Created row.)
+    [Fact]
+    public async Task A_record_written_again_after_its_delete_is_not_a_deleted_history()
+    {
+        var id = Guid.NewGuid();
+        var name = await SeedAsync([.. Life(id, "Shift"), Hist(id, "Shift", AuditAction.Created, 20, B)]);
+
+        Assert.Equal(404, (await HistoryAsync(name, A, "Shift", id)).Status);
+    }
+
+    [Fact]
+    public async Task A_deleted_row_with_no_organisation_keeps_its_history_hidden()
+    {
+        var id = Guid.NewGuid();
+        var rows = Life(id, "Shift");
+        rows[2].TenantId = null;
+        var name = await SeedAsync(rows);
+
+        Assert.Equal(404, (await HistoryAsync(name, A, "Shift", id)).Status);
+    }
+
+    [Fact]
+    public async Task A_live_shifts_history_takes_the_unchanged_path()
+    {
+        var id = Guid.NewGuid();
+        var name = Guid.NewGuid().ToString();
+        await using (var db = Db(name, A))
+        {
+            db.Shifts.Add(new Shift { Id = id, TenantId = A });
+            db.AuditLogs.Add(Hist(id, "Shift", AuditAction.Created, 0));
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal((200, 1), await HistoryAsync(name, A, "Shift", id));
+        Assert.Equal(404, (await HistoryAsync(name, B, "Shift", id)).Status);
     }
 }

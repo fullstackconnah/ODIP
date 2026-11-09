@@ -15,6 +15,11 @@ const row = (o: Partial<DeletedRecord> = {}): DeletedRecord => ({
 const result = (items: DeletedRecord[], totalCount = items.length) => ({ data: { items, totalCount, page: 1, pageSize: 25 }, isLoading: false, isError: false, refetch: vi.fn() })
 const show = () => render(<MemoryRouter><DeletedRecordsTab /></MemoryRouter>)
 
+vi.mock('@/components/AuditHistoryTab', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/components/AuditHistoryTab')>()),
+  default: ({ entityType, entityId }: { entityType: string; entityId: string }) => <p>History of {entityType} {entityId}</p>,
+}))
+
 beforeEach(() => mockUseDeletedRecords.mockReset())
 
 describe('DeletedRecordsTab', () => {
@@ -44,6 +49,20 @@ describe('DeletedRecordsTab', () => {
     await userEvent.click(screen.getAllByRole('button', { name: /^Show details for Wed 11 Nov 2026/ })[0])
     expect(document.getElementById('deleted-detail-d1')).toBeNull()
     expect(within(document.getElementById('deleted-detail-d2')!).queryByRole('link')).toBeNull() // no ParticipantId held
+  })
+
+  it('offers the full history for a shift or pattern only, and shows it on request', async () => {
+    mockUseDeletedRecords.mockReturnValue(result([row(), row({ id: 'd2', entityType: 'ShiftPattern', entityId: 'e2' }), row({ id: 'd3', entityType: 'ParticipantRiskEntry', fields: [{ field: 'Description', old: 'Choking risk', new: null }] })]))
+    show()
+    await userEvent.click(screen.getAllByRole('button', { name: /^Show details for/ })[0])
+    expect(screen.queryByText(/^History of/)).toBeNull() // collapsed: nothing is fetched
+    await userEvent.click(screen.getByRole('button', { name: 'Show full history' }))
+    expect(screen.getByText('History of Shift e1')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Hide full history' }))
+    expect(screen.queryByText(/^History of/)).toBeNull()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /^Show details for Choking risk/ })[0])
+    expect(screen.queryByRole('button', { name: /full history/ })).toBeNull()
   })
 
   it('says so when a record kept no values', async () => {
