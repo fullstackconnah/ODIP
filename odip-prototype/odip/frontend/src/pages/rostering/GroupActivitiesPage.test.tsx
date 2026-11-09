@@ -41,7 +41,7 @@ describe('GroupActivitiesPage', () => {
     const [, first, second] = screen.getAllByRole('row')
     expect(within(first).getByText('Bowling')).toBeInTheDocument()
     expect(within(first).getByText('Strike Zone')).toBeInTheDocument()
-    expect(within(first).getByText('Mon 17 Aug 2026')).toBeInTheDocument()
+    expect(within(first).getByText('Mon 17 Aug')).toBeInTheDocument()
     expect(within(first).getByText('Alex Rivera, Sam Wilson +1')).toBeInTheDocument()
     expect(within(first).getByText('Draft')).toBeInTheDocument()
     expect(within(first).getByText('1')).toBeInTheDocument()

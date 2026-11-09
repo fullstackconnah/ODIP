@@ -5,7 +5,7 @@ import { CalendarDays, Users } from 'lucide-react'
 import { useGroupActivities, useModuleVisibility } from '@/api/hooks'
 import type { GroupActivityDto, ShiftStatus } from '@/api/types'
 import { PageHeader } from '@/components/PageHeader'
-import { DataTable, type Column } from '@/components/DataTable'
+import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
@@ -14,7 +14,6 @@ import { FormField } from '@/components/FormField'
 import { TextField } from '@/components/TextField'
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatServiceDate } from '@/lib/format'
 import { httpStatusOf } from '@/lib/httpStatus'
 import { TONE } from '@/lib/tone'
 import { extractErrorMessage } from '@/lib/utils'
@@ -47,26 +46,27 @@ function StaffCell({ activity }: { activity: GroupActivityDto }) {
   const names = activity.staff.map(s => s.staffName)
   const short = activity.status !== 'Cancelled' ? activity.staffNeeded - activity.staffAssigned : 0
   return (
-    <>
+    // A div, not a span: DataTable's phone meta line truncates spans, and this cell wraps (so the dot keeps its spaces and nothing leaves the card).
+    <div className="min-w-0 md:max-w-56">
       {names.length === 0 ? <span className="text-[var(--color-muted-foreground)]">Nobody yet</span> : names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ')}
       {short > 0 && <span className={TONE.warning.ink}> · {short} more needed</span>}
-    </>
+    </div>
   )
 }
 
 const columns: Column<GroupActivityDto>[] = [
-  { key: 'serviceDate', header: 'Date', mobile: 'meta', render: a => formatServiceDate(a.serviceDate) },
+  { key: 'serviceDate', header: 'Date', mobile: 'meta', render: a => format(parseISO(a.serviceDate), 'EEE d MMM') },
   { key: 'startTime', header: 'Time', mobile: 'meta', render: timeRange },
   {
     key: 'title', header: 'Activity', mobile: 'primary',
     render: a => (
       <div className="min-w-0">
-        <p className="truncate font-semibold">{a.title}</p>
-        {a.location && <p className="truncate text-xs text-[var(--color-muted-foreground)]">{a.location}</p>}
+        <CellText className="font-semibold md:max-w-64">{a.title}</CellText>
+        {a.location && <CellText className="text-xs text-[var(--color-muted-foreground)] md:max-w-64">{a.location}</CellText>}
       </div>
     ),
   },
-  { key: 'staff', header: 'Staff', mobile: 'meta', render: a => <StaffCell activity={a} /> },
+  { key: 'staff', header: 'Staff', mobile: 'meta', wrap: true, className: 'max-md:basis-full max-md:max-w-none!', render: a => <StaffCell activity={a} /> },
   { key: 'participants', header: 'Participants', align: 'right', mobile: 'trail', render: a => <span className="tabular-nums">{a.participants.filter(p => !p.didNotAttend).length}</span> },
   { key: 'status', header: 'Status', mobile: 'status', render: a => <StatusBadge status={a.status} label={labelOf(a.status)} className="whitespace-nowrap" /> },
 ]
@@ -117,7 +117,7 @@ export default function GroupActivitiesPage() {
         filtered ? (
           <EmptyState icon={CalendarDays} title="No group activities match these filters" description="Try a different status or date range." />
         ) : (
-          <EmptyState icon={CalendarDays} title="No group activities this week" description="Add one from the roster board with New, then Group activity." action={{ label: 'Open roster board', to: '/rostering' }} />
+          <EmptyState icon={CalendarDays} title="No group activities this week" description="Add one from the roster board with New, then Group activity." action={{ label: 'Open roster board', to: '/rostering', variant: 'secondary' }} />
         )
       ) : (
         <DataTable

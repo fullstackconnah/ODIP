@@ -2,6 +2,7 @@
 // Run through the runner: bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <absolute path to this script> <outdir>
 // Routed: sign-in as a Coordinator; the module-visibility switch and the list endpoint answer from `scene`; everything else goes to the mock API.
 import path from 'node:path'
+import { copyFileSync } from 'node:fs'
 import { AU_CONTEXT, cropElement, fullPage, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
@@ -42,7 +43,9 @@ async function route(page) {
     if (r.request().method() !== 'GET') return r.fallback()
     if (scene.hold) await scene.hold
     if (scene.mode === 'error') return r.fulfill({ status: 500, json: { success: false, data: null, message: null, errors: ['boom'] } })
-    return r.fulfill({ json: list(scene.mode === 'empty' ? [] : ROWS) })
+    // Mirrors the server's status filter, so a chosen status shows only its own rows.
+    const only = new URL(r.request().url()).searchParams.get('status')
+    return r.fulfill({ json: list(scene.mode === 'empty' ? [] : ROWS.filter((a) => !only || a.status === only)) })
   })
 }
 
@@ -52,6 +55,11 @@ async function shoot(page, st, name) {
   await main.waitFor({ state: 'visible', timeout: 30_000 })
   const c = await cropElement(page, main, path.join(OUT_DIR, `${name}-${st.name}.png`), { touch: st.width === 390, hideChrome: true, pad: 16 })
   add(`${name} crop holds [${st.name}]`, c.clip, c.overlap?.pass !== false)
+}
+
+async function pickStatus(page, name) {
+  await page.getByRole('button', { name: /Status/ }).click()
+  await page.getByRole('option', { name, exact: true }).click()
 }
 
 async function open(page, mode, on = true) {
@@ -80,10 +88,45 @@ try {
       await open(page, 'ok')
       await page.getByText('Community garden working bee').first().waitFor({ state: 'visible', timeout: 30_000 })
       await shoot(page, st, 'normal')
+      // Numeric checks on the full list first (every status in view), then the single-status states below.
+      const pillRe = /^(Published|Draft|Pending review|Cancelled)$/
+      if (mobile) {
+        const cards = await page.locator('tbody tr').evaluateAll((trs) => trs.map((tr) => {
+          const b = tr.getBoundingClientRect(); const pr = parseFloat(getComputedStyle(tr).paddingRight) || 0
+          const limit = b.right - pr
+          // The trail cell (participants) sits in the card's bottom-right corner inside the padding by house design (index.css), so it is exempt.
+          const over = [...tr.querySelectorAll('*')].filter((el) => !el.closest('td[data-card="trail"]') && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > limit + 0.5).map((el) => el.tagName + ':' + Math.round(el.getBoundingClientRect().right))
+          return { right: Math.round(b.right), limit: Math.round(limit), over: over.slice(0, 4) }
+        }))
+        add('every card child ends inside the card padding [390]', cards, cards.length === ROWS.length && cards.every((c) => c.over.length === 0))
+        const pills = await page.locator('tbody').getByText(pillRe).evaluateAll((els) => els.map((el) => { const b = el.getBoundingClientRect(); const c = el.closest('tr').getBoundingClientRect(); return { left: Math.round(b.left), right: Math.round(b.right), cardLeft: Math.round(c.left), cardRight: Math.round(c.right) } }))
+        add('each status pill is fully inside its card [390]', pills, pills.length === ROWS.length && pills.every((p) => p.left >= p.cardLeft && p.right <= p.cardRight))
+      } else {
+        const t = await page.evaluate(() => {
+          const table = document.querySelector('main table'); let box = table.parentElement
+          while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowX)) box = box.parentElement
+          const bb = box.getBoundingClientRect()
+          return { scrollWidth: box.scrollWidth, clientWidth: box.clientWidth, boxRight: Math.round(bb.right), viewport: innerWidth }
+        })
+        add('table fits without horizontal scroll [1280]', t, t.scrollWidth <= t.clientWidth)
+        const head = await page.getByRole('columnheader', { name: 'Status' }).evaluate((el) => Math.round(el.getBoundingClientRect().right))
+        const pills = await page.locator('tbody').getByText(pillRe).evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().right)))
+        add('Status header and every pill are inside the viewport [1280]', { head, pills, viewport: t.viewport, boxRight: t.boxRight }, head <= t.viewport && head <= t.boxRight && pills.length === ROWS.length && pills.every((r) => r <= t.viewport && r <= t.boxRight))
+      }
+      const fp = mobile ? await fullPage(page, path.join(OUT_DIR, 'mobile-390.png'), { touch: true }) : await fullPage(page, path.join(OUT_DIR, 'normal-1280-full.png'))
+      checks.push(...fp.checks)
+      copyFileSync(path.join(OUT_DIR, mobile ? 'mobile-390.png' : 'normal-1280-full.png'), path.join(OUT_DIR, 'full', mobile ? 'normal-390-full.png' : 'normal-1280-full.png'))
+
+      await pickStatus(page, 'Draft')
+      await page.getByText('Community garden working bee').first().waitFor({ state: 'visible', timeout: 30_000 })
+      await page.getByText('Movie afternoon').waitFor({ state: 'detached', timeout: 30_000 })
       await shoot(page, st, 'draft-and-short-staffed')
+      await pickStatus(page, 'Cancelled')
+      await page.getByText('Movie afternoon').waitFor({ state: 'visible', timeout: 30_000 })
+      await page.getByText('Community garden working bee').waitFor({ state: 'detached', timeout: 30_000 })
       await shoot(page, st, 'cancelled')
-      if (mobile) await fullPage(page, path.join(OUT_DIR, 'mobile-390.png'), { touch: true })
-      else await fullPage(page, path.join(OUT_DIR, 'normal-1280-full.png'))
+      await pickStatus(page, 'All statuses')
+      await page.getByText('Community garden working bee').first().waitFor({ state: 'visible', timeout: 30_000 })
       add(`short-staffed cell says how many more [${st.name}]`, null, (await page.getByText(/2 more needed/).count()) >= 1 && (await page.getByText('Nobody yet').count()) === 1)
 
       if (mobile) {
@@ -101,8 +144,7 @@ try {
       await open(page, 'empty')
       await page.getByText('No group activities this week').waitFor({ state: 'visible', timeout: 30_000 })
       await shoot(page, st, 'empty')
-      await page.getByRole('button', { name: /Status/ }).click()
-      await page.getByRole('option', { name: 'Draft' }).click()
+      await pickStatus(page, 'Draft')
       await page.getByText('No group activities match these filters').waitFor({ state: 'visible', timeout: 30_000 })
       await shoot(page, st, 'filtered-empty')
 
