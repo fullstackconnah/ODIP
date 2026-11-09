@@ -3,7 +3,7 @@
 // The mock API serves the files (mock-api/claimHub.js); the two POST answers are stubbed with page.route (synthetic rows). Exit 1 on any failed check.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, layoutCheck, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -80,8 +80,9 @@ for (const vp of VPS) {
     if (vp.touch) { const h = (await again.boundingBox())?.height ?? 0; check(t('paid-left-out: button is a touch target (>= 44 px)'), h >= 44, h) }
     await fitChecks(page, callout, t('paid-left-out'))
     await crop(page, callout, `paid-left-out-${vp.name}.png`, vp, 24)
-    const full = await fullPage(page, path.join(OUT_DIR, 'full', `paid-left-out-page-${vp.name}.png`), { touch: vp.touch })
-    checks.push(...full.checks)
+    const panel = page.getByRole('dialog').first()
+    checks.push(await layoutCheck(page, panel, t('paid-left-out panel')))
+    await crop(page, panel, `paid-left-out-panel-${vp.name}.png`, vp, 0)
     await context.close()
   } catch (e) { check(t('paid-left-out ran'), false, String(e.message).split('\n')[0]) }
 
@@ -92,7 +93,7 @@ for (const vp of VPS) {
         await p.route('**/api/v1/claim-batches/b-uploaded/results', (r) => r.fulfill({ json: envelope({ successful: 118, rejected: 2, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: [], unreadRows: [], batch: batchDto('b-uploaded', 'BPR261028001.csv', 'Uploaded', { successful: 118, rejected: 2 }), amountDiffers: n }) }))
       })
       await page.getByLabel('Results file (.csv)').setInputFiles({ name: 'results.csv', mimeType: 'text/csv', buffer: Buffer.from('a') })
-      await page.getByRole('button', { name: 'Import results' }).click({ timeout: 60_000 })
+      await page.getByTestId('file-next-action').click({ timeout: 60_000 })
       const callout = calloutOf(page, /118 successful/)
       await callout.waitFor({ state: 'visible', timeout: 30_000 })
       const text = await callout.innerText()
@@ -101,8 +102,9 @@ for (const vp of VPS) {
       if (capture) {
         await fitChecks(page, callout, t('import-differs'))
         await crop(page, callout, `import-differs-${vp.name}.png`, vp, 24)
-        const full = await fullPage(page, path.join(OUT_DIR, 'full', `import-differs-page-${vp.name}.png`), { touch: vp.touch })
-        checks.push(...full.checks)
+        const panel = page.getByRole('dialog').first()
+        checks.push(await layoutCheck(page, panel, t('import-differs panel')))
+        await crop(page, panel, `import-differs-panel-${vp.name}.png`, vp, 0)
       }
       await context.close()
     } catch (e) { check(t(`import-differs ${n} ran`), false, String(e.message).split('\n')[0]) }

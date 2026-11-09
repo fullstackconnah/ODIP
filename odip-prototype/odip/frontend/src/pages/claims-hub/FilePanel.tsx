@@ -315,7 +315,7 @@ function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto
     <Card title={nothingToPay ? 'Nothing to pay' : 'Record the payment'}>
       <p className="text-sm">{nothingToPay ? 'The NDIA rejected every line, so there is no money to record.' : 'The NDIA pays successful lines in its next payment run. When the money is in, record it here.'}</p>
       {result && result.leftOut.length > 0 && (
-        <Callout tone="warning" polite className="mt-3">
+        <Callout tone="warning" polite className="my-3">
           <p>Marked {plural(result.marked, 'line')} as paid.</p>
           <p className="break-words">{plural(result.leftOut.length, 'line')} {result.leftOut.length === 1 ? 'needs' : 'need'} an amount: {result.leftOut.map(l => l.claimReference).join(', ')}.</p>
         </Callout>
