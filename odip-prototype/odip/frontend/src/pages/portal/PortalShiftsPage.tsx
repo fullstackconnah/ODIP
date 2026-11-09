@@ -178,8 +178,8 @@ export default function PortalShiftsPage() {
   const shifts = useMemo(() => (data?.shifts ?? []).filter(s => !needsDetails(s) && inWeek(s.serviceDate.slice(0, 10))), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
   const tripAssignments = (data?.tripAssignments ?? []).filter(a => a.assignmentStart.slice(0, 10) <= weekEnd && a.assignmentEnd.slice(0, 10) >= weekStart)
   // Intake visits you are going to, in the browsed week: their own query beside the shifts (a non-shift entry, not billable work).
-  // Group activity rows in the browsed week (GA PR3), above the shifts; an older server sends none.
-  const activityShifts = useMemo(() => (data?.activityShifts ?? []).filter(a => inWeek(a.serviceDate.slice(0, 10))).sort((a, b) => a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime)), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Group activity rows in the browsed week (GA PR3), above the shifts; an older server sends none. A started, unfinished row stays from any older day (a forgotten overnight finish).
+  const activityShifts = useMemo(() => (data?.activityShifts ?? []).filter(a => inWeek(a.serviceDate.slice(0, 10)) || a.state === 'Started').sort((a, b) => a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime)), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
   const { id: myId } = usePermissions()
   const visitsQuery = useIntakeVisits({ from: weekStart, to: weekEnd, staffUserId: myId ?? undefined }, !!myId)
   const visits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data])
