@@ -24,7 +24,7 @@ export function useDecisionGroups(gates: DecisionGates, ctx: {
   const completions = useCompletionsGroup(gates.completions)
   const leave = useLeaveGroup(gates.leave, ctx.viewerId)
   const incidents = useIncidentsGroup(gates.incidents)
-  const tasks = useTasksGroup(gates.tasks, { today: ctx.today, mayCloseBudgetReview: ctx.mayCloseBudgetReview })
+  const tasks = useTasksGroup(gates.tasks, { mayCloseBudgetReview: ctx.mayCloseBudgetReview })
   // The same right as closing a budget review: Admin or SuperAdmin.
   const compliance = useComplianceGroup(gates.compliance, { staff: ctx.staff, today: ctx.today, warningDays: ctx.warningDays, mayEditAdmins: ctx.mayCloseBudgetReview })
   // Last, so the fixed order above and every tab position stay put; only organisations with group activities on, and only a viewer who decides completions.

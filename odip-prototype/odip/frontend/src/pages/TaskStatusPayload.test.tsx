@@ -32,12 +32,12 @@ beforeEach(() => {
 })
 
 describe('a status change sends the status only, never the whole task', () => {
-  it('Tasks page tick posts Completed with the day', async () => {
+  it('Tasks page tick posts Completed alone', async () => {
     const user = userEvent.setup()
     renderWithClient(<TasksPage />)
     await user.click(await screen.findByRole('button', { name: 'Mark complete' }))
 
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/tasks/t1/status', { status: 'Completed', completedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/tasks/t1/status', { status: 'Completed' }))
     expect(mockPut).not.toHaveBeenCalled()
   })
 

@@ -21,12 +21,12 @@ const task: TaskDto = {
   ownerName: 'Alex Rivera', dueDate: '2026-10-05', priority: 'Medium', status: 'NotStarted', completedDate: null, notes: null,
 }
 
-// L4-05, the trip page's copy of the same defect.
+// L4-05, the trip page's copy of the same defect: the status change sends no date, so the server writes the provider's day.
 describe('trip TasksTab completing a task before 10:00 Sydney time', () => {
   it.each([
-    ['Sat 3 Oct 08:00 AEST', '2026-10-02T22:00:00Z', '2026-10-03'],
-    ['Mon 5 Oct 08:00 AEDT', '2026-10-04T21:00:00Z', '2026-10-05'],
-  ])('%s saves the local date', async (_label, now, expectedDate) => {
+    ['Sat 3 Oct 08:00 AEST', '2026-10-02T22:00:00Z'],
+    ['Mon 5 Oct 08:00 AEDT', '2026-10-04T21:00:00Z'],
+  ])('%s sends no date', async (_label, now) => {
     if (!setZone('Australia/Sydney')) return
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(now))
@@ -36,6 +36,7 @@ describe('trip TasksTab completing a task before 10:00 Sydney time', () => {
     await user.click(screen.getByRole('button', { name: /not started/i }))
     await user.click(await screen.findByText('Completed'))
 
-    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: task.id, status: 'Completed', completedDate: expectedDate })
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: task.id, status: 'Completed' })
+    expect(mockUpdateMutate.mock.calls[0][0]).not.toHaveProperty('completedDate')
   })
 })

@@ -325,7 +325,7 @@ describe('TasksPage — the Mark complete tick', () => {
     await user.click(screen.getByRole('button', { name: 'Mark complete' }))
 
     expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 't1', status: 'Completed', completedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
+      { id: 't1', status: 'Completed' },
       expect.anything(),
     )
     expect(mockPutMutate).not.toHaveBeenCalled()

@@ -158,8 +158,6 @@ public class TasksController : ControllerBase
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
         if (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
-        if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
-            return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
         if (status == TaskItemStatus.Completed && await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail(FutureCompletedDate));
         if (StatusChangeRefusal(t, status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
@@ -169,7 +167,8 @@ public class TasksController : ControllerBase
             && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
             t.OwnerId = reviewer;
         t.Status = status;
-        t.CompletedDate = status == TaskItemStatus.Completed ? dto.CompletedDate : null;
+        // A Done sent with no date (the quick actions) is the provider's today, as Update stamps it.
+        t.CompletedDate = status == TaskItemStatus.Completed ? dto.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, t.TenantId, _clock, ct) : null;
         t.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
@@ -299,7 +298,7 @@ public class TasksController : ControllerBase
         if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null
             && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
             t.OwnerId = reviewer;
-        t.Status = TaskItemStatus.Completed; t.CompletedDate = dto.CompletedDate; t.UpdatedAt = DateTime.UtcNow;
+        t.Status = TaskItemStatus.Completed; t.CompletedDate = dto.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, t.TenantId, _clock, ct); t.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
     }

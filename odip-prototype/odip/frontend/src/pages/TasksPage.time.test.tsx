@@ -33,16 +33,15 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-// L4-05. completedDate is a DateOnly the user sees on the task. It was `new Date().toISOString().split('T')[0]`, the UTC date, so a task
-// completed at 08:00 on Saturday 3 Oct in Sydney (22:00Z on the 2nd) was saved as Friday the 2nd, every morning, until 10:00 (11:00 in
-// daylight time). It is the local calendar date.
+// L4-05. The quick Done sends no date: the browser's UTC date saved a task completed at 08:00 Saturday in Sydney as Friday. The server
+// writes the provider's day when no date is sent.
 describe.each([
-  ['Sat 3 Oct 08:00 AEST', '2026-10-02T22:00:00Z', '2026-10-03'],
-  ['Sat 3 Oct 00:05 AEST', '2026-10-02T14:05:00Z', '2026-10-03'],
-  ['Sat 3 Oct 23:55 AEST', '2026-10-03T13:55:00Z', '2026-10-03'],
-  ['Mon 5 Oct 08:00 AEDT (daylight time: 21:00Z on the 4th)', '2026-10-04T21:00:00Z', '2026-10-05'],
-])('TasksPage completing a task at %s', (_label, now, expectedDate) => {
-  it('"Mark complete" saves the local date', async () => {
+  ['Sat 3 Oct 08:00 AEST', '2026-10-02T22:00:00Z'],
+  ['Sat 3 Oct 00:05 AEST', '2026-10-02T14:05:00Z'],
+  ['Sat 3 Oct 23:55 AEST', '2026-10-03T13:55:00Z'],
+  ['Mon 5 Oct 08:00 AEDT (daylight time: 21:00Z on the 4th)', '2026-10-04T21:00:00Z'],
+])('TasksPage completing a task at %s', (_label, now) => {
+  it('"Mark complete" sends no date', async () => {
     if (!setZone('Australia/Sydney')) return
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(now))
@@ -51,13 +50,11 @@ describe.each([
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     await user.click(screen.getByRole('button', { name: 'Mark complete' }))
 
-    expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 't1', status: 'Completed', completedDate: expectedDate },
-      expect.anything(),
-    )
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: 't1', status: 'Completed' }, expect.anything())
+    expect(mockUpdateMutate.mock.calls[0][0]).not.toHaveProperty('completedDate')
   })
 
-  it('choosing Completed in the status pill saves the local date', async () => {
+  it('choosing Completed in the status pill sends no date', async () => {
     if (!setZone('Australia/Sydney')) return
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(now))
@@ -67,9 +64,7 @@ describe.each([
     await user.click(screen.getByRole('button', { name: /Not Started/i }))
     await user.click(await screen.findByText('Completed'))
 
-    expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 't1', status: 'Completed', completedDate: expectedDate },
-      expect.anything(),
-    )
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: 't1', status: 'Completed' }, expect.anything())
+    expect(mockUpdateMutate.mock.calls[0][0]).not.toHaveProperty('completedDate')
   })
 })

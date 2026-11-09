@@ -14,7 +14,6 @@ import { useState } from 'react'
 import { Filter, CheckCircle, Plus, ListChecks, Eye, Pencil, Archive, ArchiveRestore } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
-import { localIsoDate } from '@/lib/dateOnly'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 const TASK_STATUS_ITEMS = [
@@ -68,7 +67,7 @@ export default function TasksPage() {
   const total = data?.totalCount ?? 0
   const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
-    setStatus.mutate({ id: task.id, status: 'Completed', completedDate: localIsoDate() }, {
+    setStatus.mutate({ id: task.id, status: 'Completed' }, {
       onError: () => setFailedRowId(task.id),
       onSuccess: () => setFailedRowId(prev => prev === task.id ? null : prev),
     })
@@ -136,7 +135,6 @@ export default function TasksPage() {
               setStatus.mutate({
                 id: t.id,
                 status: val as TaskItemStatus,
-                ...(val === 'Completed' ? { completedDate: localIsoDate() } : {}),
               }, {
                 onError: () => setFailedRowId(t.id),
                 onSuccess: () => setFailedRowId(prev => prev === t.id ? null : prev),
