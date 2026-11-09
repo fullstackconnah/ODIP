@@ -16,6 +16,7 @@ vi.mock('@/api/client', async () => ({
 }))
 vi.mock('@/api/hooks', async () => ({
   ...(await vi.importActual<typeof import('@/api/hooks')>('@/api/hooks')),
+  useProviderTodayQuery: () => ({ data: { date: '2026-08-01' } }), // before the fixtures' days, so none counts as gone
   useRosterBoard: h.board,
   useParticipants: () => ({ data: [] }),
   useStaff: () => ({ data: [{ id: 'staff-2', fullName: 'Sam Wilson', isActive: true, region: 'North', hasExpiredQualifications: false }], isLoading: false }),

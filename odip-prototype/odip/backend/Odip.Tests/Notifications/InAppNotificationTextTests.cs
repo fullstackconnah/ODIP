@@ -147,4 +147,29 @@ public class InAppNotificationTextTests
             new ShiftAssignedPayload("a@x.au", "Grace Palmer-Hughes", Oct13, new(hour, minute), new(23, 0))).Title;
         Assert.EndsWith($"on Tue 13 Oct at {clock}.", title);
     }
+
+    /// <summary>A worker whose publish notice starts on a group activity is told they are on it, and the bell opens My shifts (the activity has no shift page).</summary>
+    [Fact]
+    public void ShiftAssigned_ActivityFirst_NamesTheActivity_AndLinksToMyShifts()
+    {
+        var payload = new ShiftAssignedPayload("a@x.au", "Bowling", Oct13, new(9, 30), new(12, 30), FirstIsActivity: true);
+        Assert.Equal(("You're on Bowling on Tue 13 Oct at 9:30 am.", "/portal"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload, "GroupActivity"));
+        // A mixed notice anchored on a shift keeps the shift page.
+        Assert.Equal(("You're on Bowling on Tue 13 Oct at 9:30 am.", $"/portal/shifts/{Id}"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload, "Shift"));
+    }
+
+    [Fact]
+    public void ShiftAssigned_ShiftFirst_IsUnchanged()
+    {
+        var payload = new ShiftAssignedPayload("a@x.au", "Grace Palmer-Hughes", Oct13, new(9, 0), new(17, 0));
+        Assert.Equal(("You're rostered with Grace Palmer-Hughes on Tue 13 Oct at 9:00 am.", $"/portal/shifts/{Id}"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload, "Shift"));
+    }
+
+    /// <summary>Rows already in the outbox have no FirstIsActivity field.</summary>
+    [Fact]
+    public void ShiftAssignedPayload_WithoutFirstIsActivity_ReadsAsAShift()
+    {
+        var old = System.Text.Json.JsonSerializer.Deserialize<ShiftAssignedPayload>("{\"RecipientEmail\":\"a@x.au\",\"ParticipantName\":\"Sam\",\"ServiceDate\":\"2026-10-13\",\"StartTime\":\"09:00:00\",\"EndTime\":\"17:00:00\",\"MoreShifts\":null}")!;
+        Assert.False(old.FirstIsActivity);
+    }
 }

@@ -18,13 +18,16 @@ public static class InAppNotificationText
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    public static (string Title, string? LinkTo) Build(NotificationEventType type, Guid entityId, object? payload) =>
+    public static (string Title, string? LinkTo) Build(NotificationEventType type, Guid entityId, object? payload, string? entityType = null) =>
         (type, payload) switch
         {
             (NotificationEventType.LeaveRequestSubmitted, LeaveRequestSubmittedPayload p) =>
                 ($"{Who(p.RequesterName)} asked for {Leave(p.LeaveType)}, {Range(p.StartDate, p.EndDate)}.", "/rostering/leave"),
             (NotificationEventType.LeaveRequestDecided, LeaveRequestDecidedPayload p) =>
                 ($"Your {Leave(p.LeaveType)} for {Range(p.StartDate, p.EndDate)} was {(p.Approved ? "approved" : "declined")}.", "/portal/leave"),
+            // A group activity has no shift page: a notice anchored on one links to My shifts, where its parts are listed.
+            (NotificationEventType.ShiftAssigned, ShiftAssignedPayload { FirstIsActivity: true } p) =>
+                ($"You're on {p.ParticipantName} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", entityType == "GroupActivity" ? "/portal" : $"/portal/shifts/{entityId}"),
             (NotificationEventType.ShiftAssigned, ShiftAssignedPayload p) =>
                 ($"You're rostered with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", $"/portal/shifts/{entityId}"),
             // A cancelled shift the worker still holds opens in the portal; one that is no longer theirs (taken off, or cancelled and handed to someone else) links to My shifts.
