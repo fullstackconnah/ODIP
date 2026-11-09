@@ -23,7 +23,7 @@ public class GroupShiftClaimTests
     private static readonly DateOnly Monday = new(2026, 10, 12);
     private const string GroupItem = "04_102_0136_6_1";
 
-    private static LedgerKit Arrange(bool withGroupRows = true, decimal rate = 70.01m)
+    internal static LedgerKit Arrange(bool withGroupRows = true, decimal rate = 70.01m)
     {
         var kit = LedgerKit.Create();
         kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
@@ -41,7 +41,7 @@ public class GroupShiftClaimTests
         return kit;
     }
 
-    private static Participant Person(LedgerKit kit, string last = "Brown")
+    internal static Participant Person(LedgerKit kit, string last = "Brown")
     {
         var person = kit.SeedParticipant(last: last);
         kit.SeedPlan(person, Core(PlanType.PlanManaged, Q(1, 100000m), Q(2, 100000m), Q(3, 100000m), Q(4, 100000m)));
@@ -262,7 +262,7 @@ public class GroupShiftClaimTests
     });
 
     // The pattern an agreement block became. The draft and the pattern can each belong to another org, to show that the block is read only through the caller's own rows.
-    private static ShiftPattern BlockPattern(LedgerKit kit, Participant person, PlanBlock block, Guid? draftTenant = null, Guid? patternTenant = null)
+    internal static ShiftPattern BlockPattern(LedgerKit kit, Participant person, PlanBlock block, Guid? draftTenant = null, Guid? patternTenant = null)
     {
         var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = draftTenant ?? kit.TenantId, ParticipantId = person.Id, Version = 1, State = "NSW" };
         kit.Db.ServiceAgreementDrafts.Add(draft);
@@ -273,14 +273,14 @@ public class GroupShiftClaimTests
         return pattern;
     }
 
-    private static PlanBlock SharedBlock(int workers = 1, int present = 6) => new()
+    internal static PlanBlock SharedBlock(int workers = 1, int present = 6) => new()
     {
         Workers = workers, ParticipantsPresent = present, Location = new PlanLocation { State = "NSW", Zone = PriceZone.National, Mm = 1 },
         Travel = new PlanProviderTravel { ParticipantsSharing = 3 },   // the divisor is the headcount, never the travel sharing
     };
 
     // 09:00-10:30 at 70.23: the 17.55 fixture of the claim, the ledger and the estimate.
-    private static Shift AttachedSharedSupport(LedgerKit kit, Participant person, Guid? patternId, bool attached = true)
+    internal static Shift AttachedSharedSupport(LedgerKit kit, Participant person, Guid? patternId, bool attached = true)
     {
         var shift = Attached(kit, person, SupportRatio.SharedSupport, Guid.NewGuid());
         shift.EndTime = new TimeOnly(10, 30);

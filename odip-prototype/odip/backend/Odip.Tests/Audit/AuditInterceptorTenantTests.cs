@@ -112,6 +112,20 @@ public class AuditInterceptorTenantTests
         Assert.Equal(A, (await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = A })).TenantId);
     }
 
+    // P60-D2: the case above passes whether TenantOf reads the claim or always returns the ambient tenant; this one needs the claim's own value.
+    [Fact]
+    public async Task A_claim_of_another_organisation_keeps_its_own_tenant_under_a_view_as()
+    {
+        Assert.Equal(B, (await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = B })).TenantId);
+    }
+
+    // P60-D3: an old claim with no tenant, deleted by an unscoped SuperAdmin, has no organisation to fall back to.
+    [Fact]
+    public async Task A_claim_with_no_tenant_deleted_with_no_organisation_in_scope_gets_a_null_audit_tenant()
+    {
+        Assert.Null((await DeletedRowAsync(null, new TripClaim { Id = Guid.NewGuid(), TenantId = null })).TenantId);
+    }
+
     [Fact]
     public async Task Global_tables_get_no_tenant()
     {

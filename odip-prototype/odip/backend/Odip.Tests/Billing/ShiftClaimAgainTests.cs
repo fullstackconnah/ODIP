@@ -18,6 +18,7 @@ public class ShiftClaimAgainTests
     private static readonly CancellationToken Ct = CancellationToken.None;
     private static readonly DateOnly Day1 = new(2026, 10, 20);   // a Tuesday
     private static readonly DateOnly Now = new(2026, 10, 30);
+    private const string GroupItem = "04_102_0136_6_1";   // the group activities item of GroupShiftClaimTests.Arrange
 
     private static async Task<(LedgerKit Kit, ShiftClaimGenerationService Engine, TripClaim Old, Participant Person, List<Shift> Shifts)> RejectedAsync(int shifts = 3, TripClaimStatus status = TripClaimStatus.Rejected)
     {
@@ -338,5 +339,27 @@ private static async Task<(LedgerKit Kit, ShiftClaimGenerationService Engine, Tr
         var previewRefused = await Assert.ThrowsAsync<ClaimAgainRefusedException>(() => engine.PreviewClaimAgainAsync(old.Id, Guid.NewGuid(), Now, Ct));
         Assert.True(previewRefused.NotFound);
         Assert.True(await StillThere(kit, old));
+    }
+
+    // GSS-D3: a shared-support shift of a block of six is priced from its agreement block, and claiming it again reads the block again to the same amount (70.23 x 1.5 h / 6 = 17.55, as in GroupShiftClaimTests).
+    [Fact]
+    public async Task ASharedSupportGroupShiftOfSix_IsClaimedAgainAtTheSameAmount()
+    {
+        using var kit = GroupShiftClaimTests.Arrange(rate: 70.23m);
+        var person = GroupShiftClaimTests.Person(kit);
+        var day = new DateOnly(2026, 10, 12);   // the Monday of the block's pattern
+        GroupShiftClaimTests.AttachedSharedSupport(kit, person, GroupShiftClaimTests.BlockPattern(kit, person, GroupShiftClaimTests.SharedBlock()).Id);
+        var engine = new ShiftClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant);
+        var old = (await engine.GenerateAsync(person.Id, day, day, Ct)).Claim;
+        Assert.Equal(17.55m, old.TotalAmount);
+        old.Status = TripClaimStatus.Rejected;
+        foreach (var l in kit.Db.ClaimLineItems.Where(l => l.TripClaimId == old.Id)) l.Status = ClaimLineItemStatus.Submitted;
+        kit.Db.SaveChanges();
+
+        var made = await engine.ClaimAgainAsync(old.Id, kit.TenantId, Now, Ct);
+
+        var line = await kit.Db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.TripClaimId == made.Claim.Id, Ct);
+        Assert.Equal((GroupItem, 11.70m, 1.5m, 17.55m), (line.SupportItemCode, line.UnitPrice, line.Hours, line.TotalAmount));
+        Assert.Equal(17.55m, made.Claim.TotalAmount);
     }
 }
