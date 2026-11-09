@@ -58,7 +58,7 @@ describe('Budgets tab: what is shown', () => {
   it('says a hard limit cannot see the shifts the system cannot price yet, so the Admin who chooses the policy knows what it does not cover (design review M4, code review C6)', () => {
     renderTab()
 
-    const line = screen.getByText(/Shifts the system cannot price yet \(group sleepovers and passive nights, and group or shared-support shifts that are not on a group activity, or whose headcount is not agreed or changes\) are not checked, so a hard limit does not see them\./)
+    const line = screen.getByText(/Shifts the system cannot price yet are not checked, so a hard limit does not see them. These are sleepovers and passive nights on a group activity, 1:2 to 1:5 and shared-support shifts that are not on a group activity, and group shifts with no agreed number of participants, or where that number changes part-way through./)
     const percentHeading = screen.getByRole('heading', { name: /When a participant is approaching/ })
     expect(line.compareDocumentPosition(percentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // said in the first section, beside what both modes leave alone
   })

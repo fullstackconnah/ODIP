@@ -107,11 +107,14 @@ public static class ParticipantPurger
             var auditRows = await scope.Q<AuditLog>().Where(a => a.EntityId == participantId || audited.Contains(a.EntityId)
                 || (a.TenantId == tenantId && a.Action == AuditAction.Deleted && a.Changes.Contains(owned))).ExecuteDeleteAsync(ct);
             // Children with no ParticipantId of their own name their parent instead: the Deleted row holds "Field":"<Link>","Old":"<parent id>". Only parents that carry a ParticipantId (so belong to X alone) are listed.
-            // shortcut: a child whose parent was itself deleted earlier (two levels, e.g. a period of a deleted pool) is not matched, and nor are children of a parent with no ParticipantId (FundingPeriod, ShiftBreak, incident witnesses); link them if that history must go too.
-            var linked = string.Join("|", ParentLinks.Where(l => removed.TryGetValue(l.Table, out var ids) && ids.Count > 0)
-                .Select(l => "\"Field\":\"" + l.Field + "\",\"Old\":\"(" + string.Join("|", removed[l.Table]) + ")\""));
-            if (linked.Length > 0)
-                auditRows += await scope.Q<AuditLog>().Where(a => a.TenantId == tenantId && a.Action == AuditAction.Deleted && Regex.IsMatch(a.Changes, linked)).ExecuteDeleteAsync(ct);
+            // shortcut: a child whose parent was itself deleted earlier (two levels, e.g. a period of a deleted pool) is not matched, and nor are children of a parent with no ParticipantId (FundingPeriod, ShiftBreak); link them if that history must go too. Incident witnesses and injuries are linked through their incident, which belongs to X alone (InvolvedParticipantId).
+            // The ids go in 200 at a time so one pattern never grows past the regex limit. Every row a link field matches must belong to the parent's participant, so IncidentReport is skipped: it can name X's shift or booking for Y, and its own ParticipantId needle above covers X's.
+            foreach (var link in ParentLinks.Where(l => removed.TryGetValue(l.Table, out var ids) && ids.Count > 0))
+                foreach (var chunk in removed[link.Table].Chunk(200))
+                {
+                    var linked = "\"Field\":\"" + link.Field + "\",\"Old\":\"(" + string.Join("|", chunk) + ")\"";
+                    auditRows += await scope.Q<AuditLog>().Where(a => a.TenantId == tenantId && a.Action == AuditAction.Deleted && a.EntityType != "IncidentReport" && Regex.IsMatch(a.Changes, linked)).ExecuteDeleteAsync(ct);
+                }
             if (auditRows > 0) counts["AuditLogs"] = auditRows;
 
             var record = new PurgeRecord
@@ -138,7 +141,7 @@ public static class ParticipantPurger
     private static readonly (string Field, string Table)[] ParentLinks =
     [
         ("FundingPlanId", "FundingPlans"), ("DraftId", "ServiceAgreementDrafts"), ("SnapshotId", "ElectronicSigningSnapshots"), ("InquiryId", "ParticipantInquiries"),
-        ("RestrictivePracticeId", "RestrictivePractices"), ("ShiftId", "Shifts"), ("InvoiceId", "Invoices"), ("ParticipantBookingId", "ParticipantBookings"),
+        ("RestrictivePracticeId", "RestrictivePractices"), ("ShiftId", "Shifts"), ("InvoiceId", "Invoices"), ("ParticipantBookingId", "ParticipantBookings"), ("IncidentReportId", "IncidentReports"),
     ];
 
     public static Task<PurgeRecord?> ExistingAsync(OdipDbContext db, Guid tenantId, Guid participantId, CancellationToken ct) =>

@@ -16,7 +16,7 @@ prepareOutDir(OUT_DIR)
 const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const devUsers = envelope([{ username: 'dev.admin', role: 'Admin', tenantName: 'Sample Support Co' }])
 const devLogin = envelope({ id: '00000000-0000-0000-0000-0000000000a1', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.admin', fullName: 'Dev Admin', role: 'Admin', tenantName: 'Sample Support Co', tenantId: 'tenant-0001' })
-const NEW_TAIL = 'group or shared-support shifts that are not on a group activity, or whose headcount is not agreed or changes) are not checked, so a hard limit does not see them.'
+const NEW_TAIL = 'Shifts the system cannot price yet are not checked, so a hard limit does not see them. These are sleepovers and passive nights on a group activity, 1:2 to 1:5 and shared-support shifts that are not on a group activity, and group shifts with no agreed number of participants, or where that number changes part-way through.'
 
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })

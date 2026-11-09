@@ -333,6 +333,56 @@ public class ParticipantPurgePostgresTests : IClassFixture<PostgresFixture>
         Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
     }
 
+    // An incident edit hard-deletes witnesses and injuries; their Deleted rows name the incident, which belongs to X alone.
+    [SkippableFact]
+    public async Task The_purge_removes_the_deleted_witness_history_of_Xs_incident()
+    {
+        var w = await SeedAsync();
+        var ofX = Deleted(w.A, "IncidentWitness", $"[{{\"Field\":\"IncidentReportId\",\"Old\":\"{w.X.Ids[IncidentIx]}\",\"New\":null}}]");
+        var ofOther = Deleted(w.A, "IncidentWitness", $"[{{\"Field\":\"IncidentReportId\",\"Old\":\"{w.KeptIncidentId}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.AuditLogs.AddRange(ofX, ofOther); await admin.SaveChangesAsync(); }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofOther.Id));
+    }
+
+    // The parent ids go into the pattern 200 at a time; 450 plans must all clear, and a row naming an id one character off stays.
+    [SkippableFact]
+    public async Task The_purge_clears_the_deleted_history_of_more_than_one_chunk_of_parents()
+    {
+        var w = await SeedAsync();
+        var dates = (Start: new DateOnly(2026, 7, 1), End: new DateOnly(2027, 6, 30));
+        var plans = Enumerable.Range(0, 450).Select(i => new FundingPlan { Id = Guid.NewGuid(), TenantId = w.A, ParticipantId = w.XId, PlanStart = dates.Start.AddDays(i), PlanEnd = dates.Start.AddDays(i + 1) }).ToList();
+        var rows = plans.Select(p => Deleted(w.A, "FundingPool", $"[{{\"Field\":\"FundingPlanId\",\"Old\":\"{p.Id}\",\"New\":null}}]")).ToList();
+        var last = plans[^1].Id.ToString();
+        var nearMiss = Deleted(w.A, "FundingPool", $"[{{\"Field\":\"FundingPlanId\",\"Old\":\"{last[..^1]}{(last[^1] == '0' ? '1' : '0')}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.FundingPlans.AddRange(plans); admin.AuditLogs.AddRange(rows); admin.AuditLogs.Add(nearMiss); await admin.SaveChangesAsync(); }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        var ids = rows.Select(r => r.Id).ToList();
+        Assert.Equal(0, await db.AuditLogs.CountAsync(a => ids.Contains(a.Id)));
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == nearMiss.Id));
+    }
+
+    // Y's incident can name X's shift (the server only checks the shift exists); its Deleted row is Y's history, not X's.
+    [SkippableFact]
+    public async Task A_deleted_incident_of_Y_that_names_Xs_shift_stays()
+    {
+        var w = await SeedAsync();
+        var ofY = Deleted(w.A, "IncidentReport", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.YId}\",\"New\":null}},{{\"Field\":\"ShiftId\",\"Old\":\"{w.X.Ids[ShiftIx]}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.AuditLogs.Add(ofY); await admin.SaveChangesAsync(); }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofY.Id));
+    }
+
     // On Postgres a null-tenant comparison is IS NULL, which would match every row from before the column existed; the list must show only its own organisation's rows.
     [SkippableFact]
     public async Task The_deleted_list_shows_only_the_callers_organisation_and_never_a_row_with_no_organisation()
