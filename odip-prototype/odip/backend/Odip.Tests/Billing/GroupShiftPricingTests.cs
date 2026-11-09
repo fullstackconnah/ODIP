@@ -221,7 +221,7 @@ public class GroupShiftPricingTests
     public void Invariants_HoldAcrossRatesAndHours()
     {
         foreach (var rate in new[] { 70.01m, 70.23m, 65.47m, 100.00m, 193.99m })
-            foreach (var n in new[] { 2, 3, 4, 5, 6, 7, 8, 12, 40 })
+            foreach (var n in new[] { 2, 3, 4, 5, 6, 7, 8, 12, 40, 41, 60 })
                 foreach (var minutes in new[] { 15, 30, 90, 165, 200 })
                 {
                     var line = Weekday(rate, n <= 5 ? Ratios[n - 1] : SupportRatio.SharedSupport, n, 9, minutes).Lines.Single();

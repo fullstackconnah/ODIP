@@ -53,6 +53,13 @@ public class GroupActivityAttendanceClaimTests
             return (person, shifts);
         }
 
+        /// <summary>A group line is claimed only once its activity can no longer change (GCH-D1).</summary>
+        public void SetStatus(ShiftStatus status)
+        {
+            Activity.Status = status;
+            Kit.Db.SaveChanges();
+        }
+
         public GroupActivitiesController Controller()
         {
             var controller = new GroupActivitiesController(Kit.Db, Kit.Tenant!, new StaffUnavailabilityQuery(Kit.Db));
@@ -73,6 +80,7 @@ public class GroupActivityAttendanceClaimTests
         var (person, shifts) = rig.Person(SupportRatio.OneToOne);
         GroupActivityFixture.Body(await rig.Mark(person.Id, false), 200);
 
+        rig.SetStatus(ShiftStatus.Completed);
         var offered = await rig.Engine.CancellationCandidatesAsync(rig.Kit.TenantId, Today.AddDays(1), Ct);
         Assert.Equal([shifts[0].Id], offered.Shifts.Select(s => s.ShiftId));
         var made = await rig.Engine.GenerateCancellationAsync(shifts[0].Id, "NSDT", Today.AddDays(1), Ct);
@@ -88,6 +96,7 @@ public class GroupActivityAttendanceClaimTests
         var (person, shifts) = rig.Person(SupportRatio.TwoToOne);
         GroupActivityFixture.Body(await rig.Mark(person.Id, false), 200);
 
+        rig.SetStatus(ShiftStatus.Completed);
         var offered = await rig.Engine.CancellationCandidatesAsync(rig.Kit.TenantId, Today.AddDays(1), Ct);
         Assert.Equal(shifts.Select(s => s.Id).Order(), offered.Shifts.Select(s => s.ShiftId).Order());
         foreach (var s in shifts)
@@ -103,7 +112,9 @@ public class GroupActivityAttendanceClaimTests
         using var rig = new Rig();
         var (person, shifts) = rig.Person(SupportRatio.OneToOne);
         GroupActivityFixture.Body(await rig.Mark(person.Id, false), 200);
+        rig.SetStatus(ShiftStatus.Completed);
         await rig.Engine.GenerateCancellationAsync(shifts[0].Id, "NSDT", Today.AddDays(1), Ct);
+        rig.SetStatus(ShiftStatus.InProgress);
 
         Assert.Equal("SHIFT_CLAIM_LOCKED", GroupActivityFixture.Error(await rig.Mark(person.Id, true), 409));
         Assert.Equal(ShiftStatus.Cancelled, (await rig.Kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shifts[0].Id, Ct)).Status);

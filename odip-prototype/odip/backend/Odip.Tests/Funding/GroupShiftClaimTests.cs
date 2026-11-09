@@ -5,6 +5,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Funding.LedgerKit;
@@ -492,5 +493,362 @@ public class GroupShiftClaimTests
         var estimate = Assert.Single(await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, person.Id, new[] { spec }, Ct));
 
         Assert.Equal("the group size changed during this support; claim it by hand", Assert.IsType<ShiftCostEstimate.NotPriced>(estimate).Reason);
+    }
+
+    // Headcount PR: N is never fewer than the people each worker supports, so a group's lines never add up to more than its workers x the rate.
+
+    private static readonly DateTime OnTheDay = new(2026, 10, 12, 1, 0, 0, DateTimeKind.Utc);   // 12:00 on the Monday in Sydney: no notice at all
+
+    private static List<Shift> Others(LedgerKit kit, Guid activity, int count, SupportRatio ratio = SupportRatio.OneToThree, ShiftStatus status = ShiftStatus.Completed, DateTime? cancelledAt = null, Guid? tenant = null)
+    {
+        var list = new List<Shift>();
+        for (var i = 0; i < count; i++)
+        {
+            var other = tenant is null ? Person(kit, "Other" + Guid.NewGuid().ToString("N")[..6]) : kit.SeedParticipant(tenantId: tenant, last: "Foreign");
+            var shift = Attached(kit, other, ratio, activity, status: status);
+            shift.CancelledAt = cancelledAt;
+            list.Add(shift);
+        }
+        kit.Db.SaveChanges();
+        return list;
+    }
+
+    private static void Staff(LedgerKit kit, Guid activity, int rows, Guid? tenant = null)
+    {
+        for (var i = 0; i < rows; i++)
+            kit.Db.GroupActivityStaff.Add(new GroupActivityStaff { Id = Guid.NewGuid(), TenantId = tenant ?? kit.TenantId, GroupActivityId = activity, UserId = Guid.NewGuid(), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0) });
+        kit.Db.SaveChanges();
+    }
+
+    private static async Task<decimal> UnitOf(LedgerKit kit, Shift shift)
+    {
+        await Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct);
+        return Assert.Single(await LinesOf(kit, shift.Id)).UnitPrice;
+    }
+
+    private static ShiftSpec GroupSpec(Guid activity) => new(Monday, new TimeOnly(9, 0), new TimeOnly(12, 0), false, SupportRatio.OneToThree, SleepoverType.None, CatalogueGroups.GroupActivitiesGroupCode, GroupActivityId: activity);
+
+    [Fact]
+    public async Task ClaimRun_OneToThreeQuoted_FiveAttend_BilledAtFifth_AndTheFiveLinesStayWithinTheRate()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shifts = Others(kit, activity, 4).Prepend(Attached(kit, Person(kit), SupportRatio.OneToThree, activity)).ToList();
+
+        foreach (var shift in shifts) await Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct);
+
+        var lines = new List<ClaimLineItem>();
+        foreach (var shift in shifts) lines.Add(Assert.Single(await LinesOf(kit, shift.Id)));
+        Assert.All(lines, l => Assert.Equal(14.00m, l.UnitPrice));   // 70.01 / 5 = 14.002, floored
+        Assert.All(lines, l => Assert.Equal(42.00m, l.TotalAmount));
+        Assert.Equal(70.00m, lines.Sum(l => l.UnitPrice));   // an hour of the group is at most 70.01
+    }
+
+    [Fact]
+    public async Task ClaimRun_OneToThreeQuoted_TwoAttend_StillThird()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 1);
+
+        Assert.Equal(23.33m, await UnitOf(kit, shift));
+    }
+
+    [Fact]
+    public async Task ClaimRun_SharedSupportBlockOfSix_EightAttend_BilledAtEighth()
+    {
+        var kit = Arrange(rate: 70.23m);
+        var activity = Guid.NewGuid();
+        var person = Person(kit);
+        var shift = AttachedSharedSupport(kit, person, BlockPattern(kit, person, SharedBlock()).Id);
+        shift.GroupActivityId = activity;
+        kit.Db.SaveChanges();
+        Others(kit, activity, 7, SupportRatio.SharedSupport);
+
+        var unit = await UnitOf(kit, shift);
+
+        var line = Assert.Single(await LinesOf(kit, shift.Id));
+        Assert.Equal(8.77m, unit);   // 70.23 / 8 = 8.77875, floored
+        Assert.Equal(13.16m, line.TotalAmount);   // 1.5 h x 8.77 = 13.155
+    }
+
+    [Theory]
+    [InlineData(5, 2, 23.33)]   // six people, two workers: three each
+    [InlineData(6, 2, 17.50)]   // seven people over two workers: ceil(7 / 2) = 4
+    [InlineData(5, 0, 11.66)]   // no staff row: one worker covers six
+    public async Task ClaimRun_StaffRows_ShareTheGroup(int others, int rows, double expected)
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, others);
+        Staff(kit, activity, rows);
+
+        Assert.Equal((decimal)expected, await UnitOf(kit, shift));
+    }
+
+    [Theory]
+    [InlineData(2, 23.33)]   // three at 1:3 and a 1:1 on two rows: one worker left for the three
+    [InlineData(3, 17.50)]   // four at 1:3: ceil(4 / 1) = 4
+    public async Task ClaimRun_OneToOneInTheActivity_TakesItsOwnWorker(int others, double expected)
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, others);
+        Others(kit, activity, 1, SupportRatio.OneToOne);
+        Staff(kit, activity, 2);
+
+        Assert.Equal((decimal)expected, await UnitOf(kit, shift));
+    }
+
+    [Fact]
+    public async Task ClaimRun_OneToOnePeopleTakeEveryWorker_IsClaimedAsIfOneCoveredTheGroup()
+    {
+        // Main does the same today (GCH-C2): two rows, both taken by 1:1 people, and three at 1:3 still divide by their own count.
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 2);
+        Others(kit, activity, 2, SupportRatio.OneToOne);
+        Staff(kit, activity, 2);
+
+        Assert.Equal(23.33m, await UnitOf(kit, shift));
+    }
+
+    [Fact]
+    public async Task ClaimRun_NoShowAndItsCancellation_BothClaimed_TheFiveLinesAddUpToTheRate()
+    {
+        var kit = Arrange();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        kit.Db.SaveChanges();
+        var activity = Guid.NewGuid();
+        var first = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        var attendees = Others(kit, activity, 3).Prepend(first).ToList();
+        var noShow = Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay).Single();
+        foreach (var shift in attendees) await Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct);
+
+        var made = await Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(2), Ct);
+
+        var units = new List<decimal>();
+        foreach (var shift in attendees) units.Add(Assert.Single(await LinesOf(kit, shift.Id)).UnitPrice);
+        units.Add(Assert.Single(await LinesOf(kit, noShow.Id)).UnitPrice);
+        Assert.All(units, u => Assert.Equal(14.00m, u));   // five seats, the no-show's included
+        Assert.Equal(70.00m, units.Sum());
+        Assert.Equal(42.00m, made.Claim.TotalAmount);
+    }
+
+    // GCH-D1: a group line waits until its activity can no longer change (Completed, PendingReview, Cancelled), so a later claim never divides by a different N.
+
+    private static GroupActivity RealActivity(LedgerKit kit, Guid id, ShiftStatus status)
+    {
+        var activity = new GroupActivity { Id = id, TenantId = kit.TenantId, ServiceDate = Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Title = "Bowling", Status = status };
+        kit.Db.GroupActivities.Add(activity);
+        kit.Db.SaveChanges();
+        return activity;
+    }
+
+    [Fact]
+    public async Task CancellationClaim_ActivityStillInProgress_LeftOut_ThenOfferedOnceCompleted_AndTheLinesStayWithinTheRate()
+    {
+        var kit = Arrange();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        kit.Db.SaveChanges();
+        var activity = Guid.NewGuid();
+        var row = RealActivity(kit, activity, ShiftStatus.InProgress);
+        var first = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        var attendees = Others(kit, activity, 5).Prepend(first).ToList();   // six attend
+        var noShow = Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay).Single();
+        Staff(kit, activity, 2);
+
+        var early = await Assert.ThrowsAsync<NothingClaimableException>(() => Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(1), Ct));
+
+        Assert.Contains(GroupHeadcount.NotFinished, early.Message);
+        Assert.Empty(await LinesOf(kit, noShow.Id));
+
+        row.Status = ShiftStatus.Completed;
+        kit.Db.SaveChanges();
+        foreach (var shift in attendees) await Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct);
+        await Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(1), Ct);
+
+        var lines = new List<ClaimLineItem>();
+        foreach (var shift in attendees.Append(noShow)) lines.AddRange(await LinesOf(kit, shift.Id));
+        Assert.Equal(7, lines.Count);
+        Assert.True(lines.Sum(l => l.TotalAmount) <= 2 * 70.01m * 3);   // two workers x the rate x three hours
+    }
+
+    [Fact]
+    public async Task ClaimRun_CompletedShiftOnAnActivityStillInProgress_LeftOut()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        RealActivity(kit, activity, ShiftStatus.InProgress);
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+
+        var refused = await Assert.ThrowsAsync<NothingClaimableException>(() => Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct));
+
+        Assert.Contains(GroupHeadcount.NotFinished, refused.Message);
+        Assert.Empty(await LinesOf(kit, shift.Id));
+    }
+
+    [Fact]
+    public async Task CancellationClaim_CancelledActivity_StillOffered()
+    {
+        var kit = Arrange();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        kit.Db.SaveChanges();
+        var activity = Guid.NewGuid();
+        RealActivity(kit, activity, ShiftStatus.Cancelled);
+        var noShow = Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay).Single();
+
+        await Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(1), Ct);
+
+        Assert.Single(await LinesOf(kit, noShow.Id));
+    }
+
+    [Fact]
+    public async Task ClaimRun_CancelledSevenDaysAhead_LowersTheCount()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 3);
+        Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay.AddDays(-7));
+
+        Assert.Equal(17.50m, await UnitOf(kit, shift));   // four are in the group
+    }
+
+    [Fact]
+    public async Task ClaimRun_DidNotAttendMark_DoesNotChangeTheCount()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 3);
+        Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay);
+
+        Assert.Equal(14.00m, await UnitOf(kit, shift));   // five: the marked person's cancellation can be claimed, so the seat stays
+    }
+
+    [Fact]
+    public async Task CancellationClaim_ChooserAmount_EqualsTheClaims()
+    {
+        var kit = Arrange();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        kit.Db.SaveChanges();
+        var activity = Guid.NewGuid();
+        Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 3);
+        var cancelled = Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay).Single();
+        var today = Monday.AddDays(2);
+
+        var offered = Assert.Single((await Engine(kit).CancellationCandidatesAsync(kit.TenantId, today, Ct)).Shifts);
+        var made = await Engine(kit).GenerateCancellationAsync(cancelled.Id, "NSDH", today, Ct);
+
+        Assert.Equal(cancelled.Id, offered.ShiftId);
+        Assert.Equal(14.00m, Assert.Single(await LinesOf(kit, cancelled.Id)).UnitPrice);
+        Assert.Equal(made.Claim.TotalAmount, offered.TotalAmount);
+    }
+
+    [Fact]
+    public async Task Ledger_CompletedShift_AndClaimAgain_EqualTheClaim_WithTwoWorkers()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var first = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 6);
+        Staff(kit, activity, 2);
+
+        var ledger = (await kit.Ledger.ComputeAsync(kit.TenantId, new[] { first.ParticipantId }, Ct))[first.ParticipantId];
+        var estimate = Assert.Single(ledger.Items, i => i.ShiftId == first.Id);
+        var made = await Engine(kit).GenerateAsync(first.ParticipantId, From, To, Ct);
+        made.Claim.Status = TripClaimStatus.Rejected;
+        foreach (var l in kit.Db.ClaimLineItems.Where(l => l.TripClaimId == made.Claim.Id)) l.Status = ClaimLineItemStatus.Submitted;
+        kit.Db.SaveChanges();
+        var again = await Engine(kit).ClaimAgainAsync(made.Claim.Id, kit.TenantId, Monday.AddDays(5), Ct);
+
+        Assert.Equal(52.50m, estimate.Amount);   // seven people over two workers is four: 3 h x 17.50
+        Assert.Equal(52.50m, made.Claim.TotalAmount);
+        Assert.Equal(52.50m, again.Claim.TotalAmount);
+    }
+
+    [Fact]
+    public async Task Estimate_AndANotYetCompletedLedger_PriceAtTheQuotedShare_TheClaimAtTheCount()
+    {
+        // Five attend one worker: the claim is 14.00. The estimate and a not-yet-completed shift keep the quoted 23.33, the most any later claim can be.
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var first = Attached(kit, Person(kit), SupportRatio.OneToThree, activity, status: ShiftStatus.Published);
+        var others = Others(kit, activity, 4, status: ShiftStatus.Published);
+        Staff(kit, activity, 1);
+
+        var estimate = Assert.Single(await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, first.ParticipantId, new[] { GroupSpec(activity) }, Ct));
+        var ledger = (await kit.Ledger.ComputeAsync(kit.TenantId, new[] { first.ParticipantId }, Ct))[first.ParticipantId];
+        foreach (var s in others.Prepend(first)) s.Status = ShiftStatus.Completed;
+        kit.Db.SaveChanges();
+        var completed = (await kit.Ledger.ComputeAsync(kit.TenantId, new[] { first.ParticipantId }, Ct))[first.ParticipantId];
+        var made = await Engine(kit).GenerateAsync(first.ParticipantId, From, To, Ct);
+
+        Assert.Equal(69.99m, Assert.IsType<ShiftCostEstimate.Priced>(estimate).Amount);
+        Assert.Equal(69.99m, Assert.Single(ledger.Items, i => i.ShiftId == first.Id).Amount);
+        Assert.Equal(42.00m, Assert.Single(completed.Items, i => i.ShiftId == first.Id).Amount);
+        Assert.Equal(42.00m, made.Claim.TotalAmount);
+        Assert.True(made.Claim.TotalAmount <= 69.99m);   // the forecast is never below the claim
+    }
+
+    [Fact]
+    public async Task Estimate_SixAtOneToThree_NoStaffRows_IsTheQuotedShare_AndTheClaimWithTwoRowsEqualsIt()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var first = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 5);
+
+        var estimate = Assert.Single(await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, first.ParticipantId, new[] { GroupSpec(activity) }, Ct));
+        Staff(kit, activity, 2);
+
+        Assert.Equal(69.99m, Assert.IsType<ShiftCostEstimate.Priced>(estimate).Amount);   // 23.33 x 3 h
+        Assert.Equal(23.33m, await UnitOf(kit, first));
+    }
+
+    [Fact]
+    public async Task ClaimRun_OtherOrgsShiftsOnTheSameActivityId_NotCounted()
+    {
+        var kit = Arrange();
+        Moq.Mock.Get(kit.Tenant).Setup(t => t.IsSuperAdmin).Returns(true);   // the global filter is off, so only the explicit tenant filter decides
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 1);
+        Others(kit, activity, 3, tenant: Guid.NewGuid());
+
+        Assert.Equal(23.33m, await UnitOf(kit, shift));   // two in this org; 17.50 if the other org's three leaked in
+    }
+
+    [Fact]
+    public async Task ClaimRun_OtherOrgsStaffRowsOnTheSameActivityId_NotCounted()
+    {
+        var kit = Arrange();
+        Moq.Mock.Get(kit.Tenant).Setup(t => t.IsSuperAdmin).Returns(true);
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 5);
+        Staff(kit, activity, 2, tenant: Guid.NewGuid());
+
+        Assert.Equal(11.66m, await UnitOf(kit, shift));   // six people, one worker; 23.33 if the other org's two rows leaked in
+    }
+
+    [Fact]
+    public async Task ClaimRun_MoreThanFortyAttend_PricesThroughTheClaim()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        Others(kit, activity, 44);
+
+        var unit = await UnitOf(kit, shift);
+
+        Assert.Equal(1.55m, unit);   // 70.01 / 45 = 1.5557, floored
+        Assert.True(45 * unit <= 70.01m);
     }
 }

@@ -54,6 +54,7 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
         var libraryNames = await db.Activities.AsNoTracking().Where(a => libraryIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id, a => a.ActivityName, ct);
         var patternIds = shifts.Where(s => s.ShiftPatternId != null).Select(s => s.ShiftPatternId!.Value).Distinct().ToList();
         var patterns = await db.ShiftPatterns.AsNoTracking().Where(p => patternIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
+        var blocks = await ShiftTravelSource.AgreementBlocksAsync(db, activities[0].TenantId, patternIds.Select(p => (Guid?)p), ct);
 
         // One read of the rules for every worker and participant across the dates: the rows' findings are judged against the same snapshot.
         var snapshot = staffRows.Count == 0 ? null
@@ -89,7 +90,11 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
                         .Select(RosterGate.ToFindingDto).ToList(),
             }).OrderBy(s => s.StaffName).ToList();
 
-            var needed = GroupActivityStaffing.StaffNeeded(attending.Select(p => p.Ratio), activity.MinStaffRequired);
+            // Shared support needs one worker per its block's headcount (the smallest among the people attending), 40 with no block.
+            var attendingIds = attending.Select(p => p.ParticipantId).ToHashSet();
+            var sharedCap = mine.Where(s => s.Ratio == SupportRatio.SharedSupport && attendingIds.Contains(s.ParticipantId))
+                .Select(s => AgreementPatternMapper.GroupSizeOf(activity.Id, s.Ratio, s.ShiftPatternId is { } blockPattern ? blocks.GetValueOrDefault(blockPattern) : null) ?? 40).DefaultIfEmpty(40).Min();
+            var needed = GroupActivityStaffing.StaffNeeded(attending.Select(p => p.Ratio), activity.MinStaffRequired, sharedCap);
             var findings = new List<RosterFindingDto>();
             if (activity.Status != ShiftStatus.Cancelled && staff.Count < needed)
                 findings.Add(new RosterFindingDto

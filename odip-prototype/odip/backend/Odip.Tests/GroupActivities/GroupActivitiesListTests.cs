@@ -132,6 +132,63 @@ public class GroupActivitiesListTests
         Assert.Equal(1, item.StaffNeeded);
         Assert.Equal("Pat Test", Assert.Single(item.Participants).ParticipantName);
     }
+
+    // Shared support needs one worker per its block's headcount (here six), so eight people over one worker is short; with no block it is 40, so one worker covers them.
+    private static GroupActivity EightSharedSupport(GroupActivityFixture fx, bool withBlock)
+    {
+        var activity = fx.AddActivity();
+        Guid? pattern = null;
+        if (withBlock)
+        {
+            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = fx.TenantId, ParticipantId = fx.AddParticipant().Id, Version = 1, State = "NSW" };
+            var block = new Odip.Domain.Billing.Pricing.PlanBlock
+            {
+                Workers = 1, ParticipantsPresent = 6, Location = new Odip.Domain.Billing.Pricing.PlanLocation { State = "NSW", Zone = Odip.Domain.Enums.PriceZone.National, Mm = 1 },
+            };
+            fx.Seed.ServiceAgreementDrafts.Add(draft);
+            fx.Seed.ServiceAgreementDraftBlocks.Add(new ServiceAgreementDraftBlock { Id = Guid.NewGuid(), DraftId = draft.Id, BlockKey = "blk", BlockJson = Odip.Infrastructure.Services.DraftJson.Write(block) });
+            var row = new ShiftPattern
+            {
+                Id = Guid.NewGuid(), TenantId = fx.TenantId, ParticipantId = draft.ParticipantId, SourceDraftId = draft.Id, SourceBlockKey = "blk", DayOfWeek = GroupActivityFixture.Day.DayOfWeek,
+                StartTime = activity.StartTime, EndTime = activity.EndTime, EffectiveFrom = GroupActivityFixture.Day,
+            };
+            fx.Seed.ShiftPatterns.Add(row);
+            pattern = row.Id;
+        }
+        for (var i = 0; i < 8; i++)
+        {
+            var shift = fx.AddShift(fx.AddParticipant("P" + i), Odip.Domain.Enums.SupportRatio.SharedSupport);
+            shift.GroupActivityId = activity.Id;
+            shift.ShiftPatternId = pattern;
+        }
+        fx.Seed.GroupActivityStaff.Add(new GroupActivityStaff { Id = Guid.NewGuid(), TenantId = fx.TenantId, GroupActivityId = activity.Id, UserId = fx.AddUser().Id, StartTime = activity.StartTime, EndTime = activity.EndTime });
+        fx.Seed.SaveChanges();
+        return activity;
+    }
+
+    [Fact]
+    public async Task List_SharedSupportOfASixBlock_EightAttending_OneWorker_IsShortOfStaff()
+    {
+        var fx = new GroupActivityFixture();
+        EightSharedSupport(fx, withBlock: true);
+
+        var item = Assert.Single((await List(fx.Controller())).Body.Data!.Items);
+
+        Assert.Equal(2, item.StaffNeeded);   // ceil(8 / 6)
+        Assert.Contains(item.Findings, f => f.Code == Odip.Domain.Rostering.Services.RosterConflictService.ActivityStaffShort);
+    }
+
+    [Fact]
+    public async Task List_SharedSupportWithNoBlock_CapsAtForty_SoOneWorkerCoversEight()
+    {
+        var fx = new GroupActivityFixture();
+        EightSharedSupport(fx, withBlock: false);
+
+        var item = Assert.Single((await List(fx.Controller())).Body.Data!.Items);
+
+        Assert.Equal(1, item.StaffNeeded);
+        Assert.DoesNotContain(item.Findings, f => f.Code == Odip.Domain.Rostering.Services.RosterConflictService.ActivityStaffShort);
+    }
 }
 
 /// <summary>The list read is office-only like the controller it sits on: SupportWorker and ReadOnly are refused, Coordinator, Admin and SuperAdmin pass (as the framework evaluates the role strings).</summary>

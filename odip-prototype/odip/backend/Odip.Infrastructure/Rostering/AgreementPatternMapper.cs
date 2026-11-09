@@ -71,12 +71,12 @@ public static class AgreementPatternMapper
         _ => null,
     };
 
-    /// <summary>N for a shift on a group activity: at 1:N (2 to 5) its claim is the rate x 1 / N, as its agreement block was quoted. Shared support has no N of its own, so it takes its block's participants present, only when that block is 1 worker for 6 to 40 people (<see cref="RatioOf"/>); no block, or another shape, is null. Null for any other shift (priced, or refused, as before).</summary>
-    public static int? GroupSizeOf(Guid? groupActivityId, SupportRatio ratio, PlanBlock? block = null) =>
-        groupActivityId is null ? null
+    /// <summary>N for a shift on a group activity: at 1:N (2 to 5) its claim is the rate x 1 / N, as its agreement block was quoted. Shared support has no N of its own, so it takes its block's participants present, only when that block is 1 worker for 6 to 40 people (<see cref="RatioOf"/>); no block, or another shape, is null. Never fewer than <paramref name="headcount"/>, the people each worker of the activity supports (<see cref="GroupHeadcount"/>), so a group's lines never add up to more than its workers x the rate; 0 leaves the quoted N. Null for any other shift (priced, or refused, as before).</summary>
+    public static int? GroupSizeOf(Guid? groupActivityId, SupportRatio ratio, PlanBlock? block = null, int headcount = 0) =>
+        (groupActivityId is null ? (int?)null
         : ShapeOf(ratio) is (1, > 1 and var n) ? n
         : ratio == SupportRatio.SharedSupport && block is { ParticipantsPresent: <= 40 } && RatioOf(block.Workers, block.ParticipantsPresent) == SupportRatio.SharedSupport ? block.ParticipantsPresent
-        : null;
+        : null) is int quoted ? Math.Max(quoted, headcount) : (int?)null;
 
     /// <summary>A block where the worker may sleep is a sleepover; otherwise one that crosses midnight (its end is not after its start) is an active night; otherwise it is none.</summary>
     public static SleepoverType NightTypeOf(PlanBlock block) => block.WorkerMaySleep ? SleepoverType.Sleepover : block.EndsNextDay ? SleepoverType.ActiveNight : SleepoverType.None;
