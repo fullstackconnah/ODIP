@@ -94,7 +94,7 @@ for (const vp of VPS) {
       })
       await page.getByLabel('Results file (.csv)').setInputFiles({ name: 'results.csv', mimeType: 'text/csv', buffer: Buffer.from('a') })
       await page.getByTestId('file-next-action').click({ timeout: 60_000 })
-      const callout = calloutOf(page, /118 successful/)
+      const callout = calloutOf(page, /^118 successful/)
       await callout.waitFor({ state: 'visible', timeout: 30_000 })
       const text = await callout.innerText()
       const want = n === 2 ? '2 paid amounts differ from what was claimed.' : n === 1 ? '1 paid amount differs from what was claimed.' : null
