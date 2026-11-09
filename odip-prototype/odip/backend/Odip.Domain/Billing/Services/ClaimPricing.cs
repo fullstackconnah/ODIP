@@ -222,7 +222,7 @@ public static class ShiftPriceEstimator
     /// <param name="unclaimed">Minute offsets from the rostered start (<see cref="ShiftBreakRules.UnclaimedSpans"/>): breaks taken alone come off the hourly stretches they fall in, before each line is rounded. A sleepover item is flat and never changes. Null (a future shift, a cancellation) deducts nothing.</param>
     public static ShiftPriceOutcome Price(
         ShiftRateRows rows, string? groupCode, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
-        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false)
+        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false, bool onGroupActivity = false)
     {
         // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
         // so this is said before the shift's kind.

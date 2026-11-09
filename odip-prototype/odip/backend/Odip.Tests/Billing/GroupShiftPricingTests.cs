@@ -22,9 +22,9 @@ public class GroupShiftPricingTests
     };
 
     private static ShiftPriceOutcome Price(IReadOnlyList<SupportCatalogueItem> group, DateOnly date, TimeOnly start, TimeOnly end, SupportRatio ratio, int? groupOf, SleepoverType night = SleepoverType.None,
-        bool endsNextDay = false, bool intensive = false, IReadOnlyList<SupportCatalogueItem>? personalCare = null, bool headcountChanged = false) =>
+        bool endsNextDay = false, bool intensive = false, IReadOnlyList<SupportCatalogueItem>? personalCare = null, bool headcountChanged = false, bool onGroupActivity = false) =>
         ShiftPriceEstimator.Price(new ShiftRateRows(group, personalCare ?? Array.Empty<SupportCatalogueItem>(), Array.Empty<SupportCatalogueItem>()), null, date, start, end, endsNextDay, ratio, night, intensive, "NSW",
-            new HashSet<DateOnly>(), TimeZoneInfo.Utc, null, groupOf, headcountChanged);
+            new HashSet<DateOnly>(), TimeZoneInfo.Utc, null, groupOf, headcountChanged, onGroupActivity);
 
     private static ShiftPriceOutcome Weekday(decimal rate, SupportRatio ratio, int? groupOf, int startHour, int minutes) =>
         Price(new[] { Row(ClaimDayType.Weekday, rate) }, Monday, new TimeOnly(startHour, 0), new TimeOnly(startHour, 0).AddMinutes(minutes), ratio, groupOf);
@@ -71,6 +71,55 @@ public class GroupShiftPricingTests
 
         Assert.False(outcome.IsPriced);
         Assert.Equal(new[] { kind }, outcome.NotPricedKinds);
+    }
+
+    [Fact]
+    public void SharedSupport_OnAGroupActivityWithNoHeadcount_SaysSo()
+    {
+        var outcome = Price(new[] { Row(ClaimDayType.Weekday, 70.01m) }, Monday, new TimeOnly(10, 0), new TimeOnly(12, 0), SupportRatio.SharedSupport, null, onGroupActivity: true);
+
+        Assert.False(outcome.IsPriced);
+        Assert.Equal(new[] { "a shared-support shift with no agreement headcount" }, outcome.NotPricedKinds);
+    }
+
+    [Fact]
+    public void SharedSupport_BlockOfSix_FloorsSixthRate()
+    {
+        var line = Price(new[] { Row(ClaimDayType.Weekday, 70.23m) }, Monday, new TimeOnly(10, 0), new TimeOnly(11, 30), SupportRatio.SharedSupport, 6, onGroupActivity: true).Lines.Single();
+
+        Assert.Equal(11.70m, line.UnitPrice);   // 70.23 / 6 = 11.705, floored (not 11.71)
+        Assert.Equal(1.5m, line.Hours);
+        Assert.Equal(17.55m, line.TotalAmount);
+        Assert.True(6 * line.UnitPrice <= 70.23m);
+        Assert.True(6 * line.TotalAmount <= 70.23m * 1.5m + 0.005m * 6);
+    }
+
+    [Fact]
+    public void SharedSupport_GroupSleepover_Refused()
+    {
+        var outcome = Price(new[] { Row(ClaimDayType.Weekday, 70.01m) }, Monday, new TimeOnly(22, 0), new TimeOnly(7, 0), SupportRatio.SharedSupport, 6, SleepoverType.Sleepover, endsNextDay: true, onGroupActivity: true);
+
+        Assert.False(outcome.IsPriced);
+        Assert.Contains("a group sleepover", outcome.NotPricedKinds);
+    }
+
+    [Fact]
+    public void SharedSupport_NightBand_NoPersonalCareFallback()
+    {
+        var personalCare = new[] { Row(ClaimDayType.WeekdayNight, 80m, "01_011_0107_1_1") };
+
+        var outcome = Price(new[] { Row(ClaimDayType.Weekday, 70.01m) }, Tuesday, new TimeOnly(1, 0), new TimeOnly(3, 0), SupportRatio.SharedSupport, 6, personalCare: personalCare, onGroupActivity: true);
+
+        Assert.False(outcome.IsPriced);
+        Assert.Equal(new[] { ShiftPriceEstimator.NoCatalogueRateKind }, outcome.NotPricedKinds);
+    }
+
+    [Fact]
+    public void SharedSupport_HeadcountChanged_Refused()
+    {
+        var outcome = Price(new[] { Row(ClaimDayType.Weekday, 70.01m) }, Monday, new TimeOnly(9, 0), new TimeOnly(11, 0), SupportRatio.SharedSupport, 6, headcountChanged: true, onGroupActivity: true);
+
+        Assert.Equal("the group size changed during this support; claim it by hand", outcome.NotPricedBecause);
     }
 
     [Fact]
@@ -172,10 +221,10 @@ public class GroupShiftPricingTests
     public void Invariants_HoldAcrossRatesAndHours()
     {
         foreach (var rate in new[] { 70.01m, 70.23m, 65.47m, 100.00m, 193.99m })
-            foreach (var n in new[] { 2, 3, 4, 5 })
+            foreach (var n in new[] { 2, 3, 4, 5, 6, 7, 8, 12, 40 })
                 foreach (var minutes in new[] { 15, 30, 90, 165, 200 })
                 {
-                    var line = Weekday(rate, Ratios[n - 1], n, 9, minutes).Lines.Single();
+                    var line = Weekday(rate, n <= 5 ? Ratios[n - 1] : SupportRatio.SharedSupport, n, 9, minutes).Lines.Single();
                     var hours = minutes / 60m;
                     var label = $"{rate} 1:{n} {minutes} min";
 

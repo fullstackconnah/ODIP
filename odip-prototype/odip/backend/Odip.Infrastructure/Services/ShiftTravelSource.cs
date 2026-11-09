@@ -74,6 +74,9 @@ public static class ShiftTravelSource
         return blocks.Where(b => b.Value.HeadcountChanges is { Count: > 0 }).Select(b => b.Key).ToHashSet();
     }
 
+    public static async Task<IReadOnlyDictionary<Guid, PlanBlock>> AgreementBlocksAsync(OdipDbContext db, Guid tenantId, IEnumerable<Guid?> patternIds, CancellationToken ct) =>
+        (await BlocksAsync(db, tenantId, patternIds.OfType<Guid>().Distinct().ToList(), ct)).Blocks;
+
     /// <summary>The agreement block each pattern was made from, read only through the caller's own patterns and drafts.</summary>
     private static async Task<(Dictionary<Guid, PlanBlock> Blocks, HashSet<Guid> AgreementIds)> BlocksAsync(OdipDbContext db, Guid tenantId, List<Guid> patternIds, CancellationToken ct)
     {

@@ -231,4 +231,21 @@ public class AgreementPatternMapperTests
         Assert.Equal(expected, AgreementPatternMapper.GroupSizeOf(Guid.NewGuid(), ratio));
         Assert.Null(AgreementPatternMapper.GroupSizeOf(null, ratio));   // unattached: priced or refused as before
     }
+
+    [Theory]
+    [InlineData(true, SupportRatio.SharedSupport, 1, 6, 6)]
+    [InlineData(true, SupportRatio.SharedSupport, 1, 40, 40)]
+    [InlineData(true, SupportRatio.SharedSupport, 1, 41, null)]   // above PlanBlock's 40: refused, never guessed
+    [InlineData(true, SupportRatio.SharedSupport, 0, 0, -1)]      // no block
+    [InlineData(true, SupportRatio.SharedSupport, 2, 8, null)]
+    [InlineData(true, SupportRatio.SharedSupport, 1, 3, null)]
+    [InlineData(false, SupportRatio.SharedSupport, 1, 6, null)]
+    [InlineData(true, SupportRatio.OneToThree, 1, 6, 3)]          // the ratio wins
+    [InlineData(true, SupportRatio.Other, 1, 6, null)]
+    public void GroupSizeOf_SharedSupport_TakesTheBlocksCount(bool attached, SupportRatio ratio, int workers, int present, int? expected)
+    {
+        var block = expected == -1 ? null : new PlanBlock { Workers = workers, ParticipantsPresent = present };
+
+        Assert.Equal(expected == -1 ? null : expected, AgreementPatternMapper.GroupSizeOf(attached ? Guid.NewGuid() : null, ratio, block));
+    }
 }

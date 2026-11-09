@@ -23,7 +23,7 @@ public class GroupShiftClaimTests
     private static readonly DateOnly Monday = new(2026, 10, 12);
     private const string GroupItem = "04_102_0136_6_1";
 
-    private static LedgerKit Arrange(bool withGroupRows = true)
+    private static LedgerKit Arrange(bool withGroupRows = true, decimal rate = 70.01m)
     {
         var kit = LedgerKit.Create();
         kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
@@ -33,7 +33,7 @@ public class GroupShiftClaimTests
             var group = kit.SeedGroup(CatalogueGroups.GroupActivitiesGroupCode, "Group Activities", 4);
             kit.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
             {
-                Id = Guid.NewGuid(), ActivityGroupId = group.Id, ItemNumber = GroupItem, Description = "Group activities", Unit = "H", DayType = ClaimDayType.Weekday, PriceLimit_NSW = 70.01m, PriceLimit_VIC = 70.01m,
+                Id = Guid.NewGuid(), ActivityGroupId = group.Id, ItemNumber = GroupItem, Description = "Group activities", Unit = "H", DayType = ClaimDayType.Weekday, PriceLimit_NSW = rate, PriceLimit_VIC = rate,
                 CatalogueVersion = "2026-27", EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true, PaceSupportCategoryNumber = 4, SupportCategoryNumber = 4,
             });
             kit.Db.SaveChanges();
@@ -140,7 +140,7 @@ public class GroupShiftClaimTests
     private static int AgreementPatternMapperShape(SupportRatio ratio) => Odip.Infrastructure.Rostering.AgreementPatternMapper.ShapeOf(ratio)!.Value.ParticipantsPresent;
 
     [Fact]
-    public async Task ClaimRun_AttachedSharedSupport_LeftOutNothingSaved()
+    public async Task ClaimRun_AttachedSharedSupport_NoBlock_LeftOutWithNewReason()
     {
         var kit = Arrange();
         var person = Person(kit);
@@ -151,7 +151,7 @@ public class GroupShiftClaimTests
 
         var left = Assert.Single(generated.LeftOut);
         Assert.Equal(shift.Id, left.ShiftId);
-        Assert.Equal("It is a shared-support shift, which shift claims do not price yet.", left.Reason);
+        Assert.Equal("It is a shared-support shift with no agreement headcount, which shift claims do not price yet.", left.Reason);
         Assert.Empty(await LinesOf(kit, shift.Id));
     }
 
@@ -256,16 +256,196 @@ public class GroupShiftClaimTests
     }
 
     // A block whose headcount changes part-way: the starting ratio is not what was delivered all through, so a group shift from it is claimed by hand (all three callers say so).
-    private static ShiftPattern HeadcountPattern(LedgerKit kit, Participant person)
+    private static ShiftPattern HeadcountPattern(LedgerKit kit, Participant person) => BlockPattern(kit, person, new PlanBlock
     {
-        var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = kit.TenantId, ParticipantId = person.Id, Version = 1, State = "NSW" };
+        ParticipantsPresent = 2, Location = new PlanLocation { State = "NSW", Zone = PriceZone.National, Mm = 1 }, HeadcountChanges = new[] { new PlanHeadcountChange { From = new TimeOnly(10, 30), ParticipantsPresent = 3 } },
+    });
+
+    // The pattern an agreement block became. The draft and the pattern can each belong to another org, to show that the block is read only through the caller's own rows.
+    private static ShiftPattern BlockPattern(LedgerKit kit, Participant person, PlanBlock block, Guid? draftTenant = null, Guid? patternTenant = null)
+    {
+        var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = draftTenant ?? kit.TenantId, ParticipantId = person.Id, Version = 1, State = "NSW" };
         kit.Db.ServiceAgreementDrafts.Add(draft);
-        var block = new PlanBlock { ParticipantsPresent = 2, Location = new PlanLocation { State = "NSW", Zone = PriceZone.National, Mm = 1 }, HeadcountChanges = new[] { new PlanHeadcountChange { From = new TimeOnly(10, 30), ParticipantsPresent = 3 } } };
         kit.Db.ServiceAgreementDraftBlocks.Add(new ServiceAgreementDraftBlock { Id = Guid.NewGuid(), DraftId = draft.Id, BlockKey = "blk", BlockJson = DraftJson.Write(block) });
-        var pattern = new ShiftPattern { Id = Guid.NewGuid(), TenantId = kit.TenantId, ParticipantId = person.Id, SourceDraftId = draft.Id, SourceBlockKey = "blk", DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Monday };
+        var pattern = new ShiftPattern { Id = Guid.NewGuid(), TenantId = patternTenant ?? kit.TenantId, ParticipantId = person.Id, SourceDraftId = draft.Id, SourceBlockKey = "blk", DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Monday };
         kit.Db.ShiftPatterns.Add(pattern);
         kit.Db.SaveChanges();
         return pattern;
+    }
+
+    private static PlanBlock SharedBlock(int workers = 1, int present = 6) => new()
+    {
+        Workers = workers, ParticipantsPresent = present, Location = new PlanLocation { State = "NSW", Zone = PriceZone.National, Mm = 1 },
+        Travel = new PlanProviderTravel { ParticipantsSharing = 3 },   // the divisor is the headcount, never the travel sharing
+    };
+
+    // 09:00-10:30 at 70.23: the 17.55 fixture of the claim, the ledger and the estimate.
+    private static Shift AttachedSharedSupport(LedgerKit kit, Participant person, Guid? patternId, bool attached = true)
+    {
+        var shift = Attached(kit, person, SupportRatio.SharedSupport, Guid.NewGuid());
+        shift.EndTime = new TimeOnly(10, 30);
+        shift.ShiftPatternId = patternId;
+        if (!attached) shift.GroupActivityId = null;
+        kit.Db.SaveChanges();
+        return shift;
+    }
+
+    private const string NoHeadcount = "It is a shared-support shift with no agreement headcount, which shift claims do not price yet.";
+
+    [Fact]
+    public async Task ClaimRun_AttachedSharedSupportFromABlockOfSix_BilledAtSixthRate()
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var shift = AttachedSharedSupport(kit, person, BlockPattern(kit, person, SharedBlock()).Id);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        var line = Assert.Single(await LinesOf(kit, shift.Id));
+        Assert.Equal(GroupItem, line.SupportItemCode);
+        Assert.Equal(11.70m, line.UnitPrice);   // 70.23 / 6 = 11.705, floored
+        Assert.Equal(1.5m, line.Hours);
+        Assert.Equal(17.55m, line.TotalAmount);
+        Assert.Empty(generated.LeftOut);
+    }
+
+    [Theory]
+    [InlineData(2, 8)]    // two workers: not shared support
+    [InlineData(1, 3)]    // a 1:3 block under a shared-support shift
+    [InlineData(1, 41)]   // above the 40 a block may hold
+    public async Task ClaimRun_SharedSupportBlockThatIsNotSharedSupport_LeftOutNoHeadcount(int workers, int present)
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var shift = AttachedSharedSupport(kit, person, BlockPattern(kit, person, SharedBlock(workers, present)).Id);
+        kit.SeedShift(person, Monday.AddDays(1), ShiftStatus.Completed);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Equal(NoHeadcount, Assert.Single(generated.LeftOut).Reason);
+        Assert.Empty(await LinesOf(kit, shift.Id));
+    }
+
+    [Fact]
+    public async Task ClaimRun_UnattachedSharedSupportWithABlock_KeepsTodaysReason()
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var shift = AttachedSharedSupport(kit, person, BlockPattern(kit, person, SharedBlock()).Id, attached: false);
+        kit.SeedShift(person, Monday.AddDays(1), ShiftStatus.Completed);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Equal("It is a shared-support shift, which shift claims do not price yet.", Assert.Single(generated.LeftOut).Reason);
+        Assert.Empty(await LinesOf(kit, shift.Id));
+    }
+
+    [Fact]
+    public async Task ClaimRun_AttachedOneToThreeWithABlockOfSix_StillThirdRate()
+    {
+        var kit = Arrange();
+        var person = Person(kit);
+        var shift = Attached(kit, person, SupportRatio.OneToThree, Guid.NewGuid());
+        shift.ShiftPatternId = BlockPattern(kit, person, SharedBlock()).Id;
+        kit.Db.SaveChanges();
+
+        await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Equal(23.33m, Assert.Single(await LinesOf(kit, shift.Id)).UnitPrice);   // a block never changes a 1:N line
+    }
+
+    // The explicit tenant filters of the block read, each killed by its own case: the global query filter is off (a super admin context), so only they decide.
+    [Theory]
+    [InlineData(false, true)]    // this org's pattern, another org's draft
+    [InlineData(true, false)]    // another org's pattern, this org's draft
+    [InlineData(true, true)]     // both another org's
+    public async Task ClaimRun_SharedSupportBlockFromAnotherOrg_NeverRead(bool patternForeign, bool draftForeign)
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var other = Guid.NewGuid();
+        var pattern = BlockPattern(kit, person, SharedBlock(), draftForeign ? other : null, patternForeign ? other : null);
+        var shift = AttachedSharedSupport(kit, person, pattern.Id);
+        kit.SeedShift(person, Monday.AddDays(1), ShiftStatus.Completed);
+        Moq.Mock.Get(kit.Tenant).Setup(t => t.IsSuperAdmin).Returns(true);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Equal(NoHeadcount, Assert.Single(generated.LeftOut).Reason);
+        Assert.Empty(await LinesOf(kit, shift.Id));
+    }
+
+    [Fact]
+    public async Task ClaimRun_SharedSupportBlockWithHeadcountChanges_LeftOut()
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var block = SharedBlock() with { HeadcountChanges = new[] { new PlanHeadcountChange { From = new TimeOnly(10, 0), ParticipantsPresent = 8 } } };
+        var shift = AttachedSharedSupport(kit, person, BlockPattern(kit, person, block).Id);
+        kit.SeedShift(person, Monday.AddDays(1), ShiftStatus.Completed);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Equal("The group size changed during this support; claim it by hand.", Assert.Single(generated.LeftOut).Reason);
+        Assert.Empty(await LinesOf(kit, shift.Id));
+    }
+
+    [Fact]
+    public async Task CancellationClaim_AttachedSharedSupport_SixthOfTheRate()
+    {
+        var kit = Arrange(withGroupRows: false);
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        var person = Person(kit);
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 20), ShiftStatus.Cancelled);
+        shift.Ratio = SupportRatio.SharedSupport;
+        shift.GroupActivityId = Guid.NewGuid();
+        shift.ShiftPatternId = BlockPattern(kit, person, SharedBlock()).Id;
+        shift.CancelledAt = new DateTime(2026, 10, 16, 1, 0, 0, DateTimeKind.Utc);
+        kit.Db.SaveChanges();
+
+        var made = await Engine(kit).GenerateCancellationAsync(shift.Id, "NSDH", new DateOnly(2026, 10, 22), Ct);
+
+        var line = Assert.Single(await LinesOf(kit, shift.Id));
+        Assert.Equal(ClaimType.Cancellation, line.ClaimType);
+        Assert.Equal(10m, line.UnitPrice);   // the NSW weekday limit of $60 over 6
+        Assert.Equal(80m, made.Claim.TotalAmount);
+    }
+
+    [Fact]
+    public async Task Ledger_AttachedSharedSupport_EstimateEqualsClaim_AndNoBlockIsZeroWithAReason()
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var priced = AttachedSharedSupport(kit, person, BlockPattern(kit, person, SharedBlock()).Id);
+        var bare = AttachedSharedSupport(kit, person, null);
+        bare.ServiceDate = Monday.AddDays(1);
+        kit.Db.SaveChanges();
+
+        var ledger = (await kit.Ledger.ComputeAsync(kit.TenantId, new[] { person.Id }, Ct))[person.Id];
+        var estimate = Assert.Single(ledger.Items, i => i.ShiftId == priced.Id);
+        var none = Assert.Single(ledger.Items, i => i.ShiftId == bare.Id);
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Null(estimate.Note);
+        Assert.Equal(17.55m, estimate.Amount);
+        Assert.Equal(17.55m, Assert.Single(await LinesOf(kit, priced.Id)).TotalAmount);
+        Assert.Equal(0m, none.Amount);
+        Assert.Contains("no agreement headcount", none.Note);
+        Assert.Equal(17.55m, generated.Claim.TotalAmount);
+    }
+
+    [Fact]
+    public async Task BudgetEstimate_AttachedSharedSupport_IsPriced_AndWithoutABlockIsNot()
+    {
+        var kit = Arrange(rate: 70.23m);
+        var person = Person(kit);
+        var pattern = BlockPattern(kit, person, SharedBlock());
+        ShiftSpec Spec(Guid? patternId) => new(Monday, new TimeOnly(9, 0), new TimeOnly(10, 30), false, SupportRatio.SharedSupport, SleepoverType.None, CatalogueGroups.GroupActivitiesGroupCode, patternId, GroupActivityId: Guid.NewGuid());
+
+        var estimates = await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, person.Id, new[] { Spec(pattern.Id), Spec(null) }, Ct);
+
+        Assert.Equal(17.55m, Assert.IsType<ShiftCostEstimate.Priced>(estimates[0]).Amount);
+        Assert.Equal("it is a shared-support shift with no agreement headcount, which shift claims do not price yet", Assert.IsType<ShiftCostEstimate.NotPriced>(estimates[1]).Reason);
     }
 
     [Fact]
