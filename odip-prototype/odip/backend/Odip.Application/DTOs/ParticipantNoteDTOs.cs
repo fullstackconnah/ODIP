@@ -36,6 +36,10 @@ public record CreateParticipantNoteDto
     public string Description { get; init; } = string.Empty;
 
     public bool IsPinned { get; init; }
+
+    /// <summary>The add-note modal session's retry key. A second POST with the same key replays the first note; PUT never takes it.</summary>
+    [StringLength(100)]
+    public string? IdempotencyKey { get; init; }
 }
 
 public record UpdateParticipantNoteDto

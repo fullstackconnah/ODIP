@@ -11,6 +11,7 @@ import { useQuickAdd } from '@/hooks/useQuickAdd'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { parseApiDate, extractErrorMessage } from '@/lib/utils'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatRelative } from '@/lib/format'
 import type { ParticipantNoteDto } from '@/api/types/notes'
 import { Button } from '@/components/Button'
@@ -108,6 +109,8 @@ export default function NotesTab({ participantId }: { participantId: string | un
   const [modalError, setModalError] = useState<string | null>(null)
   const [archivingNote, setArchivingNote] = useState<ParticipantNoteDto | null>(null)
   const [listError, setListError] = useState<string | null>(null)
+  // One retry key per opening of the add-note modal, kept across a failed save and replaced on the next opening.
+  const createKey = useRef('')
 
   const activeNotes = useMemo(() => notes.filter(n => !n.isArchived), [notes])
   const archivedNotes = useMemo(() => notes.filter(n => n.isArchived), [notes])
@@ -118,6 +121,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
     setForm(EMPTY_FORM)
     setErrors({})
     setModalError(null)
+    createKey.current = newCompletionRequestId()
     setModalState({ mode: 'create' })
   }
   const addRef = useRef<HTMLButtonElement>(null)
@@ -163,7 +167,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
       } else if (participantId) {
         await createNote.mutateAsync({
           participantId,
-          data: { title: form.title.trim(), description: form.description.trim(), isPinned: form.isPinned },
+          data: { title: form.title.trim(), description: form.description.trim(), isPinned: form.isPinned, idempotencyKey: createKey.current },
         })
       }
       closeModal()

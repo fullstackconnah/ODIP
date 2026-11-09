@@ -327,4 +327,147 @@ public class ParticipantNotesControllerTests
         Assert.Contains("Peanuts and tree nuts", saved.Description);
         Assert.False(saved.IsManuallyEdited);
     }
+
+    // ── A retried save (same IdempotencyKey) never makes a second note ──
+
+    private static ParticipantNotesController NotesController(OdipDbContext db) => new(db, new SafetyNoteSyncService(db));
+
+    private static CreateParticipantNoteDto Keyed(string? key) => CreateDto() with { IdempotencyKey = key };
+
+    private static ParticipantNoteDto Created(ActionResult<ApiResponse<ParticipantNoteDto>> result) =>
+        Assert.IsType<ApiResponse<ParticipantNoteDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+
+    private static Participant SeedParticipantIn(OdipDbContext db, Guid tenant, string firstName = "Sophie", string lastName = "Brown")
+    {
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenant, FirstName = firstName, LastName = lastName, IsActive = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+        return participant;
+    }
+
+    [Fact]
+    public async Task Create_SameKeyTwice_ReplaysTheFirstNote_AndMakesNoSecondRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = NotesController(db);
+
+        var first = Created(await controller.Create(participant.Id, Keyed("key-1"), default));
+        var second = Created(await controller.Create(participant.Id, Keyed("key-1"), default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(db.ParticipantNotes);
+    }
+
+    [Fact]
+    public async Task Create_SameKeyInAnotherTenant_MakesItsOwnNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var a = SeedParticipantIn(db, Guid.NewGuid(), "Amy", "Ng");
+        var b = SeedParticipantIn(db, Guid.NewGuid(), "Ben", "Lee");
+        var controller = NotesController(db);
+
+        var first = Created(await controller.Create(a.Id, Keyed("key-1"), default));
+        var second = Created(await controller.Create(b.Id, Keyed("key-1"), default));
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(new[] { a.TenantId, b.TenantId }.Order(), db.ParticipantNotes.Select(n => n.TenantId).ToList().Order());
+    }
+
+    [Fact]
+    public async Task Create_ASuperAdmin_NeverReplaysAnotherTenantsNoteWithTheSameKey()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString()); // a SuperAdmin context: the tenant filter passes every row
+        var mine = SeedParticipantIn(db, Guid.NewGuid());
+        var theirs = new ParticipantNote
+        {
+            Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), ParticipantId = mine.Id, Title = "Theirs", Description = "Other tenant.",
+            CreatedByName = "X", IdempotencyKey = "key-1",
+        };
+        db.ParticipantNotes.Add(theirs);
+        db.SaveChanges();
+
+        var created = Created(await NotesController(db).Create(mine.Id, Keyed("key-1"), default));
+
+        Assert.NotEqual(theirs.Id, created.Id);
+        Assert.Equal(mine.TenantId, db.ParticipantNotes.Single(n => n.Id == created.Id).TenantId);
+    }
+
+    [Fact]
+    public async Task Create_SameKeyOnAnotherParticipant_MakesANewNote()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenant = Guid.NewGuid();
+        var a = SeedParticipantIn(db, tenant, "Amy", "Ng");
+        var b = SeedParticipantIn(db, tenant, "Ben", "Lee");
+        var controller = NotesController(db);
+
+        var first = Created(await controller.Create(a.Id, Keyed("key-1"), default));
+        var second = Created(await controller.Create(b.Id, Keyed("key-1"), default));
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(b.Id, second.ParticipantId);
+        Assert.Equal(2, db.ParticipantNotes.Count());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task Create_NoOrBlankKeyTwice_MakesTwoNotes_AndStoresNoKey(string? key)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = NotesController(db);
+
+        await controller.Create(participant.Id, Keyed(key), default);
+        await controller.Create(participant.Id, Keyed(key), default);
+
+        Assert.Equal(2, db.ParticipantNotes.Count());
+        Assert.All(db.ParticipantNotes, n => Assert.Null(n.IdempotencyKey));
+    }
+
+    [Fact]
+    public async Task Create_AKeyWithSpacesAroundIt_IsStoredTrimmed_AndAnUntrimmedRetryMatchesIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = NotesController(db);
+        var first = Created(await controller.Create(participant.Id, Keyed(" key-1"), default));
+        Assert.Equal("key-1", db.ParticipantNotes.Single().IdempotencyKey);
+
+        var second = Created(await controller.Create(participant.Id, Keyed("  key-1 "), default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(db.ParticipantNotes);
+    }
+
+    [Fact]
+    public async Task Create_RetryAfterTheFirstNoteWasArchived_StillReplaysIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = NotesController(db);
+        var first = Created(await controller.Create(participant.Id, Keyed("key-1"), default));
+        await controller.Update(first.Id, new UpdateParticipantNoteDto { Title = first.Title, Description = first.Description, IsArchived = true }, default);
+
+        var second = Created(await controller.Create(participant.Id, Keyed("key-1"), default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.True(second.IsArchived);
+        Assert.Single(db.ParticipantNotes);
+    }
+
+    [Fact]
+    public async Task Update_LeavesTheIdempotencyKeyAsItWas()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = NotesController(db);
+        var first = Created(await controller.Create(participant.Id, Keyed("key-1"), default));
+
+        var result = await controller.Update(first.Id, new UpdateParticipantNoteDto { Title = "Changed", Description = first.Description }, default);
+
+        Assert.Equal("Changed", Created(result).Title);
+        Assert.Equal("key-1", db.ParticipantNotes.Single().IdempotencyKey);
+    }
 }
