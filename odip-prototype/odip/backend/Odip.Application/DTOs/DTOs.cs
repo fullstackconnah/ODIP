@@ -2414,6 +2414,10 @@ public record CreateIncidentDto
     /// </summary>
     public List<CreateIncidentWitnessDto> Witnesses { get; init; } = new();
 
+    /// <summary>One key per form session, sent again on every retry of the same submit. The server stores it trimmed and, when it has already saved an incident with this key for the same reporter, returns that incident instead of making a second one. Absent or blank means no de-duplication.</summary>
+    [StringLength(100)]
+    public string? IdempotencyKey { get; init; }
+
     /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific medication administration. Server-validated to exist (same-tenant scoped) when non-null.</summary>
     public Guid? MedicationAdministrationId { get; init; }
     /// <summary>Connection-map source link (Deliverable 1): set when this incident is being filed from a specific shift. Server-validated to exist (same-tenant scoped) when non-null.</summary>

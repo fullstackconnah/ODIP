@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -630,6 +630,9 @@ describe('CompletionReviewPage: breaks with the participant (W9)', () => {
 })
 
 describe('CompletionReviewPage extra time', () => {
+  // The 62-day change window reads Date.now(): pin it near the fixture dates (Sep 2026) so the tests don't age out.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T02:00:00Z')) })
+  afterEach(() => vi.useRealTimers())
   // Rostered 08:00-16:00 (8 h), actual 07:40-16:20 (8 h 40 min): an early start and a late finish.
   const extra = (o: Partial<CompletionQueueItemDto> = {}) => makeQueueItem({
     actualStart: '2026-09-08T07:40:00Z', actualEnd: '2026-09-08T16:20:00Z', varianceMinutesStart: -20, varianceMinutesEnd: 20, offRoster: true, extraTime: 'Pending', ...o,

@@ -33,9 +33,9 @@ const BOARD = makeParticipantBoard({
   participantRows: [makeParticipantRow({ participantId: 'participant-1', fullName: 'Mia Chen', shifts: [MIA] })],
 })
 
-function renderPage() {
-  const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: ['/rostering?date=2026-08-17'] })
-  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
+function renderPage(entry = '/rostering?date=2026-08-17') {
+  const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: [entry] })
+  return { router, ...render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>) }
 }
 
 const warning422 = { response: { status: 422, data: { success: false, data: [makeFinding({ code: 'STAFF_ON_LEAVE', severity: 'Warning', requiresReason: true, message: 'Sam Wilson is on leave.' })] } } }
@@ -128,5 +128,25 @@ describe('RosterBoardPage: Publish week covers group activities (gav PR B)', () 
     renderPage()
     await screen.findByText('Mia Chen')
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+  })
+})
+
+describe('RosterBoardPage: ?activity= deep link from the Group activities list', () => {
+  it('opens the activity modal once the board has loaded, keeps the param while it is open and drops it on close', async () => {
+    const user = userEvent.setup()
+    const { router } = renderPage('/rostering?date=2026-08-17&activity=activity-1')
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByDisplayValue('Bowling')).toBeInTheDocument()
+    expect(router.state.location.search).toContain('activity=activity-1')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(router.state.location.search).toBe('?date=2026-08-17'))
+  })
+
+  it('opens the board plain, with no modal and no error, when the id is not on the loaded board', async () => {
+    const { router } = renderPage('/rostering?date=2026-08-17&activity=cancelled-or-elsewhere')
+    await screen.findByRole('button', { name: /^Group activity, Bowling/ })
+    await waitFor(() => expect(router.state.location.search).toBe('?date=2026-08-17'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

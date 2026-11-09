@@ -1912,3 +1912,53 @@ describe('IncidentCreatePage — the register list and what is saved', () => {
     expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 })
+
+// A retried submit must never make a second incident: the page sends one idempotency key per form session.
+describe('IncidentCreatePage — retry key', () => {
+  async function fillToReview(user: ReturnType<typeof userEvent.setup>) {
+    await fillBasicsMinimallyAndNext(user) // Basics -> Incident Details
+    await fillDetailsMinimallyAndNext(user) // Incident Details -> Review
+  }
+  const submitButton = () => screen.getByRole('button', { name: /submit incident report/i })
+
+  it('sends the same key again when the first submit was rejected', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(new Error('Network Error'))
+    renderCreatePage()
+    await fillToReview(user)
+
+    await user.click(submitButton())
+    await user.click(submitButton())
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2)
+    const [first, second] = mockCreateMutateAsync.mock.calls.map((c) => c[0].idempotencyKey)
+    expect(first).toEqual(expect.any(String))
+    expect(first.length).toBeGreaterThan(0)
+    expect(second).toBe(first)
+  })
+
+  it('sends a different key from a fresh form', async () => {
+    const user = userEvent.setup()
+    const keys: string[] = []
+    for (let i = 0; i < 2; i++) {
+      const view = renderCreatePage()
+      await fillToReview(user)
+      await user.click(submitButton())
+      keys.push(mockCreateMutateAsync.mock.calls[i][0].idempotencyKey)
+      view.unmount()
+    }
+    expect(keys[1]).not.toBe(keys[0])
+  })
+
+  it('shows the server\'s message when another reporter already used the key (409)', async () => {
+    mockUseCreateIncident.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 409, data: { errors: ['An incident from this form was already saved under another reporter. Check the incidents list before you submit again.'], code: 'INCIDENT_IDEMPOTENCY_KEY_REUSED' } } },
+    })
+    renderCreatePage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('An incident from this form was already saved under another reporter. Check the incidents list before you submit again.')
+  })
+})
