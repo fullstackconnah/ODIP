@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Complaints;
@@ -106,15 +107,38 @@ public class ComplaintsController : ControllerBase
         // A new complaint always starts Open, so the form's status (if any) and a closing date are ignored before anything is checked.
         dto = dto with { Status = ComplaintStatus.Open, ClosedOn = null };
         var today = await TodayAsync(ct);
+        var key = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim();
+        if (key != null)
+        {
+            // Before validation on purpose, so a retry replays even if a referenced row changed between presses. Explicit tenant: a SuperAdmin passes the
+            // query filter for every organisation. Finds archived rows too. Any key match in the tenant replays: every route is office roles only and complaints have no reporter.
+            var prior = await _db.Complaints.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.IdempotencyKey == key, ct);
+            if (prior != null) return await ReplayAsync(prior.Id, today, ct);
+        }
         var error = await ValidateAsync(dto, tenantId, today, null, ct);
         if (error != null) return BadRequest(ApiResponse<ComplaintDto>.Fail(error));
 
         var complaint = new Complaint { Id = Guid.NewGuid(), TenantId = tenantId };
         Apply(complaint, dto);
+        complaint.IdempotencyKey = key;
         _db.Complaints.Add(complaint);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (key != null && ex.InnerException is PostgresException pg && pg.ConstraintName == Complaint.IdempotencyIndexName)
+        {
+            // A racing submit with the SAME key committed between our lookup and our insert: drop everything tracked and answer from the winner.
+            _db.ChangeTracker.Clear();
+            var winner = await _db.Complaints.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.IdempotencyKey == key, ct);
+            if (winner == null) throw;
+            return await ReplayAsync(winner.Id, today, ct);
+        }
         return Ok(ApiResponse<ComplaintDto>.Ok(ToDto((await LoadAsync(complaint.Id, ct))!, today)));
     }
+
+    private async Task<ActionResult<ApiResponse<ComplaintDto>>> ReplayAsync(Guid id, DateOnly today, CancellationToken ct) =>
+        Ok(ApiResponse<ComplaintDto>.Ok(ToDto((await LoadAsync(id, ct))!, today)));
 
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ApiResponse<ComplaintDto>>> Update(Guid id, [FromBody] SaveComplaintDto dto, CancellationToken ct)

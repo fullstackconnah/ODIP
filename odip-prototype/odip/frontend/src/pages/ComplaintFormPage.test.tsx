@@ -96,6 +96,7 @@ describe('ComplaintFormPage', () => {
       receivedOn: today, channel: 'Phone', complainantKind: 'FamilyOrCarer', participantId: null, complainantName: 'Sam Carer',
       summary: 'Worker was late', status: 'Open', acknowledgedOn: null, actionsTaken: null, outcome: null, outcomeCommunicatedOn: null,
       toldAboutCommission: false, toldAboutCommissionOn: null, closedOn: null, handledByUserId: 'u-me', incidentReportId: null,
+      idempotencyKey: expect.any(String),
     })
     await waitFor(() => expect(router.state.location.pathname).toBe('/complaints/new-1'))
   })
@@ -192,6 +193,7 @@ describe('ComplaintFormPage', () => {
     await user.type(screen.getByLabelText('Actions taken'), 'Rang the family')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('idempotencyKey')
     expect(mockUpdate).toHaveBeenCalledWith({
       id: 'c-1',
       data: {
@@ -360,5 +362,43 @@ describe('ComplaintFormPage', () => {
     mockUseComplaint.mockReturnValue({ ...loaded(undefined), isError: true, error: { response: { status: 403 } } })
     renderAt('/complaints/c-1')
     expect(screen.getByText("You can't see complaints. They're for Admins and Coordinators.")).toBeInTheDocument()
+  })
+
+  // A retried submit must never file a second complaint: the page sends one idempotency key per new-complaint attempt.
+  it('sends the same key again when the first create was rejected', async () => {
+    const user = userEvent.setup()
+    mockCreate.mockRejectedValueOnce(new Error('Network Error'))
+    renderAt('/complaints/new')
+    await fillRequired(user)
+    await user.selectOptions(screen.getByLabelText(/Who made the complaint/), 'Staff')
+
+    await user.click(screen.getByRole('button', { name: 'Save complaint' }))
+    await screen.findByText("Couldn't save the complaint. Check the details and try again.")
+    await user.click(screen.getByRole('button', { name: 'Save complaint' }))
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2))
+    const [first, second] = mockCreate.mock.calls.map(c => c[0].idempotencyKey)
+    expect(first).toEqual(expect.any(String))
+    expect(first.length).toBeGreaterThan(0)
+    expect(second).toBe(first)
+  })
+
+  it('sends a fresh key for the next new complaint once one is saved', async () => {
+    const user = userEvent.setup()
+    const { router } = renderAt('/complaints/new')
+    await fillRequired(user)
+    await user.selectOptions(screen.getByLabelText(/Who made the complaint/), 'Staff')
+    await user.click(screen.getByRole('button', { name: 'Save complaint' }))
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/complaints/new-1'))
+
+    mockUseComplaint.mockReturnValue(loaded(undefined))
+    await act(() => router.navigate('/complaints/new'))
+    await fillRequired(user)
+    await user.selectOptions(screen.getByLabelText(/Who made the complaint/), 'Staff')
+    await user.click(screen.getByRole('button', { name: 'Save complaint' }))
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2))
+    expect(mockCreate.mock.calls[1][0].idempotencyKey).not.toBe(mockCreate.mock.calls[0][0].idempotencyKey)
   })
 })

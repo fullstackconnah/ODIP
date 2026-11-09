@@ -416,4 +416,132 @@ public class ComplaintsControllerTests
         Assert.Equal(200, item.Summary.Length);
         Assert.Equal("Sophie Brown", item.ParticipantName);
     }
+
+    // ── A retried submit (same IdempotencyKey) never makes a second complaint ──
+
+    private static SaveComplaintDto Keyed(string? key, SaveComplaintDto? dto = null) => (dto ?? Save()) with { IdempotencyKey = key };
+
+    [Fact]
+    public async Task Create_SameKeyTwice_ReplaysTheFirstComplaint_AndMakesNoSecondRow()
+    {
+        using var db = TestDb.Create();
+        var controller = Controller(db, TenantA);
+
+        var first = Value(await controller.Create(Keyed("key-1"), default));
+        var second = Value(await controller.Create(Keyed("key-1"), default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(db.Complaints);
+    }
+
+    [Fact]
+    public async Task Create_SameKeyInAnotherTenant_MakesItsOwnComplaint()
+    {
+        using var db = TestDb.Create(); // a SuperAdmin context: the tenant filter passes every row
+        var first = Value(await Controller(db, TenantA, true).Create(Keyed("key-1"), default));
+
+        var second = Value(await Controller(db, TenantB, true).Create(Keyed("key-1"), default));
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(new[] { TenantA, TenantB }.Order(), db.Complaints.Select(c => c.TenantId).ToList().Order());
+    }
+
+    [Fact]
+    public async Task Create_ASuperAdminInTenantA_NeverReplaysTenantBsRowWithTheSameKey()
+    {
+        using var db = TestDb.Create();
+        var theirs = Row(TenantB);
+        theirs.IdempotencyKey = "key-1";
+        db.Complaints.Add(theirs);
+        db.SaveChanges();
+
+        var created = Value(await Controller(db, TenantA, true).Create(Keyed("key-1"), default));
+
+        Assert.NotEqual(theirs.Id, created.Id);
+        Assert.Equal(TenantA, db.Complaints.Single(c => c.Id == created.Id).TenantId);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task Create_NoOrBlankKeyTwice_MakesTwoComplaints_AndStoresNoKey(string? key)
+    {
+        using var db = TestDb.Create();
+        var controller = Controller(db, TenantA);
+
+        await controller.Create(Keyed(key), default);
+        await controller.Create(Keyed(key), default);
+
+        Assert.Equal(2, db.Complaints.Count());
+        Assert.All(db.Complaints, c => Assert.Null(c.IdempotencyKey));
+    }
+
+    [Fact]
+    public void Dto_AKeyOver100Characters_FailsValidation_AndOneOf100Passes()
+    {
+        static bool Valid(string key) => System.ComponentModel.DataAnnotations.Validator.TryValidateProperty(key,
+            new System.ComponentModel.DataAnnotations.ValidationContext(new SaveComplaintDto()) { MemberName = nameof(SaveComplaintDto.IdempotencyKey) },
+            new List<System.ComponentModel.DataAnnotations.ValidationResult>());
+        Assert.False(Valid(new string('k', 101)));
+        Assert.True(Valid(new string('k', 100)));
+    }
+
+    [Fact]
+    public async Task Create_AKeyWithSpacesAroundIt_IsStoredTrimmed_AndAnUntrimmedRetryMatchesIt()
+    {
+        using var db = TestDb.Create();
+        var controller = Controller(db, TenantA);
+        var first = Value(await controller.Create(Keyed(" key-1"), default));
+        Assert.Equal("key-1", db.Complaints.Single().IdempotencyKey);
+
+        var second = Value(await controller.Create(Keyed("  key-1 "), default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(db.Complaints);
+    }
+
+    [Fact]
+    public async Task Create_RetryAfterTheFirstComplaintWasArchived_StillReplaysIt()
+    {
+        using var db = TestDb.Create();
+        var controller = Controller(db, TenantA);
+        var first = Value(await controller.Create(Keyed("key-1"), default));
+        await controller.Archive(first.Id, default);
+
+        var second = Value(await controller.Create(Keyed("key-1"), default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.False(second.IsActive);
+        Assert.Single(db.Complaints);
+    }
+
+    [Fact]
+    public async Task Create_RetryWhoseParticipantWasSinceRemoved_StillReplays_BecauseTheLookupRunsBeforeValidation()
+    {
+        using var db = TestDb.Create();
+        var participant = AddParticipant(db, TenantA);
+        var controller = Controller(db, TenantA);
+        var dto = Keyed("key-1", Save(v => { v["ComplainantKind"] = ComplainantKind.FamilyOrCarer; v["ParticipantId"] = participant.Id; }));
+        var first = Value(await controller.Create(dto, default));
+        db.Participants.Remove(participant);
+        db.SaveChanges();
+
+        var second = Value(await controller.Create(dto, default));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(db.Complaints);
+    }
+
+    [Fact]
+    public async Task Update_LeavesTheIdempotencyKeyAsItWas()
+    {
+        using var db = TestDb.Create();
+        var controller = Controller(db, TenantA);
+        var first = Value(await controller.Create(Keyed("key-1"), default));
+
+        var result = await controller.Update(first.Id, Keyed("other-key", Save(v => v["Summary"] = "Changed")), default);
+
+        Assert.Equal("Changed", Value(result).Summary);
+        Assert.Equal("key-1", db.Complaints.Single().IdempotencyKey);
+    }
 }
