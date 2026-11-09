@@ -71,7 +71,7 @@ public static class AgreementPatternMapper
         _ => null,
     };
 
-        /// <summary>N for a shift on a group activity: at 1:N (2 to 5) its claim is the rate x 1 / N, as its agreement block was quoted. Shared support has no N of its own, so it takes its block's participants present, only when that block is 1 worker for 6 to 40 people (<see cref="RatioOf"/>); no block, or another shape, is null. Null for any other shift (priced, or refused, as before).</summary>
+    /// <summary>N for a shift on a group activity: at 1:N (2 to 5) its claim is the rate x 1 / N, as its agreement block was quoted. Shared support has no N of its own, so it takes its block's participants present, only when that block is 1 worker for 6 to 40 people (<see cref="RatioOf"/>); no block, or another shape, is null. Null for any other shift (priced, or refused, as before).</summary>
     public static int? GroupSizeOf(Guid? groupActivityId, SupportRatio ratio, PlanBlock? block = null) =>
         groupActivityId is null ? null
         : ShapeOf(ratio) is (1, > 1 and var n) ? n

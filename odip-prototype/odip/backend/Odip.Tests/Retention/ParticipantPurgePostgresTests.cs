@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -287,6 +288,33 @@ public class ParticipantPurgePostgresTests : IClassFixture<PostgresFixture>
         await using var db = PostgresFixture.NewContext(w.Cs);
         Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
         Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofY.Id));
+    }
+
+    // A child with no ParticipantId of its own (a funding pool) names its plan; the plan belongs to X alone, so that Deleted row goes and Y's same-type row stays.
+    [SkippableFact]
+    public async Task The_purge_removes_the_deleted_history_of_children_that_only_name_their_parent_plan()
+    {
+        var w = await SeedAsync();
+        var (xPlan, yPlan) = (Guid.NewGuid(), Guid.NewGuid());
+        var dates = (Start: new DateOnly(2026, 7, 1), End: new DateOnly(2027, 6, 30));
+        var ofX = Deleted(w.A, "FundingPool", $"[{{\"Field\":\"FundingPlanId\",\"Old\":\"{xPlan}\",\"New\":null}}]");
+        var ofY = Deleted(w.A, "FundingPool", $"[{{\"Field\":\"FundingPlanId\",\"Old\":\"{yPlan}\",\"New\":null}}]");
+        var ofXInB = Deleted(w.B, "FundingPool", $"[{{\"Field\":\"FundingPlanId\",\"Old\":\"{xPlan}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs))
+        {
+            admin.FundingPlans.AddRange(
+                new FundingPlan { Id = xPlan, TenantId = w.A, ParticipantId = w.XId, PlanStart = dates.Start, PlanEnd = dates.End },
+                new FundingPlan { Id = yPlan, TenantId = w.A, ParticipantId = w.YId, PlanStart = dates.Start, PlanEnd = dates.End });
+            admin.AuditLogs.AddRange(ofX, ofY, ofXInB);
+            await admin.SaveChangesAsync();
+        }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofY.Id));
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofXInB.Id));
     }
 
     // A Deleted row of Y's incident that only names X as involved is Y's history; X's own deleted child (ParticipantId = X) still goes.

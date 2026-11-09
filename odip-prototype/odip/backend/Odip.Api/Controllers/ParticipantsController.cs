@@ -279,7 +279,8 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
-        var consentDateError = ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(_db, p.TenantId, _clock, ct));
+        var consentDateError = ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(_db, p.TenantId, _clock, ct),
+            await _db.ParticipantConsents.Where(c => c.ParticipantId == p.Id).ToListAsync(ct));
         if (consentDateError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(consentDateError));
 

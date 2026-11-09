@@ -219,4 +219,26 @@ public class ConsentSignedDateTests
         Assert.Equal(Future, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
         Assert.Equal(0, await db.ParticipantConsents.CountAsync());
     }
+
+    // P60-D4: the full PUT checks a consent date the same way the PATCH does.
+    [Fact]
+    public async Task Update_AcceptsAnUnchangedLegacyDate_ButRefusesAChangedOne()
+    {
+        using var db = TestDb.Create(Guid.NewGuid().ToString());
+        var p = Seed(db);
+        db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = p.Id, ConsentType = ConsentType.Privacy, Granted = true, SignedByName = "Guardian", SignedDate = new DateOnly(1999, 6, 1) });
+        db.SaveChanges();
+        UpdateParticipantDto Put(DateOnly signed) => new()
+        {
+            FirstName = "Sophie", LastName = "Brown", IsActive = true, PlanType = PlanType.SelfManaged,
+            OvernightSupport = OvernightSupportType.None, OvernightRatio = SupportRatio.OneToOne, SupportRatio = SupportRatio.OneToOne,
+            Consents = Consent(signed),
+        };
+
+        Assert.IsType<OkObjectResult>((await Participants(db).Update(p.Id, Put(new DateOnly(1999, 6, 1)), CancellationToken.None)).Result);
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await Participants(db).Update(p.Id, Put(new DateOnly(1998, 1, 1)), CancellationToken.None)).Result);
+        Assert.Equal(TooOld, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
+        Assert.Equal(new DateOnly(1999, 6, 1), (await db.ParticipantConsents.SingleAsync()).SignedDate);
+    }
 }
