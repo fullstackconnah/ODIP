@@ -160,11 +160,23 @@ describe('ImportWizardPage', () => {
     expect(screen.getByText('Last name is required.')).toBeInTheDocument()
   })
 
-  it('refuses a file over 5 MB without calling the server, and shows the server refusing a file', async () => {
+  const TOO_BIG = 'This file is over 5 MB. Choose a smaller .csv or .xlsx file.' // the page uses a no-break space; getByText normalises it to a plain one
+  it('refuses a file over 5 MB when it is chosen, without calling the server, and clears the refusal on a new file', async () => {
     renderWizard()
-    await upload('big.csv', 5 * 1024 * 1024 + 1)
-    expect(screen.getByText('The file is over 5 MB. Split it into smaller files and import each one.')).toBeInTheDocument()
+    await userEvent.upload(screen.getByLabelText('File (.csv or .xlsx)'), new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.csv'))
+    expect(screen.getByText(TOO_BIG)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Choose a .csv or .xlsx file first.')).toBeInTheDocument()
     expect(preview).not.toHaveBeenCalled()
+    await userEvent.upload(screen.getByLabelText('File (.csv or .xlsx)'), new File([new Uint8Array(10)], 'ok.csv'))
+    expect(screen.queryByText(TOO_BIG)).not.toBeInTheDocument()
+  })
+
+  it('shows the same sentence when the server answers 413, and shows the server refusing a file', async () => {
+    renderWizard()
+    preview.mockRejectedValueOnce(Object.assign(new Error('413'), { isAxiosError: true, response: { status: 413, data: 'Request body too large.' } }))
+    await upload('edge.csv')
+    expect(await screen.findByText(TOO_BIG)).toBeInTheDocument()
 
     preview.mockRejectedValue({ response: { data: { success: false, errors: ['The file has a header row but no data rows.'] } } })
     await upload('empty.csv')

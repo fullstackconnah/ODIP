@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { useRef, useState, type FormEvent } from 'react'
 import { format } from 'date-fns'
 import { Navigate, useParams } from 'react-router-dom'
@@ -23,7 +24,9 @@ import ShiftsUploadFields from './ShiftsUploadFields'
 import { maxFrom, nextMonday, sayDay } from './upcomingShifts'
 import { undoBlockers, undoFirst } from './importUndoBlockers'
 
-const MAX_BYTES = 5 * 1024 * 1024
+const MAX_BYTES = 5 * 1024 * 1024 // the server caps the request at 6 MB (file plus multipart overhead)
+const FILE_TOO_BIG = 'This file is over 5 MB. Choose a smaller .csv or .xlsx\u00a0file.' // no-break space: "file." never wraps alone
+const tooBig = (err: unknown) => isAxiosError(err) && err.response?.status === 413
 const BACK_TO = '/settings?section=import'
 
 type StepKey = 'upload' | 'match' | 'preview' | 'review'
@@ -190,7 +193,7 @@ export default function ImportWizardPage() {
       if (!withMapping) setMapping(answer.columns.map(c => c.field))
       go(next)
     } catch (err) {
-      setProblem(extractErrorMessage(err, 'The file could not be read.'))
+      setProblem(tooBig(err) ? FILE_TOO_BIG : extractErrorMessage(err, 'The file could not be read.'))
     }
   }
 
@@ -206,7 +209,6 @@ export default function ImportWizardPage() {
         }
       }
       if (!file) return setProblem('Choose a .csv or .xlsx file first.')
-      if (file.size > MAX_BYTES) return setProblem('The file is over 5 MB. Split it into smaller files and import each one.')
       void runPreview('match')
       return
     }
@@ -235,7 +237,7 @@ export default function ImportWizardPage() {
     try {
       setResult(await commit.mutateAsync({ kind, file, mapping, landing: landing ?? undefined, idempotencyKey: idempotencyKey.current, extra }))
     } catch (err) {
-      setProblem(extractErrorMessage(err, 'The import failed, so nothing was imported.'))
+      setProblem(tooBig(err) ? FILE_TOO_BIG : extractErrorMessage(err, 'The import failed, so nothing was imported.'))
     }
   }
 
@@ -367,7 +369,13 @@ export default function ImportWizardPage() {
                     id="import-file" type="file" accept=".csv,.xlsx"
                     className="mt-1 block w-full rounded-[var(--radius-sm)] text-sm text-[var(--color-muted-foreground)] file:mr-3 file:h-[var(--control-h)] file:cursor-pointer file:rounded-[var(--radius-sm)] file:border file:border-solid file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-4 file:text-sm file:font-medium file:text-[var(--color-foreground)] hover:file:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                     onChange={e => {
-                      setFile(e.target.files?.[0] ?? null)
+                      const picked = e.target.files?.[0] ?? null
+                      setProblem(null)
+                      if (picked && picked.size > MAX_BYTES) {
+                        e.target.value = '' // so the same file can be chosen again after it is trimmed
+                        setFile(null)
+                        setProblem(FILE_TOO_BIG)
+                      } else setFile(picked)
                       // A new file makes the later steps stale: they open again as Next reaches them.
                       resetUpload()
                     }}
