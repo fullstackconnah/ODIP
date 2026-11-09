@@ -137,6 +137,12 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>Why a status change is refused (409), or null: a deleted task stays deleted, and a leave cover task closes itself when the shift is covered.</summary>
+    private const string FutureCompletedDate = "The completed date can't be in the future.";
+
+    /// <summary>True when the date is after the task's own organisation's today (a SuperAdmin's context has no tenant filter, so the caller's organisation would be the wrong one).</summary>
+    private async Task<bool> InTheFutureAsync(Guid tenantId, DateOnly? date, CancellationToken ct) =>
+        date is { } d && d > await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+
     private static string? StatusChangeRefusal(BookingTask t, TaskItemStatus status) =>
         t.Status == TaskItemStatus.Cancelled && status != TaskItemStatus.Cancelled ? "This task was deleted, so it can't be reopened."
         : t.TaskType == TaskType.LeaveCoverage && status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed ? "This task closes itself when the shift is covered."
@@ -154,6 +160,8 @@ public class TasksController : ControllerBase
         if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
         if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
             return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
+        if (status == TaskItemStatus.Completed && await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
+            return BadRequest(ApiResponse<TaskDto>.Fail(FutureCompletedDate));
         if (StatusChangeRefusal(t, status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
@@ -281,6 +289,9 @@ public class TasksController : ControllerBase
         if (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (t.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled || t.TaskType == TaskType.LeaveCoverage)
             return Conflict(ApiResponse<bool>.Fail("Task is already closed or cannot be marked done here."));
+
+        if (await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
+            return BadRequest(ApiResponse<bool>.Fail(FutureCompletedDate));
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
         if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null
