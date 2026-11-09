@@ -36,9 +36,12 @@ public partial class GroupActivitiesController : ControllerBase
     private readonly GroupActivityReader _reader;
     private readonly RosterShiftGenerator _generator;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
+    private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly TimeProvider _clock;
 
     public GroupActivitiesController(OdipDbContext db, ICurrentTenant tenant, IStaffUnavailabilityQuery unavailabilityQuery,
-        RosterShiftGenerator? generator = null, Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+        RosterShiftGenerator? generator = null, Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
+        Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null, TimeProvider? clock = null)
     {
         _db = db;
         _tenant = tenant;
@@ -46,6 +49,8 @@ public partial class GroupActivitiesController : ControllerBase
         _availability = new RosterAvailability(db, unavailabilityQuery);
         _reader = new GroupActivityReader(db, _availability);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+        _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
+        _clock = clock ?? TimeProvider.System;
     }
 
     // ── Refusals: the codes are message keys (plan section 6) ───────────────────────────────────────
@@ -327,6 +332,14 @@ public partial class GroupActivitiesController : ControllerBase
                 var snapshot = await LoadSnapshotAsync(activity, rowsToJudge.Select(r => r.UserId).ToList(), participantIds, token);
                 foreach (var row in rowsToJudge)
                     (row.OverrideReason, row.AcknowledgedFindingCodes) = Judge(snapshot, activity, participantIds, row, null, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+            }
+
+            if (publishing)
+            {
+                // Save first so the notice reads the workers' final times; the outbox rows go out with the save below.
+                await _db.SaveChangesAsync(token);
+                var today = await Odip.Infrastructure.Services.ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, token);
+                await PublishNotices.RaiseAsync(_db, _notificationRaiser, await PublishNotices.ActivityLinesAsync(_db, tenantId, [activity], today, token), token);
             }
 
             return await SavedAsync(activity.Id, token);
