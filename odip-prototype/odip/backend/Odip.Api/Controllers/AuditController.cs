@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Odip.Application.Common;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -125,6 +126,29 @@ public class AuditController : ControllerBase
             totalPages = (total + pageSize - 1) / pageSize
         });
     }
+
+    /// <summary>The records deleted in the caller's organisation, newest first, each with the values it held.</summary>
+    [HttpGet("deleted")]
+    public async Task<ActionResult> GetDeleted([FromQuery] string? entityType, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+    {
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
+        var result = new PagedResult<DeletedRecordDto> { Page = page, PageSize = pageSize };
+        // A null tenant would compare as IS NULL and match every row from before the column existed.
+        if (_db.CurrentTenantId is not Guid tenantId) return Ok(ApiResponse<PagedResult<DeletedRecordDto>>.Ok(result));
+
+        var query = _db.AuditLogs.Where(a => a.TenantId == tenantId && a.Action == AuditAction.Deleted);
+        if (!string.IsNullOrWhiteSpace(entityType)) query = query.Where(a => a.EntityType == entityType);
+
+        result.TotalCount = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(a => a.ChangedAt).ThenByDescending(a => a.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(a => new { a.Id, a.EntityType, a.EntityId, a.ChangedAt, a.ChangedByName, a.Changes })
+            .ToListAsync(ct);
+        result.Items = rows.Select(a => new DeletedRecordDto(a.Id, a.EntityType, a.EntityId, a.ChangedAt, a.ChangedByName, DeserializeChanges(a.Changes))).ToList();
+        return Ok(ApiResponse<PagedResult<DeletedRecordDto>>.Ok(result));
+    }
+
+    private sealed record DeletedRecordDto(Guid Id, string EntityType, Guid EntityId, DateTimeOffset DeletedAt, string? DeletedByName, List<AuditChangeDto> Fields);
 
     private static readonly JsonSerializerOptions StoredOptions = new() { PropertyNameCaseInsensitive = true };
 

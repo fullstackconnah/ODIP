@@ -20,7 +20,7 @@ export type SectionKey =
   | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'compliance' | 'billing' | 'safety' | 'onboarding' | 'alerts' | 'rostering' | 'locations' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'referral-sources' | 'holidays'
-  | 'import' | 'export' | 'retention' | 'integrations' | 'failed-sends'
+  | 'import' | 'export' | 'retention' | 'integrations' | 'deleted-records' | 'failed-sends'
   | 'tenants' | 'users' | 'catalogue' | 'alpha-signups' | 'whats-new'
 
 export type SectionGroup = 'My account' | 'Organisation' | 'Pricing and budgets' | 'Content' | 'Data' | 'Platform'
@@ -44,6 +44,7 @@ const everyone = () => true
 const withOrganisation = (p: SettingsPerms) => p.hasOrganisation
 const managesOrganisation = (p: SettingsPerms) => (p.isAdmin || p.isSuperAdmin) && p.hasOrganisation
 const onlyAdminsChange = (p: SettingsPerms) => !p.canEditProviderSettings
+export const DELETED_RECORDS_INTRO = 'Records deleted in your organisation, newest first: who deleted each one, when, and what it held. Only deletions since this list was added to Bunya Support appear here.'
 const HOLIDAYS = 'The public holiday calendar that sets holiday rates on plans and claims. One calendar serves every organisation.'
 
 /**
@@ -79,6 +80,8 @@ export const SECTIONS: SectionDef[] = [
   // Data retention (retention 2b): DataRetentionController is Admin-only and a SuperAdmin cannot confirm a purge, even viewing as an organisation.
   { key: 'retention', label: 'Data retention', group: 'Data', wide: true, visible: p => p.isAdmin && !p.viewingAs && p.hasOrganisation, description: "Archived participants' records that have been kept for 7 years. Download their data, then delete each record for good." },
   // Employment Hero (EH PR 1): EmploymentHeroController admits an Admin, or a SuperAdmin viewing an organisation.
+  // Deleted records: AuditController.GetDeleted admits Admin and SuperAdmin; the list is one organisation's, so a SuperAdmin needs one in scope.
+  { key: 'deleted-records', label: 'Deleted records', group: 'Data', wide: true, visible: managesOrganisation, description: DELETED_RECORDS_INTRO },
   { key: 'integrations', label: 'Integrations', group: 'Data', wide: true, visible: p => p.canManageIntegrations, description: 'Connect Bunya Support to the other systems you use, such as Employment Hero.' },
   { key: 'failed-sends', label: 'Failed sends', group: 'Data', wide: true, visible: p => p.isAdmin, description: "Emails we couldn't deliver for your organisation. Retry one, or send a test email to check sending works." },
   { key: 'tenants', label: 'Tenants', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'Every organisation on Bunya Support. Create one, edit its details, or see its users.' },

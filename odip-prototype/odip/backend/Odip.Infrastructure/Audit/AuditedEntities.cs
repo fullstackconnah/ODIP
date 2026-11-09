@@ -162,6 +162,12 @@ public static class AuditedEntities
         typeof(ComplianceItem),
     };
 
+    /// <summary>Tables no organisation owns (the holiday feed and its overrides, What's new, early-access requests): their audit rows get no TenantId, so they never show in an organisation's Deleted records.</summary>
+    public static readonly HashSet<string> Global = new()
+    {
+        nameof(PublicHoliday), nameof(PublicHolidayOverride), nameof(WhatsNewEntry), nameof(EarlyAccessRequest),
+    };
+
     /// <summary>Properties written whenever the named trigger property changed in the same save, even if their own value did not: a repeat medication
     /// amendment (same reason and note) must still record its reason in its own audit entry. Every amend sets AmendedAt; no other write does.</summary>
     public static readonly Dictionary<(Type Entity, string Property), string> RecordedWith = new()

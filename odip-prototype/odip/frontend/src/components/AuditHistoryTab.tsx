@@ -15,7 +15,7 @@ const ACTION_TONES = { created: 'success', updated: 'info', deleted: 'danger' } 
  * FieldDiff: Displays a single field change with old → new values.
  * Part of the timeline entry, styled as a subsidiary detail.
  */
-function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
+export function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
   return (
     <div className="flex items-start gap-2 text-xs text-[var(--color-muted-foreground)]">
       <span className="font-medium min-w-[140px] shrink-0 text-[var(--color-muted-foreground)]">

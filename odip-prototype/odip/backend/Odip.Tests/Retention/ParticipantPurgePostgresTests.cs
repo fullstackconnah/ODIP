@@ -267,4 +267,59 @@ public class ParticipantPurgePostgresTests : IClassFixture<PostgresFixture>
         await using var db = PostgresFixture.NewContext(w.Cs);
         Assert.True(await db.Participants.AnyAsync(p => p.Id == w.XId));
     }
+
+    private static AuditLog Deleted(Guid? tenant, string type, string changes) => new()
+    {
+        Id = Guid.NewGuid(), EntityType = type, EntityId = Guid.NewGuid(), Action = AuditAction.Deleted, ChangedAt = DateTimeOffset.UtcNow, ChangedByName = "Sam Hill", TenantId = tenant, Changes = changes,
+    };
+
+    // A child deleted before the purge leaves a Deleted audit row whose entity id is no longer in the database, so the id match misses it; its stored values still name X.
+    [SkippableFact]
+    public async Task The_purge_removes_the_deleted_history_of_rows_that_were_already_gone_and_keeps_Ys()
+    {
+        var w = await SeedAsync();
+        var ofX = Deleted(w.A, "Shift", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.XId}\",\"New\":null}}]");
+        var ofY = Deleted(w.A, "Shift", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.YId}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.AuditLogs.AddRange(ofX, ofY); await admin.SaveChangesAsync(); }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofY.Id));
+    }
+
+    // A Deleted row of Y's incident that only names X as involved is Y's history; X's own deleted child (ParticipantId = X) still goes.
+    [SkippableFact]
+    public async Task A_deleted_row_of_another_participant_that_only_names_X_elsewhere_stays()
+    {
+        var w = await SeedAsync();
+        var ofYNamingX = Deleted(w.A, "IncidentReport", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.YId}\",\"New\":null}},{{\"Field\":\"InvolvedParticipantId\",\"Old\":\"{w.XId}\",\"New\":null}}]");
+        var ofX = Deleted(w.A, "Shift", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.XId}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.AuditLogs.AddRange(ofYNamingX, ofX); await admin.SaveChangesAsync(); }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofYNamingX.Id));
+        Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
+    }
+
+    // On Postgres a null-tenant comparison is IS NULL, which would match every row from before the column existed; the list must show only its own organisation's rows.
+    [SkippableFact]
+    public async Task The_deleted_list_shows_only_the_callers_organisation_and_never_a_row_with_no_organisation()
+    {
+        var w = await SeedAsync();
+        var (mine, theirs, orphan) = (Deleted(w.A, "Shift", "[]"), Deleted(w.B, "Shift", "[]"), Deleted(null, "Shift", "[]"));
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.AuditLogs.AddRange(mine, theirs, orphan); await admin.SaveChangesAsync(); }
+
+        await using var db = PostgresFixture.NewContext(w.Cs, DataExportTestKit.Tenant(w.A));
+        var result = await new Odip.Api.Controllers.AuditController(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<Odip.Api.Controllers.AuditController>.Instance).GetDeleted(null, 1, 200, CancellationToken.None);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result).Value, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        var ids = System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("data").GetProperty("items").EnumerateArray().Select(i => i.GetProperty("entityId").GetGuid()).ToList();
+        Assert.Contains(mine.EntityId, ids);
+        Assert.DoesNotContain(theirs.EntityId, ids);
+        Assert.DoesNotContain(orphan.EntityId, ids);
+    }
 }
