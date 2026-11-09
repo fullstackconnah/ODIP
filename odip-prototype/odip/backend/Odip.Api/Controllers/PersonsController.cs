@@ -136,10 +136,10 @@ public class PersonsController : ControllerBase
             ? "Provide at least a first or last name."
             : null;
 
-    /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
     /// <summary>The email as stored: what ValidateContactAsync checked (trimmed), with a blank kept as null.</summary>
     internal static string? StoredEmail(string? email) => email?.Trim() is { Length: > 0 } e ? e : null;
 
+    /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
     internal static async Task<string?> ValidateContactAsync(OdipDbContext db, TimeProvider clock, CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct) =>
         ParticipantPatchApplier.ValidatePersonContact(dto.Email, dto.DateOfBirth, storedEmail, storedDob, await ProviderTimeZoneResolver.TodayAsync(db, clock, ct));
 

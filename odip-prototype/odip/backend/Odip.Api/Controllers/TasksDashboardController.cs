@@ -136,13 +136,13 @@ public class TasksController : ControllerBase
         return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
 
-    /// <summary>Why a status change is refused (409), or null: a deleted task stays deleted, and a leave cover task closes itself when the shift is covered.</summary>
     private const string FutureCompletedDate = "The completed date can't be in the future.";
 
     /// <summary>True when the date is after the task's own organisation's today (a SuperAdmin's context has no tenant filter, so the caller's organisation would be the wrong one).</summary>
     private async Task<bool> InTheFutureAsync(Guid tenantId, DateOnly? date, CancellationToken ct) =>
         date is { } d && d > await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
 
+    /// <summary>Why a status change is refused (409), or null: a deleted task stays deleted, and a leave cover task closes itself when the shift is covered.</summary>
     private static string? StatusChangeRefusal(BookingTask t, TaskItemStatus status) =>
         t.Status == TaskItemStatus.Cancelled && status != TaskItemStatus.Cancelled ? "This task was deleted, so it can't be reopened."
         : t.TaskType == TaskType.LeaveCoverage && status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed ? "This task closes itself when the shift is covered."
@@ -264,7 +264,9 @@ public class TasksController : ControllerBase
         if (StatusChangeRefusal(t, dto.Status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
 
         // A completion date belongs to a Completed task only; the task form may send Completed without one.
-        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct) : (DateOnly?)null;
+        if (dto.Status == TaskItemStatus.Completed && await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
+            return BadRequest(ApiResponse<TaskDto>.Fail(FutureCompletedDate));
+        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, t.TenantId, _clock, ct) : (DateOnly?)null;
         t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = ownerId;
         t.Priority = dto.Priority; t.DueDate = dto.DueDate; t.Status = dto.Status;
         t.CompletedDate = completedDate; t.Notes = dto.Notes; t.UpdatedAt = DateTime.UtcNow;
