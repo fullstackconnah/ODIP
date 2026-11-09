@@ -2,7 +2,7 @@ import { afterEach, describe, it, expect } from 'vitest'
 import { makeActivity, makeShift, makeStaffRow, makeUnfilledShift } from '../test-fixtures'
 import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
 import {
-  assignedSentence, carriedLine, dropOutcome, joinedSentence, keepInWindow, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
+  assignedSentence, carriedLine, dropOutcome, joinedSentence, keepInWindow, movedSentence, publishedSentence, publishWeekLabel, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
   staffWeekHours, swappedSentence, type DragCarry, type DropTarget,
   hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapOptionName, type PickRow,
 } from './rosterDrag'
@@ -262,6 +262,18 @@ describe('sentences', () => {
     expect(publishWeekMessage(staffed.slice(2), 0, [picnic])).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 group activity goes out too. The 1 person on it is notified.')
     expect(publishWeekMessage(staffed.slice(2), 0, [lonely])).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 group activity goes out too.')
     expect(publishWeekMessage([], 1, [bowling])).toBe('1 group activity goes out to staff. The 2 people on it are notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it.')
+    // Only people the server tells are counted: a day that has gone is published for the record, nobody is told (PublishNotices.ActivityLinesAsync, RosteringController.PublishWeek toTell).
+    const pastShift = makeShift({ id: 'past', staffId: 'p', serviceDate: '2026-08-10' })
+    const pastBowling = makeActivity({ id: 'a4', status: 'Draft', serviceDate: '2026-08-10', staff: [{ id: 'r9', staffId: 'z', staffName: 'Z', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, findings: [] }] })
+    expect(publishWeekMessage([pastShift, staffed[2]], 0, [pastBowling, picnic], '2026-08-17')).toBe('2 draft shifts go out to staff. The 1 person on them is notified. 2 group activities go out too. The 1 person on them is notified.')
+    expect(publishWeekMessage([pastShift], 0, [pastBowling], '2026-08-17')).toBe('1 draft shift goes out to staff. 1 group activity goes out too.')
+    expect(publishWeekMessage([pastShift], 0, [pastBowling], '2026-08-10')).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 group activity goes out too. The 1 person on it is notified.')
+    // The confirm button names what goes out: shifts, activities, or both.
+    expect(publishWeekLabel(1, 2)).toBe('Publish 1 shift and 2 group activities')
+    expect(publishWeekLabel(3, 1)).toBe('Publish 3 shifts and 1 group activity')
+    expect(publishWeekLabel(0, 2)).toBe('Publish 2 group activities')
+    expect(publishWeekLabel(2, 0)).toBe('Publish 2 shifts')
+    expect(publishWeekLabel(1, 0)).toBe('Publish 1 shift')
     expect(publishedSentence({ published: 5, notified: 4, unfilled: 0, skipped: 0, activities: 2 })).toBe('Published 5 shifts and 2 group activities. 4 people notified.')
     expect(publishedSentence({ published: 5, notified: 4, unfilled: 0, skipped: 0, activities: 1 })).toBe('Published 5 shifts and 1 group activity. 4 people notified.')
   })

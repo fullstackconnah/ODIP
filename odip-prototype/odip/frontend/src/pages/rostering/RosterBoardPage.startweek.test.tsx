@@ -25,6 +25,7 @@ vi.mock('@/api/hooks', async () => {
   return {
     ...actual,
     useRosterBoard: h.board,
+    useProviderTodayQuery: () => ({ data: { date: '2026-08-01' } }), // before the fixtures' days, so none counts as gone
     useAssignShift: () => ({ mutateAsync: h.assign, isPending: false }),
     useMoveStaff: () => ({ mutateAsync: h.move, isPending: false }),
     usePublishWeek: () => ({ mutateAsync: h.publish, isPending: false }),
