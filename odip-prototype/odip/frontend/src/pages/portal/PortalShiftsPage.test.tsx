@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import PortalShiftsPage from './PortalShiftsPage'
-import type { PortalShiftsResponseDto, PortalShiftSummaryDto } from '@/api/types'
+import type { PortalActivityShiftDto, PortalShiftsResponseDto, PortalShiftSummaryDto } from '@/api/types'
 
 const { mockUseMyShifts, mockUsePendingWitnessRequests, mockUsePortalShiftDetail } = vi.hoisted(() => ({
   mockUseMyShifts: vi.fn(),
@@ -16,6 +16,8 @@ vi.mock('@/api/hooks', () => ({
   useMyShifts: mockUseMyShifts,
   usePendingWitnessRequests: mockUsePendingWitnessRequests,
   usePortalShiftDetail: mockUsePortalShiftDetail,
+  useStartActivityShift: () => ({ mutate: vi.fn(), isPending: false }),
+  useFinishActivityShift: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 function renderPage() {
@@ -199,6 +201,28 @@ describe('PortalShiftsPage', () => {
     mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
     renderPage()
     expect(screen.getByRole('link', { name: /my leave/i })).toHaveAttribute('href', '/portal/leave')
+  })
+
+  describe('group activities from before the browsed week', () => {
+    // Browsed week is Mon 2026-08-17 to Sun 2026-08-23; Sunday 08-16 is the day before it (the request reaches back that far).
+    const activity = (state: PortalActivityShiftDto['state']): PortalActivityShiftDto => ({
+      id: 'act-1', groupActivityId: 'ga-1', title: 'Overnight camp', serviceDate: '2026-08-16', startTime: '22:00:00', endTime: '06:00:00',
+      endsNextDay: true, location: null, role: null, state, actualStart: state === 'NotStarted' ? null : '2026-08-16T12:00:00Z',
+      actualEnd: state === 'Finished' ? '2026-08-16T20:00:00Z' : null, breakStartedAt: null, breakEndedAt: null, participants: [],
+    })
+
+    it('keeps a started activity from the day before the week, with its Finish button', () => {
+      mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse({ activityShifts: [activity('Started')] }), isLoading: false })
+      renderPage()
+      expect(screen.getByText('Overnight camp')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Finish' })).toBeInTheDocument()
+    })
+
+    it.each(['NotStarted', 'Finished'] as const)('hides a %s activity from before the week', state => {
+      mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse({ activityShifts: [activity(state)] }), isLoading: false })
+      renderPage()
+      expect(screen.queryByText('Overnight camp')).not.toBeInTheDocument()
+    })
   })
 })
 
