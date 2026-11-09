@@ -34,7 +34,8 @@ public static class ParticipantPatchApplier
         Participant p,
         PatchParticipantDto dto,
         IReadOnlyDictionary<string, int>? expectedRevisions,
-        CancellationToken ct)
+        CancellationToken ct,
+        TimeProvider? clock = null)
     {
         // ── Validate — only for present groups, each checked purely from its own incoming values
         // (no merge with the existing entity needed: every validator below is already confirmed
@@ -73,6 +74,11 @@ public static class ParticipantPatchApplier
 
         if (dto.Remoteness is { MmLevel: < 1 or > 7 })
             return "Choose a level from 1 to 7.";
+
+        // Only a consent that carries a date needs the provider's today (the caregiver accept path has no request clock, so it uses the system one).
+        if (dto.Consents?.Any(c => c.SignedDate.HasValue) == true
+            && ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(db, p.TenantId, clock ?? TimeProvider.System, ct)) is { } consentDateError)
+            return consentDateError;
 
         if (dto.LivingArrangement is { } ladValidate)
         {

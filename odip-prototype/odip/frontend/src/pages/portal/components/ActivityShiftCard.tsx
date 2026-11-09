@@ -165,7 +165,7 @@ function ParticipantAttendance({ rowId, person, editable, online, onDone }: { ro
           </Button>
         )}
       </div>
-      {error && <p role="alert" className="text-xs text-[var(--color-destructive)]">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-xs text-[var(--color-destructive)]">{error}</p>}
     </>
   )
 }
@@ -181,6 +181,7 @@ export function ActivityShiftCard({ shift, tz, now }: { shift: PortalActivityShi
   const [sheetOpen, setSheetOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const missed = shift.participants.filter(p => p.didNotAttend).length
   const [notesFor, setNotesFor] = useState<string | null>(null)
   const [announce, setAnnounce] = useState('')
   const finishButton = useRef<HTMLButtonElement>(null)
@@ -233,7 +234,7 @@ export function ActivityShiftCard({ shift, tz, now }: { shift: PortalActivityShi
             type="button" aria-expanded={peopleOpen} aria-controls={`people-${shift.id}`} onClick={() => setPeopleOpen(o => !o)}
             className="flex min-h-[var(--tap-min)] w-full items-center justify-between gap-2 text-sm font-medium"
           >
-            <span>Participants ({shift.participants.length})</span>
+            <span>Participants ({shift.participants.length}{missed > 0 && `, ${missed} didn't attend`})</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${peopleOpen ? 'rotate-180' : ''}`} aria-hidden />
           </button>
           {peopleOpen && (

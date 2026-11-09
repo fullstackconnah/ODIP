@@ -276,6 +276,10 @@ public class ParticipantsController : ControllerBase
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
 
+        var consentDateError = ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
+        if (consentDateError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(consentDateError));
+
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
@@ -850,7 +854,7 @@ public class ParticipantsController : ControllerBase
         string? error;
         try
         {
-            error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, expected, ct);
+            error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, expected, ct, _clock);
         }
         catch (DbUpdateException ex) when (ParticipantGroupRevisions.IsLostRace(ex))
         {

@@ -29,7 +29,12 @@ namespace Odip.Api.Controllers;
 public class ParticipantConsentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ParticipantConsentsController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public ParticipantConsentsController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     [HttpGet("participants/{participantId:guid}/consents")]
     public async Task<ActionResult<ApiResponse<List<ParticipantConsentDto>>>> GetForParticipant(Guid participantId, CancellationToken ct)
@@ -52,6 +57,9 @@ public class ParticipantConsentsController : ControllerBase
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
         if (tenantId == null) return NotFound(ApiResponse<ParticipantConsentDto>.Fail("Participant not found"));
 
+        var dateError = ParticipantGridRules.SignedDateError(dto.SignedDate, await ProviderTimeZoneResolver.TodayAsync(_db, tenantId.Value, _clock, ct));
+        if (dateError != null) return BadRequest(ApiResponse<ParticipantConsentDto>.Fail(dateError));
+
         var row = await _db.ParticipantConsents.FirstOrDefaultAsync(c => c.ParticipantId == participantId && c.ConsentType == type, ct);
         if (row == null)
         {
@@ -59,8 +67,7 @@ public class ParticipantConsentsController : ControllerBase
             _db.ParticipantConsents.Add(row);
         }
 
-        ParticipantGridRules.ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
-        await _db.SaveChangesAsync(ct);
+        row = await ParticipantGridRules.SaveConsentAnswerAsync(_db, row, dto.Granted, dto.SignedByName, dto.SignedDate, ct);
 
         return Ok(ApiResponse<ParticipantConsentDto>.Ok(ToDto(row)));
     }

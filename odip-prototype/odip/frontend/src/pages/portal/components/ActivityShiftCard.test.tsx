@@ -175,7 +175,7 @@ describe('ActivityShiftCard attendance', () => {
 
   it.each(['NotStarted', 'Finished', 'Approved'] as const)('a %s card has no attendance button, but still shows a mark', state => {
     renderCard({ state, participants: [person('Mia Chen', true, 1), person('Sam Lee', false, 2)] }); open()
-    expect(screen.queryByRole('button', { name: /didn't attend/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^(Mark .* as didn't attend|Undo didn't attend for .*)$/ })).toBeNull()
     expect(screen.getAllByText("Didn't attend", badge)).toHaveLength(1)
   })
 
@@ -189,5 +189,19 @@ describe('ActivityShiftCard attendance', () => {
   it('a long name wraps rather than truncating', () => {
     started([person('Annabelle-Louise Featherstonehaugh-Smyth', false, 1)]); open()
     expect(screen.getByText('Annabelle-Louise Featherstonehaugh-Smyth').className).not.toMatch(/truncate/)
+  })
+  it("the header counts everyone listed and adds how many did not attend", () => {
+    started(); expect(screen.getByRole("button", { name: "Participants (2)" })).toBeInTheDocument()
+  })
+
+  it("two marked people add \"2 didn't attend\" to the header", () => {
+    started([person("Mia Chen", true, 1), person("Sam Lee", true, 2), person("Jo Park", false, 3)])
+    expect(screen.getByRole("button", { name: "Participants (3, 2 didn't attend)" })).toBeInTheDocument()
+  })
+
+  it("a refusal sits mt-1 under the row, the house field-error gap", () => {
+    started(); open(); attendMutate.mockImplementation((_a, o) => o.onError(new Error("x")))
+    fireEvent.click(screen.getByRole("button", { name: "Mark Mia Chen as didn't attend" }))
+    expect(screen.getByRole("alert").className).toMatch(/\bmt-1\b/)
   })
 })
