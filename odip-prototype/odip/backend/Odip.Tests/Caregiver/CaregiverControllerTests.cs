@@ -494,4 +494,23 @@ public class CaregiverControllerTests
         var attr = typeof(CaregiverController).GetMethod(action)!.GetCustomAttributes(typeof(RequestSizeLimitAttribute), false);
         Assert.Single(attr);
     }
+
+    // P59-D3: Accept answers 400 for a date outside the range every time, so the form refuses it first.
+    [Fact]
+    public async Task Submit_FutureSignedDate_Returns400AndSavesNothing()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var consent = new CreateParticipantConsentDto { ConsentType = ConsentType.Privacy, Granted = true, SignedByName = "Guardian", SignedDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(2) };
+
+        var result = await MakeController(db).Submit(raw,
+            new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = new PatchParticipantDto { Consents = [consent] } }, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("The signed date can't be in the future.", Assert.IsType<ApiResponse<object>>(bad.Value).Errors.Single());
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(CaregiverSubmissionStatus.Draft, reloaded.Status);
+        Assert.Null(reloaded.Payload);
+        Assert.Null(reloaded.SubmittedAt);
+    }
 }

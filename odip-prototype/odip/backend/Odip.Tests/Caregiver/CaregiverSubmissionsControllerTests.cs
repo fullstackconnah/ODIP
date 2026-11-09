@@ -492,4 +492,35 @@ public class CaregiverSubmissionsControllerTests
         Assert.Equal("A goal", reloaded.Goals);
         Assert.Equal(4, await db.ParticipantGroupRevisions.Where(r => r.ParticipantId == p.Id && r.GroupKey == "aboutMe").Select(r => r.Revision).SingleAsync());
     }
+
+    [Fact]
+    public async Task CreateLink_ForAnArchivedParticipant_Returns400AndCreatesNoLink()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.IsActive = false;
+        await db.SaveChangesAsync();
+
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).CreateLink(p.Id, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("This participant is archived. Restore them before sending a caregiver link.", Assert.IsType<ApiResponse<CaregiverLinkDto>>(bad.Value).Errors.Single());
+        Assert.Empty(await db.CaregiverProfileSubmissions.IgnoreQueryFilters().ToListAsync());
+    }
+
+    // Pins today's behaviour: a stored submission with a pre-2000 date can only be declined (the public form now refuses such a date first).
+    [Fact]
+    public async Task Accept_AStoredSubmissionWithAPre2000SignedDate_Returns400()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        var payload = new PatchParticipantDto { Consents = [new CreateParticipantConsentDto { ConsentType = ConsentType.Privacy, Granted = true, SignedByName = "Guardian", SignedDate = new DateOnly(1999, 6, 1) }] };
+        var s = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted, payload);
+
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).Accept(s.Id, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("The signed date must be in 2000 or later.", Assert.IsType<ApiResponse<object>>(bad.Value).Errors.Single());
+        Assert.Equal(CaregiverSubmissionStatus.Submitted, (await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync()).Status);
+    }
 }
