@@ -23,10 +23,10 @@ const MODE_WORDS: Record<BudgetLimitMode, string> = {
 }
 
 /**
- * What neither mode ever does, said once. The last sentence is what a hard limit cannot see: a sleepover, a passive night or a shared-support shift has no price yet, so it gets no finding and is never refused,
+ * What neither mode ever does, said once. The last two sentences are what a hard limit cannot see: a group sleepover or passive night, a 1:2 to 1:5 or shared-support shift off a group activity, or a group shift with no agreed number of participants (or one that changes), has no price yet, so it gets no finding and is never refused,
  * and the Admin who chooses the policy is told here, where the choice is made. It goes when the claim engine prices those shifts.
  */
-const BOTH_MODES_WORDS = 'In both modes, a shift made from a pattern, a trip booking, an agreement and a claim only ever warn. Cancelling a shift, an edit that lowers its cost, and a shift that has started or been delivered are never refused. Shifts the system cannot price yet (sleepovers, passive nights and shared support at 1:2 or more) are not checked, so a hard limit does not see them.'
+const BOTH_MODES_WORDS = 'In both modes, a shift made from a pattern, a trip booking, an agreement and a claim only ever warn. Cancelling a shift, an edit that lowers its cost, and a shift that has started or been delivered are never refused. Shifts the system cannot price yet are not checked, so a hard limit does not see them. These are sleepovers and passive nights on a group activity, 1:2 to 1:5 and shared-support shifts that are not on a group activity, and group shifts with no agreed number of participants, or where that number changes part-way through.'
 
 /** The emergency or safety path is the owner's decision and cannot be switched off: a line to read, never a control. */
 const EMERGENCY_LINE = 'Emergency or safety bookings are always allowed and reviewed by an Admin.'

@@ -84,11 +84,11 @@ export function rowsByGroup(rows: readonly LedgerRow[]): { group: LedgerGroup; r
 }
 
 /**
- * The quiet line under the ledger: what the estimates are made from, and what they leave out. Shift claims price one-to-one community access hours only, so a sleepover, a passive night or a
- * group shift has no price yet and is counted as $0: the line says so, and the Funding tab counts the shifts it leaves out (see `unpricedShiftSentence`).
+ * The quiet line under the ledger: what the estimates are made from, and what they leave out. A group sleepover or passive night, a 1:2 to 1:5 or shared-support shift off a group activity, and a group shift with no agreed
+ * number of participants (or one that changed), has no price yet and is counted as $0: the line says so, in the words of the budget settings, and the Funding tab counts the shifts it leaves out (see `unpricedShiftSentence`).
  */
 export const quietEstimateLine =
-  "Estimates use the rates we'll claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet."
+  "Estimates use the rates we'll claim with. These shifts are not counted yet: sleepovers and passive nights on a group activity, 1:2 to 1:5 and shared-support shifts that are not on a group activity, and group shifts with no agreed number of participants, or where that number changes part-way through."
 
 /**
  * The warning beside a pool's figures when shifts have no price: they are $0 in every figure, so Used, the forecast and the status leave them out, and the screen says how many and why

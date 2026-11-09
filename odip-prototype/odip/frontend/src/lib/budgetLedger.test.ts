@@ -139,9 +139,9 @@ describe('the rows in their three groups', () => {
 })
 
 describe('the quiet estimate line', () => {
-  it('says what the estimates use, that shift claims price community access only, and which shifts are therefore not counted', () => {
+  it('says what the estimates use, and which shifts are therefore not counted', () => {
     expect(quietEstimateLine).toBe(
-      "Estimates use the rates we'll claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet.",
+      "Estimates use the rates we'll claim with. These shifts are not counted yet: sleepovers and passive nights on a group activity, 1:2 to 1:5 and shared-support shifts that are not on a group activity, and group shifts with no agreed number of participants, or where that number changes part-way through.",
     )
   })
 })
