@@ -674,7 +674,7 @@ public class MedicationsController : ControllerBase
 
     private async Task<int> GetPrnDosesInLast24hAsync(Guid medicationId, CancellationToken ct)
     {
-        var cutoff = DateTime.UtcNow.AddHours(-24);
+        var cutoff = _slots.UtcNow.AddHours(-24);
         return await _db.MedicationAdministrations.CountAsync(a =>
             a.ParticipantMedicationId == medicationId &&
             a.Status == MedicationAdministrationStatus.Administered &&

@@ -29,6 +29,7 @@ describe('GroupActivitiesPage', () => {
     renderPage()
     expect(h.list).toHaveBeenLastCalledWith({ from: '2026-08-17', to: '2026-08-23' }, 1, 25, true)
     expect(screen.getByRole('heading', { level: 1, name: 'Group activities' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Status/ })).toBeInTheDocument()
   })
 
   it('shows date, time, activity, staff, participants and status, with the shortfall in the staff cell', () => {
@@ -83,6 +84,8 @@ describe('GroupActivitiesPage', () => {
     expect(h.list).toHaveBeenLastCalledWith(expect.anything(), 1, 25, false)
     expect(screen.getByText('Group activities are turned off')).toBeInTheDocument()
     expect(screen.getByText('An admin can turn them on in Settings, under Workspace.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Status/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('From')).not.toBeInTheDocument()
   })
 
   it('treats a server refusal for the switch as the same off state', () => {

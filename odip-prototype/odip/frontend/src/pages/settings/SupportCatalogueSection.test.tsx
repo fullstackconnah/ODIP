@@ -7,7 +7,7 @@ import SupportCatalogueSection from './SupportCatalogueSection'
 
 vi.mock('@/api/hooks', () => ({ useSupportCatalogue: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }) }))
 
-const TOO_BIG = 'This file is over 10 MB. Choose the NDIS support catalogue .xlsx file.'
+const TOO_BIG = 'This file is over 10 MB. Choose the NDIS Support Catalogue .xlsx file.'
 const MB10 = 10 * 1024 * 1024
 
 async function openImport() {
@@ -32,9 +32,15 @@ describe('SupportCatalogueSection import size', () => {
   it('refuses a file over 10 MB before upload and clears the picker', async () => {
     const input = await openImport()
     fireEvent.change(input, { target: { files: [fileOf(MB10 + 1)] } })
-    expect(await screen.findByText(TOO_BIG)).toBeInTheDocument()
+    const note = await screen.findByText(TOO_BIG)
+    expect(note.textContent).toContain('.xlsx\u00a0file.') // no-break, so "file." never wraps alone
     expect(mockPost).not.toHaveBeenCalled()
     expect(input.value).toBe('')
+  })
+
+  it('names the catalogue the way the NDIA publishes it in the upload hint', async () => {
+    await openImport()
+    expect(screen.getByText('Upload the NDIS Support Catalogue .xlsx file to preview changes.')).toBeInTheDocument()
   })
 
   it('uploads a file of exactly 10 MB', async () => {
