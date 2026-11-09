@@ -61,6 +61,18 @@ public class TemplateRenderingTests
         Assert.Contains("https://odip.test/portal", message.HtmlBody);
     }
 
+    /// <summary>A worker put only on a group activity is told they are on it, not that they have a shift "with" it.</summary>
+    [Fact]
+    public void ShiftAssignedTemplate_ActivityOnly_NamesTheActivity()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Bowling", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0), FirstIsActivity: true);
+        var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("New group activity: Bowling on 15 Sep 2026", message.Subject);
+        Assert.Equal("You've been put on Bowling on 15 Sep 2026 from 9:00 AM to 5:00 PM.\n\nView it: https://odip.test/portal", message.PlainTextBody);
+        Assert.Contains("You've been put on Bowling on 15 Sep 2026", message.HtmlBody);
+    }
+
     /// <summary>Publish week tells each worker once (roster drag and drop fix round 1): one email listing every shift of theirs it published.</summary>
     [Fact]
     public void ShiftAssignedTemplate_WithSeveralShifts_ListsEveryShiftInOneEmail()

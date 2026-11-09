@@ -77,6 +77,18 @@ public class GroupActivityPublishTests
         Assert.Equal(("Bowling", Monday, new TimeOnly(9, 30), new TimeOnly(12, 30)), (payload.ParticipantName, payload.ServiceDate, payload.StartTime, payload.EndTime));
     }
 
+    /// <summary>The bell for a worker on an activity only must open a page that exists (My shifts), and read as being on the activity.</summary>
+    [Fact]
+    public async Task PublishWeek_ActivityOnlyWorker_BellNamesTheActivity_AndLinksToMyShifts()
+    {
+        var fx = new GroupActivityFixture();
+        var worker = fx.AddUser();
+        Activity(fx, worker);
+        await Publish(fx, Before);
+        var bell = await fx.Seed.InAppNotifications.AsNoTracking().SingleAsync();
+        Assert.Equal(("You're on Bowling on Mon 16 Nov at 9:30 am.", "/portal"), (bell.Title, bell.LinkTo));
+    }
+
     [Fact]
     public async Task PublishWeek_GivesAWorkerWithAShiftAndAnActivity_OneNotice_EarliestFirst()
     {
