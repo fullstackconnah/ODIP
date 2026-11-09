@@ -258,12 +258,16 @@ export default function RosterBoardPage() {
   const publishWeek = usePublishWeek()
   const [publishOpen, setPublishOpen] = useState(false)
   // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows. Only staffed Drafts: Publish week holds a shift nobody is on until someone is (owner, 2026-10-28).
-  const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && !isUnfilledShift(s)), [boardShifts])
-  const heldDrafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && isUnfilledShift(s)).length, [boardShifts])
+  // Group activities publish with the week: their participant shifts have no worker, so they are not drafts or held shifts here; the Draft activities count instead (both views carry them while the switch is on).
+  const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && !s.groupActivityId && !isUnfilledShift(s)), [boardShifts])
+  const heldDrafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && !s.groupActivityId && isUnfilledShift(s)).length, [boardShifts])
+  const draftActivities = useMemo(() => (board?.groupActivitiesEnabled === true ? (board.groupActivities ?? []).filter(a => a.status === 'Draft') : []), [board])
   // Only an explicit false is unstarted: a board without the field (old fixtures) reads as started.
   const unstarted = board?.weekStarted === false
   const blocked = useMemo(() => drafts.filter(isBlocked), [drafts])
   const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
+  // What Publish week would send: select mode picks shifts only, so this is for the whole-week button, banner and leave guard.
+  const weekPublishable = publishable.length + draftActivities.length
   // Select mode (R3, publish several): a writer ticks Drafts on the board and publishes just those. Keyed to the toolbar (week, view, filters), so any toolbar change leaves the mode with the selection; a render-time reset, as the pickers above.
   const toolbarKey = [weekStart, groupBy, participantFilter, regionFilter, unfilledOnly].join('|')
   const [selection, setSelection] = useState<{ key: string; ids: ReadonlySet<string> } | null>(null)
@@ -296,7 +300,7 @@ export default function RosterBoardPage() {
     return () => document.removeEventListener('keydown', onKey, true)
   }, [selecting])
   // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
-  const showBanner = !unstarted && drafts.length > 0
+  const showBanner = !unstarted && drafts.length + draftActivities.length > 0
 
   const startWeek = useStartWeek()
   // Keyed to its week: a Start still out for a week no longer shown never says "Starting…" on this week's card, and one week settling never clears another's.
@@ -362,10 +366,10 @@ export default function RosterBoardPage() {
   }
 
   // The leave guard (the brief, section 4): a writer, a started week, and a draft Publish could send. Drafts only a rule blocks never ask: publishing can't fix them.
-  const leaveArmed = canWrite && !unstarted && publishable.length > 0
+  const leaveArmed = canWrite && !unstarted && weekPublishable > 0
   const draftOpen = autoOpen && autoArmed
   const draftLeaveCopy = { title: 'Leave without applying the draft?', message: `Your draft roster for ${formatWeekSpan(days)} hasn’t been applied. If you leave, it’s lost.`, confirmLabel: 'Leave without applying', stayLabel: 'Keep reviewing' }
-  const leaveCopy = { title: LEAVE_TITLE, message: leaveMessage(publishable.length, formatWeekSpan(days)), confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
+  const leaveCopy = { title: LEAVE_TITLE, message: leaveMessage(publishable.length, formatWeekSpan(days), draftActivities.length), confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
   const { dialog: leaveDialog } = useUnsavedChangesWarning(leaveArmed || draftOpen, {
     leaveCopy: draftOpen ? draftLeaveCopy : leaveCopy,
     // Another week by address (a bell or task link) leaves this one; the filters (?participant=, ?unfilled=) keep it.
@@ -773,7 +777,7 @@ export default function RosterBoardPage() {
     <div ref={newMenuRef} className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
       <Dropdown
         variant="menu"
-        triggerVariant={unstarted || publishable.length > 0 ? 'secondary' : 'primary'}
+        triggerVariant={unstarted || weekPublishable > 0 ? 'secondary' : 'primary'}
         label="New"
         icon={<Plus aria-hidden="true" className="h-4 w-4" />}
         items={[{ value: 'shift', label: 'Shift' }, { value: 'trip', label: 'Trip' }, ...(groupActivities ? [{ value: 'activity', label: 'Group activity' }] : [])]}
@@ -788,7 +792,7 @@ export default function RosterBoardPage() {
       {plural(waiting.length, 'agreement')} waiting
     </Button>
   )
-  const publishButton = canWrite && publishable.length > 0 && <Button key="publish-week" size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
+  const publishButton = canWrite && weekPublishable > 0 && <Button key="publish-week" size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
   const selectButton = canWrite && publishable.length >= 2 && <Button ref={focusSelectButton} variant="secondary" size="md" onClick={() => setSelection({ key: toolbarKey, ids: new Set() })}>Select shifts</Button>
   const allChosen = chosen.length === publishable.length
   const selectActions = (
@@ -806,7 +810,7 @@ export default function RosterBoardPage() {
       <div className={`publish-float mx-auto flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-popover)] p-3 text-[var(--color-popover-foreground)] shadow-[var(--shadow-float)] transition-opacity duration-150 motion-reduce:transition-none md:max-w-[720px] md:py-2 md:pl-4 md:pr-2 ${carry ? 'pointer-events-none opacity-0' : 'pointer-events-auto'}`}>
         <div className="min-w-0 max-md:basis-full">
           <p className="text-sm font-semibold leading-5 tabular-nums">
-            {selecting ? <span ref={focusCount} tabIndex={-1} aria-live="polite" className="outline-none">{selectionTitle(chosen.length)}</span> : bannerTitle(drafts.length)}
+            {selecting ? <span ref={focusCount} tabIndex={-1} aria-live="polite" className="outline-none">{selectionTitle(chosen.length)}</span> : bannerTitle(drafts.length, draftActivities.length)}
           </p>
           {blocked.length > 0 && <p className="text-sm leading-5 text-[var(--color-muted-foreground)]">{bannerBlockedLine(blocked.length)}</p>}
         </div>
@@ -871,7 +875,7 @@ export default function RosterBoardPage() {
           onRegionFilterChange={setRegionFilter}
           unfilledOnly={unfilledOnly}
           onUnfilledOnlyChange={setUnfilledOnly}
-          allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
+          allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0 && draftActivities.length === 0}
           heldBack={heldDrafts > 0}
           trailing={belowMd ? secondaryActions : undefined}
         />
@@ -1171,8 +1175,8 @@ export default function RosterBoardPage() {
         onCancel={() => setPublishOpen(false)}
         onConfirm={handlePublishWeek}
         title={selecting ? `Publish ${plural(chosen.length, 'shift')}?` : `Publish ${formatWeekSpan(days)}?`}
-        message={<p>{selecting ? publishWeekMessage(chosen, 0) : publishWeekMessage(publishable, heldDrafts)}</p>}
-        confirmLabel={`Publish ${plural(selecting ? chosen.length : publishable.length, 'shift')}`}
+        message={<p>{selecting ? publishWeekMessage(chosen, 0) : publishWeekMessage(publishable, heldDrafts, draftActivities)}</p>}
+        confirmLabel={!selecting && publishable.length === 0 ? `Publish ${plural(draftActivities.length, 'group activity', 'group activities')}` : `Publish ${plural(selecting ? chosen.length : publishable.length, 'shift')}`}
         loading={publishWeek.isPending}
       />
 

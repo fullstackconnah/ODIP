@@ -17,7 +17,11 @@ const either = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
 export const alreadyInWeekLine = (n: number) => `${plural(n, 'shift')} already in this week ${either(n, 'stays as it is', 'stay as they are')}.`
 
-export const bannerTitle = (n: number) => `${plural(n, 'shift')} not visible to staff yet`
+/** "3 shifts", "2 group activities" or "3 shifts and 2 group activities": what a week's drafts are, for the banner and the leave guard. */
+const draftsPhrase = (shifts: number, activities: number) =>
+  joinList([...(shifts > 0 || activities === 0 ? [plural(shifts, 'shift')] : []), ...(activities > 0 ? [plural(activities, 'group activity', 'group activities')] : [])])
+
+export const bannerTitle = (n: number, activities = 0) => `${draftsPhrase(n, activities)} not visible to staff yet`
 
 /** The Publish bar's title in select mode (R3). */
 export const selectionTitle = (n: number) => (n === 0 ? 'Select the shifts to publish' : `${plural(n, 'shift')} selected`)
@@ -26,8 +30,10 @@ export const selectionTitle = (n: number) => (n === 0 ? 'Select the shifts to pu
 export const bannerBlockedLine = (blocked: number): string | null =>
   blocked === 0 ? null : `${blocked} ${either(blocked, "can't be published until its worker changes.", "can't be published until their workers change.")}`
 
-export const leaveMessage = (n: number, span: string) =>
-  `${plural(n, 'shift')} in ${span} ${either(n, "isn't", "aren't")} visible to staff yet. ${either(n, 'It stays saved as a draft', 'They stay saved as drafts')} until you publish the week.`
+export const leaveMessage = (n: number, span: string, activities = 0) => {
+  const total = n + activities
+  return `${draftsPhrase(n, activities)} in ${span} ${total > 1 ? "aren't" : "isn't"} visible to staff yet. ${either(total, 'It stays saved as a draft', 'They stay saved as drafts')} until you publish the week.`
+}
 
 export const startResultTitle = (span: string, r: StartWeekResultDto) => (r.created > 0 ? `Started ${span}: ${plural(r.created, 'shift')} added` : `Started ${span}`)
 
