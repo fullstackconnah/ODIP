@@ -382,6 +382,7 @@ export default function RosterBoardPage() {
   const draftOpen = autoOpen && autoArmed
   const draftLeaveCopy = { title: 'Leave without applying the draft?', message: `Your draft roster for ${formatWeekSpan(days)} hasn’t been applied. If you leave, it’s lost.`, confirmLabel: 'Leave without applying', stayLabel: 'Keep reviewing' }
   const leaveCopy = { title: LEAVE_TITLE, message: leaveMessage(publishable.length, formatWeekSpan(days), draftActivities.length), confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
+  const publishLabel = selecting ? publishWeekLabel(chosen.length, 0) : publishWeekLabel(publishable.length, draftActivities.length)
   const { dialog: leaveDialog } = useUnsavedChangesWarning(leaveArmed || draftOpen, {
     leaveCopy: draftOpen ? draftLeaveCopy : leaveCopy,
     // Another week by address (a bell or task link) leaves this one; the filters (?participant=, ?unfilled=) keep it.
@@ -1189,8 +1190,16 @@ export default function RosterBoardPage() {
         onConfirm={handlePublishWeek}
         title={selecting ? `Publish ${plural(chosen.length, 'shift')}?` : `Publish ${formatWeekSpan(days)}?`}
         message={<p>{selecting ? publishWeekMessage(chosen, 0, [], today) : publishWeekMessage(publishable, heldDrafts, draftActivities, today)}</p>}
-        confirmLabel={selecting ? publishWeekLabel(chosen.length, 0) : publishWeekLabel(publishable.length, draftActivities.length)}
-        loading={publishWeek.isPending}
+        confirmLabel={publishLabel}
+        footer={
+          // Stacked below sm so the long label ("Publish 1 shift and 2 group activities") keeps one line at 390; confirm sits on top, Cancel stays first in tab order.
+          <div className="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setPublishOpen(false)}>Cancel</Button>
+            <Button className="w-full sm:w-auto" onClick={handlePublishWeek} disabled={publishWeek.isPending} aria-label={publishLabel}>
+              {publishWeek.isPending ? 'Processing...' : publishLabel}
+            </Button>
+          </div>
+        }
       />
 
       <ConfirmDialog
