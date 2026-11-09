@@ -129,6 +129,32 @@ public class GroupActivityStaffingTests
     [InlineData(new[] { SupportRatio.OneToTwo }, 3, 3)]
     public void StaffNeeded_RoundsSixtiethsUp_AndHonoursMinimum(SupportRatio[] ratios, int? min, int expected) =>
         Assert.Equal(expected, GroupActivityStaffing.StaffNeeded(ratios, min));
+
+    private static SupportRatio[] Of(SupportRatio ratio, int count) => Enumerable.Repeat(ratio, count).ToArray();
+
+    [Theory]
+    [InlineData(3, 40, 1)]   // three 1:3 are one worker whatever the cap
+    [InlineData(3, 6, 1)]
+    public void StaffNeeded_OneToThree_IgnoresTheSharedCap(int people, int cap, int expected) =>
+        Assert.Equal(expected, GroupActivityStaffing.StaffNeeded(Of(SupportRatio.OneToThree, people), null, cap));
+
+    [Theory]
+    [InlineData(8, 6, 2)]    // one worker per 6 people
+    [InlineData(6, 6, 1)]
+    [InlineData(8, 40, 1)]
+    public void StaffNeeded_SharedSupport_OneWorkerPerBlockHeadcount(int people, int cap, int expected) =>
+        Assert.Equal(expected, GroupActivityStaffing.StaffNeeded(Of(SupportRatio.SharedSupport, people), null, cap));
+
+    [Fact]
+    public void StaffNeeded_SharedSupportAddsToTheOtherRatios()
+    {
+        var threeAndSix = Of(SupportRatio.OneToThree, 3).Concat(Of(SupportRatio.SharedSupport, 6)).ToArray();
+        var oneAndShared = new[] { SupportRatio.OneToOne, SupportRatio.SharedSupport };
+
+        Assert.Equal(2, GroupActivityStaffing.StaffNeeded(threeAndSix, null, 6));   // 1 + 1
+        Assert.Equal(2, GroupActivityStaffing.StaffNeeded(oneAndShared, null));
+        Assert.Equal(3, GroupActivityStaffing.StaffNeeded(Of(SupportRatio.SharedSupport, 8), 3, 6));   // the minimum wins
+    }
 }
 
 public class GroupActivitiesControllerTests
@@ -487,5 +513,29 @@ public class GroupActivityTenantTests
         fx.Seed.SaveChanges();
         Assert.Equal("GA_SHIFT_NOT_FOUND", GroupActivityFixture.Error(await fx.Controller().AttachShifts(a.Id, new AttachShiftsDto { ShiftIds = [foreignShift.Id] }, default), 404));
         Assert.Null((await fx.Seed.Shifts.AsNoTracking().SingleAsync()).GroupActivityId);
+    }
+}
+
+/// <summary>
+/// Group claims (headcount PR, GCH-C6): nobody can join an activity once it has started, so a shift that is Completed (and so claimable) never has a person still to attach. The guard is <c>StateRefusal</c>
+/// in GroupActivitiesController (GA_STARTED, behind EnsureChangeable), and the claim run reads the headcount only from Completed shifts, so the count it uses is final.
+/// </summary>
+public class GroupActivityLateAttachTests
+{
+    [Theory]
+    [InlineData(ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.PendingReview)]
+    [InlineData(ShiftStatus.Completed)]
+    public async Task StartedActivity_RefusesANewParticipant_AndAnAttachedShift(ShiftStatus status)
+    {
+        var fx = new GroupActivityFixture();
+        var a = fx.AddActivity(status);
+        var late = fx.AddParticipant();
+        var lateShift = fx.AddShift(fx.AddParticipant("Sam"));
+
+        Assert.Equal("GA_STARTED", GroupActivityFixture.Error(await fx.Controller().AddParticipant(a.Id, new AddGroupParticipantDto { ParticipantId = late.Id, Ratio = SupportRatio.OneToThree }, default), 409));
+        Assert.Equal("GA_STARTED", GroupActivityFixture.Error(await fx.Controller().AttachShifts(a.Id, new AttachShiftsDto { ShiftIds = [lateShift.Id] }, default), 409));
+        Assert.Null((await fx.Seed.Shifts.AsNoTracking().SingleAsync(s => s.Id == lateShift.Id)).GroupActivityId);
+        Assert.Equal(1, await fx.Seed.Shifts.CountAsync());
     }
 }

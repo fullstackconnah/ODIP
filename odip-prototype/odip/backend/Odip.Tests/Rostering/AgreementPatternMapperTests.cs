@@ -248,4 +248,25 @@ public class AgreementPatternMapperTests
 
         Assert.Equal(expected == -1 ? null : expected, AgreementPatternMapper.GroupSizeOf(attached ? Guid.NewGuid() : null, ratio, block));
     }
+
+    [Theory]
+    [InlineData(SupportRatio.OneToThree, 5, 5)]    // more than quoted: the headcount
+    [InlineData(SupportRatio.OneToThree, 2, 3)]    // fewer: the quote stays
+    [InlineData(SupportRatio.OneToThree, 0, 3)]
+    [InlineData(SupportRatio.SharedSupport, 8, 8)]
+    [InlineData(SupportRatio.SharedSupport, 4, 6)]
+    [InlineData(SupportRatio.OneToOne, 5, -1)]     // not a group ratio: still refused
+    public void GroupSizeOf_TakesTheLargerOfQuoteAndHeadcount(SupportRatio ratio, int headcount, int expected)
+    {
+        var block = new PlanBlock { Workers = 1, ParticipantsPresent = 6 };
+
+        Assert.Equal(expected == -1 ? null : expected, AgreementPatternMapper.GroupSizeOf(Guid.NewGuid(), ratio, block, headcount));
+    }
+
+    [Fact]
+    public void GroupSizeOf_HeadcountNeverMakesAnUnpricedShiftPriced()
+    {
+        Assert.Null(AgreementPatternMapper.GroupSizeOf(Guid.NewGuid(), SupportRatio.SharedSupport, null, 8));   // no block
+        Assert.Null(AgreementPatternMapper.GroupSizeOf(null, SupportRatio.OneToThree, null, 5));              // unattached
+    }
 }

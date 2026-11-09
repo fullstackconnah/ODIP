@@ -292,11 +292,13 @@ public partial class ShiftClaimGenerationService
         // A group shift's agreement block gives shared support its N, and a block that changes headcount mid-support cannot be priced from one N: it is refused with a reason (GA PR4 G6).
         var blocks = await ShiftTravelSource.AgreementBlocksAsync(_db, participant.TenantId, shifts.Select(s => s.ShiftPatternId), ct);
         PlanBlock? BlockOf(Guid? id) => id is Guid p ? blocks.GetValueOrDefault(p) : null;
+        // Everyone on each shift's activity decides N, so a group's lines never add up to more than its workers x the rate (the claim run is where the count binds).
+        var headcount = await GroupHeadcount.LoadAsync(_db, participant.TenantId, shifts.Select(s => s.GroupActivityId), ct);
         ShiftPriceOutcome PriceOn(Shift shift, ClaimSpan w, TimeZoneInfo shiftZone) => ShiftPriceEstimator.Price(
             new ShiftRateRows(RowsOf(shift), personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.Ratio, shift.NightType,
             participant.IsIntensiveSupport, state, publicHolidays, shiftZone,
             ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone),
-            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId), headcount.Of(shift.GroupActivityId, shiftZone)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
         var extraRefusal = await ExtraTimeRefusalsAsync(participant, shifts, windows, PriceOn, placeZones, orgZone, ct);
 
         var lineItems = new List<ShiftLineCalc>();
@@ -446,12 +448,15 @@ public partial class ShiftClaimGenerationService
         return refusals;
     }
 
+    /// <summary>Whole calendar days between the cancellation and the shift's service date, both in the shift's zone. One rule for the claim and for the group headcount (<see cref="Odip.Infrastructure.Rostering.GroupHeadcount"/>).</summary>
+    internal static int NoticeDays(DateOnly serviceDate, DateTime cancelledAt, TimeZoneInfo zone) =>
+        serviceDate.DayNumber - DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(cancelledAt, DateTimeKind.Utc), zone)).DayNumber;
+
     /// <summary>Why a cancelled shift is not (yet) claimable as a short-notice cancellation, or null when it is. Notice is whole calendar days in the shift's zone.</summary>
     private static string? NotClaimableCancellation(Shift shift, DateOnly today, TimeZoneInfo zone)
     {
         if (shift.CancelledAt is not { } cancelledAt) return "It wasn't published when it was cancelled, or it was cancelled before Bunya Support kept cancel times, so it can't be claimed.";
-        var cancelledOn = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(cancelledAt, DateTimeKind.Utc), zone));
-        var noticeDays = shift.ServiceDate.DayNumber - cancelledOn.DayNumber;
+        var noticeDays = NoticeDays(shift.ServiceDate, cancelledAt, zone);
         if (!PlanCancellation.IsShortNotice(noticeDays))
             return FormattableString.Invariant($"Cancelled {noticeDays} days ahead. Only a cancellation less than {PlanCancellation.ShortNoticeDays} days before the shift can be claimed.");
         // shortcut: compares with the org's today, not the place's; a cancelled late shift at a western place can become claimable 2-3 h early. Upgrade when places span zones in production.
