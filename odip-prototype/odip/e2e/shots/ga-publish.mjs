@@ -1,6 +1,6 @@
 // Captures and numeric checks for "Publish week covers group activities" (gav PR B): the Publish dialog sentence and the banner when the week has Draft group activities.
 // Run through the runner: bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <absolute path to this script> <outdir>
-// Capture states: publish-dialog-mixed (Draft shifts and Draft activities), publish-dialog-activities-only (the week's only Drafts are activities), publish-banner-activities-only, each at 390 and 1280.
+// Capture states: publish-dialog-mixed-390, publish-dialog-mixed-1280, publish-dialog-activities-only-390, publish-dialog-activities-only-1280, publish-banner-activities-only-390, publish-banner-activities-only-1280
 // Pinned: Coordinator, switch on, the fixture week 2026-09-07 (?date=), theme light, clock fixed; the mock board with activities injected through page.route.
 import path from 'node:path'
 import { AU_CONTEXT, cropElement, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
@@ -70,8 +70,11 @@ async function dialogScene(page, st, name, sentence) {
   await page.getByRole('button', { name: 'Publish week' }).click()
   const dialog = page.locator('[role="dialog"], [role="alertdialog"]').first()
   await dialog.waitFor({ state: 'visible', timeout: 30_000 })
-  const line = dialog.getByText(sentence).first()
-  await line.waitFor({ state: 'visible', timeout: 30_000 })
+  const line = dialog.locator('p').first()
+  await line.waitFor({ state: 'visible', timeout: 15_000 })
+  // The house glues words with invisible characters, so the sentence is matched on letters, digits and full stops only.
+  const said = (await line.innerText()).replace(/[^\p{L}\p{N}.]+/gu, ' ')
+  add(`${name} says the activities sentence [${st.name}]`, said, sentence.test(said))
   const c = await cropElement(page, dialog, path.join(OUT_DIR, `${name}-${st.name}.png`), { touch: st.width === 390, hideChrome: true, pad: 24 })
   const db = await dialog.boundingBox()
   const lb = await line.boundingBox()
@@ -91,9 +94,9 @@ try {
       const { context, page } = await open(browser, st, mixed)
       try {
         if (mixed) {
-          await dialogScene(page, st, 'publish-dialog-mixed', /group activit(y|ies) goes? out too/)
+          await dialogScene(page, st, 'publish-dialog-mixed', /group activit(y|ies) go(es)? out too/)
         } else {
-          await dialogScene(page, st, 'publish-dialog-activities-only', /group activit(y|ies) goes? out to staff/)
+          await dialogScene(page, st, 'publish-dialog-activities-only', /group activit(y|ies) go(es)? out to staff/)
           const bar = page.locator('[data-publish-bar]')
           await bar.waitFor({ state: 'visible', timeout: 30_000 })
           const title = bar.getByText(/group activit/).first()
