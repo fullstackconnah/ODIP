@@ -13,7 +13,7 @@ import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024 // the server caps the request at 11 MB (file plus multipart overhead)
-const FILE_TOO_BIG = 'This file is over 10 MB. Choose the NDIS support catalogue .xlsx file.'
+const FILE_TOO_BIG = 'This file is over 10 MB. Choose the NDIS Support Catalogue .xlsx\u00a0file.' // no-break space: "file." never wraps alone
 
 /** What the uploaded workbook's header row showed: the 2026-27 layout (zone prices) or the 2025-26 one (a column per state). */
 function catalogueFormatLabel(format: CatalogueFileFormat): string {
@@ -152,7 +152,7 @@ export default function SupportCatalogueSection() {
 
             {previewStep === 'upload' && (
               <div className="space-y-4">
-                <p className="text-sm text-[var(--color-muted-foreground)]">Upload the NDIA Support Catalogue .xlsx file to preview changes.</p>
+                <p className="text-sm text-[var(--color-muted-foreground)]">Upload the NDIS Support Catalogue .xlsx file to preview changes.</p>
                 <label className="flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-border)] rounded-[var(--radius-md)] p-[var(--card-pad)] cursor-pointer hover:border-[var(--color-primary)] transition-colors">
                   <span className="text-[var(--color-muted-foreground)] text-sm mb-2">{uploading ? 'Uploading...' : 'Drop .xlsx here or click to browse'}</span>
                   <input type="file" accept=".xlsx" onChange={handleUpload} className="hidden" disabled={uploading} />
