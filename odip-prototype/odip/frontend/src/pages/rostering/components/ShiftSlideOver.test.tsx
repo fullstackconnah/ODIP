@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ShiftSlideOver } from './ShiftSlideOver'
+import { ShiftSlideOver, type ShiftSlideOverTarget } from './ShiftSlideOver'
 import { makeShift, makeUnfilledShift, makeFinding } from '../test-fixtures'
 import { lockedWords } from '../lib/rosterDrag'
 import type { ParticipantRoutineDto, CompatibilityRowDto, ServiceLocationDto, ShiftDto, ShiftNoteDto } from '@/api/types'
@@ -2279,5 +2279,24 @@ describe('ShiftSlideOver: a failed staff or participant list', () => {
   it('shows no failure message when both lists loaded', () => {
     renderCreate()
     expect(screen.queryByText(/Couldn't load this/)).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftSlideOver cut participant list', () => {
+  const note = 'Showing the first 200 of 250 participants.'
+  const renderPanel = (target: ShiftSlideOverTarget, participantsNote?: string | null) =>
+    render(<ShiftSlideOver target={target} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} participantsNote={participantsNote} />)
+
+  it('says so under the Participant field, when adding and when editing', () => {
+    renderPanel({ mode: 'create' }, note)
+    expect(screen.getByText(note)).toBeInTheDocument()
+    cleanup()
+    renderPanel({ mode: 'edit', shift: makeShift() }, note)
+    expect(screen.getByText(note)).toBeInTheDocument()
+  })
+
+  it('shows nothing for a whole list', () => {
+    renderPanel({ mode: 'create' }, null)
+    expect(screen.queryByText(/showing the first/i)).not.toBeInTheDocument()
   })
 })
