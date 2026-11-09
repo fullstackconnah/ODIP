@@ -16,6 +16,9 @@ public static class SuperAdminDomain
     /// <summary>The configured SuperAdmin domain, lower-case; the default when none is configured (or there is no configuration).</summary>
     public static string From(IConfiguration? config) => (config?[ConfigKey] ?? Default).Trim().ToLowerInvariant();
 
+    /// <summary>True when the address is on the configured SuperAdmin domain; the exchange and the per-request session recheck both ask this, so they cannot drift.</summary>
+    public static bool Matches(IConfiguration? config, string email) => email.Split('@').Last().ToLowerInvariant() == From(config);
+
     /// <summary>True when the address (already normalised, see <c>EmailIdentity</c>) is on <paramref name="domain"/>.</summary>
     public static bool Covers(string normalisedEmail, string domain) => normalisedEmail.EndsWith("@" + domain, StringComparison.Ordinal);
 
