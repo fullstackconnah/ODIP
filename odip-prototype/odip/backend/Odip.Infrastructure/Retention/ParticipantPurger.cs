@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Retention;
@@ -92,8 +93,11 @@ public static class ParticipantPurger
             }
 
             // L7: the audit rows of every purged row (by id: rows from before the release have no tenant).
+            // Also the Deleted rows of children removed earlier: their entity ids are gone, but the values they held name the participant.
             var audited = scope.PurgedIds;
-            var auditRows = await scope.Q<AuditLog>().Where(a => a.EntityId == participantId || audited.Contains(a.EntityId)).ExecuteDeleteAsync(ct);
+            var named = participantId.ToString();
+            var auditRows = await scope.Q<AuditLog>().Where(a => a.EntityId == participantId || audited.Contains(a.EntityId)
+                || (a.TenantId == tenantId && a.Action == AuditAction.Deleted && a.Changes.Contains(named))).ExecuteDeleteAsync(ct);
             if (auditRows > 0) counts["AuditLogs"] = auditRows;
 
             var record = new PurgeRecord
