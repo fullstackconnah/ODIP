@@ -289,13 +289,14 @@ public partial class ShiftClaimGenerationService
         // The window each shift is claimed on (W2 PR3): the hours worked, the pay window, with approved extra time only once approved. A cancellation has no completion and stays rostered.
         var completions = cancelToday is null ? await ShiftClaimWindow.LoadAsync(_db, shifts.Select(s => s.Id).ToList(), ct) : new();
         var windows = shifts.ToDictionary(s => s.Id, s => ShiftClaimWindow.For(s, completions.GetValueOrDefault(s.Id), ProviderTimeZoneResolver.ZoneOf(s, placeZones, orgZone)));
-        // A group shift whose pattern block changes headcount mid-support cannot be priced from one N: it is refused with a reason (GA PR4 G6).
-        var headcountChanged = await ShiftTravelSource.HeadcountChangedAsync(_db, participant.TenantId, shifts.Select(s => s.ShiftPatternId), ct);
+        // A group shift's agreement block gives shared support its N, and a block that changes headcount mid-support cannot be priced from one N: it is refused with a reason (GA PR4 G6).
+        var blocks = await ShiftTravelSource.AgreementBlocksAsync(_db, participant.TenantId, shifts.Select(s => s.ShiftPatternId), ct);
+        PlanBlock? BlockOf(Guid? id) => id is Guid p ? blocks.GetValueOrDefault(p) : null;
         ShiftPriceOutcome PriceOn(Shift shift, ClaimSpan w, TimeZoneInfo shiftZone) => ShiftPriceEstimator.Price(
             new ShiftRateRows(RowsOf(shift), personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.Ratio, shift.NightType,
             participant.IsIntensiveSupport, state, publicHolidays, shiftZone,
             ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone),
-            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio), shift.ShiftPatternId is Guid pid && headcountChanged.Contains(pid));
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
         var extraRefusal = await ExtraTimeRefusalsAsync(participant, shifts, windows, PriceOn, placeZones, orgZone, ct);
 
         var lineItems = new List<ShiftLineCalc>();
