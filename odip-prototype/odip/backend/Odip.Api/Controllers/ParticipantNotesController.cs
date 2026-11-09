@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -59,6 +60,15 @@ public class ParticipantNotesController : ControllerBase
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
         if (participant == null) return NotFound(ApiResponse<ParticipantNoteDto>.Fail("Participant not found"));
 
+        var key = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim();
+        if (key != null)
+        {
+            // A replay returns the row as it is now and ignores the new payload. Explicit tenant and participant: a SuperAdmin passes the query filter for every
+            // organisation, and a key from another participant's modal is a new note. Finds archived rows too.
+            var prior = await FindByKeyAsync(participant, key, ct);
+            if (prior != null) return Ok(ApiResponse<ParticipantNoteDto>.Ok(ToDto(prior)));
+        }
+
         var note = new ParticipantNote
         {
             Id = Guid.NewGuid(),
@@ -68,12 +78,28 @@ public class ParticipantNotesController : ControllerBase
             Description = dto.Description,
             IsPinned = dto.IsPinned,
             CreatedByName = GetCreatedByName(),
+            IdempotencyKey = key,
         };
         _db.ParticipantNotes.Add(note);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (key != null && ex.InnerException is PostgresException pg && pg.ConstraintName == ParticipantNote.IdempotencyIndexName)
+        {
+            // A racing save with the SAME key committed between our lookup and our insert: drop everything tracked and answer from the winner.
+            _db.ChangeTracker.Clear();
+            var winner = await FindByKeyAsync(participant, key, ct);
+            if (winner == null) throw;
+            return Ok(ApiResponse<ParticipantNoteDto>.Ok(ToDto(winner)));
+        }
 
         return Ok(ApiResponse<ParticipantNoteDto>.Ok(ToDto(note)));
     }
+
+    private Task<ParticipantNote?> FindByKeyAsync(Participant participant, string key, CancellationToken ct) =>
+        _db.ParticipantNotes.FirstOrDefaultAsync(
+            n => n.TenantId == participant.TenantId && n.ParticipantId == participant.Id && n.IdempotencyKey == key, ct);
 
     [HttpPut("participants/notes/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]

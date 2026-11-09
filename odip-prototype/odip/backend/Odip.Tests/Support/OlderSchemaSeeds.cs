@@ -60,6 +60,7 @@ internal static class OlderSchemaSeeds
         ("IncidentReports", "FireOfficerName", "character varying(100)"),
         ("IncidentReports", "FireReference", "character varying(50)"),
         ("Complaints", "IdempotencyKey", "character varying(100)"),
+        ("ParticipantNotes", "IdempotencyKey", "character varying(100)"),
         ("IncidentReports", "IdempotencyKey", "character varying(100)"),
         ("IncidentReports", "PoliceOfficerName", "character varying(100)"),
         ("IncidentReports", "PoliceReference", "character varying(50)"),

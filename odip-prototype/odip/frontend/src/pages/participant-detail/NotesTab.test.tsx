@@ -230,6 +230,45 @@ describe('NotesTab', () => {
     expect(call.data.description).toBe('Dim the lights from 8pm.')
   })
 
+  async function addNote(user: ReturnType<typeof userEvent.setup>, title: string) {
+    await user.click(screen.getAllByRole('button', { name: /new note/i })[0])
+    await user.type(screen.getByLabelText(/title/i), title)
+    await user.type(screen.getByLabelText(/description/i), 'Dim the lights from 8pm.')
+    await user.click(screen.getByRole('button', { name: /save note/i }))
+  }
+
+  it('a rejected first save and a second press in the same modal send the same retry key; a new opening sends a new one', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({})
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
+
+    await addNote(user, 'Evening wind-down')
+    await screen.findByText(/failed to save note|offline/i)
+    await user.click(screen.getByRole('button', { name: /save note/i }))
+    await addNote(user, 'Morning routine')
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(3)
+    const [first, second, third] = mockCreateMutateAsync.mock.calls.map(([c]) => c.data.idempotencyKey)
+    expect(first).toEqual(expect.any(String))
+    expect(first.length).toBeGreaterThan(0)
+    expect(second).toBe(first)
+    expect(third).toEqual(expect.any(String))
+    expect(third).not.toBe(first)
+  })
+
+  it('an edit sends no retry key', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
+    render(<NotesTab participantId="participant-1" />, { wrapper: MemoryRouter })
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByLabelText(/title/i), ' updated')
+    await user.click(screen.getByRole('button', { name: /save note/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('idempotencyKey')
+  })
+
   it('row actions work: Edit opens the edit form, Archive only asks until confirmed', async () => {
     const user = userEvent.setup()
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })

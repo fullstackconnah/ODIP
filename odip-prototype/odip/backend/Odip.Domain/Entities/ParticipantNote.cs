@@ -9,6 +9,10 @@ namespace Odip.Domain.Entities;
 /// </summary>
 public class ParticipantNote : ITenantEntity
 {
+    /// <summary>Database name of the filtered unique index on (TenantId, ParticipantId, IdempotencyKey) WHERE the key is not null. The Create action matches this name on
+    /// PostgresException.ConstraintName to turn a racing duplicate submit into an idempotent replay instead of a 500.</summary>
+    public const string IdempotencyIndexName = "IX_ParticipantNotes_TenantId_ParticipantId_IdempotencyKey";
+
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public Tenant? Tenant { get; set; }
@@ -21,6 +25,9 @@ public class ParticipantNote : ITenantEntity
 
     public bool IsPinned { get; set; }
     public bool IsArchived { get; set; }
+
+    /// <summary>The client-generated key of the modal session that added this note; a retried save with the same key replays this row instead of making a second note. Null for generated notes and rows made before the key existed.</summary>
+    public string? IdempotencyKey { get; set; }
 
     /// <summary>Set server-side from JWT claims at creation time — never client-supplied.</summary>
     public string CreatedByName { get; set; } = string.Empty;

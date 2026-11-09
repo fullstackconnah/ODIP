@@ -144,6 +144,7 @@ public class ExportTablesTests
         ["ParticipantGroupRevision.GroupKey"] = "the name of a profile section such as medical; it grants nothing",
         ["ImportBatch.IdempotencyKey"] = "a browser's retry key for one Import click; it grants nothing",
         ["Complaint.IdempotencyKey"] = "a browser's retry key for one complaint submit; it grants nothing",
+        ["ParticipantNote.IdempotencyKey"] = "a browser's retry key for one add-note save; it grants nothing",
         ["IncidentReport.IdempotencyKey"] = "a browser's retry key for one incident submit; it grants nothing",
         ["MedicationAdministration.IdempotencyKey"] = "a browser's retry key for one dose record; it grants nothing",
         ["BookingTask.SourceKey"] = "names the rule that made the task, such as leave-coverage:<shift>:<leave>",
