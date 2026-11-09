@@ -171,10 +171,12 @@ public sealed class BudgetLedgerService
         var peopleById = withPlan.ToDictionary(p => p.Id);
         var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, peopleById[s.ParticipantId].MmLevel, AgreementPatternMapper.GroupSizeOf(s.GroupActivityId, s.Ratio))).ToList(), ct);
         var blocks = await ShiftTravelSource.AgreementBlocksAsync(_db, tenantId, shiftRows.Select(s => s.ShiftPatternId), ct);
+        // A Completed group shift is priced at the headcount its claim will use; one not yet completed stays at the quoted N, the most any later claim can be (staff and attendance can still change).
+        var headcount = await GroupHeadcount.LoadAsync(_db, tenantId, shiftRows.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.GroupActivityId), ct);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
-        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks, completions, blocks));
+        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks, completions, blocks, headcount));
         AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
@@ -515,7 +517,7 @@ public sealed class BudgetLedgerService
     /// The ledger items of a shift: one for each part of it, a date and a PACE category (<see cref="ShiftPriceEstimator.PartsOf"/>), so the ledger counts the shift exactly as the claim lines it becomes are filed. Kind and group come
     /// from the shift (completed, past or ahead); only the part's own date places it in a period. A shift with no price is one $0 item that says why.
     /// </summary>
-    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks, Dictionary<Guid, ShiftCompletion> completions, IReadOnlyDictionary<Guid, PlanBlock> blocks)
+    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks, Dictionary<Guid, ShiftCompletion> completions, IReadOnlyDictionary<Guid, PlanBlock> blocks, GroupHeadcount headcount)
     {
         PlanBlock? BlockOf(Guid? id) => id is Guid p ? blocks.GetValueOrDefault(p) : null;
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
@@ -527,7 +529,7 @@ public sealed class BudgetLedgerService
         var hours = Shift.HoursBetween(start, end, endsNextDay);
         var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, start, end, endsNextDay, shift.NightType, pricing.ZoneOf(shift));
         var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, start, end, endsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.ZoneOf(shift), unclaimed,
-            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId), shift.Status == ShiftStatus.Completed ? headcount.Of(shift.GroupActivityId, pricing.ZoneOf(shift)) : 0), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
         // The travel counts in the shift's pool like the claim lines it becomes; its caveat is for the claim, not a ledger note, so the note below is the estimator's own.
         var counted = outcome.IsPriced ? ShiftTravelPricer.Apply(outcome, travel, shift.ServiceDate, state, travelPolicy.KmRate, pricing.ShiftRows(shift.SupportGroupCode).Concat(pricing.PersonalCare).ToList(), travelPolicy.TravelRows) : outcome;
 
