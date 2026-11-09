@@ -3546,6 +3546,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("HasSourceDrift")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean");
 
@@ -3584,6 +3588,11 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId", "SourceKey")
                         .IsUnique()
                         .HasFilter("\"SourceKey\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ParticipantNotes_TenantId_IdempotencyKey")
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.ToTable("ParticipantNotes");
                 });
