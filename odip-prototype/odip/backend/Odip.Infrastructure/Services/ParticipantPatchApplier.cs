@@ -77,7 +77,8 @@ public static class ParticipantPatchApplier
 
         // Only a consent that carries a date needs the provider's today (the caregiver accept path has no request clock, so it uses the system one).
         if (dto.Consents?.Any(c => c.SignedDate.HasValue) == true
-            && ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(db, p.TenantId, clock ?? TimeProvider.System, ct)) is { } consentDateError)
+            && ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(db, p.TenantId, clock ?? TimeProvider.System, ct),
+                await db.ParticipantConsents.Where(c => c.ParticipantId == p.Id).ToListAsync(ct)) is { } consentDateError)
             return consentDateError;
 
         if (dto.LivingArrangement is { } ladValidate)
