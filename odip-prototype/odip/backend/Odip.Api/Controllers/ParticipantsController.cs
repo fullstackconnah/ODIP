@@ -276,12 +276,12 @@ public class ParticipantsController : ControllerBase
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
 
-        var consentDateError = ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
-        if (consentDateError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(consentDateError));
-
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        var consentDateError = ParticipantGridRules.ConsentDateError(dto.Consents, await ProviderTimeZoneResolver.TodayAsync(_db, p.TenantId, _clock, ct));
+        if (consentDateError != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(consentDateError));
 
         // INTAKE-08 fix round 1 (Finding 1b, controller ruling): un-finalising is not a product
         // capability. A participant that has already been finalised (p.IsDraft == false) can

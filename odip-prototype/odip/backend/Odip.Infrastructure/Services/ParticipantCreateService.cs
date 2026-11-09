@@ -47,7 +47,10 @@ public sealed class ParticipantCreateService
     /// <returns>The tracked, unsaved participant; or the 400 message, in the order the controller checked them.</returns>
     public async Task<(Participant? Participant, string? Error)> StageAsync(CreateParticipantDto dto, string actor, CancellationToken ct)
     {
-        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        // The organisation the new participant is saved under (the context stamps it from the request); a context with none keeps the filter's own read.
+        var today = _db.CurrentTenantId is { } tenant
+            ? await ProviderTimeZoneResolver.TodayAsync(_db, tenant, _clock, ct)
+            : await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var error = ParticipantPatchApplier.ValidateNames(dto)
             ?? InvalidMobilityOptions(dto)
             ?? ParticipantPatchApplier.ValidateGender(dto)

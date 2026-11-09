@@ -162,7 +162,7 @@ public class DeletedRecordsTests
     public async Task A_record_written_again_after_its_delete_is_not_a_deleted_history()
     {
         var id = Guid.NewGuid();
-        var name = await SeedAsync([.. Life(id, "Shift"), Hist(id, "Shift", AuditAction.Created, 20, B)]);
+        var name = await SeedAsync([.. Life(id, "Shift"), Hist(id, "Shift", AuditAction.Created, 20)]);
 
         Assert.Equal(404, (await HistoryAsync(name, A, "Shift", id)).Status);
     }

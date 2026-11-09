@@ -180,6 +180,12 @@ for (const vp of VPS) {
     await page.getByText('3 events recorded').waitFor({ state: 'visible', timeout: 20_000 })
     const hover = await page.locator('[id$="-history"]').evaluate((el) => el.scrollWidth - el.clientWidth)
     check(t('shift-full-history: expanded history does not scroll sideways'), hover <= 1, hover)
+    // DSH-F1: the history starts where the "What it held" text starts, not 14 px (border + padding) to its left.
+    const lefts = await page.evaluate(() => ({
+      held: [...document.querySelectorAll('p')].find((p) => p.textContent === 'What it held')?.getBoundingClientRect().left,
+      hist: document.querySelector('[id$="-history"]')?.getBoundingClientRect().left,
+    }))
+    check(t('shift-full-history: history left edge equals the held text left edge (+-1 px)'), lefts.held != null && lefts.hist != null && Math.abs(lefts.held - lefts.hist) <= 1, lefts)
     await noHScroll(page, t('shift-full-history'))
     await tableChecks(page, vp, t('shift-full-history'))
     await crop(page, main(page), `shift-full-history-${vp.name}.png`, vp)

@@ -8,6 +8,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -31,10 +32,12 @@ public class CaregiverController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IHttpContextAccessor _http;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
+    private readonly TimeProvider _clock;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public CaregiverController(OdipDbContext db, IHttpContextAccessor http, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null)
+    public CaregiverController(OdipDbContext db, IHttpContextAccessor http, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null, TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _db = db;
         _http = http;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
@@ -92,6 +95,14 @@ public class CaregiverController : ControllerBase
         return Ok(ApiResponse<CaregiverFormDto>.Ok(dto));
     }
 
+    /// <summary>The provider's calendar date for the link's own organisation: no ambient tenant on this route, so the settings row is read by TenantId past the query filter.</summary>
+    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct)
+    {
+        var row = await _db.ProviderSettings.IgnoreQueryFilters([TenantFilter.Name]).Where(s => s.TenantId == tenantId)
+            .Select(s => new { s.TimeZoneId, s.State }).FirstOrDefaultAsync(ct);
+        return ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, ProviderTimeZoneResolver.For(row?.TimeZoneId, row?.State).Zone);
+    }
+
     /// <summary>The link's own tenant only: no ambient tenant on this route, so the explicit TenantId filter is the scoping. One string leaves the server.</summary>
     private async Task<string?> ProviderNameAsync(Guid tenantId, CancellationToken ct)
     {
@@ -127,6 +138,9 @@ public class CaregiverController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("Relationship can be up to 100 characters."));
         if (sub.Status != CaregiverSubmissionStatus.Draft)
             return Conflict(ApiResponse<object>.Fail("This form has already been submitted and is awaiting review."));
+        // A date Accept would refuse can never be accepted, so it never reaches staff. A date unchanged from the stored consent is left alone, as on a staff save.
+        if (submit && ParticipantGridRules.ConsentDateError(body.Payload.Consents, await ProviderTodayAsync(sub.TenantId, ct), participant.Consents) is { } consentDateError)
+            return BadRequest(ApiResponse<object>.Fail(consentDateError));
 
         sub.CaregiverName = body.CaregiverName.Trim();
         sub.CaregiverRelationship = string.IsNullOrWhiteSpace(body.CaregiverRelationship) ? null : body.CaregiverRelationship.Trim();

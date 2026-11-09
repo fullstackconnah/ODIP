@@ -42,8 +42,8 @@ function Detail({ row }: { row: Row }) {
             {history ? 'Hide full history' : 'Show full history'}
           </Button>
         )}
+        {history && <div id={`${detailId(row)}-history`} className="pt-2"><AuditHistoryTab entityType={row.entityType} entityId={row.entityId} /></div>}
       </div>
-      {history && <div id={`${detailId(row)}-history`} className="pt-2"><AuditHistoryTab entityType={row.entityType} entityId={row.entityId} /></div>}
     </div>
   )
 }

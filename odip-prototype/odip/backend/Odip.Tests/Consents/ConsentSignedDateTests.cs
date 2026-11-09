@@ -141,4 +141,82 @@ public class ConsentSignedDateTests
         Assert.IsType<OkObjectResult>((await Participants(db).Patch(p.Id, new PatchParticipantDto { Consents = Consent(new DateOnly(2000, 1, 1)) }, CancellationToken.None)).Result);
         Assert.Equal(new DateOnly(2000, 1, 1), (await db.ParticipantConsents.SingleAsync()).SignedDate);
     }
+
+    // P59-D2: 14:30 UTC on 10 Nov is already 11 Nov in Sydney (+11) and still 10 Nov in Perth (+8), so only the participant's own organisation's zone gives the right answer.
+    private static readonly TimeProvider LateClock = new FixedClock(new DateTimeOffset(2026, 11, 10, 14, 30, 0, TimeSpan.Zero));
+    private static readonly DateOnly Eleventh = new(2026, 11, 11);
+
+    private static (OdipDbContext Db, Participant Sydney, Participant Perth) TwoZones()
+    {
+        var db = TestDb.Create(Guid.NewGuid().ToString());
+        Guid perthOrg = Guid.NewGuid(), sydneyOrg = Guid.NewGuid();
+        // Perth first: a context that reads "whichever settings row comes first" answers with Perth's zone for everyone.
+        foreach (var (org, zone) in new[] { (perthOrg, "Australia/Perth"), (sydneyOrg, "Australia/Sydney") })
+            db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = org, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = "Org", Address = "1 Test St", State = "NSW", TimeZoneId = zone });
+        var sydney = new Participant { Id = Guid.NewGuid(), TenantId = sydneyOrg, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        var perth = new Participant { Id = Guid.NewGuid(), TenantId = perthOrg, FirstName = "Pia", LastName = "Green", IsActive = true };
+        db.Participants.AddRange(sydney, perth);
+        db.SaveChanges();
+        return (db, sydney, perth);
+    }
+
+    private static UpdateParticipantDto UpdateWith(string first, DateOnly signed) => new()
+    {
+        FirstName = first, LastName = "Brown", IsActive = true, PlanType = PlanType.SelfManaged,
+        OvernightSupport = OvernightSupportType.None, OvernightRatio = SupportRatio.OneToOne, SupportRatio = SupportRatio.OneToOne,
+        Consents = Consent(signed),
+    };
+
+    [Fact]
+    public async Task Update_UsesTheParticipantsOwnOrganisationsToday()
+    {
+        var (db, sydney, perth) = TwoZones();
+        using var _ = db;
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db), clock: LateClock);
+
+        Assert.IsType<OkObjectResult>((await controller.Update(sydney.Id, UpdateWith("Sophie", Eleventh), CancellationToken.None)).Result);
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await controller.Update(perth.Id, UpdateWith("Pia", Eleventh), CancellationToken.None)).Result);
+        Assert.Equal(Future, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
+    }
+
+    [Fact]
+    public async Task Patch_UsesTheParticipantsOwnOrganisationsToday()
+    {
+        var (db, sydney, perth) = TwoZones();
+        using var _ = db;
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db), clock: LateClock);
+
+        Assert.IsType<OkObjectResult>((await controller.Patch(sydney.Id, new PatchParticipantDto { Consents = Consent(Eleventh) }, CancellationToken.None)).Result);
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await controller.Patch(perth.Id, new PatchParticipantDto { Consents = Consent(Eleventh) }, CancellationToken.None)).Result);
+        Assert.Equal(Future, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
+    }
+
+    // H76-4: a legacy consent's old date is not re-checked when the save leaves it as it was.
+    [Fact]
+    public async Task Patch_AcceptsAnUnchangedLegacyDate_ButRefusesAChangedOne()
+    {
+        using var db = TestDb.Create(Guid.NewGuid().ToString());
+        var p = Seed(db);
+        db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = p.Id, ConsentType = ConsentType.Privacy, Granted = true, SignedByName = "Guardian", SignedDate = new DateOnly(1999, 6, 1) });
+        db.SaveChanges();
+
+        Assert.IsType<OkObjectResult>((await Participants(db).Patch(p.Id, new PatchParticipantDto { Consents = Consent(new DateOnly(1999, 6, 1)) }, CancellationToken.None)).Result);
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await Participants(db).Patch(p.Id, new PatchParticipantDto { Consents = Consent(new DateOnly(1998, 1, 1)) }, CancellationToken.None)).Result);
+        Assert.Equal(TooOld, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
+        Assert.Equal(new DateOnly(1999, 6, 1), (await db.ParticipantConsents.SingleAsync()).SignedDate);
+    }
+
+    [Fact]
+    public async Task Patch_RefusesANewConsentDatedTomorrow()
+    {
+        using var db = TestDb.Create(Guid.NewGuid().ToString());
+        var p = Seed(db);
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await Participants(db).Patch(p.Id, new PatchParticipantDto { Consents = Consent(Today.AddDays(1)) }, CancellationToken.None)).Result);
+        Assert.Equal(Future, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
+        Assert.Equal(0, await db.ParticipantConsents.CountAsync());
+    }
 }
