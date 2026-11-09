@@ -301,4 +301,40 @@ public class MedicationsAdministeredByTests
         var saved = await db.MedicationAdministrations.SingleAsync();
         Assert.Equal("Australia/Sydney", saved.AdministeredAtTimeZone);
     }
+
+    [Fact]
+    public async Task RecordAdministration_DeactivatedCaller_Gets403_AndNothingIsSaved()
+    {
+        var (db, tenant) = CreateDb();
+        var med = SeedMed(db, SeedParticipant(db).Id);
+        var user = SeedUser(db, "Dee", "Active");
+        user.IsActive = false;
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant.Object);
+        AttachJwtIdentity(controller, user.Id);
+
+        var result = await controller.RecordAdministration(
+            med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered }, CancellationToken.None);
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(forbidden.Value);
+        Assert.Equal("This account is no longer active, so it can't record medication.", Assert.Single(body.Errors!));
+        Assert.Empty(db.MedicationAdministrations);
+    }
+
+    [Fact]
+    public async Task RecordAdministration_UnknownUserClaim_StillRecordsAsBefore()
+    {
+        var (db, tenant) = CreateDb();
+        var med = SeedMed(db, SeedParticipant(db).Id);
+        var controller = new MedicationsController(db, tenant.Object);
+        AttachJwtIdentity(controller, Guid.NewGuid());
+
+        var result = await controller.RecordAdministration(
+            med.Id, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Single(db.MedicationAdministrations);
+    }
 }
