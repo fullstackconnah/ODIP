@@ -19,7 +19,7 @@ const NOW = new Date('2026-11-16T04:00:00Z')   // 3 pm in Sydney (AEDT)
 const shift = (over: Partial<PortalActivityShiftDto> = {}): PortalActivityShiftDto => ({
   id: 'row-1', groupActivityId: 'ga-1', title: 'Bowling', serviceDate: '2026-11-16', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
   location: 'Strike Lanes', role: 'Driver', state: 'NotStarted', actualStart: null, actualEnd: null, breakStartedAt: null, breakEndedAt: null,
-  participants: [{ shiftId: 's-1', participantId: 'p-1', name: 'Mia Chen' }, { shiftId: 's-2', participantId: 'p-2', name: 'Sam Lee' }],
+  participants: [{ shiftId: 's-1', participantId: 'p-1', name: 'Mia Chen', didNotAttend: false }, { shiftId: 's-2', participantId: 'p-2', name: 'Sam Lee', didNotAttend: false }],
   ...over,
 })
 
