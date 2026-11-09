@@ -53,6 +53,7 @@ const BookingsPage = React.lazy(() => import('./pages/BookingsPage'))
 const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
 const ImportWizardPage = React.lazy(() => import('@/pages/settings/ImportWizardPage'))
+const DeletedRecordsPage = React.lazy(() => import('@/pages/settings/DeletedRecordsPage'))
 const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage'))
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
 const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
@@ -102,7 +103,7 @@ export function HomeRoute() {
   return <PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>
 }
 
-export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation, requiresDataImport }: {
+export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation, requiresDataImport, requiresDeletedRecords }: {
   children: React.ReactNode
   page?: PageKey
   requiresWrite?: boolean
@@ -111,6 +112,8 @@ export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly
   requiresParticipantLifecycleMutation?: boolean
   /** Settings → Import data: an Admin, or a SuperAdmin viewing as an organisation (canImportData). */
   requiresDataImport?: boolean
+  /** Settings → Deleted records: an Admin or a SuperAdmin (canViewDeletedRecords); the `settings` page key alone also admits a Coordinator. */
+  requiresDeletedRecords?: boolean
 }) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
@@ -119,6 +122,7 @@ export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly
   if (requiresWrite && !permissions.canWrite && !(viewableByReadOnly && permissions.isReadOnly)) return <Navigate to="/" replace />
   if (requiresParticipantLifecycleMutation && !permissions.canManageParticipantLifecycle) return <Navigate to="/" replace />
   if (requiresDataImport && !permissions.canImportData) return <Navigate to="/" replace />
+  if (requiresDeletedRecords && !permissions.canViewDeletedRecords) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -185,6 +189,7 @@ const router = createBrowserRouter(
         <Route path="/complaints/:id" element={<PrivateRoute page="complaints"><ComplaintFormPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
+        <Route path="/settings/deleted-records" element={<PrivateRoute page="settings" requiresDeletedRecords><DeletedRecordsPage /></PrivateRoute>} />
         <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
         <Route path="/claims" element={<PrivateRoute page="claims"><ClaimsHubPage /></PrivateRoute>} />

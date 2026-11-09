@@ -286,6 +286,8 @@ export function usePermissions() {
      * not viewing an organisation (an import belongs to one), so: an Admin, or a SuperAdmin viewing as an organisation.
      */
     canImportData: isAdmin || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
+    /** Settings → Deleted records: AuditController admits Admin and SuperAdmin only, and the page key `settings` alone would also admit a Coordinator. */
+    canViewDeletedRecords: isSuperAdmin || isAdmin,
     // RegistersController: the office roles, plus a SuperAdmin viewing an organisation. The complaints register stays with canImportData.
     canDownloadRegisters: isAdmin || isCoordinator || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
 

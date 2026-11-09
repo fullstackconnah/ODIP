@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'retention', 'integrations', 'failed-sends'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'retention', 'deleted-records', 'integrations', 'failed-sends'])
     expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'templates', 'activities', 'referral-sources', 'holidays', 'export'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'deleted-records', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
 
