@@ -60,6 +60,8 @@ public class CaregiverSubmissionsController : ControllerBase
     {
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId, ct);
         if (p == null) return NotFound(ApiResponse<CaregiverLinkDto>.Fail("Participant not found"));
+        // The public form refuses an archived participant's link (the dead-link page), so none is issued.
+        if (!p.IsActive) return BadRequest(ApiResponse<CaregiverLinkDto>.Fail("This participant is archived. Restore them before sending a caregiver link."));
 
         // A new link would revoke the pending answers (they drop off the review list and Accept returns 409): make the reviewer decide first.
         if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))

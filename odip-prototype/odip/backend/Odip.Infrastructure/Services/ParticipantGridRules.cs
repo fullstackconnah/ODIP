@@ -47,6 +47,10 @@ public static class ParticipantGridRules
     public static string? ConsentDateError(IEnumerable<CreateParticipantConsentDto>? consents, DateOnly today) =>
         consents?.Select(c => SignedDateError(c.SignedDate, today)).FirstOrDefault(e => e != null);
 
+    /// <summary>As <see cref="ConsentDateError(IEnumerable{CreateParticipantConsentDto}?, DateOnly)"/>, but a consent whose date equals the stored row's for the same type is not checked: a legacy date saves as it was.</summary>
+    public static string? ConsentDateError(IEnumerable<CreateParticipantConsentDto>? consents, DateOnly today, IEnumerable<ParticipantConsent> stored) =>
+        ConsentDateError(consents?.Where(c => !stored.Any(s => s.ConsentType == c.ConsentType && s.SignedDate == c.SignedDate)), today);
+
     /// <summary>
     /// Writes the answer onto <paramref name="row"/> and saves. A new row that loses the first-save race on the (participant, type) unique index is
     /// dropped, the winner's row is loaded and given this answer, and the save runs once more: last write wins and the caller gets the stored row.
