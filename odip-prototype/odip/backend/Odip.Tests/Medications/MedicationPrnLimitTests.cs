@@ -260,4 +260,22 @@ public class MedicationPrnLimitTests
         var med = AddPrn(f);
         for (var i = 0; i < 4; i++) Assert.Equal(200, Status(await Give(f, med)));
     }
+
+    [Fact]
+    public async Task ThePrnCountOnTheDetail_ReadsTheInjectedClock_ADoseOf23HoursAgoCountsOneOf25DoesNot()
+    {
+        var f = CreateAt(11);
+        var med = AddPrn(f, max: 3, intervalMinutes: 60);
+        foreach (var hoursAgo in new[] { 23, 25 })
+            f.Db.MedicationAdministrations.Add(new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), TenantId = med.TenantId, ParticipantMedicationId = med.Id, ParticipantId = med.ParticipantId, Status = MedicationAdministrationStatus.Administered,
+                AdministeredAt = At(11).AddHours(-hoursAgo), RecordedByName = "Ben Turner", PrnReason = "Headache",
+            });
+        f.Db.SaveChanges();
+
+        var detail = new MedicationsController(f.Db, f.Tenant.Object, slots: new MedicationSlotService(f.Db, f.Clock));
+        var ok = Assert.IsType<OkObjectResult>((await detail.GetById(med.Id, default)).Result);
+        Assert.Equal(1, Assert.IsType<ApiResponse<MedicationDetailDto>>(ok.Value).Data!.PrnDosesInLast24h);
+    }
 }
