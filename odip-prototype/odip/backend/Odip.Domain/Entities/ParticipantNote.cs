@@ -9,9 +9,9 @@ namespace Odip.Domain.Entities;
 /// </summary>
 public class ParticipantNote : ITenantEntity
 {
-    /// <summary>Database name of the filtered unique index on (TenantId, IdempotencyKey) WHERE the key is not null. The Create action matches this name on
+    /// <summary>Database name of the filtered unique index on (TenantId, ParticipantId, IdempotencyKey) WHERE the key is not null. The Create action matches this name on
     /// PostgresException.ConstraintName to turn a racing duplicate submit into an idempotent replay instead of a 500.</summary>
-    public const string IdempotencyIndexName = "IX_ParticipantNotes_TenantId_IdempotencyKey";
+    public const string IdempotencyIndexName = "IX_ParticipantNotes_TenantId_ParticipantId_IdempotencyKey";
 
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }

@@ -1680,9 +1680,9 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
             entity.Property(e => e.Description).HasMaxLength(4000).IsRequired();
             entity.Property(e => e.CreatedByName).HasMaxLength(200).IsRequired();
-            // Retried saves: unique per tenant over NON-NULL keys only, so every existing row (all NULL) is outside the index.
+            // Retried saves: unique per tenant and participant over NON-NULL keys only, so every existing row (all NULL) is outside the index.
             entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
-            entity.HasIndex(e => new { e.TenantId, e.IdempotencyKey })
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.IdempotencyKey })
                 .IsUnique()
                 .HasDatabaseName(ParticipantNote.IdempotencyIndexName)
                 .HasFilter("\"IdempotencyKey\" IS NOT NULL");

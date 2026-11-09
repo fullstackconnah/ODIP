@@ -15,7 +15,7 @@ namespace Odip.Tests.Notes;
 
 /// <summary>
 /// Against a real PostgreSQL (skipped, never failed, without POSTGRES_CONNECTION_STRING): the filtered unique index on
-/// (TenantId, IdempotencyKey) that makes a retried add-note save safe, and the race the controller answers as a replay.
+/// (TenantId, ParticipantId, IdempotencyKey) that makes a retried add-note save safe, and the race the controller answers as a replay.
 /// </summary>
 public class ParticipantNoteRetryPostgresTests : IClassFixture<PostgresFixture>
 {
@@ -56,7 +56,24 @@ public class ParticipantNoteRetryPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(ParticipantNote.IdempotencyIndexName, pg.ConstraintName);
     }
 
-    /// <summary>Hands the first save a rival that commits the same (tenant, key) just before it, which is what two saves passing the lookup together look like.</summary>
+    [SkippableFact]
+    public async Task TheSameKeyOnTwoParticipantsInATenant_SavesBothRows()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (db, tenant) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var first = NewParticipant(tenant);
+        var second = NewParticipant(tenant);
+        db.Participants.AddRange(first, second);
+        await db.SaveChangesAsync(Ct);
+
+        db.ParticipantNotes.AddRange(NewNote(tenant, first.Id, "shared-key"), NewNote(tenant, second.Id, "shared-key"));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(2, await db.ParticipantNotes.CountAsync(n => n.TenantId == tenant && n.IdempotencyKey == "shared-key", Ct));
+    }
+
+    /// <summary>Hands the first save a rival that commits the same (tenant, participant, key) just before it, which is what two saves passing the lookup together look like.</summary>
     private sealed class RivalFirstInterceptor(Func<Task> rival) : SaveChangesInterceptor
     {
         private bool _fired;

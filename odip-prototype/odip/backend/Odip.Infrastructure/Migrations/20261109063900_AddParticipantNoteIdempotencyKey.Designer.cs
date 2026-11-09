@@ -3592,9 +3592,9 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"SourceKey\" IS NOT NULL");
 
-                    b.HasIndex("TenantId", "IdempotencyKey")
+                    b.HasIndex("TenantId", "ParticipantId", "IdempotencyKey")
                         .IsUnique()
-                        .HasDatabaseName("IX_ParticipantNotes_TenantId_IdempotencyKey")
+                        .HasDatabaseName("IX_ParticipantNotes_TenantId_ParticipantId_IdempotencyKey")
                         .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.ToTable("ParticipantNotes");

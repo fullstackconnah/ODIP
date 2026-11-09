@@ -18,9 +18,9 @@ namespace Odip.Infrastructure.Migrations
                 nullable: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_ParticipantNotes_TenantId_IdempotencyKey",
+                name: "IX_ParticipantNotes_TenantId_ParticipantId_IdempotencyKey",
                 table: "ParticipantNotes",
-                columns: new[] { "TenantId", "IdempotencyKey" },
+                columns: new[] { "TenantId", "ParticipantId", "IdempotencyKey" },
                 unique: true,
                 filter: "\"IdempotencyKey\" IS NOT NULL");
         }
@@ -29,7 +29,7 @@ namespace Odip.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
-                name: "IX_ParticipantNotes_TenantId_IdempotencyKey",
+                name: "IX_ParticipantNotes_TenantId_ParticipantId_IdempotencyKey",
                 table: "ParticipantNotes");
 
             migrationBuilder.DropColumn(
