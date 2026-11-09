@@ -65,6 +65,18 @@ describe('a staff write refreshes the staff overview', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['staff-overview', 'staff-1'] })
   })
 
+  it('after an update, also the roster board and the staff availability', async () => {
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useUpdateStaff(), { wrapper: wrapperFor(client) })
+
+    result.current.mutate({ id: 'staff-1', data: {} as UpdateStaffDto })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['staff-available'] })
+  })
+
   it('after a delete', async () => {
     const client = new QueryClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')

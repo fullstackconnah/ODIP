@@ -97,7 +97,7 @@ public class PersonsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             FirstName = dto.FirstName.Trim(), LastName = dto.LastName.Trim(),
-            Phone = dto.Phone, Mobile = dto.Mobile, Email = dto.Email,
+            Phone = dto.Phone, Mobile = dto.Mobile, Email = StoredEmail(dto.Email),
             AddressLine = dto.AddressLine, Suburb = dto.Suburb, State = dto.State, Postcode = dto.Postcode,
             Organisation = dto.Organisation, DateOfBirth = dto.DateOfBirth, Notes = dto.Notes,
         };
@@ -120,7 +120,7 @@ public class PersonsController : ControllerBase
         if (contactError != null) return BadRequest(ApiResponse<PersonDto>.Fail(contactError));
 
         p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim();
-        p.Phone = dto.Phone; p.Mobile = dto.Mobile; p.Email = dto.Email;
+        p.Phone = dto.Phone; p.Mobile = dto.Mobile; p.Email = StoredEmail(dto.Email);
         p.AddressLine = dto.AddressLine; p.Suburb = dto.Suburb; p.State = dto.State; p.Postcode = dto.Postcode;
         p.Organisation = dto.Organisation; p.DateOfBirth = dto.DateOfBirth; p.Notes = dto.Notes;
         p.UpdatedAt = DateTime.UtcNow;
@@ -135,6 +135,9 @@ public class PersonsController : ControllerBase
         string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName)
             ? "Provide at least a first or last name."
             : null;
+
+    /// <summary>The email as stored: what ValidateContactAsync checked (trimmed), with a blank kept as null.</summary>
+    internal static string? StoredEmail(string? email) => email?.Trim() is { Length: > 0 } e ? e : null;
 
     /// <summary>A non-blank email must look like one (on update only when each changed, so an old stored value never blocks an unrelated edit), and a date of birth can't be after the provider's today.</summary>
     internal static async Task<string?> ValidateContactAsync(OdipDbContext db, TimeProvider clock, CreatePersonDto dto, string? storedEmail, DateOnly? storedDob, CancellationToken ct) =>

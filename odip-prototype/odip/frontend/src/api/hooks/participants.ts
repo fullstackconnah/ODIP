@@ -263,6 +263,8 @@ export function usePatchParticipant() {
       // The checklist's "Profile details" item and the worklist are derived from these fields.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: ['participant-rostering', vars.id] })
       // The funding source decides whether the NDIS ledger counts this participant.
       refreshBudgetFigures(qc, [vars.id])
     },
@@ -296,6 +298,7 @@ export function useUpdateParticipantStatus() {
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
       // Archiving or reactivating changes who the onboarding worklist lists.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
 }

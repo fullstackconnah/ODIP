@@ -34,7 +34,7 @@ public sealed class NotificationRaiser : INotificationRaiser
     {
         var payloadJson = JsonSerializer.Serialize(payload);
         // The bell's text: one per event, the same for every recipient (the payload's own RecipientEmail never reaches it).
-        var (title, linkTo) = InAppNotificationText.Build(type, entityId, payload, entityType);
+        var (title, linkTo) = InAppNotificationText.Build(type, entityId, payload);
         // 5-minute sliding dedupe window (design spec §1) — a double-click or retry-on-transient-
         // error re-submitting the same action must not raise a second row for the same triple.
         var cutoff = DateTime.UtcNow.AddMinutes(-5);

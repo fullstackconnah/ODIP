@@ -78,6 +78,8 @@ export function useUpdateStaff() {
       qc.invalidateQueries({ queryKey: ['staff'] })
       qc.invalidateQueries({ queryKey: ['staff-detail', vars.id] })
       qc.invalidateQueries({ queryKey: ['staff-overview', vars.id] })
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: ['staff-available'] })
     },
   })
 }

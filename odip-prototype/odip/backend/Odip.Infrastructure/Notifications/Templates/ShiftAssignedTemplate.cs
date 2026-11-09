@@ -10,8 +10,8 @@ namespace Odip.Infrastructure.Notifications.Templates;
 public record ShiftAssignedPayload(
     string RecipientEmail, string ParticipantName, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, IReadOnlyList<ShiftAssignedLine>? MoreShifts = null, bool FirstIsActivity = false);
 
-/// <summary>One more shift in a <see cref="ShiftAssignedPayload"/>.</summary>
-public record ShiftAssignedLine(string ParticipantName, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime);
+/// <summary>One more shift in a <see cref="ShiftAssignedPayload"/>. <paramref name="IsActivity"/> marks a group activity part; it is optional so rows already in the outbox still read back (as shifts).</summary>
+public record ShiftAssignedLine(string ParticipantName, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool IsActivity = false);
 
 public static class ShiftAssignedTemplate
 {
@@ -35,13 +35,25 @@ public static class ShiftAssignedTemplate
                           $"<p><a href=\"{Html.Attr(baseUrl)}/portal\">View it</a></p>");
 
         var lines = new[] { new ShiftAssignedLine(p.ParticipantName, p.ServiceDate, p.StartTime, p.EndTime) }.Concat(more).ToList();
+        var activities = (p.FirstIsActivity ? 1 : 0) + more.Count(l => l.IsActivity);
+        var shifts = lines.Count - activities;
+        // Counts are of kinds: with no activity the copy is the shifts-only wording; with any, it names both ("1 shift and 2 group activities").
+        var (subject, lead) = activities == 0
+            ? ($"New shifts: {lines.Count} shifts from {Html.Date(p.ServiceDate)}", $"You've been assigned {lines.Count} shifts:")
+            : ($"New work: {Counted(shifts, activities)} from {Html.Date(p.ServiceDate)}", $"You've been put on {Counted(shifts, activities)}:");
         static string Line(ShiftAssignedLine l, string name) => $"{name}, {Html.Date(l.ServiceDate)} {Html.Time(l.StartTime)} to {Html.Time(l.EndTime)}";
         return new(
             RecipientAddress: p.RecipientEmail,
-            Subject: $"New shifts: {lines.Count} shifts from {Html.Date(p.ServiceDate)}",
-            PlainTextBody: $"You've been assigned {lines.Count} shifts:\n" + string.Concat(lines.Select(l => $"- {Line(l, l.ParticipantName)}\n")) +
+            Subject: subject,
+            PlainTextBody: lead + "\n" + string.Concat(lines.Select(l => $"- {Line(l, l.ParticipantName)}\n")) +
                            $"\nView them: {baseUrl}/portal",
-            HtmlBody: $"<p>You've been assigned {lines.Count} shifts:</p><ul>" + string.Concat(lines.Select(l => $"<li>{Line(l, Html.E(l.ParticipantName))}</li>")) + "</ul>" +
+            HtmlBody: $"<p>{lead}</p><ul>" + string.Concat(lines.Select(l => $"<li>{Line(l, Html.E(l.ParticipantName))}</li>")) + "</ul>" +
                       $"<p><a href=\"{Html.Attr(baseUrl)}/portal\">View them</a></p>");
+    }
+
+    private static string Counted(int shifts, int activities)
+    {
+        var a = activities == 1 ? "1 group activity" : $"{activities} group activities";
+        return shifts == 0 ? a : $"{(shifts == 1 ? "1 shift" : $"{shifts} shifts")} and {a}";
     }
 }

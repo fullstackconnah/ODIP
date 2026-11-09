@@ -146,7 +146,32 @@ public class PersonsControllerTests
         var result = await new PersonsController(db, null, new FixedClock()).Create(Contact(email), CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
-        Assert.Equal(email, Assert.Single(db.People).Email);
+        Assert.Equal(string.IsNullOrEmpty(email) ? null : email, Assert.Single(db.People).Email);
+    }
+
+    [Fact]
+    public async Task Create_PaddedEmail_IsStoredTrimmed_AndABlankOneAsNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new PersonsController(db, null, new FixedClock());
+
+        await controller.Create(Contact("  karen@example.com "), CancellationToken.None);
+        await controller.Create(Contact("   "), CancellationToken.None);
+
+        Assert.Equal(new string?[] { "karen@example.com", null }, db.People.OrderBy(x => x.Email == null).Select(x => x.Email).ToArray());
+    }
+
+    [Fact]
+    public async Task Update_PaddedEmail_IsStoredTrimmed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var person = new Person { Id = Guid.NewGuid(), FirstName = "Karen", LastName = "Johnson", Email = "old@example.com" };
+        db.People.Add(person);
+        db.SaveChanges();
+
+        await new PersonsController(db, null, new FixedClock()).Update(person.Id, new UpdatePersonDto { FirstName = "Karen", LastName = "Johnson", Email = " new@example.com  " }, CancellationToken.None);
+
+        Assert.Equal("new@example.com", (await db.People.AsNoTracking().SingleAsync()).Email);
     }
 
     [Fact]
