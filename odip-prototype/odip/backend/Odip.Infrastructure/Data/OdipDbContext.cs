@@ -184,6 +184,9 @@ public class OdipDbContext : DbContext
     /// </summary>
     public string? AuditActorName { get; set; }
 
+    /// <summary>The organisation this request acts in: the view-as organisation for a SuperAdmin; null for an unscoped SuperAdmin (their token still carries a home tenant) and when none is in scope. The audit interceptor stamps it on rows.</summary>
+    public Guid? CurrentTenantId => _tenant.IsSuperAdmin ? null : _tenant.TenantId;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -1164,7 +1167,7 @@ public class OdipDbContext : DbContext
 
         // ── AuditLog ─────────────────────────────────────────────
         // Column types must match the "AddAuditLog" migration exactly (varchar(100)/varchar(20)/
-        // varchar(200)/text) since we cannot add a new migration to reconcile a mismatch — in
+        // varchar(200)/text), which a later migration would otherwise have to reconcile — in
         // particular Action needs HasConversion<string>() or EF's default int mapping would send
         // an integer parameter into the migration's character varying(20) column and fail at runtime.
         modelBuilder.Entity<AuditLog>(entity =>
@@ -1177,6 +1180,8 @@ public class OdipDbContext : DbContext
 
             entity.HasIndex(e => e.ChangedAt);
             entity.HasIndex(e => new { e.EntityType, e.EntityId });
+            // The Deleted records list: one organisation's deletions, newest first. No FK and no backfill: rows from before the column have none.
+            entity.HasIndex(e => new { e.TenantId, e.Action, e.ChangedAt });
         });
 
         // ── TripInstance — new FK to SupportActivityGroup ─────────

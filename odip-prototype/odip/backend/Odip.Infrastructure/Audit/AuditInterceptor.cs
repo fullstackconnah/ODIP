@@ -97,6 +97,12 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
 
         var entries = new List<AuditLog>();
         var now = DateTimeOffset.UtcNow;
+        var ambient = (context as OdipDbContext)?.CurrentTenantId;
+
+        // Rows written by hand (SettingChangeAudit, AgreementAudit, the controllers that add their own) belong to the request's organisation, unless they describe a global table.
+        foreach (var e in context.ChangeTracker.Entries<AuditLog>()
+            .Where(e => e.State == EntityState.Added && e.Entity.TenantId == null && !AuditedEntities.Global.Contains(e.Entity.EntityType)))
+            e.Entity.TenantId = ambient;
 
         foreach (var entry in context.ChangeTracker.Entries())
         {
@@ -131,11 +137,21 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
                 ChangedAt = now,
                 ChangedById = changedById,
                 ChangedByName = changedByName,
+                TenantId = TenantOf(entry, ambient),
                 Changes = JsonSerializer.Serialize(changes)
             });
         }
 
         return entries;
+    }
+
+    // The entity's own tenant (also the nullable ones: IncidentReport, TripClaim, ClaimLineItem), else the request's. A global table's row belongs to no organisation.
+    private static Guid? TenantOf(EntityEntry entry, Guid? ambient)
+    {
+        if (AuditedEntities.Global.Contains(entry.Entity.GetType().Name)) return null;
+        var p = entry.Properties.FirstOrDefault(x => x.Metadata.Name == "TenantId");
+        if (p is null) return ambient;
+        return (entry.State == EntityState.Deleted ? p.OriginalValue : p.CurrentValue) is Guid g && g != Guid.Empty ? g : null;
     }
 
     private static Guid GetEntityId(EntityEntry entry)

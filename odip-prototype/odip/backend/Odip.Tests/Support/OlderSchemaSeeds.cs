@@ -11,6 +11,7 @@ internal static class OlderSchemaSeeds
 {
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
+        ("AuditLogs", "TenantId", "uuid"),
         ("ServiceAgreementDrafts", "AgreementId", "uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'"),
         ("ServiceAgreementDrafts", "AgreementKind", "integer NOT NULL DEFAULT 0"),
         ("ServiceAgreementDrafts", "AgreementName", "character varying(80)"),

@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '../client'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { apiClient, apiGet } from '../client'
+import type { PagedResult } from '../types'
 
 export interface AuditChange {
   field: string
@@ -33,5 +34,26 @@ export function useAuditHistory(entityType: string, entityId: string) {
       return res.data
     },
     enabled: Boolean(entityType && entityId),
+  })
+}
+
+export interface DeletedRecord {
+  id: string
+  entityType: string
+  entityId: string
+  deletedAt: string
+  deletedByName: string | null
+  /** The values the record held when it was deleted. */
+  fields: AuditChange[]
+}
+
+export const DELETED_RECORDS_PAGE_SIZE = 25
+
+/** Settings › Deleted records (Admin): one page of the organisation's deletions, newest first (the server's order), optionally of one type. */
+export function useDeletedRecords(entityType: string, page: number) {
+  return useQuery({
+    queryKey: ['audit', 'deleted', entityType || 'all', page],
+    queryFn: () => apiGet<PagedResult<DeletedRecord>>('/audit/deleted', { entityType: entityType || undefined, page, pageSize: DELETED_RECORDS_PAGE_SIZE }),
+    placeholderData: keepPreviousData,
   })
 }

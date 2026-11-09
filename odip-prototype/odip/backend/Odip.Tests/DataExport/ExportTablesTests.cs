@@ -59,6 +59,8 @@ public class ExportTablesTests
         Assert.Empty(exported.Concat(leftOut).Except(model));
         Assert.Equal(exported.Count, exported.Distinct().Count());
         Assert.Equal((89, 14), (exported.Count, leftOut.Count));
+        // On purpose: the audit log now has a TenantId, but old rows have none, so it stays out of the export.
+        Assert.Contains(typeof(AuditLog), leftOut);
     }
 
     [Fact]

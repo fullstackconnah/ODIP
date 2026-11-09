@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'retention', 'integrations', 'failed-sends'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'retention', 'deleted-records', 'integrations', 'failed-sends'])
     expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'templates', 'activities', 'referral-sources', 'holidays', 'export'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'compliance', 'billing', 'safety', 'onboarding', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'deleted-records', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
 
@@ -38,6 +38,15 @@ describe('who sees which section', () => {
     expect(keysOf('Admin')).not.toContain('whats-new')
     const platform = visibleSections(ROLES.SuperAdmin()).filter(s => s.group === 'Platform')
     expect(platform.at(-1)?.key).toBe('whats-new')
+  })
+
+  it('shows Deleted records to an Admin and a SuperAdmin in an organisation, right after Data retention, and to nobody else', () => {
+    expect(keysOf('Admin')).toContain('deleted-records')
+    expect(keysOf('SuperAdmin')).toContain('deleted-records')
+    expect(keysOf('Coordinator')).not.toContain('deleted-records')
+    expect(keysOf('SuperAdminNoOrg')).not.toContain('deleted-records')
+    const admin = keysOf('Admin')
+    expect(admin.indexOf('deleted-records')).toBe(admin.indexOf('retention') + 1)
   })
 
   it('groups them, with My account first for everyone and only My account and Platform for a SuperAdmin with no organisation', () => {

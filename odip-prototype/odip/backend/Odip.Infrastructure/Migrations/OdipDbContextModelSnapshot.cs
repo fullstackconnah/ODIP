@@ -339,11 +339,16 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ChangedAt");
 
                     b.HasIndex("EntityType", "EntityId");
+
+                    b.HasIndex("TenantId", "Action", "ChangedAt");
 
                     b.ToTable("AuditLogs");
                 });
