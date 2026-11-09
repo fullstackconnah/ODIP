@@ -10,7 +10,7 @@ const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancell
 const dueDay = (t: TaskDto) => t.dueDate?.slice(0, 10) ?? ''
 
 /** The Tasks due group (SHAPE §5, call 11): overdue, then due today, ticked with the server's own Done, which writes the completion only. */
-export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }: { today: string; mayCloseBudgetReview: boolean }): GroupModel {
+export function useTasksGroup(enabled: boolean, { mayCloseBudgetReview }: { mayCloseBudgetReview: boolean }): GroupModel {
   // Overdue is the server's own rule (the dashboard's Overdue figure); due today is the server's too (dueToday, on the provider's day, never the browser's). Both are full rows with their
   // notes, so Done never wipes them (the summary no longer carries task rows).
   const overdue = useTasks({ status: 'Overdue' }, { enabled })
@@ -40,7 +40,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
           void overdue.refetch(); void dueOnToday.refetch()
           return { announce: 'Task changed. Open the full task workflow before marking it done.', stale: true, keep: true }
         }
-        await completeTask.mutateAsync({ id: t.id, completedDate: today })
+        await completeTask.mutateAsync({ id: t.id })
         return { announce: `Marked done: ${t.title}.` }
       },
     }
