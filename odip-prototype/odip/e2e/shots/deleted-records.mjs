@@ -75,6 +75,33 @@ const noHScroll = async (page, ctx) => {
   const o = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   check(`${ctx}: no horizontal scroll`, o <= 0, o)
 }
+// The table, the card and the date, which the page-level check above cannot see (the table scrolls inside its pane; the card button can sit over the meta line).
+const DATE_RE = /\d{2}\/\d{2}\/\d{4}, \d{1,2}:\d{2}\s?(am|pm)/
+const tableChecks = async (page, vp, ctx) => {
+  const m = await page.evaluate(() => {
+    const table = document.querySelector("table")
+    let box = table.parentElement
+    while (box && box !== document.body && !/(auto|scroll|hidden)/.test(getComputedStyle(box).overflowX)) box = box.parentElement
+    const hit = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1
+    const overlaps = []
+    for (const tr of table.querySelectorAll("tbody tr:not([data-row-detail])")) {
+      const btn = tr.querySelector("button[aria-expanded]")
+      if (!btn) continue
+      const b = btn.getBoundingClientRect()
+      for (const td of tr.querySelectorAll("td[data-card=meta]")) {
+        const range = document.createRange()
+        range.selectNodeContents(td)
+        if ([...range.getClientRects()].some((r) => r.width > 0 && hit(r, b))) overlaps.push(td.textContent.slice(0, 24))
+      }
+    }
+    const dates = [...table.querySelectorAll("tbody td[data-label=Deleted]")].map((td) => { const el = td.querySelector("span") ?? td; return { text: el.textContent, over: Math.max(el.scrollWidth - el.clientWidth, td.scrollWidth - td.clientWidth) } })
+    return { tableOver: box.scrollWidth - box.clientWidth, overlaps, dates }
+  })
+  if (!vp.touch) check(ctx + ": table fits its pane (no inner horizontal scroll)", m.tableOver <= 1, m.tableOver)
+  if (vp.touch) check(ctx + ": no Show details button over a meta line", m.overlaps.length === 0, m.overlaps)
+  const bad = m.dates.filter((d) => d.over > 1 || !DATE_RE.test(d.text))
+  check(ctx + ": every Deleted date is whole (" + m.dates.length + " rows)", m.dates.length > 0 && bad.length === 0, bad.slice(0, 3))
+}
 const open = async (page, ready) => {
   await page.goto(`${BASE_URL}/settings?section=deleted-records`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   if (ready) await ready(page)
@@ -103,6 +130,7 @@ for (const vp of VPS) {
     check(t('list: no pager with 8 rows'), (await page.getByRole('button', { name: 'Next page' }).count()) === 0)
     check(t('list: a deleted-by-nobody row reads System'), text.includes('System'))
     await noHScroll(page, t('list'))
+    await tableChecks(page, vp, t('list'))
     const filter = page.getByRole('button', { name: /All types/ }).first()
     const fh = await filter.evaluate((e) => ({ h: e.getBoundingClientRect().height, want: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--control-h')) || null }))
     const wantH = vp.touch ? 44 : 32
@@ -130,6 +158,7 @@ for (const vp of VPS) {
     check(t('detail-open-shift: 2px left border, 12px padding-left'), geo.border === '2px' && geo.padLeft === '12px', geo)
     check(t('detail-open-shift: Open participant link shows'), geo.link)
     await noHScroll(page, t('detail-open-shift'))
+    await tableChecks(page, vp, t('detail-open-shift'))
     await crop(page, main(page), `detail-open-shift-${vp.name}.png`, vp)
     await showButtons(page).first().click().catch(() => {})
 
@@ -137,6 +166,7 @@ for (const vp of VPS) {
       await page.getByRole('button', { name: /^(Show|Hide) details for Shift$/ }).first().click()
       await page.getByText('No details were kept for this record.').waitFor({ state: 'visible', timeout: 20_000 })
       await noHScroll(page, t('sparse-row-detail'))
+    await tableChecks(page, vp, t('sparse-row-detail'))
       await crop(page, main(page), `sparse-row-detail-${vp.name}.png`, vp)
     }
     await fullPage(page, path.join(OUT_DIR, `full-page-${vp.name}.png`))
@@ -148,11 +178,17 @@ for (const vp of VPS) {
     const { context, page } = await openPage(browser, vp, { mode: 'long' })
     await open(page, waitText(LONG))
     const cell = page.getByText(LONG).first()
-    const m = await cell.evaluate((e) => { const lh = parseFloat(getComputedStyle(e).lineHeight); return { cut: e.scrollWidth - e.clientWidth, lines: Math.round(e.getBoundingClientRect().height / lh), h: e.closest('tr')?.getBoundingClientRect().height ?? null } })
-    check(t('long-label: title is not cut sideways'), m.cut <= 0, m)
-    check(t('long-label: title wraps onto at least 2 lines'), m.lines >= 2, m)
-    if (!vp.touch) check(t('long-label: the long row is taller than --row-h'), m.h > 36, m)
+    const m = await cell.evaluate((e) => { const lh = parseFloat(getComputedStyle(e).lineHeight); return { title: e.getAttribute('title'), cut: e.scrollWidth - e.clientWidth, lines: Math.round(e.getBoundingClientRect().height / lh), h: e.closest('tr')?.getBoundingClientRect().height ?? null } })
+    if (vp.touch) {
+      check(t('long-label: title is not cut sideways'), m.cut <= 0, m)
+      check(t('long-label: title wraps onto at least 2 lines'), m.lines >= 2, m)
+    } else {
+      // one line, ellipsis, full label in the tooltip, row stays --row-h
+      check(t('long-label: title is one truncated line with the full label as its tooltip'), m.cut > 0 && m.lines === 1 && m.title === LONG, m)
+      check(t('long-label: the long row is --row-h (34)'), Math.abs(m.h - 34) <= 1.5, m)
+    }
     await noHScroll(page, t('long-label'))
+    await tableChecks(page, vp, t('long-label'))
     if (vp.touch) await crop(page, main(page), `long-label-${vp.name}.png`, vp)
     await context.close()
   } catch (e) { check(t('long-label ran'), false, String(e.message).split('\n')[0]) }
@@ -163,6 +199,7 @@ for (const vp of VPS) {
     await open(page, waitText('Showing 1-25 of 60'))
     const next = page.getByRole('button', { name: 'Next page' })
     check(t('pager: shows "Showing 1-25 of 60" with 25 rows'), (await next.count()) === 1)
+    await tableChecks(page, vp, t('pager'))
     if (vp.touch) {
       const hs = await page.locator('button[aria-label="Next page"], button[aria-label="Previous page"]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))
       check(t('pager: buttons are at least 44 high'), hs.length === 2 && hs.every((h) => h >= 43.5), hs)

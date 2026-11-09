@@ -96,7 +96,6 @@ const ROUTES: Route[] = [
   { path: '/complaints/:id', url: `/complaints/${ID}`, load: () => import('@/pages/ComplaintFormPage') },
   { path: '/bookings', url: '/bookings', load: () => import('@/pages/BookingsPage') },
   { path: '/settings', url: '/settings', load: () => import('@/pages/SettingsPage') },
-  { path: '/settings/deleted-records', url: '/settings/deleted-records', load: () => import('@/pages/settings/DeletedRecordsPage') },
   { path: '/settings/import/:kind', url: '/settings/import/participants', load: () => import('@/pages/settings/ImportWizardPage') },
   { path: '/qualifications', url: '/qualifications', load: () => import('@/pages/QualificationsPage') },
   { path: '/claims', url: '/claims', load: () => import('@/pages/claims-hub/ClaimsHubPage') },

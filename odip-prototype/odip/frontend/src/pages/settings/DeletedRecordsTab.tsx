@@ -43,7 +43,8 @@ export default function DeletedRecordsTab() {
   const rows: Row[] = useMemo(() => (data?.items ?? []).map(r => ({ ...r, label: recordLabel(r.entityType, r.fields) })), [data])
 
   const columns: Column<Row>[] = [
-    { key: 'label', header: 'Record', wrap: true, minWidth: '20rem', mobile: 'primary' },
+    // One line at 1280 (ellipsis, full label in the tooltip and the detail); it wraps in the phone card.
+    { key: 'label', header: 'Record', maxWidth: '12rem', mobile: 'primary' },
     { key: 'entityType', header: 'Type', mobile: 'meta', render: r => typeName(r.entityType) },
     { key: 'deletedByName', header: 'Deleted by', maxWidth: '12rem', mobile: 'meta', render: r => r.deletedByName ?? 'System' },
     {
@@ -51,7 +52,7 @@ export default function DeletedRecordsTab() {
       render: r => <span className="tabular-nums" title={formatDateTimeAu(r.deletedAt)}>{formatDateTimeAu(r.deletedAt)}</span>,
     },
     {
-      key: 'actions', header: '', srHeader: 'Details', align: 'right', mobile: 'trail',
+      key: 'actions', header: '', srHeader: 'Details', align: 'right',
       render: r => {
         const open = openId === r.id
         return (

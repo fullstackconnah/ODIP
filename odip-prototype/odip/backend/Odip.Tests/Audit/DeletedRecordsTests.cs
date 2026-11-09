@@ -19,11 +19,11 @@ public class DeletedRecordsTests
     private static readonly Guid B = Guid.NewGuid();
     private static readonly DateTimeOffset T0 = new(2026, 11, 1, 3, 0, 0, TimeSpan.Zero);
 
-    private static OdipDbContext Db(string name, Guid? tenantId)
+    private static OdipDbContext Db(string name, Guid? tenantId, bool superAdmin = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true); // sees every row, so the controller's own tenant filter is what is under test
+        tenant.Setup(t => t.IsSuperAdmin).Returns(superAdmin); // a scoped caller by default; no tenant query filter touches AuditLogs
         return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).Options, tenant.Object);
     }
 
@@ -32,9 +32,9 @@ public class DeletedRecordsTests
         Id = Guid.NewGuid(), EntityType = type, EntityId = Guid.NewGuid(), Action = action, ChangedAt = T0.AddMinutes(minutes), ChangedByName = "Sam Lee", TenantId = tenant, Changes = changes,
     };
 
-    private static async Task<JsonElement> ListAsync(string name, Guid? tenantId, string? type = null, int page = 1, int pageSize = 50)
+    private static async Task<JsonElement> ListAsync(string name, Guid? tenantId, string? type = null, int page = 1, int pageSize = 50, bool superAdmin = false)
     {
-        await using var db = Db(name, tenantId);
+        await using var db = Db(name, tenantId, superAdmin);
         var result = await new AuditController(db, NullLogger<AuditController>.Instance).GetDeleted(type, page, pageSize, CancellationToken.None);
         var json = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(result).Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         return JsonDocument.Parse(json).RootElement.GetProperty("data").Clone();
@@ -82,6 +82,18 @@ public class DeletedRecordsTests
         var name = await SeedAsync(Row(null), Row(A));
 
         var list = await ListAsync(name, tenantId: null);
+
+        Assert.Equal(0, list.GetProperty("totalCount").GetInt32());
+        Assert.Equal(0, list.GetProperty("items").GetArrayLength());
+    }
+
+    // An unscoped SuperAdmin's token still carries a home tenant; they must not read that organisation's deletions.
+    [Fact]
+    public async Task An_unscoped_SuperAdmin_with_a_home_tenant_gets_an_empty_list()
+    {
+        var name = await SeedAsync(Row(A), Row(B));
+
+        var list = await ListAsync(name, A, superAdmin: true);
 
         Assert.Equal(0, list.GetProperty("totalCount").GetInt32());
         Assert.Equal(0, list.GetProperty("items").GetArrayLength());

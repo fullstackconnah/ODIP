@@ -24,12 +24,15 @@ public class AuditInterceptorTenantTests
         .AddInterceptors([new AuditInterceptor(new HttpContextAccessor()), .. extra])
         .Options;
 
-    // A SuperAdmin context (no query filter in the way) acting in `ambient`: A when viewing as A, null when not viewing an organisation.
+    private static readonly Guid Home = Guid.NewGuid();
+
+    // `ambient` is the organisation in scope: A when viewing as A (IsSuperAdmin cleared, as CurrentTenant does under view-as); null is an unscoped
+    // SuperAdmin, whose token still carries a home tenant.
     private static OdipDbContext Db(DbContextOptions<OdipDbContext> options, Guid? ambient)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(ambient);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        tenant.Setup(t => t.TenantId).Returns(ambient ?? Home);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(ambient is null);
         return new OdipDbContext(options, tenant.Object);
     }
 
@@ -39,7 +42,7 @@ public class AuditInterceptorTenantTests
         await using (var seed = Db(options, ambient)) { seed.Add(entity); await seed.SaveChangesAsync(); }
         await using (var db = Db(options, ambient))
         {
-            db.Remove(await db.FindAsync<T>(db.Entry(entity).Property("Id").CurrentValue));
+            db.Remove(entity); // the seeded instance: a scoped context would not find a row of another organisation through its query filter
             await db.SaveChangesAsync();
         }
         await using var check = Db(options, ambient);
@@ -72,6 +75,28 @@ public class AuditInterceptorTenantTests
     {
         var availability = new StaffAvailability { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), AvailabilityType = AvailabilityType.Unavailable };
         Assert.Null((await DeletedRowAsync(null, availability)).TenantId);
+    }
+
+    [Fact]
+    public async Task Rows_without_a_tenant_column_get_no_tenant_for_an_unscoped_SuperAdmin_whose_token_has_a_home_tenant()
+    {
+        var assignment = new StaffAssignment { Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), UserId = Guid.NewGuid() };
+        Assert.Null((await DeletedRowAsync(null, assignment)).TenantId);
+
+        var options = Options();
+        await using (var db = Db(options, null))
+        {
+            db.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), EntityType = "StaffAssignment", EntityId = Guid.NewGuid(), Action = AuditAction.Created });
+            await db.SaveChangesAsync();
+        }
+        await using var check = Db(options, null);
+        Assert.Null((await check.AuditLogs.SingleAsync()).TenantId);
+    }
+
+    [Fact]
+    public async Task An_entity_with_an_empty_tenant_id_gets_an_audit_row_with_no_tenant()
+    {
+        Assert.Null((await DeletedRowAsync(A, new TripClaim { Id = Guid.NewGuid(), TenantId = Guid.Empty })).TenantId);
     }
 
     [Fact]

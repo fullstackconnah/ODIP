@@ -184,8 +184,8 @@ public class OdipDbContext : DbContext
     /// </summary>
     public string? AuditActorName { get; set; }
 
-    /// <summary>The organisation this request acts in (the view-as organisation for a SuperAdmin); null when none is in scope. The audit interceptor stamps it on rows.</summary>
-    public Guid? CurrentTenantId => _tenant.TenantId;
+    /// <summary>The organisation this request acts in: the view-as organisation for a SuperAdmin; null for an unscoped SuperAdmin (their token still carries a home tenant) and when none is in scope. The audit interceptor stamps it on rows.</summary>
+    public Guid? CurrentTenantId => _tenant.IsSuperAdmin ? null : _tenant.TenantId;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -40,6 +40,15 @@ describe('who sees which section', () => {
     expect(platform.at(-1)?.key).toBe('whats-new')
   })
 
+  it('shows Deleted records to an Admin and a SuperAdmin in an organisation, right after Data retention, and to nobody else', () => {
+    expect(keysOf('Admin')).toContain('deleted-records')
+    expect(keysOf('SuperAdmin')).toContain('deleted-records')
+    expect(keysOf('Coordinator')).not.toContain('deleted-records')
+    expect(keysOf('SuperAdminNoOrg')).not.toContain('deleted-records')
+    const admin = keysOf('Admin')
+    expect(admin.indexOf('deleted-records')).toBe(admin.indexOf('retention') + 1)
+  })
+
   it('groups them, with My account first for everyone and only My account and Platform for a SuperAdmin with no organisation', () => {
     expect(groupsOf('Admin')).toEqual(['My account', 'Organisation', 'Pricing and budgets', 'Content', 'Data'])
     expect(groupsOf('Coordinator')).toEqual(['My account', 'Organisation', 'Content', 'Data'])

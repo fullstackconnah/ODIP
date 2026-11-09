@@ -289,6 +289,22 @@ public class ParticipantPurgePostgresTests : IClassFixture<PostgresFixture>
         Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofY.Id));
     }
 
+    // A Deleted row of Y's incident that only names X as involved is Y's history; X's own deleted child (ParticipantId = X) still goes.
+    [SkippableFact]
+    public async Task A_deleted_row_of_another_participant_that_only_names_X_elsewhere_stays()
+    {
+        var w = await SeedAsync();
+        var ofYNamingX = Deleted(w.A, "IncidentReport", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.YId}\",\"New\":null}},{{\"Field\":\"InvolvedParticipantId\",\"Old\":\"{w.XId}\",\"New\":null}}]");
+        var ofX = Deleted(w.A, "Shift", $"[{{\"Field\":\"ParticipantId\",\"Old\":\"{w.XId}\",\"New\":null}}]");
+        await using (var admin = PostgresFixture.NewContext(w.Cs)) { admin.AuditLogs.AddRange(ofYNamingX, ofX); await admin.SaveChangesAsync(); }
+
+        await Purge(w, _clock);
+
+        await using var db = PostgresFixture.NewContext(w.Cs);
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Id == ofYNamingX.Id));
+        Assert.False(await db.AuditLogs.AnyAsync(a => a.Id == ofX.Id));
+    }
+
     // On Postgres a null-tenant comparison is IS NULL, which would match every row from before the column existed; the list must show only its own organisation's rows.
     [SkippableFact]
     public async Task The_deleted_list_shows_only_the_callers_organisation_and_never_a_row_with_no_organisation()
