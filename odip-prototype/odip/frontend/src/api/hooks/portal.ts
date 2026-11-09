@@ -425,3 +425,15 @@ export const useStartActivityShift = () => useActivityWrite('start')
 
 /** POST portal/activity-staff/{rowId}/finish — a typed start only when Start was never tapped; a break only as a pair. */
 export const useFinishActivityShift = () => useActivityWrite('finish')
+
+/** POST portal/activity-staff/{rowId}/attendance: mark a participant as didn't attend, or undo it. Live only, like Start and Finish. */
+export function useSetActivityAttendance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, participantId, attended }: { id: string; participantId: string; attended: boolean }) =>
+      apiPost<PortalActivityShiftDto>(`/portal/activity-staff/${id}/attendance`, { participantId, attended }),
+    // A mark changes what the board, the activity and the staff review show, so all of them refetch, a refusal included.
+    onSettled: () =>
+      Promise.all(['portal-my-shifts', 'group-activity', 'group-activities', 'roster-board', 'rostering-group-staff-reviews'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+  })
+}

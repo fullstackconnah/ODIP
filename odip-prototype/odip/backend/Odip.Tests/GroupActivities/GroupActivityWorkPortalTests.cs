@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
@@ -14,6 +15,7 @@ using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Notifications.Templates;
+using System.Reflection;
 using Xunit;
 
 namespace Odip.Tests.GroupActivities;
@@ -34,11 +36,11 @@ public class GroupActivityWorkPortalTests
         public GroupActivity Activity { get; }
         public GroupActivityStaff Row { get; }
 
-        public Rig(ShiftStatus status = ShiftStatus.Published, bool enabled = true)
+        public Rig(ShiftStatus status = ShiftStatus.Published, bool enabled = true, DateOnly? day = null)
         {
             Fx = new GroupActivityFixture(enabled);
             Worker = Fx.AddUser();
-            Activity = Fx.AddActivity(status);
+            Activity = Fx.AddActivity(status, day);
             Row = new GroupActivityStaff
             {
                 Id = Guid.NewGuid(), TenantId = Fx.TenantId, GroupActivityId = Activity.Id, UserId = Worker.Id,
@@ -441,5 +443,239 @@ public class GroupActivityWorkPortalTests
         GroupActivityFixture.Body(await rig.Fx.Controller(userId: coordinator.Id).SetStaffActuals(activity.Id, row.Id, times, default), 200);
 
         Assert.Empty(await NoticesAsync(rig));
+    }
+
+    // ---- worker marks attendance (ga-portal-attendance) ----
+
+    private static readonly DateOnly Yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);   // a no-show can only be undone after the service day has begun
+    private const string StartedMessage = "Start this shift before you mark attendance.";
+
+    /// <summary>The worker has tapped Start on an InProgress activity from yesterday.</summary>
+    private static Rig StartedRig(ShiftStatus status = ShiftStatus.InProgress, bool enabled = true)
+    {
+        var rig = new Rig(status, enabled, Yesterday);
+        rig.Set(r => { r.ActualStart = DateTime.UtcNow.AddHours(-2); r.StartedAt = r.ActualStart; });
+        return rig;
+    }
+
+    private static Participant Person(Rig rig, string first = "Pat", ShiftStatus status = ShiftStatus.Published, Guid? tenantId = null)
+    {
+        var person = rig.Fx.AddParticipant(first);
+        var shift = rig.Fx.AddShift(person, day: rig.Activity.ServiceDate, status: status);
+        var tracked = rig.Fx.Seed.Shifts.Single(s => s.Id == shift.Id);
+        tracked.GroupActivityId = rig.Activity.Id;
+        if (tenantId is { } t) { tracked.TenantId = t; rig.Fx.Seed.Participants.Single(p => p.Id == person.Id).TenantId = t; }
+        rig.Fx.Seed.SaveChanges();
+        return person;
+    }
+
+    private static Task<ActionResult<ApiResponse<PortalActivityShiftDto>>> Mark(Rig rig, Guid personId, bool attended, Guid? rowId = null, Guid? as_ = null) =>
+        rig.Controller(During, as_).SetAttendance(rowId ?? rig.Row.Id, new SetActivityAttendanceDto { ParticipantId = personId, Attended = attended }, default);
+
+    private static async Task<Shift> ShiftOf(Rig rig, Guid personId) => await rig.Fx.Fresh().Shifts.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.ParticipantId == personId);
+
+    private static string Message<T>(ActionResult<ApiResponse<T>> result) => Assert.IsType<ApiResponse<T>>(Assert.IsAssignableFrom<ObjectResult>(result.Result).Value).Errors![0];
+
+    [Fact]
+    public async Task Attendance_SomeoneElsesRow_Is404_AndSavesNothing()
+    {
+        var rig = StartedRig();
+        var person = Person(rig);
+        var outsider = rig.Fx.AddUser("Olly");
+        Assert.Null(Code(await Mark(rig, person.Id, false, as_: outsider.Id), 404));
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Attendance_NotStartedRow_Is409ShiftNotInProgress()
+    {
+        var rig = new Rig(ShiftStatus.InProgress, day: Yesterday);
+        var person = Person(rig);
+        var result = await Mark(rig, person.Id, false);
+        Assert.Equal(ShiftErrorCodes.ShiftNotInProgress, Code(result, 409));
+        Assert.Equal(StartedMessage, Message(result));
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData("Finished", ShiftErrorCodes.ShiftAlreadyFinished)]
+    [InlineData("Approved", ShiftErrorCodes.ShiftAlreadyCompleted)]
+    public async Task Attendance_FinishedRow_And_ApprovedRow_Are409(string state, string code)
+    {
+        var rig = StartedRig();
+        var person = Person(rig);
+        rig.Set(r => { r.SubmittedAt = DateTime.UtcNow.AddHours(-1); r.ActualEnd = r.SubmittedAt; if (state == "Approved") r.ReviewOutcome = ReviewOutcome.Approved; });
+        Assert.Equal(code, Code(await Mark(rig, person.Id, false), 409));
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Attendance_CancelledActivity_IsGaCancelled()
+    {
+        var rig = StartedRig(ShiftStatus.Cancelled);
+        Assert.Equal("GA_CANCELLED", Code(await Mark(rig, Person(rig).Id, false), 409));
+    }
+
+    [Fact]
+    public async Task Attendance_DraftActivity_Is404()
+    {
+        var rig = StartedRig(ShiftStatus.Draft);
+        Assert.Null(Code(await Mark(rig, Person(rig).Id, false), 404));
+    }
+
+    [Fact]
+    public async Task Attendance_FlagOff_IsGaDisabled()
+    {
+        var rig = StartedRig(enabled: false);
+        Assert.Equal("GA_DISABLED", Code(await Mark(rig, Person(rig).Id, false), 409));
+    }
+
+    [Fact]
+    public async Task Attendance_ActivityCompleted_IsAttendanceClosed()
+    {
+        var rig = StartedRig(ShiftStatus.Completed);
+        var person = Person(rig);
+        Assert.Equal("GA_ATTENDANCE_CLOSED", Code(await Mark(rig, person.Id, false), 409));
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Attendance_ActivityPendingReview_IsAttendanceClosed_Not200()
+    {
+        // E13's own window lets PendingReview through; the worker's route must not.
+        var rig = StartedRig(ShiftStatus.PendingReview);
+        var person = Person(rig);
+        var result = await Mark(rig, person.Id, false);
+        Assert.Equal("GA_ATTENDANCE_CLOSED", Code(result, 409));
+        Assert.Equal(RosteringController.AttendanceClosedMessage, Message(result));
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Attendance_ParticipantNotOnActivity_Is400_AndOtherOrgsParticipant_Is400()
+    {
+        var rig = StartedRig();
+        var other = Person(rig, "Olga", tenantId: Guid.NewGuid());
+        Assert.Equal("GA_PARTICIPANT_NOT_FOUND", Code(await Mark(rig, Guid.NewGuid(), false), 400));
+        Assert.Equal("GA_PARTICIPANT_NOT_FOUND", Code(await Mark(rig, Guid.Empty, false), 400));
+        Assert.Equal("GA_PARTICIPANT_NOT_FOUND", Code(await Mark(rig, other.Id, false), 400));
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, other.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Attendance_Mark_CancelsTheShift_AndTheAnswerListsThemAsDidNotAttend()
+    {
+        var rig = StartedRig();
+        var person = Person(rig);
+        var before = DateTime.UtcNow.AddSeconds(-5);
+        var dto = GroupActivityFixture.Body(await Mark(rig, person.Id, false), 200);
+        var saved = await ShiftOf(rig, person.Id);
+        Assert.Equal(ShiftStatus.Cancelled, saved.Status);
+        Assert.InRange(saved.CancelledAt!.Value, before, DateTime.UtcNow.AddSeconds(5));
+        var listed = Assert.Single(dto.Participants);
+        Assert.Equal((person.Id, true), (listed.ParticipantId, listed.DidNotAttend));
+    }
+
+    [Fact]
+    public async Task Attendance_Undo_RestoresPublished_AndDidNotAttendFalse()
+    {
+        var rig = StartedRig();
+        var person = Person(rig);
+        await Mark(rig, person.Id, false);
+        var dto = GroupActivityFixture.Body(await Mark(rig, person.Id, true), 200);
+        var saved = await ShiftOf(rig, person.Id);
+        Assert.Equal(ShiftStatus.Published, saved.Status);
+        Assert.Null(saved.CancelledAt);
+        Assert.False(Assert.Single(dto.Participants).DidNotAttend);
+    }
+
+    [Fact]
+    public async Task Attendance_MarkTwice_And_UndoTwice_AreIdempotent()
+    {
+        var rig = StartedRig();
+        var person = Person(rig);
+        await Mark(rig, person.Id, false);
+        var first = await ShiftOf(rig, person.Id);
+        GroupActivityFixture.Body(await Mark(rig, person.Id, false), 200);
+        var again = await ShiftOf(rig, person.Id);
+        Assert.Equal((first.CancelledAt, first.UpdatedAt), (again.CancelledAt, again.UpdatedAt));
+
+        await Mark(rig, person.Id, true);
+        GroupActivityFixture.Body(await Mark(rig, person.Id, true), 200);
+        Assert.Equal(ShiftStatus.Published, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Attendance_ShiftInProgress_IsLockedWithWorkerWording()
+    {
+        var rig = StartedRig();
+        var person = Person(rig, status: ShiftStatus.InProgress);
+        var result = await Mark(rig, person.Id, false);
+        Assert.Equal("GA_SHIFT_LOCKED", Code(result, 409));
+        Assert.Equal("Your coordinator needs to change this.", Message(result));
+    }
+
+    [Fact]
+    public async Task Attendance_Undo_WhenTheNoShowIsOnAClaim_IsShiftClaimLocked_WithWorkerWording()
+    {
+        var rig = StartedRig();
+        var person = Person(rig);
+        await Mark(rig, person.Id, false);
+        var shift = await ShiftOf(rig, person.Id);
+        var claim = new TripClaim { Id = Guid.NewGuid(), TenantId = rig.Fx.TenantId, ClaimReference = "CLM-1", Kind = ClaimKind.Shift, ParticipantId = person.Id };
+        rig.Fx.Seed.TripClaims.Add(claim);
+        rig.Fx.Seed.ClaimLineItems.Add(new ClaimLineItem { Id = Guid.NewGuid(), TenantId = rig.Fx.TenantId, TripClaimId = claim.Id, ShiftId = shift.Id });
+        rig.Fx.Seed.SaveChanges();
+
+        var result = await Mark(rig, person.Id, true);
+        Assert.Equal(ShiftErrorCodes.ShiftClaimLocked, Code(result, 409));
+        Assert.Equal("This person's support has already been claimed, so ask your coordinator.", Message(result));
+        Assert.Equal(ShiftStatus.Cancelled, (await ShiftOf(rig, person.Id)).Status);
+    }
+
+    [Fact]
+    public void Attendance_MissingAttended_IsNotAMark()
+    {
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var dto = new SetActivityAttendanceDto { ParticipantId = Guid.NewGuid() };
+        Assert.False(System.ComponentModel.DataAnnotations.Validator.TryValidateObject(dto, new(dto), results, true));
+        Assert.Contains(results, r => r.MemberNames.Contains("Attended"));
+    }
+
+    [Fact]
+    public async Task MyShifts_KeepsANoShow_DropsAnEarlyBoardCancel()
+    {
+        var rig = StartedRig();
+        var noShow = Person(rig, "Nora");
+        var early = Person(rig, "Earl");
+        await Mark(rig, noShow.Id, false);
+        var earlyShift = rig.Fx.Seed.Shifts.Single(s => s.ParticipantId == early.Id);
+        earlyShift.Status = ShiftStatus.Cancelled;
+        earlyShift.CancelledAt = DateTime.UtcNow.AddDays(-3);
+        rig.Fx.Seed.SaveChanges();
+
+        var card = Assert.Single(await PortalActivityShiftsLookup(rig, rig.Worker.Id));
+        var listed = Assert.Single(card.Participants);
+        Assert.Equal((noShow.Id, true), (listed.ParticipantId, listed.DidNotAttend));
+    }
+}
+
+/// <summary>The worker's portal mark is open to any signed-in role like Start and Finish: the controller has no role list and the action no [Authorize] of its own.</summary>
+public class PortalActivityShiftsControllerRoleTests
+{
+    private static bool Allows(MethodInfo action, string role)
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test"));
+        var attributes = action.DeclaringType!.GetCustomAttributes<AuthorizeAttribute>(true).Concat(action.GetCustomAttributes<AuthorizeAttribute>(true));
+        return attributes.All(a => string.IsNullOrWhiteSpace(a.Roles) || a.Roles.Split(',').Any(r => principal.IsInRole(r.Trim())));
+    }
+
+    [Theory]
+    [InlineData("SupportWorker"), InlineData("Coordinator"), InlineData("Admin")]
+    public void SetAttendance_AdmitsWorkersAndOffice(string role)
+    {
+        var action = typeof(PortalActivityShiftsController).GetMethod(nameof(PortalActivityShiftsController.SetAttendance))!;
+        Assert.True(Allows(action, role));
+        Assert.Empty(action.GetCustomAttributes<AuthorizeAttribute>(false));
     }
 }

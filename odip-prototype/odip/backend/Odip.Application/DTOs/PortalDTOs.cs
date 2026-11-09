@@ -485,7 +485,7 @@ public record PortalWitnessRequestDto(
 public record PortalRespondIncidentWitnessRequestDto(string? StatementText);
 
 /// <summary>One participant on a group activity, as the worker sees them on their card.</summary>
-public record PortalActivityParticipantDto(Guid ShiftId, Guid ParticipantId, string Name);
+public record PortalActivityParticipantDto(Guid ShiftId, Guid ParticipantId, string Name, bool DidNotAttend);
 
 /// <summary>A worker's row on a group activity (GA PR3): the planned times are the row's, the actual times are what Start and Finish recorded. State is NotStarted, Started, Finished or Approved.</summary>
 public record PortalActivityShiftDto(
@@ -501,6 +501,13 @@ public record StartActivityShiftDto
     public decimal? Longitude { get; init; }
     public double? AccuracyMetres { get; init; }
     public bool GeolocationDeclined { get; init; }
+}
+
+/// <summary>Mark a participant as didn't attend (`Attended` false) or undo it (true). Both are required, so a missing `Attended` is a 400 and never a silent "didn't attend".</summary>
+public record SetActivityAttendanceDto
+{
+    [System.ComponentModel.DataAnnotations.Required] public Guid? ParticipantId { get; init; }
+    [System.ComponentModel.DataAnnotations.Required] public bool? Attended { get; init; }
 }
 
 /// <summary>Finish: a typed start only when the worker never tapped Start; a break only as a pair (UTC instants).</summary>
