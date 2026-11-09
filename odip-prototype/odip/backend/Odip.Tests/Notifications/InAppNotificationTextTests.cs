@@ -153,16 +153,14 @@ public class InAppNotificationTextTests
     public void ShiftAssigned_ActivityFirst_NamesTheActivity_AndLinksToMyShifts()
     {
         var payload = new ShiftAssignedPayload("a@x.au", "Bowling", Oct13, new(9, 30), new(12, 30), FirstIsActivity: true);
-        Assert.Equal(("You're on Bowling on Tue 13 Oct at 9:30 am.", "/portal"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload, "GroupActivity"));
-        // A mixed notice anchored on a shift keeps the shift page.
-        Assert.Equal(("You're on Bowling on Tue 13 Oct at 9:30 am.", $"/portal/shifts/{Id}"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload, "Shift"));
+        Assert.Equal(("You're on Bowling on Tue 13 Oct at 9:30 am.", "/portal"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload));
     }
 
     [Fact]
     public void ShiftAssigned_ShiftFirst_IsUnchanged()
     {
         var payload = new ShiftAssignedPayload("a@x.au", "Grace Palmer-Hughes", Oct13, new(9, 0), new(17, 0));
-        Assert.Equal(("You're rostered with Grace Palmer-Hughes on Tue 13 Oct at 9:00 am.", $"/portal/shifts/{Id}"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload, "Shift"));
+        Assert.Equal(("You're rostered with Grace Palmer-Hughes on Tue 13 Oct at 9:00 am.", $"/portal/shifts/{Id}"), InAppNotificationText.Build(NotificationEventType.ShiftAssigned, Id, payload));
     }
 
     /// <summary>Rows already in the outbox have no FirstIsActivity field.</summary>

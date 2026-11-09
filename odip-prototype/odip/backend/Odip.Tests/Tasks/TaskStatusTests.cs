@@ -25,11 +25,11 @@ public class TaskStatusTests
         return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).Options, tenant.Object);
     }
 
-    private static TasksController As(OdipDbContext db, string role, Guid? userId = null)
+    private static TasksController As(OdipDbContext db, string role, Guid? userId = null, TimeProvider? clock = null)
     {
         var claims = new List<Claim> { new(ClaimTypes.Role, role) };
         if (userId is { } id) claims.Add(new Claim(ClaimTypes.NameIdentifier, id.ToString()));
-        return new(db) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) } } };
+        return new(db, clock) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) } } };
     }
 
     private static BookingTask Seed(OdipDbContext db, TaskType type = TaskType.RiskReview, TaskItemStatus status = TaskItemStatus.NotStarted)
@@ -38,6 +38,56 @@ public class TaskStatusTests
         db.BookingTasks.Add(task);
         db.SaveChanges();
         return task;
+    }
+
+    // 14:00 UTC on 8 Nov 2026 is 01:00 on 9 Nov in Sydney, so today there is 9 Nov and tomorrow 10 Nov (the UTC date, 8 Nov, would give a wrong answer).
+    private sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => new(2026, 11, 8, 14, 0, 0, TimeSpan.Zero); }
+
+    [Fact]
+    public async System.Threading.Tasks.Task SetStatus_CompletedDateAfterProviderToday_Is400AndTheStatusIsUnchanged_TodaySaves()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db);
+        var controller = As(db, "Coordinator", clock: new FixedClock());
+
+        var tomorrow = await controller.SetStatus(task.Id, new SetTaskStatusDto { Status = TaskItemStatus.Completed, CompletedDate = new DateOnly(2026, 11, 10) }, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(tomorrow.Result);
+        Assert.Equal("The completed date can't be in the future.", Assert.Single(Assert.IsType<ApiResponse<TaskDto>>(bad.Value).Errors!));
+        Assert.Equal((TaskItemStatus.NotStarted, (DateOnly?)null), (db.BookingTasks.Single().Status, db.BookingTasks.Single().CompletedDate));
+
+        var today = await controller.SetStatus(task.Id, new SetTaskStatusDto { Status = TaskItemStatus.Completed, CompletedDate = new DateOnly(2026, 11, 9) }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(today.Result);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Update_CompletedWithADateAfterProviderToday_Is400AndTheTaskIsUnchanged_TodaySaves()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db);
+        var controller = As(db, "Coordinator", clock: new FixedClock());
+        UpdateTaskDto Edit(DateOnly date) => new() { TaskType = task.TaskType, Title = "Edited", Priority = task.Priority, Status = TaskItemStatus.Completed, CompletedDate = date };
+
+        var tomorrow = await controller.Update(task.Id, Edit(new DateOnly(2026, 11, 10)), CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(tomorrow.Result);
+        Assert.Equal("The completed date can't be in the future.", Assert.Single(Assert.IsType<ApiResponse<TaskDto>>(bad.Value).Errors!));
+        Assert.Equal(("Chase certificate", TaskItemStatus.NotStarted, (DateOnly?)null), (db.BookingTasks.Single().Title, db.BookingTasks.Single().Status, db.BookingTasks.Single().CompletedDate));
+
+        var today = await controller.Update(task.Id, Edit(new DateOnly(2026, 11, 9)), CancellationToken.None);
+        Assert.IsType<OkObjectResult>(today.Result);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Complete_CompletedDateAfterProviderToday_Is400AndTheTaskStaysOpen()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db);
+
+        var result = await As(db, "Coordinator", clock: new FixedClock()).Complete(task.Id, new CompleteTaskDto { CompletedDate = new DateOnly(2026, 11, 10) }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(TaskItemStatus.NotStarted, db.BookingTasks.Single().Status);
     }
 
     [Fact]

@@ -56,7 +56,7 @@ public static class PublishNotices
             var anchor = ordered.FirstOrDefault(l => l.EntityType == "Shift") ?? first;
             await raiser.RaiseAsync(NotificationEventType.ShiftAssigned, anchor.EntityType, anchor.EntityId, new[] { worker.Key },
                 new ShiftAssignedPayload(email, first.Name, first.ServiceDate, first.StartTime, first.EndTime,
-                    ordered.Skip(1).Select(l => new ShiftAssignedLine(l.Name, l.ServiceDate, l.StartTime, l.EndTime)).ToList(), first.EntityType == "GroupActivity"), ct, dedupe: false);
+                    ordered.Skip(1).Select(l => new ShiftAssignedLine(l.Name, l.ServiceDate, l.StartTime, l.EndTime, l.EntityType == "GroupActivity")).ToList(), first.EntityType == "GroupActivity"), ct, dedupe: false);
             told++;
         }
         return told;

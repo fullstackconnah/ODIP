@@ -89,6 +89,68 @@ public class TemplateRenderingTests
         Assert.Contains("<li>Bob Participant, 20 Sep 2026 4:00 PM to 8:00 PM</li>", message.HtmlBody);
     }
 
+    private static readonly DateOnly Sep14 = new(2026, 9, 14);
+
+    private static ShiftAssignedLine Activity(string name, int day) => new(name, new DateOnly(2026, 9, day), new TimeOnly(10, 0), new TimeOnly(12, 0), IsActivity: true);
+
+    /// <summary>A mixed publish counts shifts and group activities apart, not "N shifts".</summary>
+    [Fact]
+    public void ShiftAssignedTemplate_OneShiftAndTwoActivities_CountsEachKind()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Alice Participant", Sep14, new TimeOnly(9, 0), new TimeOnly(15, 0),
+            new[] { Activity("Bowling", 15), Activity("Picnic", 16) });
+        var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("New work: 1 shift and 2 group activities from 14 Sep 2026", message.Subject);
+        Assert.StartsWith("You've been put on 1 shift and 2 group activities:\n- Alice Participant, 14 Sep 2026 9:00 AM to 3:00 PM\n- Bowling, 15 Sep 2026 10:00 AM to 12:00 PM\n", message.PlainTextBody);
+        Assert.Contains("<p>You've been put on 1 shift and 2 group activities:</p>", message.HtmlBody);
+        Assert.EndsWith("View them: https://odip.test/portal", message.PlainTextBody);
+    }
+
+    [Fact]
+    public void ShiftAssignedTemplate_OnlyActivities_DropsTheShiftPart()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Bowling", Sep14, new TimeOnly(10, 0), new TimeOnly(12, 0),
+            new[] { Activity("Picnic", 16) }, FirstIsActivity: true);
+        var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("New work: 2 group activities from 14 Sep 2026", message.Subject);
+        Assert.StartsWith("You've been put on 2 group activities:\n", message.PlainTextBody);
+    }
+
+    [Fact]
+    public void ShiftAssignedTemplate_ActivityFirstThenShift_CountsTheFirstLineByFirstIsActivity()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Bowling", Sep14, new TimeOnly(10, 0), new TimeOnly(12, 0),
+            new[] { new ShiftAssignedLine("Bob Participant", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0)) }, FirstIsActivity: true);
+
+        Assert.Equal("New work: 1 shift and 1 group activity from 14 Sep 2026", ShiftAssignedTemplate.Render(payload, BaseUrl).Subject);
+    }
+
+    [Fact]
+    public void ShiftAssignedTemplate_ThreeShiftsNoActivities_KeepsTheShiftsCopy()
+    {
+        var more = new[]
+        {
+            new ShiftAssignedLine("Bob Participant", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0)),
+            new ShiftAssignedLine("Cy Participant", new DateOnly(2026, 9, 16), new TimeOnly(9, 0), new TimeOnly(15, 0)),
+        };
+        var message = ShiftAssignedTemplate.Render(new ShiftAssignedPayload("worker@example.com", "Alice Participant", Sep14, new TimeOnly(9, 0), new TimeOnly(15, 0), more), BaseUrl);
+
+        Assert.Equal("New shifts: 3 shifts from 14 Sep 2026", message.Subject);
+        Assert.StartsWith("You've been assigned 3 shifts:\n", message.PlainTextBody);
+    }
+
+    /// <summary>Payloads already in the outbox carry no IsActivity on their lines; they must still read back, as shifts.</summary>
+    [Fact]
+    public void ShiftAssignedTemplate_OutboxPayloadWithoutIsActivity_DeserialisesAndRendersAsShifts()
+    {
+        const string json = """{"RecipientEmail":"worker@example.com","ParticipantName":"Alice Participant","ServiceDate":"2026-09-14","StartTime":"09:00:00","EndTime":"15:00:00","MoreShifts":[{"ParticipantName":"Bob Participant","ServiceDate":"2026-09-20","StartTime":"16:00:00","EndTime":"20:00:00"}]}""";
+        var payload = System.Text.Json.JsonSerializer.Deserialize<ShiftAssignedPayload>(json)!;
+
+        Assert.Equal("New shifts: 2 shifts from 14 Sep 2026", ShiftAssignedTemplate.Render(payload, BaseUrl).Subject);
+    }
+
     /// <summary>
     /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
     /// September as "Sept", while the container's invariant globalization renders "Sep" — a

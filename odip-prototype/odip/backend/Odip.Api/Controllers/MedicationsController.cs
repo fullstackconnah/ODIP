@@ -339,7 +339,9 @@ public class MedicationsController : ControllerBase
         // Resolved once and reused for the competency gate, the self-witness check and RecordedByName/
         // RecordedByUserId on the saved record — the administering identity, honouring the SuperAdmin
         // "view as" mechanism exactly like PortalController does (§4.3).
-        var administeringUserId = await ResolveCurrentStaffIdAsync(ct);
+        var (administeringUserId, inactive) = await ResolveCurrentStaffAsync(ct);
+        if (inactive)
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<AdministrationDto>.Fail("This account is no longer active, so it can't record medication."));
         var result = await _recorder.RecordAsync(
             new RecordAdministrationRequest(id, dto, administeringUserId, GetRecordedByName()), ct);
         return result.ToActionResult(this);
@@ -598,17 +600,18 @@ public class MedicationsController : ControllerBase
     /// takes priority (SuperAdmin tenant/user switching), falling back to the JWT's own subject
     /// claim. Returns null (never throws) when there's no current HTTP context/claim (e.g. a test
     /// constructing this controller directly with no ControllerContext) or the user isn't
-    /// found — either of which just means "skip the self-witness check".
+    /// found — either of which just means "skip the self-witness check". A user who exists but is deactivated
+    /// comes back as <c>Inactive</c> so the caller refuses, not as null (which would skip the competency gate).
     /// </summary>
-    private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
+    private async Task<(Guid? Id, bool Inactive)> ResolveCurrentStaffAsync(CancellationToken ct)
     {
         var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
         var userId = _currentTenant.ViewAsUserId ?? ownUserId;
-        if (userId is null) return null;
+        if (userId is null) return (null, false);
 
-        var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
-        return exists ? userId : null;
+        var active = await _db.Users.Where(u => u.Id == userId.Value).Select(u => (bool?)u.IsActive).FirstOrDefaultAsync(ct);
+        return (active is null ? null : userId, active == false);
     }
 
     /// <summary>The medication fields a coordinator edits, copied from the request: the one list Create and Update share.</summary>

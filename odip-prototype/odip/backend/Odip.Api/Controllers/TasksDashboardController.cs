@@ -136,6 +136,12 @@ public class TasksController : ControllerBase
         return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
 
+    private const string FutureCompletedDate = "The completed date can't be in the future.";
+
+    /// <summary>True when the date is after the task's own organisation's today (a SuperAdmin's context has no tenant filter, so the caller's organisation would be the wrong one).</summary>
+    private async Task<bool> InTheFutureAsync(Guid tenantId, DateOnly? date, CancellationToken ct) =>
+        date is { } d && d > await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+
     /// <summary>Why a status change is refused (409), or null: a deleted task stays deleted, and a leave cover task closes itself when the shift is covered.</summary>
     private static string? StatusChangeRefusal(BookingTask t, TaskItemStatus status) =>
         t.Status == TaskItemStatus.Cancelled && status != TaskItemStatus.Cancelled ? "This task was deleted, so it can't be reopened."
@@ -154,6 +160,8 @@ public class TasksController : ControllerBase
         if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
         if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
             return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
+        if (status == TaskItemStatus.Completed && await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
+            return BadRequest(ApiResponse<TaskDto>.Fail(FutureCompletedDate));
         if (StatusChangeRefusal(t, status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
@@ -256,7 +264,9 @@ public class TasksController : ControllerBase
         if (StatusChangeRefusal(t, dto.Status) is { } refusal) return Conflict(ApiResponse<TaskDto>.Fail(refusal));
 
         // A completion date belongs to a Completed task only; the task form may send Completed without one.
-        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct) : (DateOnly?)null;
+        if (dto.Status == TaskItemStatus.Completed && await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
+            return BadRequest(ApiResponse<TaskDto>.Fail(FutureCompletedDate));
+        var completedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate ?? t.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, t.TenantId, _clock, ct) : (DateOnly?)null;
         t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = ownerId;
         t.Priority = dto.Priority; t.DueDate = dto.DueDate; t.Status = dto.Status;
         t.CompletedDate = completedDate; t.Notes = dto.Notes; t.UpdatedAt = DateTime.UtcNow;
@@ -281,6 +291,9 @@ public class TasksController : ControllerBase
         if (RetentionPurgeAudience.IsAdminOnly(t.TaskType) && !RetentionPurgeAudience.MayAct(User)) return Forbid();
         if (t.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled || t.TaskType == TaskType.LeaveCoverage)
             return Conflict(ApiResponse<bool>.Fail("Task is already closed or cannot be marked done here."));
+
+        if (await InTheFutureAsync(t.TenantId, dto.CompletedDate, ct))
+            return BadRequest(ApiResponse<bool>.Fail(FutureCompletedDate));
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
         if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null
