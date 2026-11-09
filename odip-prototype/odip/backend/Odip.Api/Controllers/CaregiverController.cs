@@ -64,7 +64,7 @@ public class CaregiverController : ControllerBase
             .Include(x => x.AdlAssessments)
             .Include(x => x.ChecklistItems)
             .Include(x => x.CommunityAccessRiskItems)
-            .FirstOrDefaultAsync(x => x.Id == sub.ParticipantId && x.TenantId == sub.TenantId, ct);
+            .FirstOrDefaultAsync(x => x.Id == sub.ParticipantId && x.TenantId == sub.TenantId && x.IsActive, ct);
         if (p == null) return null;
         return (sub, p);
     }

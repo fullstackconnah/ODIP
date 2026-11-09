@@ -187,6 +187,18 @@ public class CaregiverControllerTests
     }
 
     [Fact]
+    public async Task Get_ParticipantArchived_Returns404WithTheUnknownTokenMessage()
+    {
+        using var db = CreateDb();
+        var (p, _, raw) = Seed(db);
+        p.IsActive = false;
+        await db.SaveChangesAsync();
+        var result = await MakeController(db).Get(raw, CancellationToken.None);
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("This link is not valid.", Assert.IsType<ApiResponse<CaregiverFormDto>>(notFound.Value).Errors![0]);
+    }
+
+    [Fact]
     public async Task Get_TokenFromAnotherTenant_Returns404()
     {
         // The submission row references a participant that belongs to a DIFFERENT tenant than
@@ -334,6 +346,42 @@ public class CaregiverControllerTests
         var result = await MakeController(db).SaveDraft(raw,
             new CaregiverDraftDto { CaregiverName = "Jane", Payload = new PatchParticipantDto() }, CancellationToken.None);
         Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SaveDraft_ParticipantArchived_Returns404AndKeepsTheStoredDraft()
+    {
+        using var db = CreateDb();
+        var (p, s, raw) = Seed(db);
+        var controller = MakeController(db);
+        var kept = new PatchParticipantDto { CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Gardening" } };
+        Assert.IsType<NoContentResult>(await controller.SaveDraft(raw,
+            new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = kept }, CancellationToken.None));
+        p.IsActive = false;
+        await db.SaveChangesAsync();
+        var refused = new PatchParticipantDto { CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Fishing" } };
+        var result = await controller.SaveDraft(raw,
+            new CaregiverDraftDto { CaregiverName = "Changed Name", Payload = refused }, CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(result);
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal("Jane Smith", reloaded.CaregiverName);
+        Assert.Contains("Gardening", reloaded.Payload);
+        Assert.DoesNotContain("Fishing", reloaded.Payload);
+    }
+
+    [Fact]
+    public async Task Submit_ParticipantArchived_Returns404AndStaysDraft()
+    {
+        using var db = CreateDb();
+        var (p, s, raw) = Seed(db);
+        p.IsActive = false;
+        await db.SaveChangesAsync();
+        var result = await MakeController(db).Submit(raw,
+            new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = new PatchParticipantDto() }, CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(result);
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(CaregiverSubmissionStatus.Draft, reloaded.Status);
+        Assert.Null(reloaded.SubmittedAt);
     }
 
     [Fact]
