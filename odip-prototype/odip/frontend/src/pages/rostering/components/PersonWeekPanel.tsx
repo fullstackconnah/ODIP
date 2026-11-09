@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useParticipants, useStaff } from '@/api/hooks'
+import { participantsCutNote } from '@/api/hooks/pagedList'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import { usePermissions } from '@/lib/permissions'
 import { ShiftSlideOver, type ShiftSlideOverTarget } from './ShiftSlideOver'
@@ -30,6 +31,7 @@ export function PersonWeekPanel({ kind, target, onClose }: { kind: 'staff' | 'pa
       loadFailed={{ participants: participantsFailed ? refetchParticipants : undefined, staff: staffFailed ? refetchStaff : undefined }}
       groupBy={kind}
       participantReadiness={participantReadiness}
+      participantsNote={participantsCutNote(participants)}
     />
   )
 }
