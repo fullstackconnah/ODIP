@@ -1,7 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Billing.Catalogue;
-using Odip.Domain.Billing.Pricing;
+using PlanBlock = Odip.Domain.Billing.Pricing.PlanBlock;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
