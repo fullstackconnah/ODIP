@@ -58,11 +58,12 @@ const columns: Column<GroupActivityDto>[] = [
   { key: 'serviceDate', header: 'Date', mobile: 'meta', render: a => format(parseISO(a.serviceDate), 'EEE d MMM') },
   { key: 'startTime', header: 'Time', mobile: 'meta', render: timeRange },
   {
-    key: 'title', header: 'Activity', mobile: 'primary',
+    // md:w-full takes the room the other columns leave; md:max-w-0 stops the text widening the column, so CellText truncates to the cell.
+    key: 'title', header: 'Activity', mobile: 'primary', className: 'md:w-full md:max-w-0',
     render: a => (
       <div className="min-w-0">
-        <CellText className="font-semibold md:max-w-64">{a.title}</CellText>
-        {a.location && <CellText className="text-xs text-[var(--color-muted-foreground)] md:max-w-64">{a.location}</CellText>}
+        <CellText className="font-semibold">{a.title}</CellText>
+        {a.location && <CellText className="text-xs text-[var(--color-muted-foreground)]">{a.location}</CellText>}
       </div>
     ),
   },
@@ -91,6 +92,7 @@ export default function GroupActivitiesPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Group activities" />
 
+      {!off && (
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="sm:w-48">
           <FormField label="Status">
@@ -100,6 +102,7 @@ export default function GroupActivitiesPage() {
         <TextField label="From" type="date" value={from} max={to || undefined} onChange={e => { setFrom(e.target.value); setPage(1) }} />
         <TextField label="To" type="date" value={to} min={from || undefined} onChange={e => { setTo(e.target.value); setPage(1) }} />
       </div>
+      )}
 
       {visibility.isLoading || (on && isLoading) ? (
         <PageState kind="loading" noun="group activities" />
