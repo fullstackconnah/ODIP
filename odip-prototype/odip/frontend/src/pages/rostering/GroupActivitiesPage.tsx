@@ -91,8 +91,8 @@ export default function GroupActivitiesPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Group activities" />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-48">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="sm:w-48">
           <FormField label="Status">
             <Dropdown variant="form" value={status} onChange={v => { setStatus(v as ShiftStatus | ''); setPage(1) }} items={STATUS_ITEMS} />
           </FormField>
