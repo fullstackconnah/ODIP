@@ -17,6 +17,8 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
   it('bannerTitle', () => {
     expect(bannerTitle(1)).toBe('1 shift not visible to staff yet')
     expect(bannerTitle(128)).toBe('128 shifts not visible to staff yet')
+    expect(bannerTitle(3, 2)).toBe('3 shifts and 2 group activities not visible to staff yet')
+    expect(bannerTitle(0, 1)).toBe('1 group activity not visible to staff yet')
   })
 
   it('selectionTitle', () => {
@@ -33,6 +35,8 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
 
   it('leaveMessage', () => {
     expect(leaveMessage(4, '17–23 Aug')).toBe("4 shifts in 17–23 Aug aren't visible to staff yet. They stay saved as drafts until you publish the week.")
+    expect(leaveMessage(0, '17–23 Aug', 2)).toBe("2 group activities in 17–23 Aug aren't visible to staff yet. They stay saved as drafts until you publish the week.")
+    expect(leaveMessage(1, '17–23 Aug', 1)).toBe("1 shift and 1 group activity in 17–23 Aug aren't visible to staff yet. They stay saved as drafts until you publish the week.")
     expect(leaveMessage(1, '17–23 Aug')).toBe("1 shift in 17–23 Aug isn't visible to staff yet. It stays saved as a draft until you publish the week.")
   })
 

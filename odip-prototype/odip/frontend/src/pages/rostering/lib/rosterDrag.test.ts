@@ -227,13 +227,13 @@ describe('sentences', () => {
     expect(assignedSentence(sam, { ...tue, status: 'Draft' })).toBe('Sam Wilson assigned to Mia Chen, Tuesday 9am to 3pm.')
     expect(movedSentence(onShift(mon), tue)).toBe('Sam Wilson moved to Mia Chen, Tuesday 9am to 3pm. Monday 9am to 3pm now needs staff.')
     expect(swappedSentence(onShift(mon), tue)).toBe('Swapped: Sam is on Mia Chen, Tuesday 9am to 3pm and Alex on Jo Park, Monday 9am to 3pm.')
-    expect(publishedSentence({ published: 14, notified: 9, unfilled: 3, skipped: 0 })).toBe('Published 14 shifts. 9 people notified.')
-    expect(publishedSentence({ published: 1, notified: 1, unfilled: 0, skipped: 2 }))
+    expect(publishedSentence({ published: 14, notified: 9, unfilled: 3, skipped: 0, activities: 0 })).toBe('Published 14 shifts. 9 people notified.')
+    expect(publishedSentence({ published: 1, notified: 1, unfilled: 0, skipped: 2, activities: 0 }))
       .toBe("Published 1 shift. 1 person notified. 2 shifts stayed in draft: a rule that can't be overridden, or an archived worker, stops them.")
   })
 
   it('publishedSentence names the chosen shifts that had changed and were left alone (R3)', () => {
-    const r = { published: 3, notified: 2, unfilled: 0, skipped: 0 }
+    const r = { published: 3, notified: 2, unfilled: 0, skipped: 0, activities: 0 }
     expect(publishedSentence(r, 3)).toBe('Published 3 shifts. 2 people notified.')
     expect(publishedSentence(r, 4)).toBe('Published 3 shifts. 2 people notified. 1 shift had changed since you selected it and was left alone.')
     expect(publishedSentence(r, 5)).toBe('Published 3 shifts. 2 people notified. 2 shifts had changed since you selected them and were left alone.')
@@ -254,6 +254,16 @@ describe('sentences', () => {
     expect(publishWeekMessage(staffed, 2)).toBe('3 draft shifts go out to staff. The 2 people on them are notified. 2 other shifts have nobody on them yet. They stay unpublished until someone is put on them.')
     expect(publishWeekMessage(staffed.slice(2), 0)).toBe('1 draft shift goes out to staff. The 1 person on it is notified.')
     expect(publishWeekMessage(staffed.slice(2), 1)).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it.')
+    // Group activities (gav PR B): a second sentence for their people, singular forms, none when nobody is on them.
+    const bowling = makeActivity({ id: 'a1', status: 'Draft', staff: [{ id: 'r1', staffId: 'a', staffName: 'A', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, findings: [] }, { id: 'r2', staffId: 'c', staffName: 'C', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, findings: [] }] })
+    const picnic = makeActivity({ id: 'a2', status: 'Draft', staff: [{ id: 'r3', staffId: 'c', staffName: 'C', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, findings: [] }] })
+    const lonely = makeActivity({ id: 'a3', status: 'Draft', staff: [] })
+    expect(publishWeekMessage(staffed.slice(2), 0, [bowling, picnic])).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 2 group activities go out too. The 2 people on them are notified.')
+    expect(publishWeekMessage(staffed.slice(2), 0, [picnic])).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 group activity goes out too. The 1 person on it is notified.')
+    expect(publishWeekMessage(staffed.slice(2), 0, [lonely])).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 group activity goes out too.')
+    expect(publishWeekMessage([], 1, [bowling])).toBe('1 group activity goes out to staff. The 2 people on it are notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it.')
+    expect(publishedSentence({ published: 5, notified: 4, unfilled: 0, skipped: 0, activities: 2 })).toBe('Published 5 shifts and 2 group activities. 4 people notified.')
+    expect(publishedSentence({ published: 5, notified: 4, unfilled: 0, skipped: 0, activities: 1 })).toBe('Published 5 shifts and 1 group activity. 4 people notified.')
   })
 })
 
