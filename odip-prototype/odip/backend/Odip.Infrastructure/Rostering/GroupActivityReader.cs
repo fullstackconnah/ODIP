@@ -25,6 +25,16 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
             .Where(a => a.ServiceDate >= from && a.ServiceDate <= to && a.Status != ShiftStatus.Cancelled)
             .OrderBy(a => a.ServiceDate).ThenBy(a => a.StartTime).ToListAsync(ct), ct);
 
+    /// <summary>One page of the activities of <paramref name="tenantId"/> dated in [from, to], Cancelled included, in date, start and id order. The page of rows is cut first, then built, so a page costs the same however long the range.</summary>
+    public async Task<(List<GroupActivityDto> Items, int TotalCount)> ListAsync(Guid tenantId, DateOnly from, DateOnly to, ShiftStatus? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.GroupActivities.AsNoTracking().Where(a => a.TenantId == tenantId && a.ServiceDate >= from && a.ServiceDate <= to);
+        if (status is { } only) query = query.Where(a => a.Status == only);
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderBy(a => a.ServiceDate).ThenBy(a => a.StartTime).ThenBy(a => a.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return (await BuildAsync(rows, ct), total);
+    }
+
     /// <summary>A cancelled shift is a "didn't attend" only when it was cancelled (CancelledAt, UTC) on or after the activity's service day in <paramref name="zone"/>; one cancelled earlier through the board never took part and stays hidden and unbillable. shortcut: the organisation's zone, not each place's; revisit if a provider spans zones.</summary>
     public static bool IsNoShow(Shift shift, TimeZoneInfo zone) =>
         shift.Status == ShiftStatus.Cancelled && shift.CancelledAt is { } at && ProviderLocalTime.TodayIn(DateTime.SpecifyKind(at, DateTimeKind.Utc), zone) >= shift.ServiceDate;
