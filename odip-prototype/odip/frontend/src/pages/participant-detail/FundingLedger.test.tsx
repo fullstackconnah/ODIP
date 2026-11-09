@@ -249,7 +249,7 @@ describe('the ledger table', () => {
   it('names, under the ledger, the shifts it does not count yet', () => {
     renderLedger(participantLedger())
 
-    expect(screen.getByText(/shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet\./)).toBeInTheDocument()
+    expect(screen.getByText(/Group sleepovers and passive nights, and group or shared-support shifts that are not on a group activity, or whose headcount is not agreed or changes, are not counted yet./)).toBeInTheDocument()
   })
 
   it('says nothing about started trips when there are none', () => {
