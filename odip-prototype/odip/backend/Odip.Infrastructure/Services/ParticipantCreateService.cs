@@ -62,6 +62,7 @@ public sealed class ParticipantCreateService
             ?? ParticipantPatchApplier.ValidateNdisNumber(dto.NdisNumber)
             ?? ParticipantPatchApplier.ValidateDateOfBirthRange(dto.DateOfBirth, today)
             ?? ParticipantPatchApplier.ValidatePlanDates(dto.PlanStartDate, dto.PlanEndDate)
+            ?? ParticipantGridRules.ConsentDateError(dto.Consents, today)
             ?? ValidateContactRoles(dto, today);
         if (error != null) return (null, error);
 

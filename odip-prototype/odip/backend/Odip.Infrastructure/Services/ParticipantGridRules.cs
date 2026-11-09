@@ -1,5 +1,9 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
 
@@ -28,6 +32,43 @@ public static class ParticipantGridRules
         row.SignedByName = Clean(signedByName);
         row.SignedDate = signedDate;
         row.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static readonly DateOnly EarliestSignedDate = new(2000, 1, 1);
+
+    /// <summary>The 400 text for a consent signed date after the provider's <paramref name="today"/> or before 2000-01-01; null for no date or a date in range.</summary>
+    public static string? SignedDateError(DateOnly? signedDate, DateOnly today) =>
+        signedDate is not { } d ? null
+        : d > today ? "The signed date can't be in the future."
+        : d < EarliestSignedDate ? "The signed date must be in 2000 or later."
+        : null;
+
+    /// <summary>The first <see cref="SignedDateError"/> among a participant save's consents; null when none is refused.</summary>
+    public static string? ConsentDateError(IEnumerable<CreateParticipantConsentDto>? consents, DateOnly today) =>
+        consents?.Select(c => SignedDateError(c.SignedDate, today)).FirstOrDefault(e => e != null);
+
+    /// <summary>
+    /// Writes the answer onto <paramref name="row"/> and saves. A new row that loses the first-save race on the (participant, type) unique index is
+    /// dropped, the winner's row is loaded and given this answer, and the save runs once more: last write wins and the caller gets the stored row.
+    /// Any other failure, or a race on a row that was not new, throws.
+    /// </summary>
+    public static async Task<ParticipantConsent> SaveConsentAnswerAsync(OdipDbContext db, ParticipantConsent row, bool? granted, string? signedByName, DateOnly? signedDate, CancellationToken ct)
+    {
+        ApplyAnswer(row, granted, signedByName, signedDate);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return row;
+        }
+        catch (DbUpdateException ex) when (db.Entry(row).State == EntityState.Added
+            && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_ParticipantConsents_ParticipantId_ConsentType" })
+        {
+            db.Entry(row).State = EntityState.Detached;
+            var stored = await db.ParticipantConsents.FirstAsync(c => c.ParticipantId == row.ParticipantId && c.ConsentType == row.ConsentType, ct);
+            ApplyAnswer(stored, granted, signedByName, signedDate);
+            await db.SaveChangesAsync(ct);
+            return stored;
+        }
     }
 
     public static void ApplyAnswer(ParticipantHealthCondition row, bool? has, string? severity, bool? planProvided, bool? trainingRequired, string? notes)

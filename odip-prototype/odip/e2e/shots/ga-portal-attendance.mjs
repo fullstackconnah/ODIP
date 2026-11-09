@@ -1,4 +1,5 @@
 // Worker marks "Didn't attend" on the portal group-activity card (ga-portal-attendance). Numeric checks 1 to 10 from SHAPE.md; exit 1 on any failure.
+// Polish batch 59 adds checks 11 to 13: the header count copy (none marked, some marked), the chevron on the header row's right edge, and the error's gap under the button.
 // States: started-unmarked, started-marked, started-saving, started-error, started-offline, started-long-name, notstarted-coordinator-marked, finished-marked, approved-marked
 // (390 with touch), plus started-unmarked at 1280 and one full page per breakpoint.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/ga-portal-attendance.mjs <outdir>
@@ -95,6 +96,8 @@ async function run(browser, vp) {
   let card = await show(started())
   await crop(page, card, 'started-unmarked', vp)
   const un = await measure(card, 'Mia Chen')
+  const header = (c) => c.getByRole('button', { name: /^Participants/ })
+  const unmarkedHeader = (await header(card).textContent()).trim()
   check(`1 attendance Button is --control-h tall (${vp.name})`, `${un.h} vs ${ctl}`, near(un.h, ctl) && (!vp.touch || un.h >= tapMin - 0.5))
 
   mode = 'hang'
@@ -111,6 +114,11 @@ async function run(browser, vp) {
     near(un.w, sv.w) && near(un.w, mk.w) && near(un.right, sv.right) && near(un.right, mk.right) && near(un.right, un.notesRight))
   check(`3 participant row and card height hold across the three states (${vp.name})`, `li ${un.li}/${sv.li}/${mk.li}; card ${un.card}/${sv.card}/${mk.card}`,
     near(un.li, sv.li) && near(un.li, mk.li) && near(un.card, sv.card) && near(un.card, mk.card))
+  const markedHeader = (await header(card).textContent()).trim()
+  check(`11 header copy: none marked, then one marked (${vp.name})`, `"${unmarkedHeader}" / "${markedHeader}"`, unmarkedHeader === 'Participants (2)' && markedHeader === "Participants (2, 1 didn't attend)")
+  const hb = await header(card).boundingBox()
+  const cb = await header(card).locator('svg').boundingBox()
+  check(`12 chevron sits on the header row's right edge (${vp.name})`, `chevron right ${cb.x + cb.width} vs row right ${hb.x + hb.width}`, near(cb.x + cb.width, hb.x + hb.width))
   const badge = row(card, 'Mia Chen').locator('[data-status-badge]')
   const bbx = await badge.boundingBox()
   check(`4 badge is a StatusBadge, centred on the button (${vp.name})`, `${bbx.y + bbx.height / 2} vs ${mk.mid}; text ${await badge.textContent()}`, Math.abs(bbx.y + bbx.height / 2 - mk.mid) <= 1 && (await badge.textContent()) === "Didn't attend")
@@ -134,6 +142,10 @@ async function run(browser, vp) {
   const alert = row(card, 'Mia Chen').getByRole('alert')
   await alert.waitFor({ timeout: 10_000 })
   await crop(page, card, 'started-error', vp)
+  const errBtn = await attendBtn(card, 'Mia Chen').boundingBox()
+  const errBox = await alert.boundingBox()
+  const houseGap = 0.25 * (await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize)))   // FormField's error margin, mt-1
+  check(`13 error top minus button bottom is the house field-error gap (${vp.name})`, `${errBox.y - (errBtn.y + errBtn.height)} vs ${houseGap}`, near(errBox.y - (errBtn.y + errBtn.height), houseGap))
   check(`10 the row's alert is the routed server message (${vp.name})`, await alert.textContent(), (await alert.textContent()) === 'Your coordinator needs to change this.' && (await card.getByRole('alert').count()) === 1)
 
   if (vp.touch) {
@@ -165,7 +177,7 @@ async function run(browser, vp) {
     for (const [name, state] of [['notstarted-coordinator-marked', activity({ participants: people(true) })], ['finished-marked', activity({ state: 'Finished', ...done, participants: people(true) })], ['approved-marked', activity({ state: 'Approved', ...done, participants: people(true) })]]) {
       card = await show(state)
       await crop(page, card, name, vp)
-      const ok = (await card.getByRole('button', { name: /didn't attend/ }).count()) === 0 && (await card.locator('[data-status-badge]').filter({ hasText: "Didn't attend" }).count()) === 1
+      const ok = (await card.getByRole('button', { name: /^(Mark .* as didn't attend|Undo didn't attend for .*)$/ }).count()) === 0 && (await card.locator('[data-status-badge]').filter({ hasText: "Didn't attend" }).count()) === 1
       readOnlyOk = readOnlyOk && ok
     }
     check('8 read-only states: no attendance Button, exactly one "Didn\'t attend" badge', '', readOnlyOk)
