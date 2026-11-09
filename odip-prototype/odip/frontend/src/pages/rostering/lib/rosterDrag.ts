@@ -268,10 +268,18 @@ export function replacePromptLines(carry: DragCarry, shift: ShiftDto, canSwap: b
   ]
 }
 
+/** Publish week's confirm button: what goes out, "Publish 1 shift and 2 group activities". */
+export function publishWeekLabel(shifts: number, activities: number): string {
+  const a = plural(activities, 'group activity', 'group activities')
+  return shifts === 0 ? `Publish ${a}` : `Publish ${plural(shifts, 'shift')}${activities > 0 ? ` and ${a}` : ''}`
+}
+
 /** Publish week's confirm body, counted from the board's staffed Draft shifts, with the week's unstaffed Drafts (held back) as a number: "14 draft shifts go out to staff. The 9 people on them are notified. 3 other shifts have nobody on them yet. They stay unpublished until someone is put on them." */
-export function publishWeekMessage(drafts: ShiftDto[], unfilled: number, activities: GroupActivityDto[] = []): string {
-  const people = new Set(drafts.flatMap(s => (s.staffId ? [s.staffId] : []))).size
-  const activityPeople = new Set(activities.flatMap(a => a.staff.map(w => w.staffId))).size
+export function publishWeekMessage(drafts: ShiftDto[], unfilled: number, activities: GroupActivityDto[] = [], today = ''): string {
+  // The server tells only people on a day that is today or later (a past day is published for the record); '' counts every day.
+  const told = (date: string) => date.slice(0, 10) >= today
+  const people = new Set(drafts.flatMap(s => (s.staffId && told(s.serviceDate) ? [s.staffId] : []))).size
+  const activityPeople = new Set(activities.filter(a => told(a.serviceDate)).flatMap(a => a.staff.map(w => w.staffId))).size
   const a = activities.length
   return [
     drafts.length > 0 ? `${plural(drafts.length, 'draft shift')} ${drafts.length === 1 ? 'goes' : 'go'} out to staff.` : null,

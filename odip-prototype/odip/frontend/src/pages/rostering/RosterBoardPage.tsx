@@ -8,6 +8,7 @@ import {
 import { AlertTriangle, BarChart3, CalendarClock, CalendarPlus, Hourglass, Plus, X } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -41,7 +42,7 @@ import { blockedOnlyByDoubleBooking } from './lib/rosterGate'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, formatWeekRange, allBoardShifts } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
-  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
+  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekLabel, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
   firstName, joinedSentence,
 } from './lib/rosterDrag'
@@ -266,6 +267,7 @@ export default function RosterBoardPage() {
   // Leave for the picker: the participant board sends the week's leave; the Staff view has it on its rows' leave bars (lead decision L3).
   const boardLeave = useMemo(() => (!board ? [] : board.groupBy === 'Participant' ? board.staffLeave ?? [] : leaveFromStaffRows(board.staffRows)), [board])
   const publishWeek = usePublishWeek()
+  const today = useProviderToday()
   const [publishOpen, setPublishOpen] = useState(false)
   // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows. Only staffed Drafts: Publish week holds a shift nobody is on until someone is (owner, 2026-10-28).
   // Group activities publish with the week: their participant shifts have no worker, so they are not drafts or held shifts here; the Draft activities count instead (both views carry them while the switch is on).
@@ -380,6 +382,7 @@ export default function RosterBoardPage() {
   const draftOpen = autoOpen && autoArmed
   const draftLeaveCopy = { title: 'Leave without applying the draft?', message: `Your draft roster for ${formatWeekSpan(days)} hasn’t been applied. If you leave, it’s lost.`, confirmLabel: 'Leave without applying', stayLabel: 'Keep reviewing' }
   const leaveCopy = { title: LEAVE_TITLE, message: leaveMessage(publishable.length, formatWeekSpan(days), draftActivities.length), confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
+  const publishLabel = selecting ? publishWeekLabel(chosen.length, 0) : publishWeekLabel(publishable.length, draftActivities.length)
   const { dialog: leaveDialog } = useUnsavedChangesWarning(leaveArmed || draftOpen, {
     leaveCopy: draftOpen ? draftLeaveCopy : leaveCopy,
     // Another week by address (a bell or task link) leaves this one; the filters (?participant=, ?unfilled=) keep it.
@@ -1186,9 +1189,17 @@ export default function RosterBoardPage() {
         onCancel={() => setPublishOpen(false)}
         onConfirm={handlePublishWeek}
         title={selecting ? `Publish ${plural(chosen.length, 'shift')}?` : `Publish ${formatWeekSpan(days)}?`}
-        message={<p>{selecting ? publishWeekMessage(chosen, 0) : publishWeekMessage(publishable, heldDrafts, draftActivities)}</p>}
-        confirmLabel={!selecting && publishable.length === 0 ? `Publish ${plural(draftActivities.length, 'group activity', 'group activities')}` : `Publish ${plural(selecting ? chosen.length : publishable.length, 'shift')}`}
-        loading={publishWeek.isPending}
+        message={<p>{selecting ? publishWeekMessage(chosen, 0, [], today) : publishWeekMessage(publishable, heldDrafts, draftActivities, today)}</p>}
+        confirmLabel={publishLabel}
+        footer={
+          // Stacked below sm so the long label ("Publish 1 shift and 2 group activities") keeps one line at 390; confirm sits on top, Cancel stays first in tab order.
+          <div className="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setPublishOpen(false)}>Cancel</Button>
+            <Button className="w-full sm:w-auto" onClick={handlePublishWeek} disabled={publishWeek.isPending} aria-label={publishLabel}>
+              {publishWeek.isPending ? 'Processing...' : publishLabel}
+            </Button>
+          </div>
+        }
       />
 
       <ConfirmDialog

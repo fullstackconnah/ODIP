@@ -5,9 +5,10 @@ namespace Odip.Infrastructure.Notifications.Templates;
 /// <summary>
 /// Sent to the staff member a shift was assigned to. Publish week tells a worker once about every shift of theirs it published (roster drag and drop, fix round 1): the first shift
 /// is the main fields and the rest are <paramref name="MoreShifts"/>. A payload without it (every other sender, and rows already in the outbox) renders as the one-shift email.
+/// <paramref name="FirstIsActivity"/> is set when the first line is a group activity part, so its name is the activity title, not a participant.
 /// </summary>
 public record ShiftAssignedPayload(
-    string RecipientEmail, string ParticipantName, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, IReadOnlyList<ShiftAssignedLine>? MoreShifts = null);
+    string RecipientEmail, string ParticipantName, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, IReadOnlyList<ShiftAssignedLine>? MoreShifts = null, bool FirstIsActivity = false);
 
 /// <summary>One more shift in a <see cref="ShiftAssignedPayload"/>.</summary>
 public record ShiftAssignedLine(string ParticipantName, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime);
@@ -17,7 +18,14 @@ public static class ShiftAssignedTemplate
     public static NotificationMessage Render(ShiftAssignedPayload p, string baseUrl)
     {
         if (p.MoreShifts is not { Count: > 0 } more)
-            return new(
+            return p.FirstIsActivity ? new(
+                RecipientAddress: p.RecipientEmail,
+                Subject: $"New group activity: {p.ParticipantName} on {Html.Date(p.ServiceDate)}",
+                PlainTextBody: $"You've been put on {p.ParticipantName} on {Html.Date(p.ServiceDate)} " +
+                               $"from {Html.Time(p.StartTime)} to {Html.Time(p.EndTime)}.\n\nView it: {baseUrl}/portal",
+                HtmlBody: $"<p>You've been put on {Html.E(p.ParticipantName)} on {Html.Date(p.ServiceDate)} " +
+                          $"from {Html.Time(p.StartTime)} to {Html.Time(p.EndTime)}.</p>" +
+                          $"<p><a href=\"{Html.Attr(baseUrl)}/portal\">View it</a></p>") : new(
                 RecipientAddress: p.RecipientEmail,
                 Subject: $"New shift: {p.ParticipantName} on {Html.Date(p.ServiceDate)}",
                 PlainTextBody: $"You've been assigned a shift with {p.ParticipantName} on {Html.Date(p.ServiceDate)} " +
