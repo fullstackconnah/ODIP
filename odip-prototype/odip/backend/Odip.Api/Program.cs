@@ -79,18 +79,7 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ClockSkew = TimeSpan.FromMinutes(2)
     };
-    options.Events = new JwtBearerEvents
-    {
-        OnMessageReceived = context =>
-        {
-            if (string.IsNullOrEmpty(context.Token) && context.Request.Cookies.TryGetValue("odip_jwt", out var cookieToken))
-            {
-                context.Token = cookieToken;
-            }
-            return Task.CompletedTask;
-        },
-        OnTokenValidated = SessionRecheck.OnTokenValidated
-    };
+    options.Events = OdipJwtEvents.Create();
 });
 
 builder.Services.AddAuthorization();

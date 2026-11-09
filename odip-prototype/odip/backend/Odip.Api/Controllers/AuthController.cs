@@ -142,11 +142,8 @@ public class AuthController : ControllerBase
                 ExchangeRefusal.ProviderNotAllowed,
                 "Exchange failed — sign-in provider {Provider} is not allowed (see {ConfigKey}): {Email}", provider, SignInProviders.ConfigKey, email);
 
-        var domain = email.Split('@').Last();
-
         // 2. SuperAdmin path — bypasses tenant resolution
-        var superAdminDomain = SuperAdminDomain.From(_config);
-        if (domain == superAdminDomain)
+        if (SuperAdminDomain.Matches(_config, email))
         {
             var superAdmin = await _db.Users
                 .IgnoreQueryFilters([TenantFilter.Name])

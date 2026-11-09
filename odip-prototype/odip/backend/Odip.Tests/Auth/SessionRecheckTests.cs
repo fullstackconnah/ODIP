@@ -35,6 +35,10 @@ public class SessionRecheckTests
         return (db, user);
     }
 
+    private const string PlatformDomain = "platform.test";
+    private static readonly IConfiguration Config = new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?> { [SuperAdminDomain.ConfigKey] = PlatformDomain }).Build();
+
     private static ClaimsPrincipal Claims(string? id, string role, Guid? tenant = null) => new(new ClaimsIdentity(new[]
     {
         new Claim(ClaimTypes.NameIdentifier, id ?? ""), new Claim(ClaimTypes.Role, role), new Claim("tenant_id", (tenant ?? Org).ToString()),
@@ -44,14 +48,14 @@ public class SessionRecheckTests
     public async Task An_active_user_with_the_same_role_passes()
     {
         var (db, user) = Seeded();
-        Assert.Null(await SessionRecheck.RefusalAsync(db, Claims(user.Id.ToString(), "Coordinator"), default));
+        Assert.Null(await SessionRecheck.RefusalAsync(db, Config, Claims(user.Id.ToString(), "Coordinator"), default));
     }
 
     [Fact]
     public async Task A_deactivated_user_is_refused()
     {
         var (db, user) = Seeded(active: false);
-        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Claims(user.Id.ToString(), "Coordinator"), default));
+        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Config, Claims(user.Id.ToString(), "Coordinator"), default));
     }
 
     [Theory]
@@ -60,14 +64,14 @@ public class SessionRecheckTests
     public async Task A_changed_role_is_refused(UserRole now, string claim)
     {
         var (db, user) = Seeded(now);
-        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Claims(user.Id.ToString(), claim), default));
+        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Config, Claims(user.Id.ToString(), claim), default));
     }
 
     [Fact]
     public async Task A_user_with_no_row_is_refused()
     {
         var (db, _) = Seeded();
-        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Claims(Guid.NewGuid().ToString(), "Coordinator"), default));
+        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Config, Claims(Guid.NewGuid().ToString(), "Coordinator"), default));
     }
 
     [Theory]
@@ -76,14 +80,30 @@ public class SessionRecheckTests
     public async Task A_missing_or_bad_id_claim_is_refused(string? id)
     {
         var (db, _) = Seeded();
-        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Claims(id, "Coordinator"), default));
+        Assert.NotNull(await SessionRecheck.RefusalAsync(db, Config, Claims(id, "Coordinator"), default));
     }
 
     [Fact]
     public async Task A_super_admin_viewing_as_another_organisation_passes()
     {
         var (db, user) = Seeded(UserRole.SuperAdmin);
-        Assert.Null(await SessionRecheck.RefusalAsync(db, Claims(user.Id.ToString(), "SuperAdmin", Guid.NewGuid()), default));
+        Assert.Null(await SessionRecheck.RefusalAsync(db, Config, Claims(user.Id.ToString(), "SuperAdmin", Guid.NewGuid()), default));
+    }
+
+    [Fact]
+    public void Program_installs_the_recheck_on_the_bearer_events() => Assert.NotNull(OdipJwtEvents.Create().OnTokenValidated);
+
+    [Theory]
+    [InlineData(UserRole.Admin, true, "sam@platform.test", true)]   // the exchange issues SuperAdmin to this row, so the recheck keeps it
+    [InlineData(UserRole.Admin, true, "sam@example.test", false)]   // not on the domain: a SuperAdmin claim is forged or stale
+    [InlineData(UserRole.Admin, false, "sam@platform.test", false)] // deactivated
+    public async Task A_super_admin_claim_on_a_non_super_admin_row_passes_only_for_an_active_user_on_the_domain(UserRole role, bool active, string email, bool passes)
+    {
+        var (db, user) = Seeded(role, active);
+        user.Email = email;
+        await db.SaveChangesAsync();
+        var refusal = await SessionRecheck.RefusalAsync(db, Config, Claims(user.Id.ToString(), "SuperAdmin"), default);
+        Assert.Equal(passes, refusal is null);
     }
 
     [Fact]
@@ -103,13 +123,14 @@ public class SessionRecheckTests
             {
                 ValidIssuer = "Odip", ValidAudience = "Odip", IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
             };
-            o.Events = new JwtBearerEvents { OnTokenValidated = SessionRecheck.OnTokenValidated };
+            o.Events = OdipJwtEvents.Create();
         });
         builder.Services.AddAuthorization();
         var app = builder.Build();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/ping", () => "ok").RequireAuthorization();
+        app.MapGet("/tenant", (ICurrentTenant t) => t.TenantId?.ToString() ?? "none").RequireAuthorization();
         await app.StartAsync();
         try
         {
@@ -124,6 +145,8 @@ public class SessionRecheckTests
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/ping")).StatusCode);
+            // The recheck runs before authentication finishes; it must not build the request's own tenant from the still-anonymous user.
+            Assert.Equal(Org.ToString(), await client.GetStringAsync("/tenant"));
 
             user.IsActive = false;
             await db.SaveChangesAsync();
