@@ -736,6 +736,12 @@ public class OdipDbContext : DbContext
             e.Property(i => i.PoliceReference).HasMaxLength(50);
             e.Property(i => i.AmbulanceReference).HasMaxLength(50);
             e.Property(i => i.FireReference).HasMaxLength(50);
+            // Retried submits: unique per tenant over NON-NULL keys only, so every existing row (all NULL) is outside the index.
+            e.Property(i => i.IdempotencyKey).HasMaxLength(100);
+            e.HasIndex(i => new { i.TenantId, i.IdempotencyKey })
+                .IsUnique()
+                .HasDatabaseName(IncidentReport.IdempotencyIndexName)
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
             e.HasOne(i => i.TripInstance).WithMany(t => t.IncidentReports).HasForeignKey(i => i.TripInstanceId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(i => i.InvolvedParticipant).WithMany().HasForeignKey(i => i.InvolvedParticipantId);

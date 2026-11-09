@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -597,6 +598,17 @@ public class IncidentsController : ControllerBase
             dto = dto with { ReportedByStaffId = callerId };
         }
 
+        if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
+        var reporterTenant = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
+        var key = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim();
+        if (key != null)
+        {
+            // Explicit tenant: a SuperAdmin passes the query filter for every organisation. The lookup runs before every other reference check on purpose,
+            // so a retry replays even if a referenced row changed between presses. It finds inactive rows too.
+            var prior = await _db.IncidentReports.FirstOrDefaultAsync(i => i.TenantId == reporterTenant && i.IdempotencyKey == key, ct);
+            if (prior != null) return await AnswerKeyMatchAsync(prior, dto.ReportedByStaffId, ct);
+        }
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
         if (crossFieldError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
@@ -608,8 +620,6 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Booking not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
-        if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
-            return BadRequest(ApiResponse<IncidentListDto>.Fail("Reported-by staff member not found."));
         var rpLinkError = await ValidateRestrictivePracticeLinkAsync(dto.RestrictivePracticeId, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
         if (rpLinkError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(rpLinkError));
@@ -637,7 +647,8 @@ public class IncidentsController : ControllerBase
             InvolvedParticipantId = dto.InvolvedParticipantId,
             InvolvedUserId = dto.InvolvedStaffId,
             ReportedByUserId = dto.ReportedByStaffId,
-            TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct),
+            TenantId = reporterTenant,
+            IdempotencyKey = key,
             IncidentType = dto.IncidentType,
             OtherTypeSpecify = dto.OtherTypeSpecify,
             RestrictivePracticeType = dto.RestrictivePracticeType,
@@ -756,9 +767,29 @@ public class IncidentsController : ControllerBase
             }
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (key != null && ex.InnerException is PostgresException pg && pg.ConstraintName == IncidentReport.IdempotencyIndexName)
+        {
+            // A racing submit with the SAME key committed between our lookup and our insert: drop everything tracked and answer from the winner.
+            _db.ChangeTracker.Clear();
+            var winner = await _db.IncidentReports.FirstOrDefaultAsync(i => i.TenantId == reporterTenant && i.IdempotencyKey == key, ct);
+            if (winner == null) throw;
+            return await AnswerKeyMatchAsync(winner, dto.ReportedByStaffId, ct);
+        }
 
         return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(incident.Id, ct)));
+    }
+
+    /// <summary>The key was already used: the same reporter is a retry and gets the saved incident as it stands now, anyone else gets a 409 with no incident data.</summary>
+    // shortcut: "same user" is the saved reporter, not the caller (there is no CreatedBy column), so two admins reusing one random key for the same reporter would replay; add a CreatedByUserId if that ever matters.
+    private async Task<ActionResult<ApiResponse<IncidentListDto>>> AnswerKeyMatchAsync(IncidentReport prior, Guid reporterId, CancellationToken ct)
+    {
+        if (prior.ReportedByUserId == reporterId)
+            return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(prior.Id, ct)));
+        return Conflict(ApiResponse<IncidentListDto>.Fail("An incident from this form was already saved under another reporter. Check the incidents list before you submit again.", IncidentErrorCodes.IncidentIdempotencyKeyReused));
     }
 
     private const string ChangedByOther = "Someone else changed this incident after you opened it. Cancel, then edit it again to see their changes.";
