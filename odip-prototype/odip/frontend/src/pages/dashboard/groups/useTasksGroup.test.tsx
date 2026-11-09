@@ -23,7 +23,7 @@ const answer = (overdue: Array<{ id: unknown }>, week: Array<{ id: unknown }> = 
     }
     return Promise.resolve(params?.status === 'Overdue' ? pagedTasks(overdue, overdueTotal) : pagedTasks(week))
   })
-const render = (mayCloseBudgetReview = true) => renderGroup(() => useTasksGroup(true, { today: TODAY, mayCloseBudgetReview }))
+const render = (mayCloseBudgetReview = true) => renderGroup(() => useTasksGroup(true, { mayCloseBudgetReview }))
 
 beforeEach(() => {
   apiGet.mockReset()
@@ -79,7 +79,7 @@ describe('Tasks due group — Done', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
 
     // The WHOLE body: only the day. A whole-row PUT would write back every field the list read, undoing anything changed since.
-    await waitFor(() => expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t1/complete', { completedDate: TODAY }))
+    await waitFor(() => expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t1/complete', {}))
     expect(apiPostRaw.mock.calls[0][0]).toBe('/tasks/t1/complete')
     await waitFor(() => expect(announcement()).toHaveTextContent('Marked done: Chase travel insurance certificate.'))
   })
@@ -145,7 +145,7 @@ describe('Tasks due group — a refused Done', () => {
 })
 
 describe('Tasks due group — Done reads the task fresh (deep S2)', () => {
-  it('sends no field but the day, so a title, note or date changed on the server since the list loaded is left as it is', async () => {
+  it('sends no field at all, so a title, note or date changed on the server since the list loaded is left as it is', async () => {
     const now = task({ notes: 'Insurer called back 14 Oct.', dueDate: '2026-10-12' })
     answer([task()], [], { t1: now })
     apiPostRaw.mockResolvedValue({ success: true, data: { ...now, status: 'Completed' } })
@@ -153,8 +153,8 @@ describe('Tasks due group — Done reads the task fresh (deep S2)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
 
-    await waitFor(() => expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t1/complete', { completedDate: TODAY }))
-    expect(Object.keys(apiPostRaw.mock.calls[0][1])).toEqual(['completedDate'])
+    await waitFor(() => expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t1/complete', {}))
+    expect(Object.keys(apiPostRaw.mock.calls[0][1])).toEqual([])
     const getCall = apiGet.mock.calls.findIndex(([url]) => url === '/tasks/t1')
     expect(apiGet.mock.invocationCallOrder[getCall]).toBeLessThan(apiPostRaw.mock.invocationCallOrder[0])
   })
@@ -214,7 +214,7 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
 
     await waitFor(() => expect(screen.getByText('Marked 2 tasks done')).toBeInTheDocument())
     expect(apiPostRaw.mock.calls.map(([url]) => url)).toEqual(['/tasks/t1/complete', '/tasks/t2/complete'])
-    expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t2/complete', { completedDate: TODAY })
+    expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t2/complete', {})
     expect(screen.getByText('1 was already closed.')).toBeInTheDocument()
     expect(subjects()).toEqual(['Cover the shift'])
   })
