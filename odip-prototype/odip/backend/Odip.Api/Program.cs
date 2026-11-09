@@ -88,7 +88,8 @@ builder.Services.AddAuthentication(options =>
                 context.Token = cookieToken;
             }
             return Task.CompletedTask;
-        }
+        },
+        OnTokenValidated = SessionRecheck.OnTokenValidated
     };
 });
 
