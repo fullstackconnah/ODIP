@@ -54,6 +54,11 @@ describe('extractErrorMessage', () => {
     expect(extractErrorMessage(fail({ errors: { '$.x': [converter], Notes: [note] } }), 'fb')).toBe(note)
   })
 
+  it('skips a System.Int32 type name but keeps a plain message that merely says "System."', () => {
+    expect(extractErrorMessage(fail({ errors: { Count: ['Could not convert to System.Int32.'] }, message: 'm' }), 'fb')).toBe('m')
+    expect(extractErrorMessage(fail({ errors: { Note: ['Contact your System. admin'] } }), 'fb')).toBe('Contact your System. admin')
+  })
+
   it('leaves an ApiResponse errors array unchanged', () => {
     expect(extractErrorMessage(fail({ errors: ['Participant is archived.'] }), 'fb')).toBe('Participant is archived.')
   })
