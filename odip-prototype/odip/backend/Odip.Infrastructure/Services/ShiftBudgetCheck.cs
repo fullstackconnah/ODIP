@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Billing.Catalogue;
+using PlanBlock = Odip.Domain.Billing.Pricing.PlanBlock;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -82,7 +83,8 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         // Provider travel (travel plan D5): the submitted legs of a saved shift, else the forecast of its agreement block; a hand-made shift forecasts none. The same source the claim and the ledger read.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
         var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.ShiftId, s.ShiftPatternId, person.MmLevel, AgreementPatternMapper.GroupSizeOf(s.GroupActivityId, s.Ratio))).ToList(), ct);
-        var headcountChanged = await ShiftTravelSource.HeadcountChangedAsync(_db, tenantId, shifts.Select(s => s.ShiftPatternId), ct);
+        var blocks = await ShiftTravelSource.AgreementBlocksAsync(_db, tenantId, shifts.Select(s => s.ShiftPatternId), ct);
+        PlanBlock? BlockOf(Guid? id) => id is Guid p ? blocks.GetValueOrDefault(p) : null;
 
         return shifts.Select((shift, index) =>
         {
@@ -90,7 +92,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
             // Future shifts have no breaks yet: no spans (W9).
             var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
                 person.IsIntensiveSupport, state, holidays.For(state), zone, null,
-                AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio), shift.ShiftPatternId is Guid pid && headcountChanged.Contains(pid));
+                AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
             if (outcome.IsPriced) outcome = ShiftTravelPricer.Apply(outcome, travelInputs[index], shift.ServiceDate, state, travelPolicy.KmRate, groupRows.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
             return outcome.IsPriced
                 ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(ShiftPriceEstimator.PartsOf(outcome))

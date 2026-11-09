@@ -67,12 +67,9 @@ public static class ShiftTravelSource
     // A shift with no agreement block that sits on a group activity shares its travel by the group size; a block's own sharing stands.
     private static int SharingOf(PlanBlock? block, int? groupOf) => block is null ? groupOf ?? 1 : Math.Max(1, block.Travel?.ParticipantsSharing ?? block.ParticipantsPresent);
 
-    /// <summary>Of these patterns, those whose agreement block changes the headcount part-way through (<see cref="PlanBlock.HeadcountChanges"/>): a group shift from one is left out of the claim, because its starting ratio is not what was delivered all through.</summary>
-    public static async Task<HashSet<Guid>> HeadcountChangedAsync(OdipDbContext db, Guid tenantId, IEnumerable<Guid?> patternIds, CancellationToken ct)
-    {
-        var (blocks, _) = await BlocksAsync(db, tenantId, patternIds.OfType<Guid>().Distinct().ToList(), ct);
-        return blocks.Where(b => b.Value.HeadcountChanges is { Count: > 0 }).Select(b => b.Key).ToHashSet();
-    }
+    /// <summary>The agreement block each of these patterns was made from, read only through the caller's own patterns and drafts: a group shift's divisor (shared support) and its headcount changes (a group shift from a changing block is left out of the claim) come from it.</summary>
+    public static async Task<IReadOnlyDictionary<Guid, PlanBlock>> AgreementBlocksAsync(OdipDbContext db, Guid tenantId, IEnumerable<Guid?> patternIds, CancellationToken ct) =>
+        (await BlocksAsync(db, tenantId, patternIds.OfType<Guid>().Distinct().ToList(), ct)).Blocks;
 
     /// <summary>The agreement block each pattern was made from, read only through the caller's own patterns and drafts.</summary>
     private static async Task<(Dictionary<Guid, PlanBlock> Blocks, HashSet<Guid> AgreementIds)> BlocksAsync(OdipDbContext db, Guid tenantId, List<Guid> patternIds, CancellationToken ct)

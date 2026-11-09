@@ -134,7 +134,7 @@ public sealed record ShiftPriceOutcome(IReadOnlyList<ShiftPrice> Lines, string? 
 /// A sleepover or a passive night (8 elapsed hours or more across midnight) is one flat sleepover item. Pure: the caller loads the rows, the holidays and the zone.
 ///
 /// <b>Group shifts (the 2026-10-08 review, L3-02; GA PR4).</b> A group shift is priced only on a group activity (<c>groupOf</c> is N, 2 to 5), at its agreement's own share: the rate x 1 / N floored to the cent
-/// (<c>PlanMoney.GroupPrice</c>). An unattached 1:N, shared support and another ratio are still refused with their reason. Two-to-one is priced (two one-to-one shifts are the quote).
+/// (<c>PlanMoney.GroupPrice</c>). A shared-support shift on a group activity is priced the same way, with N its agreement block's participants present; with no block it is refused. An unattached 1:N, shared support and another ratio are still refused with their reason. Two-to-one is priced (two one-to-one shifts are the quote).
 /// </summary>
 public static class ShiftPriceEstimator
 {
@@ -185,14 +185,14 @@ public static class ShiftPriceEstimator
         string.Create(CultureInfo.InvariantCulture, $"no catalogue rate covers its {(band == Odip.Domain.Billing.Pricing.DayBands.WeekdayDaytime ? "Weekday" : band)} hours on {date:d MMM yyyy}");
 
     /// <summary>How a ratio the engine cannot price is described, or null when it can (one-to-one, and two-to-one: two one-to-one shifts are the quote). An unknown ratio is not priced.</summary>
-    private static string? UnpricedRatio(SupportRatio ratio) => ratio switch
+    private static string? UnpricedRatio(SupportRatio ratio, bool onGroupActivity) => ratio switch
     {
         SupportRatio.OneToOne or SupportRatio.TwoToOne => null,
         SupportRatio.OneToTwo => "a 1:2 group shift",
         SupportRatio.OneToThree => "a 1:3 group shift",
         SupportRatio.OneToFour => "a 1:4 group shift",
         SupportRatio.OneToFive => "a 1:5 group shift",
-        SupportRatio.SharedSupport => "a shared-support shift",
+        SupportRatio.SharedSupport => onGroupActivity ? "a shared-support shift with no agreement headcount" : "a shared-support shift",
         _ => "a shift with another support ratio",
     };
 
@@ -217,12 +217,13 @@ public static class ShiftPriceEstimator
     /// <param name="groupCode">The shift's support group, or null for community access; a short-term accommodation group takes the short-term accommodation sleepover item.</param>
     /// <param name="publicHolidays">The whole-day holidays that apply in <paramref name="state"/>, loaded to the day after the last service date (a shift runs past midnight).</param>
     /// <param name="zone">The organisation's time zone, where the clocks change.</param>
-    /// <param name="groupOf">N when the shift sits on a group activity at 1:N (<c>AgreementPatternMapper.GroupSizeOf</c>): each hourly line is priced at the rate x 1 / N, floored to the cent. Null prices the shift as before (a 1:N, shared or other ratio is refused).</param>
+    /// <param name="groupOf">N when the shift sits on a group activity at 1:N (<c>AgreementPatternMapper.GroupSizeOf</c>; for shared support, its block's participants present): each hourly line is priced at the rate x 1 / N, floored to the cent. Null prices the shift as before (a 1:N, shared or other ratio is refused).</param>
+    /// <param name="onGroupActivity">True when the shift is attached to a group activity: a shared-support one with no <paramref name="groupOf"/> is then refused for its missing agreement headcount, not as a shared-support shift in general.</param>
     /// <param name="groupHeadcountChanged">True when the shift's agreement block changes the headcount part-way: its starting ratio is not what was delivered all through, so a group line is refused and claimed by hand.</param>
     /// <param name="unclaimed">Minute offsets from the rostered start (<see cref="ShiftBreakRules.UnclaimedSpans"/>): breaks taken alone come off the hourly stretches they fall in, before each line is rounded. A sleepover item is flat and never changes. Null (a future shift, a cancellation) deducts nothing.</param>
     public static ShiftPriceOutcome Price(
         ShiftRateRows rows, string? groupCode, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
-        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false)
+        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false, bool onGroupActivity = false)
     {
         // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
         // so this is said before the shift's kind.
@@ -230,7 +231,7 @@ public static class ShiftPriceEstimator
 
         // The kind of shift comes first: a shift that would be wrong to price is not priced however good its rate, and its own kind is the useful thing to say.
         if (groupOf is not null && groupHeadcountChanged) return ShiftPriceOutcome.Unpriced(GroupHeadcountChangedBecause, GroupHeadcountChangedBecause);
-        var unpriced = new[] { groupOf is null ? UnpricedRatio(ratio) : null, groupOf is not null && nightType is SleepoverType.Sleepover or SleepoverType.PassiveNight ? "a group sleepover" : null, UnknownNightType(nightType) }.OfType<string>().ToList();
+        var unpriced = new[] { groupOf is null ? UnpricedRatio(ratio, onGroupActivity) : null, groupOf is not null && nightType is SleepoverType.Sleepover or SleepoverType.PassiveNight ? "a group sleepover" : null, UnknownNightType(nightType) }.OfType<string>().ToList();
         if (unpriced.Count > 0) return ShiftPriceOutcome.Unpriced($"it is {string.Join(" and ", unpriced)}, which shift claims do not price yet", unpriced.ToArray());
 
         // "Ends the next day" with an end after the start is more than 24 hours: the data is wrong, so it is not priced as it was.
