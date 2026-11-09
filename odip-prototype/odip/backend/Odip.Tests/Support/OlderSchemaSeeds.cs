@@ -59,6 +59,7 @@ internal static class OlderSchemaSeeds
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
         ("IncidentReports", "FireOfficerName", "character varying(100)"),
         ("IncidentReports", "FireReference", "character varying(50)"),
+        ("IncidentReports", "IdempotencyKey", "character varying(100)"),
         ("IncidentReports", "PoliceOfficerName", "character varying(100)"),
         ("IncidentReports", "PoliceReference", "character varying(50)"),
         ("IncidentReports", "UrgentAlertSentAt", "timestamp without time zone"),

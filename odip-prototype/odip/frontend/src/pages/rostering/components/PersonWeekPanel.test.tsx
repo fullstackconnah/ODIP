@@ -13,6 +13,7 @@ vi.mock('./ShiftSlideOver', () => ({
     <div>
       <p>staff: {p.staffOptions.map(o => o.label).join(',')}</p>
       <p>participants: {p.participantOptions.map(o => o.label).join(',')}</p>
+      {p.participantsNote && <p>{p.participantsNote}</p>}
       {p.loadFailed?.staff && <button onClick={p.loadFailed.staff}>retry staff</button>}
       {p.loadFailed?.participants && <button onClick={p.loadFailed.participants}>retry participants</button>}
     </div>
@@ -42,5 +43,15 @@ describe('PersonWeekPanel', () => {
     screen.getByRole('button', { name: 'retry staff' }).click()
     expect(staff.refetch).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'retry participants' })).toBeInTheDocument()
+  })
+  it('hands the form the cut note when the server cut the participant list, and none for a whole one', () => {
+    const cut = Object.assign([{ id: 'p1', fullName: 'Mia Chen' }], { totalCount: 250, isTruncated: true })
+    mockUseParticipants.mockReturnValue(ok(cut))
+    const { unmount } = render(<PersonWeekPanel kind="staff" target={{ mode: 'create' }} onClose={vi.fn()} />)
+    expect(screen.getByText('Showing the first 1 of 250 participants.')).toBeInTheDocument()
+    unmount()
+    mockUseParticipants.mockReturnValue(ok([{ id: 'p1', fullName: 'Mia Chen' }]))
+    render(<PersonWeekPanel kind="staff" target={{ mode: 'create' }} onClose={vi.fn()} />)
+    expect(screen.queryByText(/showing the first/i)).not.toBeInTheDocument()
   })
 })
