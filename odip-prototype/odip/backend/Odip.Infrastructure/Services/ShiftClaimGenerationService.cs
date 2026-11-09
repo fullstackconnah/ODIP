@@ -328,6 +328,11 @@ public partial class ShiftClaimGenerationService
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = notYet });
                 continue;
             }
+            if (headcount.IsOpen(shift.GroupActivityId))
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = GroupHeadcount.NotFinished });
+                continue;
+            }
             var catalogueItems = RowsOf(shift);
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say. Approved extra time that cannot be claimed (over a hard limit, outside the shift's date,
             // or a window nothing prices) is left out on its own: the shift is claimed without it and the extra time is listed with the reason.

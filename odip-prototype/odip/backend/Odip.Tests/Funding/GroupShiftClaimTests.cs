@@ -5,6 +5,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Funding.LedgerKit;
@@ -636,6 +637,74 @@ public class GroupShiftClaimTests
         Assert.All(units, u => Assert.Equal(14.00m, u));   // five seats, the no-show's included
         Assert.Equal(70.00m, units.Sum());
         Assert.Equal(42.00m, made.Claim.TotalAmount);
+    }
+
+    // GCH-D1: a group line waits until its activity can no longer change (Completed, PendingReview, Cancelled), so a later claim never divides by a different N.
+
+    private static GroupActivity RealActivity(LedgerKit kit, Guid id, ShiftStatus status)
+    {
+        var activity = new GroupActivity { Id = id, TenantId = kit.TenantId, ServiceDate = Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Title = "Bowling", Status = status };
+        kit.Db.GroupActivities.Add(activity);
+        kit.Db.SaveChanges();
+        return activity;
+    }
+
+    [Fact]
+    public async Task CancellationClaim_ActivityStillInProgress_LeftOut_ThenOfferedOnceCompleted_AndTheLinesStayWithinTheRate()
+    {
+        var kit = Arrange();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        kit.Db.SaveChanges();
+        var activity = Guid.NewGuid();
+        var row = RealActivity(kit, activity, ShiftStatus.InProgress);
+        var first = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+        var attendees = Others(kit, activity, 5).Prepend(first).ToList();   // six attend
+        var noShow = Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay).Single();
+        Staff(kit, activity, 2);
+
+        var early = await Assert.ThrowsAsync<NothingClaimableException>(() => Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(1), Ct));
+
+        Assert.Contains(GroupHeadcount.NotFinished, early.Message);
+        Assert.Empty(await LinesOf(kit, noShow.Id));
+
+        row.Status = ShiftStatus.Completed;
+        kit.Db.SaveChanges();
+        foreach (var shift in attendees) await Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct);
+        await Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(1), Ct);
+
+        var lines = new List<ClaimLineItem>();
+        foreach (var shift in attendees.Append(noShow)) lines.AddRange(await LinesOf(kit, shift.Id));
+        Assert.Equal(7, lines.Count);
+        Assert.True(lines.Sum(l => l.TotalAmount) <= 2 * 70.01m * 3);   // two workers x the rate x three hours
+    }
+
+    [Fact]
+    public async Task ClaimRun_CompletedShiftOnAnActivityStillInProgress_LeftOut()
+    {
+        var kit = Arrange();
+        var activity = Guid.NewGuid();
+        RealActivity(kit, activity, ShiftStatus.InProgress);
+        var shift = Attached(kit, Person(kit), SupportRatio.OneToThree, activity);
+
+        var refused = await Assert.ThrowsAsync<NothingClaimableException>(() => Engine(kit).GenerateAsync(shift.ParticipantId, From, To, Ct));
+
+        Assert.Contains(GroupHeadcount.NotFinished, refused.Message);
+        Assert.Empty(await LinesOf(kit, shift.Id));
+    }
+
+    [Fact]
+    public async Task CancellationClaim_CancelledActivity_StillOffered()
+    {
+        var kit = Arrange();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        kit.Db.SaveChanges();
+        var activity = Guid.NewGuid();
+        RealActivity(kit, activity, ShiftStatus.Cancelled);
+        var noShow = Others(kit, activity, 1, status: ShiftStatus.Cancelled, cancelledAt: OnTheDay).Single();
+
+        await Engine(kit).GenerateCancellationAsync(noShow.Id, "NSDH", Monday.AddDays(1), Ct);
+
+        Assert.Single(await LinesOf(kit, noShow.Id));
     }
 
     [Fact]

@@ -20,12 +20,21 @@ public sealed class GroupHeadcount
 {
     private readonly ILookup<Guid, GroupSeat> _seats;
     private readonly IReadOnlyDictionary<Guid, int> _staff;
+    private readonly IReadOnlySet<Guid> _open;
 
-    public GroupHeadcount(IEnumerable<GroupSeat> seats, IReadOnlyDictionary<Guid, int> staffRows)
+    /// <param name="openActivities">Activities whose group can still change (shortcut: an id with no activity row is not waited on).</param>
+    public GroupHeadcount(IEnumerable<GroupSeat> seats, IReadOnlyDictionary<Guid, int> staffRows, IReadOnlySet<Guid>? openActivities = null)
     {
         _seats = seats.ToLookup(s => s.GroupActivityId);
         _staff = staffRows;
+        _open = openActivities ?? new HashSet<Guid>();
     }
+
+    /// <summary>The reason a group line waits: its activity can still gain people or lose staff rows, so the count it divides by is not final.</summary>
+    public const string NotFinished = "a group shift whose activity isn't finished yet, so the group's size can still change";
+
+    /// <summary>True while the activity is Draft, Published or InProgress, the statuses <c>GroupActivitiesController.EnsureStaffChangeable</c> / <c>StateRefusal</c> still allow a change in (the claim waits for Cancelled, PendingReview or Completed).</summary>
+    public bool IsOpen(Guid? activityId) => activityId is Guid id && _open.Contains(id);
 
     public static async Task<GroupHeadcount> LoadAsync(OdipDbContext db, Guid tenantId, IEnumerable<Guid?> activityIds, CancellationToken ct)
     {
@@ -35,7 +44,9 @@ public sealed class GroupHeadcount
             .Select(s => new GroupSeat(s.GroupActivityId!.Value, s.ParticipantId, s.Ratio, s.Status, s.ServiceDate, s.CancelledAt)).ToListAsync(ct);
         var staff = await db.GroupActivityStaff.AsNoTracking().Where(r => r.TenantId == tenantId && ids.Contains(r.GroupActivityId))
             .GroupBy(r => r.GroupActivityId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
-        return new GroupHeadcount(seats, staff);
+        var open = (await db.GroupActivities.AsNoTracking().Where(a => a.TenantId == tenantId && ids.Contains(a.Id) && a.Status != ShiftStatus.Cancelled && a.Status != ShiftStatus.PendingReview && a.Status != ShiftStatus.Completed)
+            .Select(a => a.Id).ToListAsync(ct)).ToHashSet();
+        return new GroupHeadcount(seats, staff, open);
     }
 
     /// <summary>The headcount floor for a shift on this activity, or 0 for a shift on none. <paramref name="zone"/> is the shift's own zone, which dates every cancellation (shortcut: one activity, one zone).</summary>
