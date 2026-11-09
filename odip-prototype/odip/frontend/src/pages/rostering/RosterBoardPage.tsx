@@ -28,6 +28,7 @@ import { AddToActivityDialog } from './components/AddToActivityDialog'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
 import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useAutoRosterDraft, useApplyAutoRoster, useSetRegular, useUpdateShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { participantsCutNote } from '@/api/hooks/pagedList'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { GroupActivityDto, GroupActivityParticipantDto, ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto, AutoRosterApplyResultDto } from '@/api/types'
 import { AutoRosterPanel, type AutoRosterPanelProps, type AutoRosterRowText } from './components/AutoRosterPanel'
@@ -184,10 +185,13 @@ export default function RosterBoardPage() {
 
   const days = board?.days ?? daysOfWeek(weekStart)
 
-  const participantOptions = useMemo(
-    () => participants.map(p => ({ value: p.id, label: p.fullName })),
-    [participants],
-  )
+  const participantOptions = useMemo(() => {
+    const options = participants.map(p => ({ value: p.id, label: p.fullName }))
+    // A ?participant=<id> link to someone past the list's cut still names them in the filter, from their shift on the board.
+    const filtered = participantFilter && !options.some(o => o.value === participantFilter) ? allBoardShifts(board).find(s => s.participantId === participantFilter) : undefined
+    return filtered ? [{ value: filtered.participantId, label: filtered.participantName }, ...options] : options
+  }, [participants, participantFilter, board])
+  const participantsNote = participantsCutNote(participants)
   // What is still missing per participant, for the slide-over's quiet warning line. Every listed participant gets an entry (an empty
   // list is "ready"), so a fresh list wins over a shift's older snapshot of the same participant.
   const participantReadiness = useMemo(
@@ -871,6 +875,7 @@ export default function RosterBoardPage() {
           heldBack={heldDrafts > 0}
           trailing={belowMd ? secondaryActions : undefined}
         />
+        {participantsNote && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{participantsNote}</p>}
       </div>
 
       {/* The transient notices (each dismissible) stack above the one status line, in one wrapper: the notice never jumps when an error comes and goes (the brief, section 6). */}
@@ -1053,6 +1058,7 @@ export default function RosterBoardPage() {
         staffOptions={staffOptions}
         groupBy={groupBy}
         participantReadiness={participantReadiness}
+        participantsNote={participantsNote}
       />
 
       <StaffPicker

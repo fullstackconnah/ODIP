@@ -32,6 +32,8 @@ export type PatternSlideOverProps = {
   onClose: () => void
   canWrite: boolean
   participantOptions: { value: string; label: string }[]
+  /** Set when the participant list was cut at the server ceiling: shown under the participant picker. */
+  participantsNote?: string | null
   staffOptions: { value: string; label: string }[]
   /** For a pattern an agreement made: the days of its block (the page reads them from its list), so a change can be made to every day of it at once. */
   blockDays?: string[]
@@ -65,7 +67,7 @@ function priceLine(change: PatternChangeResultDto): string {
  * explaining that it stops future generation without touching shifts already generated), not a
  * field buried in this form.
  */
-export function PatternSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, blockDays }: PatternSlideOverProps) {
+export function PatternSlideOver({ target, onClose, canWrite, participantOptions, participantsNote, staffOptions, blockDays }: PatternSlideOverProps) {
   const open = target !== null
 
   const isEdit = target?.mode === 'edit'
@@ -297,7 +299,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </FormField>
         )}
 
-        <FormField label="Participant" required>
+        <FormField label="Participant" required hint={participantsNote ?? undefined}>
           <Dropdown
             variant="form"
             value={participantId}
@@ -305,7 +307,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
             disabled={!canWrite || isEdit}
             searchable
             label="Select a participant"
-            items={participantOptions}
+            // An edited pattern whose participant is past the cut keeps its name (the picker is disabled on edit).
+            items={existing && !participantOptions.some(o => o.value === existing.participantId) ? [{ value: existing.participantId, label: existing.participantName }, ...participantOptions] : participantOptions}
           />
         </FormField>
 

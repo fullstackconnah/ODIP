@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw, apiClient } from '../client'
 import { toTruncatableList } from './pagedList'
 import { refreshBudgetFigures } from './funding-ledger'
+import { fileNameFromDisposition } from './service-agreement-drafts'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { isSectionChanged } from '@/lib/sectionConflict'
 import { SCALAR_GROUP_KEYS, type ScalarGroupKey } from '../types/participant-patch'
@@ -199,11 +200,10 @@ export function useDownloadParticipantIntakeSnapshotPdf() {
     mutationFn: async ({ id, revision }: { id: string; revision: number }) => {
       const response = await apiClient.get<Blob>(`/participants/${id}/intake-snapshots/${revision}/download`, { responseType: 'blob' })
       const disposition = response.headers['content-disposition'] as string | undefined
-      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
-      link.download = match?.[1] ? decodeURIComponent(match[1]) : `Intake-Completion-r${revision}.pdf`
+      link.download = fileNameFromDisposition(disposition) ?? `Intake-Completion-r${revision}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -330,8 +330,7 @@ export function useDownloadIntakeFormPdf() {
       })
 
       const disposition = response.headers['content-disposition'] as string | undefined
-      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
-      const downloadName = match?.[1] ? decodeURIComponent(match[1]) : fileName
+      const downloadName = fileNameFromDisposition(disposition) ?? fileName
 
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
@@ -357,8 +356,7 @@ export function useDownloadParticipantProfilePdf() {
       })
 
       const disposition = response.headers['content-disposition'] as string | undefined
-      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
-      const downloadName = match?.[1] ? decodeURIComponent(match[1]) : fileName
+      const downloadName = fileNameFromDisposition(disposition) ?? fileName
 
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
@@ -387,8 +385,7 @@ export function useDownloadClientOverviewPdf() {
       })
 
       const disposition = response.headers['content-disposition'] as string | undefined
-      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
-      const downloadName = match?.[1] ? decodeURIComponent(match[1]) : fileName
+      const downloadName = fileNameFromDisposition(disposition) ?? fileName
 
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')

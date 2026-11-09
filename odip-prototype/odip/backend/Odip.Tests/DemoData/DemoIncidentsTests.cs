@@ -490,6 +490,16 @@ public class DemoIncidentsTests
     }
 
     [Fact]
+    public async Task EveryIncidentThePacksWrite_HasNoIdempotencyKey_SoTheFilteredUniqueIndexNeverHoldsIt()
+    {
+        var env = await TickAsync(FirstRun);
+        var all = await IncidentsAsync(env);
+
+        Assert.NotEmpty(all);
+        Assert.All(all, i => Assert.Null(i.IdempotencyKey));
+    }
+
+    [Fact]
     public async Task EveryIncidentIsTheDemoTenantsAndOnlyAboutItsPeople()
     {
         var env = await TickAsync(FirstRun);

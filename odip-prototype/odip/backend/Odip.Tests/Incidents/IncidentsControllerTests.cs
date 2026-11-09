@@ -2644,6 +2644,24 @@ public class IncidentsControllerTests
     }
 
     [Fact]
+    public async Task Create_SameKeyRetry_ReplaysEvenWhenTheInvolvedParticipantIsGoneSinceTheFirstSave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db, reporter.TenantId);
+        var controller = new IncidentsController(db);
+        var dto = Keyed(reporter.Id, "key-1") with { InvolvedParticipantId = participant.Id };
+        var first = await DataOf(controller.Create(dto, CancellationToken.None));
+        db.Participants.Remove(participant);
+        await db.SaveChangesAsync();
+
+        var second = await DataOf(controller.Create(dto, CancellationToken.None));
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(1, await db.IncidentReports.CountAsync());
+    }
+
+    [Fact]
     public async Task Create_SameKeyInAnotherTenant_MakesItsOwnIncident_EvenForASuperAdmin()
     {
         using var db = CreateDb(Guid.NewGuid().ToString()); // a SuperAdmin context: the tenant filter passes every row

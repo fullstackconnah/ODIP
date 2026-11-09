@@ -122,4 +122,18 @@ describe('ReportTab participant picker', () => {
     render(<ReportTab />)
     expect(mockUseParticipants).toHaveBeenCalledWith({ servicesBegun: 'true' })
   })
+
+  it('says so under the participant filter when the list was cut at the ceiling, and says nothing when it was not', () => {
+    mockUseAdministrationsReport.mockReturnValue({
+      data: { items: [], totalCount: 0, page: 1, pageSize: 200, totalPages: 0, hasNext: false, hasPrevious: false },
+      isLoading: false,
+    })
+    const { unmount } = render(<ReportTab />)
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument()
+    unmount()
+
+    mockUseParticipants.mockReturnValue({ data: Object.assign([{ id: 'p1', fullName: 'Jamie Smith' }, { id: 'p2', fullName: 'Harrison Lee' }], { isTruncated: true, totalCount: 250 }) })
+    render(<ReportTab />)
+    expect(screen.getByText('Showing the first 2 of 250 participants.')).toBeInTheDocument()
+  })
 })

@@ -1955,10 +1955,10 @@ describe('IncidentCreatePage — retry key', () => {
       mutateAsync: mockCreateMutateAsync,
       isPending: false,
       isError: true,
-      error: { response: { status: 409, data: { errors: ['This incident was already submitted by another reporter. Reload the page and submit it again.'], code: 'INCIDENT_IDEMPOTENCY_KEY_REUSED' } } },
+      error: { response: { status: 409, data: { errors: ['An incident from this form was already saved under another reporter. Check the incidents list before you submit again.'], code: 'INCIDENT_IDEMPOTENCY_KEY_REUSED' } } },
     })
     renderCreatePage()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This incident was already submitted by another reporter. Reload the page and submit it again.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('An incident from this form was already saved under another reporter. Check the incidents list before you submit again.')
   })
 })

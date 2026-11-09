@@ -71,6 +71,8 @@ export type ShiftSlideOverProps = {
    * `readinessIssues` in edit mode; an entry holding an empty list means "ready", and wins over that fallback.
    */
   participantReadiness?: Record<string, string[]>
+  /** The line for a participant list the server cut at its page-size ceiling (`participantsCutNote`); absent for a whole list. */
+  participantsNote?: string | null
   /** Group activities (flag on): "Make a group activity" starts one from the shift being edited. Absent with the flag off, and the button with it. */
   onMakeActivity?: (shift: ShiftDto) => void
   /** Called with the saved shift after a successful save, before onClose; never on Cancel. The board uses it to clear the shift a person was carried off (roster drag and drop, decision 6). */
@@ -101,7 +103,7 @@ const BUDGET_REASON_COPY = {
 /** "Backup #2" for a ranked tier, the bare level for an unranked one. */
 const tierPlace = (level: string, rank: number) => (rank > 0 ? `${level} #${rank}` : level)
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, loadFailed, groupBy = 'participant', participantReadiness, onMakeActivity, onSaved }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, loadFailed, groupBy = 'participant', participantReadiness, participantsNote, onMakeActivity, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
   const refusalId = useId()
   const open = target !== null
@@ -505,9 +507,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               disabled={!canWrite || isEdit}
               searchable
               label="Select a participant"
-              items={participantOptions}
+              // A shift being edited whose participant is past the list's cut keeps its name (the picker is disabled on edit).
+              items={existing && !participantOptions.some(o => o.value === existing.participantId) ? [{ value: existing.participantId, label: existing.participantName }, ...participantOptions] : participantOptions}
             />}
           </FormField>
+          {participantsNote && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{participantsNote}</p>}
           <ReadinessNote issues={readinessIssues} className="mt-1.5" />
         </div>
 

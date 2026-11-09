@@ -132,3 +132,13 @@ describe('UserFormPanel inputs', () => {
     expect(screen.getByLabelText(/first name/i).className).toContain('bg-[var(--color-field)]')
   })
 })
+
+describe('UserFormPanel input limits', () => {
+  it('stops typing at the DTO caps instead of returning the server 400 text', () => {
+    render(<UserFormPanel isOpen onClose={() => {}} user={user1} />)
+    expect(screen.getByLabelText(/first name/i)).toHaveAttribute('maxLength', '100')
+    expect(screen.getByLabelText(/last name/i)).toHaveAttribute('maxLength', '100')
+    expect(screen.getByLabelText(/^email/i)).toHaveAttribute('maxLength', '200')
+    expect(screen.getByLabelText(/username/i)).toHaveAttribute('maxLength', '100')
+  })
+})
