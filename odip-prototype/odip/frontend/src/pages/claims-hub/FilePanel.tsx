@@ -16,7 +16,7 @@ import { TAP_AREA, TAP_ICON_SQUARE } from '@/components/tapArea'
 import { fetchClaimFile, useClaimBatch, useDiscardBatch, useImportResults, useMarkBatchPaid, useMarkBatchUploaded } from '@/api/hooks/claimHub'
 import { useSubmitPreviewChunks } from '@/api/hooks/claims'
 import { serverSentence } from '@/api/hooks/data-export'
-import type { BatchDetailDto, BatchLineDto, ResultsImportDto } from '@/api/types'
+import type { BatchDetailDto, BatchLineDto, PaidResultDto, ResultsImportDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, awaitsResults, deliveredText, instantDay, stepOf, type FileStep } from './claimHubSteps'
@@ -284,6 +284,7 @@ function ImportSummary({ summary, fileName, onReviewRejected }: { summary: Resul
   return (
     <Callout tone="success" polite title="Results imported">
       <p>{summary.successful} successful · {summary.rejected} rejected</p>
+      {summary.amountDiffers > 0 && <p>{plural(summary.amountDiffers, 'paid amount')} {summary.amountDiffers === 1 ? 'differs' : 'differ'} from what was claimed.</p>}
       {summary.leftAlone > 0 && <p>{plural(summary.leftAlone, 'line')} already had a result and {summary.leftAlone === 1 ? 'was' : 'were'} left alone.</p>}
       {summary.conflicts.length > 0 && <p>{plural(summary.conflicts.length, 'line')} already had a different result, so {summary.conflicts.length === 1 ? 'it wasn’t' : 'they weren’t'} changed: {summary.conflicts.map(c => c.rowReference).join(', ')}.</p>}
       {summary.unreadRows.length > 0 && <p>{plural(summary.unreadRows.length, 'row')} couldn't be read: {summary.unreadRows.map(r => `row ${r.row} (${r.note})`).join(', ')}.</p>}
@@ -307,11 +308,18 @@ function ImportSummary({ summary, fileName, onReviewRejected }: { summary: Resul
 
 function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto; announce: (m: string) => void; onReviewRejected: () => void }) {
   const [open, setOpen] = useState(false)
+  const [result, setResult] = useState<{ marked: number; leftOut: PaidResultDto['leftOut'] } | null>(null)
   const unpaid = batch.lines.filter(l => l.outcome === 'Successful' && l.paidAmount == null)
   const nothingToPay = batch.successful === 0 && batch.pending === 0
   return (
     <Card title={nothingToPay ? 'Nothing to pay' : 'Record the payment'}>
       <p className="text-sm">{nothingToPay ? 'The NDIA rejected every line, so there is no money to record.' : 'The NDIA pays successful lines in its next payment run. When the money is in, record it here.'}</p>
+      {result && result.leftOut.length > 0 && (
+        <Callout tone="warning" polite className="mt-3">
+          <p>Marked {plural(result.marked, 'line')} as paid.</p>
+          <p className="break-words">{plural(result.leftOut.length, 'line')} {result.leftOut.length === 1 ? 'needs' : 'need'} an amount: {result.leftOut.map(l => l.claimReference).join(', ')}.</p>
+        </Callout>
+      )}
       {batch.rejected > 0 && (
         <button type="button" className={`${TAP_AREA} mt-1 text-sm font-medium text-[var(--color-primary)] hover:underline`} onClick={onReviewRejected}>Review {plural(batch.rejected, 'rejected line')}</button>
       )}
@@ -322,12 +330,12 @@ function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto
           </Button>
         </div>
       )}
-      {open && <MarkPaidModal batch={batch} lines={unpaid} onClose={() => setOpen(false)} announce={announce} />}
+      {open && <MarkPaidModal batch={batch} lines={unpaid} onClose={() => setOpen(false)} announce={announce} onPaid={setResult} />}
     </Card>
   )
 }
 
-function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetailDto; lines: BatchLineDto[]; onClose: () => void; announce: (m: string) => void }) {
+function MarkPaidModal({ batch, lines, onClose, announce, onPaid }: { batch: BatchDetailDto; lines: BatchLineDto[]; onClose: () => void; announce: (m: string) => void; onPaid: (r: { marked: number; leftOut: PaidResultDto['leftOut'] }) => void }) {
   const [amounts, setAmounts] = useState<Record<string, number>>(() => Object.fromEntries(lines.map(l => [l.batchLineId, l.resultAmount ?? l.amount])))
   const [serverError, setServerError] = useState<string | null>(null)
   const paid = useMarkBatchPaid()
@@ -339,7 +347,13 @@ function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetail
     if (invalid || paid.isPending) return
     setServerError(null)
     paid.mutate({ batchId: batch.id, lines: lines.map(l => ({ batchLineId: l.batchLineId, amount: amounts[l.batchLineId] })) }, {
-      onSuccess: () => { announce(`${plural(lines.length, 'line')} marked as paid.`); onClose() },
+      onSuccess: res => {
+        const leftOut = res?.leftOut ?? []
+        const marked = lines.length - leftOut.length
+        onPaid({ marked, leftOut })
+        announce(leftOut.length > 0 ? `${plural(marked, 'line')} marked as paid. ${plural(leftOut.length, 'line')} still ${leftOut.length === 1 ? 'needs' : 'need'} an amount.` : `${plural(lines.length, 'line')} marked as paid.`)
+        onClose()
+      },
       onError: async err => setServerError(await serverSentence(isAxiosError(err) ? err.response?.data : undefined, "Couldn't mark the lines as paid. Try again.")),
     })
   }

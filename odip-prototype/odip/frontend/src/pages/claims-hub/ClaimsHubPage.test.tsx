@@ -267,7 +267,7 @@ describe('ClaimsHubPage: files', () => {
   it('holds Import results until a file is chosen, then shows what was left alone and what was not in the file', async () => {
     const user = userEvent.setup()
     m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
-    const summary: ResultsImportDto = { successful: 3, rejected: 1, unchanged: 0, leftAlone: 2, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch() }
+    const summary: ResultsImportDto = { successful: 3, rejected: 1, unchanged: 0, leftAlone: 2, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch(), amountDiffers: 0 }
     m.importResults.mockImplementation((_v, o) => o.onSuccess(summary))
     renderPage('/claims?file=b-1')
 
@@ -284,12 +284,24 @@ describe('ClaimsHubPage: files', () => {
     expect(await screen.findByText('Results imported')).toBeInTheDocument()
     expect(screen.getByText('2 lines already had a result and were left alone.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /1 line in the file weren't in BPR261030001/ })).toBeInTheDocument()
+    expect(screen.queryByText(/differ from what was claimed|differs from what was claimed/)).not.toBeInTheDocument()
+  })
+
+  it('says how many paid amounts differ from what was claimed, only when some do', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 3, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: [], unreadRows: [], batch: batch(), amountDiffers: 2 }))
+    renderPage('/claims?file=b-1')
+
+    await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
+    await user.click(screen.getByTestId('file-next-action'))
+    expect(await screen.findByText('2 paid amounts differ from what was claimed.')).toBeInTheDocument()
   })
 
   it("says the results belong to another file when none of the lines match", async () => {
     const user = userEvent.setup()
     m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
-    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 0, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch() }))
+    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 0, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch(), amountDiffers: 0 }))
     renderPage('/claims?file=b-1')
 
     await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
@@ -504,6 +516,20 @@ describe('ClaimsHubPage: file panel', () => {
     expect(panel.getByText(/^Built 30 Oct 2026 by Sam Lee/)).toBeInTheDocument()
     expect(panel.getAllByText('1 Aug 2026').length).toBeGreaterThan(0)
     expect(screen.getByTestId('file-step-name').closest('li')!.textContent).toBe('Upload BPR261030001.csv')
+  })
+
+  it('names the lines a mark-paid left unpaid, and keeps the way to enter their amounts', async () => {
+    const user = userEvent.setup()
+    const line = (n: number) => ({ batchLineId: `bl-${n}`, claimId: 'c-1', participantName: `P${n}`, supportNumber: 'x', from: '2026-08-01', to: '2026-08-01', amount: 175, attempt: 1, rowReference: `R${n}`, outcome: 'Successful' as const, resultAmount: 175 })
+    m.batch.mockReturnValue(query(resultsIn({ rejected: 0, successful: 3, lines: [line(1), line(2), line(3)] })))
+    m.paid.mockImplementation((_v, o) => o.onSuccess({ ...batch(), leftOut: [{ batchLineId: 'bl-2', claimReference: 'TC-0002', ndiaAmount: 0, lineTotal: 175 }, { batchLineId: 'bl-3', claimReference: 'TC-0003', ndiaAmount: 500, lineTotal: 175 }] }))
+    renderPage('/claims?file=b-1')
+
+    await user.click(screen.getByRole('button', { name: 'Mark 3 lines as paid' }))
+    await user.click(screen.getByRole('button', { name: 'Mark as paid' }))
+    expect(screen.getByText('Marked 1 line as paid.')).toBeInTheDocument()
+    expect(screen.getByText('2 lines need an amount: TC-0002, TC-0003.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark 3 lines as paid' })).toBeInTheDocument()
   })
 
   it('will not mark a line paid with a cleared amount, and says so', async () => {
