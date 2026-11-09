@@ -1062,6 +1062,7 @@ export default function RosterBoardPage() {
         staffOptions={staffOptions}
         groupBy={groupBy}
         participantReadiness={participantReadiness}
+        participantsNote={participantsNote}
       />
 
       <StaffPicker
