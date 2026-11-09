@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { apiClient } from '../client'
-import { useBeginServices, useCreateParticipant, useDeleteParticipant, useDownloadIntakeFormPdf, useMakeParticipantActive, usePatchParticipant, useParticipants, useSaveParticipantIntake, useSupportProfile, useUpdateSupportProfile } from './participants'
+import { useBeginServices, useCreateParticipant, useDeleteParticipant, useDownloadIntakeFormPdf, useMakeParticipantActive, usePatchParticipant, useParticipants, useSaveParticipantIntake, useSupportProfile, useUpdateParticipantStatus, useUpdateSupportProfile } from './participants'
 import type { PatchParticipantDto, SupportProfileDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
@@ -57,6 +57,19 @@ describe('usePatchParticipant', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participants'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant', 'p42'] })
+  })
+
+  it('also refreshes the roster board and that participant\'s rostering view on success', async () => {
+    mockApiPatchRaw.mockResolvedValue({ success: true, data: { id: 'p42' }, message: null, errors: null })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => usePatchParticipant(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ id: 'p42', data: { keyIdentifiers: { weightKg: 60 } } })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant-rostering', 'p42'] })
   })
 
   it('does not invalidate any query when the PATCH fails', async () => {
@@ -245,6 +258,20 @@ describe('useDeleteParticipant', () => {
     expect(mockApiDeleteRaw).toHaveBeenCalledWith('/participants/p9')
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participants'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant', 'p9'] })
+  })
+})
+
+describe('useUpdateParticipantStatus', () => {
+  it('refreshes the roster board when a participant is archived or reactivated', async () => {
+    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'p8' }, message: null, errors: null })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useUpdateParticipantStatus(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ id: 'p8', isActive: false })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 })
 
