@@ -44,6 +44,15 @@ const ROWS = [
 const LONG_ROW = row('d9', 'ParticipantRiskEntry', 10, 'Priya Nair', held({ Description: LONG }))
 const MANY = Array.from({ length: 25 }, (_, i) => row(`m${i}`, 'Shift', 10 + i, 'Sam Lee', held({ ServiceDate: '2026-11-10', StartTime: '09:00:00', EndTime: '15:00:00' })))
 
+const HISTORY = {
+  entries: [
+    { id: 'h3', action: 'Deleted', changedAt: new Date(NOW.getTime() - 20 * 60_000).toISOString(), changedByName: 'Sam Lee', changes: held({ ServiceDate: '2026-11-10', StartTime: '09:00:00' }) },
+    { id: 'h2', action: 'Updated', changedAt: '2026-11-08T01:00:00Z', changedByName: 'Priya Nair', changes: [{ field: 'EndTime', old: '14:00:00', new: '15:00:00' }] },
+    { id: 'h1', action: 'Created', changedAt: '2026-11-01T00:00:00Z', changedByName: 'Sam Lee', changes: [] },
+  ],
+  total: 3, page: 1, pageSize: 50, totalPages: 1,
+}
+
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
 
@@ -55,6 +64,8 @@ async function openPage(browser, vp, { mode = 'list', role = 'Admin', username =
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers(role, username) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role, username) }))
   await page.route('**/api/v1/provider-settings', (r) => r.fulfill({ json: envelope(provider) }))
+  // The full history of a deleted shift (GET /audit/Shift/{id}): created, edited, deleted, newest first, the bare object like the controller.
+  await page.route('**/api/v1/audit/Shift/*', (r) => r.fulfill({ json: HISTORY }))
   await page.route('**/api/v1/audit/deleted**', async (r) => {
     if (mode === 'hang') return // never answered: the loading skeleton
     if (mode === 'fail') return r.fulfill({ status: 500, json: { success: false, data: null, message: 'Server error', errors: ['Server error'] } })
@@ -160,6 +171,19 @@ for (const vp of VPS) {
     await noHScroll(page, t('detail-open-shift'))
     await tableChecks(page, vp, t('detail-open-shift'))
     await crop(page, main(page), `detail-open-shift-${vp.name}.png`, vp)
+    // full history (the Shift row is still open): collapsed fetches nothing; expanded shows the entries and does not scroll sideways
+    const histBtn = page.getByRole('button', { name: 'Show full history' })
+    await histBtn.waitFor({ state: 'visible', timeout: 20_000 })
+    const bh = await histBtn.evaluate((e) => e.getBoundingClientRect().height)
+    if (vp.touch) check(t('shift-full-history: button is at least --tap-min (44)'), bh >= 43.5, bh)
+    await histBtn.click()
+    await page.getByText('3 events recorded').waitFor({ state: 'visible', timeout: 20_000 })
+    const hover = await page.locator('[id$="-history"]').evaluate((el) => el.scrollWidth - el.clientWidth)
+    check(t('shift-full-history: expanded history does not scroll sideways'), hover <= 1, hover)
+    await noHScroll(page, t('shift-full-history'))
+    await tableChecks(page, vp, t('shift-full-history'))
+    await crop(page, main(page), `shift-full-history-${vp.name}.png`, vp)
+    await page.getByRole('button', { name: 'Hide full history' }).click()
     await showButtons(page).first().click().catch(() => {})
 
     if (vp.touch) {
