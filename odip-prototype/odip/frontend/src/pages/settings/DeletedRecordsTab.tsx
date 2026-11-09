@@ -43,7 +43,7 @@ export default function DeletedRecordsTab() {
   const rows: Row[] = useMemo(() => (data?.items ?? []).map(r => ({ ...r, label: recordLabel(r.entityType, r.fields) })), [data])
 
   const columns: Column<Row>[] = [
-    { key: 'label', header: 'Record', wrap: true, minWidth: '16rem', mobile: 'primary' },
+    { key: 'label', header: 'Record', wrap: true, minWidth: '20rem', mobile: 'primary' },
     { key: 'entityType', header: 'Type', mobile: 'meta', render: r => typeName(r.entityType) },
     { key: 'deletedByName', header: 'Deleted by', maxWidth: '12rem', mobile: 'meta', render: r => r.deletedByName ?? 'System' },
     {
