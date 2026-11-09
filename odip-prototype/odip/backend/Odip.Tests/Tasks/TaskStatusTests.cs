@@ -125,15 +125,29 @@ public class TaskStatusTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task SetStatus_CompletedWithoutADate_IsABadRequest()
+    public async System.Threading.Tasks.Task SetStatus_CompletedWithoutADate_StampsTheProviderToday()
     {
         using var db = Db(Guid.NewGuid().ToString());
         var task = Seed(db);
 
-        var result = await As(db, "Admin").SetStatus(task.Id, new SetTaskStatusDto { Status = TaskItemStatus.Completed }, CancellationToken.None);
+        var result = await As(db, "Admin", clock: new FixedClock()).SetStatus(task.Id, new SetTaskStatusDto { Status = TaskItemStatus.Completed }, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal(TaskItemStatus.NotStarted, db.BookingTasks.Single().Status);
+        Assert.IsType<OkObjectResult>(result.Result);
+        var stored = db.BookingTasks.Single();
+        Assert.Equal((TaskItemStatus.Completed, new DateOnly(2026, 11, 9)), (stored.Status, stored.CompletedDate));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Complete_WithoutADate_StampsTheProviderToday()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db);
+
+        var result = await As(db, "Coordinator", clock: new FixedClock()).Complete(task.Id, new CompleteTaskDto(), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var stored = db.BookingTasks.Single();
+        Assert.Equal((TaskItemStatus.Completed, new DateOnly(2026, 11, 9)), (stored.Status, stored.CompletedDate));
     }
 
     [Fact]

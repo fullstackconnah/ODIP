@@ -20,7 +20,7 @@ describe('the group footers read as sentences', () => {
   it.each([
     ['Incidents', () => useIncidentsGroup(false), 'Open incidents'],
     ['Leave', () => useLeaveGroup(false, null), 'Open leave'],
-    ['Tasks', () => useTasksGroup(false, { today: '2026-10-14', mayCloseBudgetReview: false }), 'Open tasks'],
+    ['Tasks', () => useTasksGroup(false, { mayCloseBudgetReview: false }), 'Open tasks'],
     ['Completions', () => useCompletionsGroup(false), 'Open completions'],
     ['Qualifications', () => useComplianceGroup(false, { staff: useStaff({ isActive: 'true' }), today: '2026-10-14', warningDays: 30, mayEditAdmins: false }), 'Open qualifications'],
   ] as const)('%s', (_name, useGroup, label) => {

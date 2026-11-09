@@ -7,7 +7,6 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
 import { getStatusColor } from '@/lib/utils'
-import { localIsoDate } from '@/lib/dateOnly'
 
 const TASK_STATUS_ITEMS = [
   { value: 'NotStarted', label: 'Not Started' },
@@ -72,7 +71,6 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
             onChange={(val: string) => setStatus.mutate({
               id: t.id,
               status: val as TaskItemStatus,
-              ...(val === 'Completed' ? { completedDate: localIsoDate() } : {}),
             })}
             colorClass={getStatusColor(t.status)}
             items={TASK_STATUS_ITEMS}

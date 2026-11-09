@@ -56,8 +56,8 @@ export function useUpdateTask() {
 export function useCompleteTask() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, completedDate }: { id: string; completedDate: string }) =>
-      apiPostRaw<boolean>(`/tasks/${id}/complete`, { completedDate }),
+    mutationFn: ({ id, completedDate }: { id: string; completedDate?: string }) =>
+      apiPostRaw<boolean>(`/tasks/${id}/complete`, completedDate === undefined ? {} : { completedDate }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['tasks'] })
       qc.invalidateQueries({ queryKey: ['task', vars.id] })
