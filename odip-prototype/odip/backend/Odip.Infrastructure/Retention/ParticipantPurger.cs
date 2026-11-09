@@ -91,7 +91,7 @@ public static class ParticipantPurger
                 }
             }
 
-            // L7: the audit rows of every purged row (no tenant column; the ids are Guids).
+            // L7: the audit rows of every purged row (by id: rows from before the release have no tenant).
             var audited = scope.PurgedIds;
             var auditRows = await scope.Q<AuditLog>().Where(a => a.EntityId == participantId || audited.Contains(a.EntityId)).ExecuteDeleteAsync(ct);
             if (auditRows > 0) counts["AuditLogs"] = auditRows;

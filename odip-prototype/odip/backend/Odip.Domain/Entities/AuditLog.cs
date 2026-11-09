@@ -13,4 +13,6 @@ public class AuditLog
     public string? ChangedByName { get; set; }
     /// <summary>JSON array of { field, old, new } objects.</summary>
     public string Changes { get; set; } = "[]";
+    /// <summary>The organisation the row belongs to; null for rows before 2026-11 and for global tables.</summary>
+    public Guid? TenantId { get; set; }
 }

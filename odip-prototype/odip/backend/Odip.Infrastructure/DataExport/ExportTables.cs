@@ -42,7 +42,7 @@ public static class ExportTables
     public static readonly IReadOnlyDictionary<Type, string> LeftOut = new Dictionary<Type, string>
     {
         [typeof(EmploymentHeroConnection)] = "Integration credentials (encrypted API key) and connection settings: never exported.",
-        [typeof(AuditLog)] = "The change history (audit log). It has no organisation column, so it can't yet be separated safely from other organisations' history.",
+        [typeof(AuditLog)] = "The change history (audit log). Rows from before November 2026 have no organisation, so it can't yet be separated safely from other organisations' history.",
         [typeof(NotificationOutbox)] = "Queued notification messages and their contents.",
         [typeof(ProblemReport)] = "\"Report a problem\" notes sent to the Bunya Support team. Free text that is kept for 90 days once sent, and the Work Board card is the record.",
         [typeof(InAppNotification)] = "Bell notices for each person. They are short-lived and purged after 90 days, like the queued notification messages.",
