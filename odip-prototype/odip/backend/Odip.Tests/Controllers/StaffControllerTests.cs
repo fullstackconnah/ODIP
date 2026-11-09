@@ -241,7 +241,7 @@ public class StaffControllerTests
     }
 
     [Fact]
-    public async Task Create_WithAnEmailUsedInAnotherTenant_ReturnsConflict()
+    public async Task Create_WithAnEmailUsedInAnotherTenant_IsRefusedWithoutSayingItExists()
     {
         var tenantId = Guid.NewGuid();
         using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
@@ -261,9 +261,9 @@ public class StaffControllerTests
             new CreateStaffDto { FirstName = "Sam", LastName = "Lee", Email = "Sam.Lee@gmail.com", Position = Position.SupportWorker },
             CancellationToken.None);
 
-        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var conflict = Assert.IsType<BadRequestObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<StaffDetailDto>>(conflict.Value);
-        Assert.Equal("A user with this email already exists.", body.Errors![0]);
+        Assert.Equal("That address belongs to another organisation on Bunya Support.", body.Errors![0]);
     }
 
     [Fact]

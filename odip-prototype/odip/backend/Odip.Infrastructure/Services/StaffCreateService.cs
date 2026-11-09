@@ -121,9 +121,13 @@ public sealed class StaffCreateService
         var at = normalisedEmail.LastIndexOf('@');
         if (at < 0) return null;
 
+        var own = ownTenantId ?? Guid.Empty;
+        // An address another organisation's user already holds gets this same refusal, not "already exists", so a caller cannot probe which addresses have accounts elsewhere.
+        // A holder in the caller's own organisation is still the conflict the callers report.
+        if (await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.TenantId != own && u.Email.ToLower() == normalisedEmail, ct)) return OtherOrganisationMessage;
+
         var domain = normalisedEmail[(at + 1)..];
         if (CommonEmailProviders.Covers(domain)) return null;
-        var own = ownTenantId ?? Guid.Empty;
         // Tenants are written with their domain tidied (EmailIdentity.NormaliseDomain), but a row from before that rule may hold " Acme.com" or "@acme.com"
         // and must keep protecting its tenant, so the stored side is tidied the same way here. There are few tenants, so they are compared in memory
         // rather than by an expression the database has to translate.

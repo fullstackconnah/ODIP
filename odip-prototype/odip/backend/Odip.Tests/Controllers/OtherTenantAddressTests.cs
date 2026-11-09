@@ -246,4 +246,44 @@ public class OtherTenantAddressTests
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal("sam.staff@tenantb.example.org", (await setup.Db.Users.SingleAsync()).Email);
     }
+
+    // ── An address a user of another organisation already holds ─────────
+    // Uniqueness is global, so a taken address is only a 409 for the holder's own organisation. To anyone else it is the same neutral refusal as another
+    // organisation's domain: the text must not confirm that this address has an account somewhere.
+
+    [Fact]
+    public async Task Staff_update_to_an_address_a_user_of_another_organisation_holds_gets_the_neutral_refusal()
+    {
+        using var setup = TwoTenants();
+        var staff = await SeedStaff(setup, setup.Own.Id, "sam.staff@acme.example.com");
+        await SeedStaff(setup, setup.Other.Id, "held.elsewhere@gmail.com");
+
+        var result = await StaffAs(setup, "Coordinator").Update(staff.Id, UpdateAt("held.elsewhere@gmail.com", confirmed: true), CancellationToken.None);
+
+        AssertRefused(result);
+    }
+
+    [Fact]
+    public async Task Staff_update_to_an_address_a_colleague_holds_is_still_the_conflict()
+    {
+        using var setup = TwoTenants();
+        var staff = await SeedStaff(setup, setup.Own.Id, "sam.staff@acme.example.com");
+        await SeedStaff(setup, setup.Own.Id, "colleague@gmail.com");
+
+        var result = await StaffAs(setup, "Coordinator").Update(staff.Id, UpdateAt("colleague@gmail.com", confirmed: true), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("A user with this email already exists.", Assert.Single(Assert.IsType<ApiResponse<StaffDetailDto>>(conflict.Value).Errors!));
+    }
+
+    [Fact]
+    public async Task Staff_create_with_an_address_a_user_of_another_organisation_holds_gets_the_neutral_refusal()
+    {
+        using var setup = TwoTenants();
+        await SeedStaff(setup, setup.Other.Id, "held.elsewhere@gmail.com");
+
+        var result = await StaffAs(setup, "Coordinator").Create(StaffAt("held.elsewhere@gmail.com", confirmed: true), CancellationToken.None);
+
+        AssertRefused(result);
+    }
 }
