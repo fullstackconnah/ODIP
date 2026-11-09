@@ -461,6 +461,8 @@ public record PublishWeekResultDto
     public int Unfilled { get; init; }
     /// <summary>Drafts left as Draft because their worker now has a Blocking finding (a PUT publishing one of them alone is refused too).</summary>
     public int Skipped { get; init; }
+    /// <summary>Group activities this press moved from Draft to Published (whole-week publish only).</summary>
+    public int Activities { get; init; }
 }
 
 /// <summary>Optional body of <c>POST /weeks/{weekStart}/publish</c> (R3, 2026-11-04): the Drafts to publish. No body, or a null list, publishes the whole week; an empty list is refused.</summary>

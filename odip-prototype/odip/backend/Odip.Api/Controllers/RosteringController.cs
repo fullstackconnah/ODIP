@@ -1046,7 +1046,7 @@ public class RosteringController : ControllerBase
     /// shows, that has someone on it, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A Draft nobody is on stays Draft (counted as unfilled, owner
     /// 2026-10-28: hold until staffed) and goes out at the first publish after someone is put on it. A staffed Draft whose worker now has a Blocking finding stays Draft and is counted as skipped,
     /// as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
-    /// tells nobody twice. An optional <c>shiftIds</c> body narrows the publish to those Drafts (R3, 2026-11-04); an empty list is refused so it can never mean the whole week.
+    /// tells nobody twice. An optional <c>shiftIds</c> body narrows the publish to those Drafts (R3, 2026-11-04); an empty list is refused so it can never mean the whole week. Group activities in the week follow the same Draft-to-Published rule (whole-week mode only) and their staff are told in the same notice, one per worker.
     /// </summary>
     [HttpPost("weeks/{weekStart}/publish")]
     public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PublishShiftsRequest? body = null)
@@ -1090,48 +1090,45 @@ public class RosteringController : ControllerBase
                 published.Add(shift);
             }
 
-            // Group activities (PR1): publishing the whole week publishes its Draft activities too, and a published activity brings its Draft participant shifts out with it (they have no worker, so the loop above skips them). Publishing a chosen list leaves activities alone: publish those from the activity.
-            var weekActivities = await _db.GroupActivities.Where(a => a.TenantId == tenantId && a.ServiceDate >= start && a.ServiceDate <= end).ToListAsync(ct);
-            if (chosen == null)
-                foreach (var activity in weekActivities.Where(a => a.Status == ShiftStatus.Draft))
-                    (activity.Status, activity.UpdatedAt) = (ShiftStatus.Published, DateTime.UtcNow);
-            var publishedActivityIds = weekActivities.Where(a => a.Status == ShiftStatus.Published).Select(a => a.Id).ToHashSet();
-            foreach (var shift in drafts.Where(s => s.GroupActivityId is { } activityId && s.UserId is null && publishedActivityIds.Contains(activityId)))
+            // Group activities (PR1): publishing the whole week publishes its Draft activities too, while the switch is on, and a published activity brings its Draft participant shifts out with it (they have no worker, so the loop above skips them). Publishing a chosen list leaves activities alone: publish those from the activity.
+            var newlyPublished = new List<GroupActivity>();
+            if (await GroupActivitiesController.FlagOnAsync(_db, tenantId, ct))
             {
-                shift.Status = ShiftStatus.Published;
-                shift.UpdatedAt = DateTime.UtcNow;
-                published.Add(shift);
+                var weekActivities = await _db.GroupActivities.Where(a => a.TenantId == tenantId && a.ServiceDate >= start && a.ServiceDate <= end).ToListAsync(ct);
+                if (chosen == null)
+                    foreach (var activity in weekActivities.Where(a => a.Status == ShiftStatus.Draft))
+                    {
+                        (activity.Status, activity.UpdatedAt) = (ShiftStatus.Published, DateTime.UtcNow);
+                        newlyPublished.Add(activity);
+                    }
+                var publishedActivityIds = weekActivities.Where(a => a.Status == ShiftStatus.Published).Select(a => a.Id).ToHashSet();
+                foreach (var shift in drafts.Where(s => s.GroupActivityId is { } activityId && s.UserId is null && publishedActivityIds.Contains(activityId)))
+                {
+                    shift.Status = ShiftStatus.Published;
+                    shift.UpdatedAt = DateTime.UtcNow;
+                    published.Add(shift);
+                }
             }
 
-            // One notice per worker, listing every shift of theirs this publish put out, earliest first (fix round 1). A shift whose day has gone is published for the
+            // One notice per worker, listing every shift and activity of theirs this publish put out, earliest first (fix round 1). A line whose day has gone is published for the
             // record, but nobody is told about it now.
-            var toTell = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).GroupBy(s => s.UserId!.Value).ToList();
-            var participantIds = published.Select(s => s.ParticipantId).Distinct().ToList();
-            var toTellIds = toTell.Select(g => g.Key).ToList();
+            var toTell = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).ToList();
+            var participantIds = toTell.Select(s => s.ParticipantId).Distinct().ToList();
             var participantNames = await _db.Participants.Where(p => participantIds.Contains(p.Id))
                 .ToDictionaryAsync(p => p.Id, p => (p.FirstName + " " + p.LastName).Trim(), ct);
-            var emails = await _db.Users.Where(u => toTellIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Email, ct);
-            foreach (var worker in toTell)
-            {
-                if (!emails.TryGetValue(worker.Key, out var email)) continue;
-                var shifts = worker.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ToList();
-                string NameOf(Shift s) => participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant";
-                var first = shifts[0];
-                // No dedupe: Publish week only publishes Drafts under the board lock, so a repeat publish finds none to tell about.
-                await _notificationRaiser.RaiseAsync(
-                    Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", first.Id, new[] { worker.Key },
-                    new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(email, NameOf(first), first.ServiceDate, first.StartTime, first.EndTime,
-                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct, dedupe: false);
-            }
+            var lines = toTell.Select(s => new PublishNoticeLine(s.UserId!.Value, "Shift", s.Id, participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant", s.ServiceDate, s.StartTime, s.EndTime))
+                .Concat(await PublishNotices.ActivityLinesAsync(_db, tenantId, newlyPublished, today, ct)).ToList();
+            var notified = await PublishNotices.RaiseAsync(_db, _notificationRaiser, lines, ct);
 
             await _db.SaveChangesAsync(ct);
             await held.CommitAsync(ct);
             return Ok(ApiResponse<PublishWeekResultDto>.Ok(new PublishWeekResultDto
             {
                 Published = published.Count,
-                Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
+                Notified = notified,
                 Unfilled = drafts.Count(s => s.UserId is null && s.GroupActivityId is null),
                 Skipped = skipped,
+                Activities = newlyPublished.Count,
             }));
         }
         catch (RosterBusyException)

@@ -247,7 +247,8 @@ export function publishedSentence(result: PublishWeekResultDto, requested?: numb
   // Chosen shifts someone published, deleted or unstaffed since the pick are left alone by the server (R3).
   const changed = requested === undefined ? 0 : requested - result.published - result.skipped
   const left = changed > 0 ? ` ${plural(changed, 'shift')} had changed since you selected ${changed === 1 ? 'it and was' : 'them and were'} left alone.` : ''
-  return `Published ${plural(result.published, 'shift')}. ${plural(result.notified, 'person', 'people')} notified.${kept}${left}`
+  const activities = result.activities > 0 ? ` and ${plural(result.activities, 'group activity', 'group activities')}` : ''
+  return `Published ${plural(result.published, 'shift')}${activities}. ${plural(result.notified, 'person', 'people')} notified.${kept}${left}`
 }
 
 /** The Replace/Swap prompt's body (the brief, section 10), a sentence a line. */
@@ -268,11 +269,16 @@ export function replacePromptLines(carry: DragCarry, shift: ShiftDto, canSwap: b
 }
 
 /** Publish week's confirm body, counted from the board's staffed Draft shifts, with the week's unstaffed Drafts (held back) as a number: "14 draft shifts go out to staff. The 9 people on them are notified. 3 other shifts have nobody on them yet. They stay unpublished until someone is put on them." */
-export function publishWeekMessage(drafts: ShiftDto[], unfilled: number): string {
+export function publishWeekMessage(drafts: ShiftDto[], unfilled: number, activities: GroupActivityDto[] = []): string {
   const people = new Set(drafts.flatMap(s => (s.staffId ? [s.staffId] : []))).size
+  const activityPeople = new Set(activities.flatMap(a => a.staff.map(w => w.staffId))).size
+  const a = activities.length
   return [
-    `${plural(drafts.length, 'draft shift')} ${drafts.length === 1 ? 'goes' : 'go'} out to staff.`,
+    drafts.length > 0 ? `${plural(drafts.length, 'draft shift')} ${drafts.length === 1 ? 'goes' : 'go'} out to staff.` : null,
     people > 0 ? `The ${plural(people, 'person', 'people')} on ${drafts.length === 1 ? 'it' : 'them'} ${people === 1 ? 'is' : 'are'} notified.` : null,
+    // "too" only follows shifts; a week of nothing but activities says they go out to staff.
+    a > 0 ? `${plural(a, 'group activity', 'group activities')} ${a === 1 ? 'goes' : 'go'} out ${drafts.length > 0 ? 'too' : 'to staff'}.` : null,
+    activityPeople > 0 ? `The ${plural(activityPeople, 'person', 'people')} on ${a === 1 ? 'it' : 'them'} ${activityPeople === 1 ? 'is' : 'are'} notified.` : null,
     unfilled > 0 ? `${plural(unfilled, 'other shift')} ${unfilled === 1 ? 'has' : 'have'} nobody on ${unfilled === 1 ? 'it' : 'them'} yet. ${unfilled === 1 ? 'It stays' : 'They stay'} unpublished until someone is put on ${unfilled === 1 ? 'it' : 'them'}.` : null,
   ].filter(Boolean).join(' ')
 }

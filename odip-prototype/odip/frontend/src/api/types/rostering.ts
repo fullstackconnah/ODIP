@@ -548,6 +548,9 @@ export type RosterBoardDto =
       weekStarted?: boolean
       /** True while Start would still add agreement shifts here (no row, no agreement shift). A hand-made week is started yet can start; absent reads as false. */
       canStart?: boolean
+      /** The server sends the same two fields on the Staff board; the Publish counts read them in both views. */
+      groupActivities?: GroupActivityDto[]
+      groupActivitiesEnabled?: boolean
     }
 
 // ── Write bodies ──────────────────────────────────────────
@@ -639,6 +642,8 @@ export interface PublishWeekResultDto {
   notified: number
   unfilled: number
   skipped: number
+  /** Group activities this press published (whole-week publish only). */
+  activities: number
 }
 
 /** The optional body of Publish week (R3): only these Draft shifts go out. */

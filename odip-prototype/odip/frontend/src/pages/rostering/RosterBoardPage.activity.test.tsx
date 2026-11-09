@@ -94,6 +94,43 @@ describe('RosterBoardPage: group activity writes', () => {
   })
 })
 
+describe('RosterBoardPage: Publish week covers group activities (gav PR B)', () => {
+  const DRAFT_BOARD = () => makeParticipantBoard({
+    groupActivitiesEnabled: true,
+    groupActivities: [makeActivity({ status: 'Draft' })],
+    participantRows: [makeParticipantRow({ participantId: 'participant-1', fullName: 'Mia Chen', shifts: [{ ...MIA, status: 'Draft' }] })],
+  })
+
+  it('a week whose only drafts are activities shows the banner and Publish week, and the dialog and toast name them', async () => {
+    const user = userEvent.setup()
+    h.board.mockReturnValue({ data: DRAFT_BOARD(), isLoading: false, isError: false, refetch: vi.fn() })
+    h.post.mockResolvedValueOnce({ published: 1, notified: 1, unfilled: 0, skipped: 0, activities: 1 })
+    renderPage()
+    expect(await screen.findByText('1 group activity not visible to staff yet')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Publish week' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Publish 17–23 Aug?' })
+    // The activity's participant shift is not a "shift nobody is on": it goes out with the activity.
+    expect(within(dialog).getByText('1 group activity goes out to staff. The 1 person on it is notified.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Publish 1 group activity' }))
+    expect(h.post).toHaveBeenCalledWith('/rostering/weeks/2026-08-17/publish')
+    expect(await screen.findByText('Published 1 shift and 1 group activity. 1 person notified.')).toBeInTheDocument()
+  })
+
+  it('a week with every activity Published has no banner and no Publish week', async () => {
+    renderPage()
+    await screen.findByRole('button', { name: /^Group activity, Bowling/ })
+    expect(screen.queryByText(/not visible to staff yet/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+  })
+
+  it('with the switch off the board carries none, so a stray draft activity never offers Publish', async () => {
+    h.board.mockReturnValue({ data: { ...DRAFT_BOARD(), groupActivitiesEnabled: false }, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    await screen.findByText('Mia Chen')
+    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+  })
+})
+
 describe('RosterBoardPage: ?activity= deep link from the Group activities list', () => {
   it('opens the activity modal once the board has loaded, keeps the param while it is open and drops it on close', async () => {
     const user = userEvent.setup()
