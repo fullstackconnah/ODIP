@@ -54,7 +54,7 @@ export function SettingsSection({ title, description, readOnly, focusOnMount, wi
       <h2 id={headingId} ref={heading} tabIndex={-1} className="scroll-mt-16 text-xl font-bold focus:outline-none md:text-base md:font-semibold">
         {title}
       </h2>
-      <p className="mt-1 max-w-prose text-[13px] text-[var(--color-muted-foreground)]">{description}</p>
+      <p className="mt-1 max-w-prose text-[13px] text-pretty text-[var(--color-muted-foreground)]">{description}</p>
       {readOnly && (
         <Callout tone="info" icon={Lock} announce={false} className="mt-[var(--section-gap)] max-w-prose">
           Only an Admin can change these. Ask an Admin if something here needs updating.

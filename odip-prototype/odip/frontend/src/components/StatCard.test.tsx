@@ -266,11 +266,11 @@ describe('StatCard — attention variant, the tall action tile', () => {
       expect(parts[i - 1].compareDocumentPosition(parts[i]) & Node.DOCUMENT_POSITION_FOLLOWING, `part ${i}`).toBeTruthy()
     }
     // One row at every width (the compact tile): the figure and the link are the tile's own children, the label and the line share the column between them.
-    expect(group()).toHaveClass('flex', 'items-center')
+    expect(group()).toHaveClass('grid', 'items-center')
     expect(parts[0].parentElement).toBe(group())
     expect(parts[3].parentElement).toBe(group())
     expect(parts[1].parentElement).toBe(parts[2].parentElement)
-    expect(parts[1].parentElement).toHaveClass('flex-col', 'min-w-0', 'flex-1')
+    expect(parts[1].parentElement).toHaveClass('flex-col', 'min-w-0')
   })
 
   // A line that wraps ("2 participants: 1 over, 1 forecast to go over") must not leave one word alone on its second line: the line balances its wrap.
@@ -353,8 +353,21 @@ describe('StatCard — attention variant, the tall action tile', () => {
   it('hides the link\'s arrow from assistive tech: the chevron is decoration', () => {
     renderTall()
 
-    const icon = screen.getByRole('link', { name: 'Open overdue tasks' }).querySelector('svg')
+    const link = screen.getByRole('link', { name: 'Open overdue tasks' })
+    const icon = link.querySelector('svg')
     expect(icon).toHaveAttribute('aria-hidden', 'true')
+    // PB74-F1: the words and the chevron are ONE inline run, and the last word shares a no-wrap span with the chevron, so a wrapped label never strands it.
+    expect(link.textContent).toBe('Open overdue tasks')
+    expect(icon?.parentElement).toHaveClass('whitespace-nowrap')
+    expect(icon?.parentElement).toHaveTextContent(/^tasks$/)
+  })
+
+  it('keeps a one-word link whole, with the chevron in the same no-wrap span', () => {
+    renderTall({ action: { label: 'Review', to: '/x' } })
+
+    const link = screen.getByRole('link', { name: 'Review' })
+    expect(link.textContent).toBe('Review')
+    expect(link.querySelector('svg')?.parentElement).toHaveTextContent(/^Review$/)
   })
 
   it('drops the line when there is none, rather than leaving an empty row', () => {
@@ -377,7 +390,7 @@ describe('StatCard — attention variant, the tall action tile', () => {
     expect(link).toHaveAttribute('aria-busy', 'true')
     expect(link).not.toHaveAttribute('data-attention')
     expect(screen.queryByText('Expired.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Open overdue tasks')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open overdue tasks' })).not.toBeInTheDocument()
   })
 
   it('falls back to the compact tile after a failed request too', () => {
@@ -419,10 +432,22 @@ describe('StatCard attention action tile — the compact row on a narrow band', 
     renderTall()
     const tile = screen.getByRole('group', { name: 'Overdue 2' })
     // The row is the same at every width; only the line and the link's words fold away under 36rem.
-    expect(tile).toHaveClass('flex', 'items-center')
-    expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('@max-[36rem]:hidden')
+    expect(tile).toHaveClass('grid', 'items-center')
+    expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('@max-[36rem]/band:hidden')
     const link = within(tile).getByRole('link', { name: 'Open overdue tasks' })
-    expect(within(link).getByText('Open overdue tasks')).toHaveClass('@max-[36rem]:sr-only')
-    expect(link).toHaveClass('ml-auto')
+    for (const part of ['Open overdue', 'tasks']) expect(within(link).getByText(part)).toHaveClass('@max-[36rem]/band:sr-only')
+    expect(link).not.toHaveClass('ml-auto')
+  })
+
+  // PB74: a tile in a band of 36rem or more shows its line, and 3 or 4 of them share a row, so the tile (not the band) decides when the link no longer fits beside
+  // the text. Its own named container; under 36rem the text spans the tile and the link drops to row 2, on the text column's left edge. A phone band never folds.
+  it('is its own size container and drops the link under the text when the tile is narrow in a band that shows the line', () => {
+    renderTall()
+    const tile = screen.getByRole('group', { name: 'Overdue 2' })
+    const fold = '@min-[36rem]/band:@max-[36rem]/tile:'
+    expect(tile).toHaveClass('@container/tile', 'grid-cols-[auto_minmax(0,1fr)_auto]')
+    expect(within(tile).getByText('Overdue').parentElement).toHaveClass(fold + 'col-[2/-1]')
+    const link = within(tile).getByRole('link', { name: 'Open overdue tasks' })
+    expect(link).toHaveClass(fold + 'col-[2/-1]', fold + 'row-start-2', 'min-h-[var(--tap-min)]', 'after:absolute', 'after:inset-0')
   })
 })

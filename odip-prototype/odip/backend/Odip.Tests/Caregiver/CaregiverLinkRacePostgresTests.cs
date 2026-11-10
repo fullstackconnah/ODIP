@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -60,7 +61,7 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
     }
 
     /// <summary>A staff controller whose context has already loaded the form (a stale view), with an optional other party who commits mid-request.</summary>
-    private async Task<(CaregiverSubmissionsController Controller, OdipDbContext Db)> StaffAsync(Guid tenantId, Guid submissionId, CaregiverSubmissionStatus? otherSets = null, bool audited = false)
+    private async Task<(CaregiverSubmissionsController Controller, OdipDbContext Db)> StaffAsync(Guid tenantId, Guid submissionId, CaregiverSubmissionStatus? otherSets = null, bool audited = false, Func<Task>? otherRuns = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
@@ -72,6 +73,7 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
                 await using var other = PostgresFixture.NewContext(_pg.ConnectionString);
                 await other.CaregiverProfileSubmissions.IgnoreQueryFilters().Where(x => x.Id == submissionId).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, status));
             }));
+        if (otherRuns != null) options.AddInterceptors(new OtherPartyCommitsFirst(otherRuns));
         if (audited) options.AddInterceptors(new AuditInterceptor(new HttpContextAccessor()));
         var db = new OdipDbContext(options.Options, tenant.Object);
         await db.CaregiverProfileSubmissions.SingleAsync(s => s.Id == submissionId);
@@ -97,9 +99,51 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
         var (staff, db) = await StaffAsync(tenantId, id, CaregiverSubmissionStatus.Submitted);
         await using var _ = db;
 
-        Assert.IsType<ConflictObjectResult>((await staff.CreateLink(participantId, CancellationToken.None)).Result);
+        Assert.StartsWith("A caregiver form is waiting for review", ConflictError(await staff.CreateLink(participantId, CancellationToken.None)));
 
         Assert.Equal([CaregiverSubmissionStatus.Submitted], await StatusesAsync(participantId));
+    }
+
+    private static string ConflictError(ActionResult<ApiResponse<CaregiverLinkDto>> result) =>
+        Assert.Single(((ApiResponse<CaregiverLinkDto>)Assert.IsType<ConflictObjectResult>(result.Result).Value!).Errors!);
+
+    private const string LinkJustSent = "Another coordinator just sent a link for this participant. Reload and try again.";
+
+    // PB75-H86-2: another coordinator's link commits between this request's checks and its insert, so the unique index on active links rejects the insert: 409, not a 500.
+    [SkippableFact]
+    public async Task CreateLink_WhenAnotherCoordinatorsLinkCommitsFirst_Answers409LinkJustSent_AndOneActiveLinkRemains()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (tenantId, participantId, id) = await SeedAsync(CaregiverSubmissionStatus.Revoked);
+        var (staff, db) = await StaffAsync(tenantId, id, otherRuns: async () =>
+        {
+            await using var other = PostgresFixture.NewContext(_pg.ConnectionString);
+            other.CaregiverProfileSubmissions.Add(new CaregiverProfileSubmission
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, TokenHash = CaregiverTokenService.Hash(CaregiverTokenService.GenerateRawToken()),
+                Status = CaregiverSubmissionStatus.Draft, CreatedByUserId = Guid.NewGuid(), ExpiresAt = DateTime.UtcNow.AddDays(14),
+            });
+            await other.SaveChangesAsync();
+        });
+        await using var _ = db;
+
+        Assert.Equal(LinkJustSent, ConflictError(await staff.CreateLink(participantId, CancellationToken.None)));
+
+        Assert.Equal([CaregiverSubmissionStatus.Revoked, CaregiverSubmissionStatus.Draft], (await StatusesAsync(participantId)).OrderBy(x => x == CaregiverSubmissionStatus.Draft));
+    }
+
+    // PB75-H86-2: the Draft claim is lost to another coordinator's link (not to a Submit), so there is no form waiting for review.
+    [SkippableFact]
+    public async Task CreateLink_WhenAnotherCoordinatorTookTheDraftAndNothingIsSubmitted_Answers409LinkJustSent()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (tenantId, participantId, id) = await SeedAsync(CaregiverSubmissionStatus.Draft);
+        var (staff, db) = await StaffAsync(tenantId, id, CaregiverSubmissionStatus.Revoked);
+        await using var _ = db;
+
+        Assert.Equal(LinkJustSent, ConflictError(await staff.CreateLink(participantId, CancellationToken.None)));
+
+        Assert.Equal([CaregiverSubmissionStatus.Revoked], await StatusesAsync(participantId));
     }
 
     [SkippableFact]

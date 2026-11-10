@@ -87,4 +87,24 @@ public class ProviderSettingsHistoryTests
         Assert.Contains("changed", body);
         foreach (var digits in new[] { "123-456", "062-000", "12345678", "87654321" }) Assert.DoesNotContain(digits, body);
     }
+    // PB75-PSA-D1: the writer masks before saving, but a row that holds a raw bank value (an older or hand-made one) must not leave the server either.
+    [Fact]
+    public async Task A_history_row_holding_raw_bank_values_reads_as_changed_and_a_masked_one_is_left_alone()
+    {
+        var (db, audit, _) = Create(TenantA, false);
+        using var _ = db;
+        db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(), EntityType = "ProviderSettings", EntityId = IdA, Action = AuditAction.Updated, ChangedAt = DateTimeOffset.UtcNow,
+            Changes = """[{"Field":"BSB","Old":"061-111","New":"062-222"},{"Field":"AccountNumber","Old":null,"New":"set"},{"Field":"State","Old":"VIC","New":"NSW"}]""",
+        });
+        await db.SaveChangesAsync();
+
+        var body = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(await History(audit, IdA)).Value);
+
+        Assert.Contains("""{"Field":"BSB","Old":"changed","New":"changed"}""", body);
+        Assert.Contains("""{"Field":"AccountNumber","Old":null,"New":"set"}""", body);
+        Assert.Contains("""{"Field":"State","Old":"VIC","New":"NSW"}""", body);
+        foreach (var raw in new[] { "061-111", "062-222" }) Assert.DoesNotContain(raw, body);
+    }
 }
