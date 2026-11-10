@@ -652,7 +652,12 @@ function useCaregiverLink(participantId: string): CaregiverLink {
 
   const generateLink = async () => {
     setLinkError(null)
-    const res = await generate.mutateAsync({ participantId }).catch((err: unknown) => { setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.')); return null })
+    const res = await generate.mutateAsync({ participantId }).catch((err: unknown) => {
+      // A 409 means a caregiver submitted through the link or another coordinator replaced it, so the one on screen is dead; any other failure leaves it live and the panel is its only copy.
+      if ((err as { response?: { status?: number } })?.response?.status === 409) setIssued(null)
+      setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.'))
+      return null
+    })
     if (!res) return
     setIssued({ url: `${window.location.origin}/caregiver/${res.data!.token}`, expiresAt: res.data!.expiresAt })
   }

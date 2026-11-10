@@ -2163,7 +2163,7 @@ function shiftClaimRun(body, make) {
   const from = body?.from ?? '2026-10-19', to = body?.to ?? '2026-11-01'
   const sleepover = { participantId: 'p-sam', participantName: 'Sam Lee', shiftId: 's-sleep', serviceDate: '2026-10-21', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' }
   // The trip cross-guard: the reason does not repeat the name, the row's lead already carries it.
-  const tripClaimGuard = { participantId: 'p-sophie', participantName: 'Sophie Brown', shiftId: 's-guard', serviceDate: '2026-10-10', description: 'Shift 09:00–17:00 · 8 h', reason: '10/10/2026 is already on trip claim TC-43100000-20261010-A1B2C3. Reject or cancel that claim to claim this shift.' }
+  const tripClaimGuard = { participantId: 'p-sophie', participantName: 'Sophie Brown', shiftId: 's-guard', serviceDate: '2026-10-10', description: 'Shift 09:00–17:00 · 8 h', reason: 'It is already on trip claim TC-43100000-20261010-A1B2C3. Reject or cancel that claim to claim this shift.' }
   const rows = [
     { participantId: 'p-sam', participantName: 'Sam Lee', shiftCount: 2, hours: 12, totalAmount: 612.4 },
     { participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftCount: 3, hours: 18.5, totalAmount: 1042.75 },

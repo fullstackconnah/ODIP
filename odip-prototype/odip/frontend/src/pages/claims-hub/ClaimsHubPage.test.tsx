@@ -404,6 +404,10 @@ describe('ClaimsHubPage: finish round 2', () => {
     expect(ok.querySelector('[data-pass]')).not.toBeNull()
     expect(bad.querySelector('[data-pass]')).toBeNull()
     expect(bad).toHaveTextContent('The price is over the limit')
+
+    // Hours / qty is hidden at 1280, so Checks keeps a desktop floor (DataTable minWidth, md-only) instead of wrapping to five lines.
+    const cell = [...bad.querySelectorAll('td')].find(td => td.textContent?.includes('The price is over the limit')) as HTMLElement
+    expect(cell.style.getPropertyValue('--col-min')).toBe('16rem')
   })
 
   it('shows delivered dates with a month name, ranges keeping the year', () => {
@@ -808,6 +812,14 @@ describe('ClaimsHubPage: New claim', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     renderPage('/claims?run=shifts')
     expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+  })
+
+  // A reader has no organisation either (hasOrganisation is Admin and Coordinator), so this pins the outcome; the canWrite term is the guard if a role ever has one without the other.
+  it('does not open for a user who cannot write, even from the URL, and leaves the link as it is', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderPage('/claims?run=shifts')
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+    expect(screen.getByTestId('where')).toHaveTextContent('run=shifts')
   })
 })
 
