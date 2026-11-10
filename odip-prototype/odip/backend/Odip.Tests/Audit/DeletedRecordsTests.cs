@@ -121,6 +121,17 @@ public class DeletedRecordsTests
         Assert.Equal([oldest.EntityId], second.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("entityId").GetGuid()));
     }
 
+    [Fact]
+    public async Task A_deleted_rows_bank_field_never_leaves_the_server_raw()
+    {
+        var changes = """[{"Field":"AccountNumber","Old":"12345678","New":null},{"Field":"Notes","Old":"kept","New":null}]""";
+        var name = await SeedAsync(Row(A, "ProviderSettings", changes: changes));
+
+        var fields = (await ListAsync(name, A)).GetProperty("items")[0].GetProperty("fields");
+        Assert.Equal(("AccountNumber", "changed"), (fields[0].GetProperty("field").GetString(), fields[0].GetProperty("old").GetString()));
+        Assert.Equal(("Notes", "kept"), (fields[1].GetProperty("field").GetString(), fields[1].GetProperty("old").GetString()));
+    }
+
     private static async Task<(int Status, int Entries)> HistoryAsync(string name, Guid? tenantId, string type, Guid id, bool superAdmin = false)
     {
         await using var db = Db(name, tenantId, superAdmin);
