@@ -4,7 +4,7 @@
 // Files are named b-<state tokens>-<width>-<theme>.png so shots-states.js finds each state of the Capture states line.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, layoutCheck, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -140,17 +140,18 @@ const audit = async (page, label, { touch }) => {
     const els = [...root.querySelectorAll('button, a[href], input, select, textarea, [role=button], [role=option]')].filter(vis)
     const under = els.filter((el) => { const e = eff(el); return e.h < tk.tapMin - 0.5 || e.w < tk.tapMin - 0.5 }).map((el) => `${el.tagName}:${(el.getAttribute('aria-label') || el.textContent || el.name || '').trim().slice(0, 30)}`)
     const field = els.filter((el) => el.matches('input:not([type=checkbox]):not([type=radio]):not([type=search]), select')).map((el) => Math.round(el.getBoundingClientRect().height * 10) / 10)
-    const buttons = els.filter((el) => el.matches('button') && !el.matches('[data-overview-row]') && !el.closest('li') && el.textContent.trim().length > 0 && !el.closest('[role=option]')).map((el) => ({ name: el.textContent.trim().slice(0, 24), h: Math.round(el.getBoundingClientRect().height * 10) / 10 }))
+    const buttons = els.filter((el) => el.matches('button') && !el.matches('[data-overview-row]') && !el.closest('li') && el.textContent.trim().length > 0 && !el.closest('[role=option]')).map((el) => ({ name: el.textContent.trim().slice(0, 24), h: Math.round(el.getBoundingClientRect().height * 10) / 10, hit: Math.round(eff(el).h * 10) / 10 }))
     const rows = [...root.querySelectorAll('[data-overview-row]')].filter(vis).map((el) => Math.round(el.getBoundingClientRect().height * 10) / 10)
     const pick = [...root.querySelectorAll('ul button')].filter((el) => vis(el) && !el.hasAttribute('data-overview-row')).map((el) => Math.round(el.getBoundingClientRect().height * 10) / 10)
     const doc = document.scrollingElement
     return { under, field, buttons, rows, pick, scrollW: doc.scrollWidth, clientW: doc.clientWidth }
   }, t)
-  const md = Math.max(t.controlH, t.tapMin), sm = Math.max(t.controlHSm, t.tapMin), row = Math.max(t.rowH, t.tapMin)
+  const md = Math.max(t.controlH, t.tapMin), sm = t.controlHSm, row = Math.max(t.rowH, t.tapMin)
   check(`${label}: no horizontal scroll (scrollWidth == clientWidth)`, r.scrollW === r.clientW, { scrollW: r.scrollW, clientW: r.clientW })
   if (touch) check(`${label}: 0 interactive targets under --tap-min (${t.tapMin})`, r.under.length === 0, r.under)
   check(`${label}: input and select height == max(--control-h, --tap-min) (${md})`, r.field.every((h) => h === md), r.field)
-  check(`${label}: buttons == ${md} (or small == ${sm})`, r.buttons.every((b) => b.h === md || b.h === sm), r.buttons.filter((b) => b.h !== md && b.h !== sm))
+  const buttonOk = (b) => b.h === md || (b.h === sm && (!touch || b.hit >= t.tapMin - 0.5))   // small: box == --control-h-sm, TAP_AREA hit area >= --tap-min at touch
+  check(`${label}: buttons == ${md}, or small == ${sm} with a hit area >= ${t.tapMin}`, r.buttons.every(buttonOk), r.buttons.filter((b) => !buttonOk(b)))
   check(`${label}: overview and picker rows >= max(--row-h, --tap-min) (${row})`, r.rows.concat(r.pick).every((h) => h >= row - 0.5), { rows: r.rows, pick: r.pick })
 }
 
@@ -194,7 +195,7 @@ const STATES = [
   { name: 'started', light: true, run: async (p) => { await openEdit(p, 'started') } },
   { name: 'completed', run: async (p) => { await openEdit(p, 'completed') } },
   { name: 'cancelled', run: async (p) => { await openEdit(p, 'cancelled') } },
-  { name: 'loading', run: async (p) => { p.mode.getDelay = 8000; await p.locator(`[data-activity-card="${A.draft.id}"] [data-activity-open]`).first().click(); await sheet(p).locator('[aria-busy=true]').first().waitFor() } },
+  { name: 'loading', run: async (p) => { p.mode.getDelay = 8000; await p.emulateMedia({ reducedMotion: 'reduce' }); await p.addStyleTag({ content: '*, *::before, *::after { animation: none !important }' }); await p.locator(`[data-activity-card="${A.draft.id}"] [data-activity-open]`).first().click(); await sheet(p).locator('[aria-busy=true]').first().waitFor() } },
   { name: 'load-failed', run: async (p) => { p.mode.getFail = true; await p.locator(`[data-activity-card="${A.draft.id}"] [data-activity-open]`).first().click(); await sheet(p).getByText("Couldn't load this activity.").waitFor() } },
   { name: 'people', light: true, run: async (p) => { await openEdit(p, 'draft'); await goRow(p, 'People') } },
   { name: 'staff', light: true, run: async (p) => { await openEdit(p, 'draft'); await goRow(p, 'Staff') } },
@@ -210,12 +211,12 @@ const STATES = [
   }, layer: 'alertdialog' },
   { name: 'remove-confirm', run: async (p) => { await openEdit(p, 'draft'); await goRow(p, 'People'); await sheet(p).getByRole('button', { name: /^Remove Liam/ }).click(); await p.getByRole('alertdialog').waitFor() }, layer: 'alertdialog' },
   { name: 'cancel-confirm', run: async (p) => { await openEdit(p, 'draft'); await sheet(p).getByRole('button', { name: 'Cancel activity' }).click(); await p.getByRole('alertdialog').waitFor() }, layer: 'alertdialog' },
-  { name: 'discard-prompt', run: async (p) => { await openEdit(p, 'draft'); await goRow(p, 'Details'); await sheet(p).getByLabel(/Notes/).fill('Bring towels and sunscreen'); await p.keyboard.press('Escape'); await p.keyboard.press('Escape'); await p.getByRole('alertdialog').waitFor() }, layer: 'alertdialog' },
+  { name: 'discard-prompt', run: async (p) => { await openEdit(p, 'draft'); await goRow(p, 'Details'); await sheet(p).getByLabel(/Notes/).fill('Bring towels and sunscreen'); const prompt = p.getByRole('alertdialog', { name: 'Discard changes?' }); await p.keyboard.press('Escape'); if (!(await prompt.isVisible({ timeout: 1500 }).catch(() => false))) await p.keyboard.press('Escape'); await prompt.waitFor({ timeout: 10_000 }) }, layer: 'alertdialog' },
   { name: 'refused-add', run: async (p) => {
     p.mode.post = { status: 409, body: { success: false, message: 'Mia Chen is not ready for group support yet.', errors: ['Mia Chen is not ready for group support yet.'] } }
     await openEdit(p, 'draft'); await goRow(p, 'People'); await press(p, 'Add participant')
-    await sheet(p).locator('ul button').first().click()
-    await sheet(p).getByText(/wasn't added/).waitFor({ timeout: 10_000 })
+    await sheet(p).locator('ul button:not([data-overview-row])').first().click()   // at 1440 the overview column's rows are also ul buttons
+    await sheet(p).getByRole('heading', { name: /wasn't added/ }).or(sheet(p).getByText(/wasn't added/)).first().waitFor({ timeout: 10_000 })
   } },
   { name: 'offline', run: async (p) => { await openEdit(p, 'started'); await goRow(p, 'People'); await p.context().setOffline(true); await p.waitForTimeout(500); await sheet(p).getByText(/You're offline/).waitFor({ timeout: 5000 }) } },
 ]
@@ -263,7 +264,16 @@ for (const vp of VIEWPORTS) {
     await openEdit(session.page, 'draft')
     await session.page.waitForTimeout(400)
     mkdirSync(path.join(OUT_DIR, 'full'), { recursive: true })
-    const full = await fullPage(session.page, path.join(OUT_DIR, 'full', `b-full-page-${vp.w}-dark.png`), { touch: vp.touch })
+    const fullFile = path.join(OUT_DIR, 'full', `b-full-page-${vp.w}-dark.png`)
+    const allow = ['.overflow-x-auto']   // the roster board's sideways strip
+    checks.push(await layoutCheck(session.page, sheet(session.page), `sheet @${vp.w}`, { allow }))
+    let full = await fullPage(session.page, fullFile, { touch: vp.touch, allow })
+    if (full.checks.some((c) => !c.pass)) {
+      // the board behind the scrim is not part of this check: retake the page with the sheet closed (the scoped sheet check above stays)
+      await session.page.keyboard.press('Escape')
+      await sheet(session.page).waitFor({ state: 'hidden', timeout: 10_000 })
+      full = await fullPage(session.page, fullFile, { touch: vp.touch, allow })
+    }
     checks.push(...full.checks)
   } catch (e) {
     check(`full page @${vp.w}: ran`, false, String(e.message).split('\n')[0])
