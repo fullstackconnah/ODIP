@@ -402,7 +402,7 @@ public sealed class ServiceAgreementDraftService
             var item = candidates[0];
             var price = PriceForState(item, request.State);
             if (price <= 0) return DraftSaveResult.Refused($"No available {request.State} price exists for {requested.ItemCode}.");
-            lines.Add(new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = requested.ServiceType.Trim(), Hours = requested.Hours, ItemCode = item.ItemNumber, UnitPrice = price, CatalogueVersion = item.CatalogueVersion, CatalogueEffectiveFrom = item.EffectiveFrom, CatalogueEffectiveTo = item.EffectiveTo });
+            lines.Add(new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = requested.ServiceType.Trim(), Hours = decimal.Round(requested.Hours, 2, MidpointRounding.AwayFromZero), ItemCode = item.ItemNumber, UnitPrice = price, CatalogueVersion = item.CatalogueVersion, CatalogueEffectiveFrom = item.EffectiveFrom, CatalogueEffectiveTo = item.EffectiveTo });
         }
 
         var draft = NewDraft(tenantId, participant, request, slot, actor);

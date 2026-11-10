@@ -56,6 +56,27 @@ public class CatalogueAgreementDraftTests
         Assert.Equal((code, (decimal)price, "2026-27"), (line.ItemCode, line.UnitPrice, line.CatalogueVersion));
     }
 
+    [Fact]
+    public async Task Hand_typed_hours_are_stored_to_two_decimals()
+    {
+        var (db, participantId) = await ImportedDbAsync();
+        await using var _ = db;
+        var request = Request("04_104_0125_6_1");
+        request = new CreateServiceAgreementDraftDto
+        {
+            PlanStartDate = request.PlanStartDate, PlanEndDate = request.PlanEndDate, AgreementStartDate = request.AgreementStartDate, AgreementEndDate = request.AgreementEndDate,
+            State = request.State, ServiceTypes = request.ServiceTypes, Representative = request.Representative,
+            Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = "Community access", ItemCode = "04_104_0125_6_1", Hours = 1.005m }],
+        };
+
+        var (draft, error) = await new ServiceAgreementDraftService(db).CreateAsync(TenantId, participantId, request, "actor", CancellationToken.None);
+
+        Assert.Null(error);
+        var line = Assert.Single(draft!.Lines);
+        Assert.Equal(1.01m, line.Hours);
+        Assert.Equal(1.01m, db.ServiceAgreementDraftLines.Single().Hours);
+    }
+
     [Theory]
     [InlineData("01_010_0107_1_1")]   // sleepover: Each
     [InlineData("01_250_0115_1_1")]   // STA participant accommodation: Day
