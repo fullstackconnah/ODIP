@@ -43,6 +43,9 @@ import { ADL_TYPE_LABELS } from '@/api/types/adl-assessments'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { ParticipantDetailDto } from '@/api/types/participants'
+import { DIAGNOSIS_OTHER_SENTINEL, HIDPA_CATEGORY_LABELS } from '@/api/types/participants'
+import type { ConsentType } from '@/api/types/enums'
+import { HOLIDAY_STA_CONSENT_TYPES } from '@/lib/participantPatchGroups'
 import { KeyIdentifiersStep } from '../profile/steps/KeyIdentifiersStep'
 import { CulturalDepthConsentsStep } from '../profile/steps/CulturalDepthConsentsStep'
 import { MedicalDetailStep } from '../profile/steps/MedicalDetailStep'
@@ -63,6 +66,10 @@ function saveFailure(err: unknown, fallback: string): string {
   if (status === 404) return 'This link is no longer valid. Please contact the person who sent it to you.'
   return [400, 409].includes(status ?? 0) ? extractErrorMessage(err, fallback) : fallback
 }
+
+// What the carer form shows its steps (Holiday/STA consents, How to Help Me notes): the steps get these, and Review reads the same values.
+const STA_VISIBLE = false
+const CA_VISIBLE = false
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
 
@@ -250,7 +257,7 @@ export default function CaregiverWizardPage() {
           <KeyIdentifiersStep control={pControl} register={pRegister} setValue={pSetValue} errors={pErrors} participant={readOnlyParticipant} activeStaff={[]} hiddenFields={hidden} />
         )}
         {!wizard.isReviewStep && wizard.currentStep.key === 'culturalDepth' && (
-          <CulturalDepthConsentsStep control={pControl} register={pRegister} participant={readOnlyParticipant} consentsFieldArray={pConsentsFieldArray} staVisible={false} />
+          <CulturalDepthConsentsStep control={pControl} register={pRegister} participant={readOnlyParticipant} consentsFieldArray={pConsentsFieldArray} staVisible={STA_VISIBLE} />
         )}
         {!wizard.isReviewStep && wizard.currentStep.key === 'medical' && (
           <MedicalDetailStep control={pControl} register={pRegister} errors={pErrors} participant={readOnlyParticipant} healthConditionFieldArray={pHealthConditionFieldArray} watchedValues={watchedValues as Partial<ParticipantFormData>} />
@@ -262,7 +269,7 @@ export default function CaregiverWizardPage() {
           <BehaviourCognitionStep control={pControl} register={pRegister} participant={readOnlyParticipant} hiddenFields={hidden} />
         )}
         {!wizard.isReviewStep && wizard.currentStep.key === 'dailyLiving' && (
-          <DailyLivingStep control={pControl} register={pRegister} adlFieldArray={pAdlFieldArray} watchedValues={watchedValues as Partial<ParticipantFormData>} caVisible={false} />
+          <DailyLivingStep control={pControl} register={pRegister} adlFieldArray={pAdlFieldArray} watchedValues={watchedValues as Partial<ParticipantFormData>} caVisible={CA_VISIBLE} />
         )}
 
         {wizard.isReviewStep && (
@@ -344,35 +351,45 @@ function SubmittedPage({ caregiverName, firstName, providerName }: { caregiverNa
   )
 }
 
-/** A yes/no answer (a boolean, or the form's 'true'/'false' string) reads Yes or No, as on the Profile and Intake review steps; a blank reads a dash. */
-function reviewValue(v: unknown): string {
+/** A yes/no answer (a boolean, or the form's 'true'/'false' string) reads Yes or No, as on the Profile and Intake review steps; a blank reads a dash. `names` is the label map of a string-list field. */
+function reviewValue(v: unknown, names?: Record<string, string>): string {
   if (v === true || v === 'true') return 'Yes'
   if (v === false || v === 'false') return 'No'
-  if (Array.isArray(v)) return reviewList(v) || '—'
+  if (Array.isArray(v)) return reviewList(v, names) || '—'
   return normValue(v) || '—'
 }
 
 // The column each fixed one-row-per-type list names its rows by, with the label its edit step shows as the row title.
-const ROW_NAME_LABELS: Record<string, Record<string, string> | undefined> = {
-  consentType: CONSENT_TYPE_LABELS, conditionType: HEALTH_CONDITION_TYPE_LABELS, adlType: ADL_TYPE_LABELS, itemType: undefined,
+const ROW_NAME_LABELS: Record<string, Record<string, string>> = {
+  consentType: CONSENT_TYPE_LABELS, conditionType: HEALTH_CONDITION_TYPE_LABELS, adlType: ADL_TYPE_LABELS,
 }
+// A string list's stored codes read as the labels its step shows.
+const LIST_LABELS: Record<string, Record<string, string>> = { hidpaSupportCategories: HIDPA_CATEGORY_LABELS }
+// A field's Review row shows only while its step shows the field.
+const SHOWN_WHEN: Record<string, (v: Record<string, unknown>) => boolean> = { primaryDiagnosisOther: (v) => v.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL }
+// A row column the carer cannot see is no answer of theirs.
+const HIDDEN_ROW_COLUMNS: string[] = CA_VISIBLE ? [] : ['howToHelpNotes']
 const answered = (v: unknown) => v != null && v !== '' && v !== false && v !== 'false'
+// A consent the carer set to Declined is an answer (the select stores 'false'); every other list reads 'false' as none.
+const declined = (r: Record<string, unknown>) => 'consentType' in r && (r.granted === false || r.granted === 'false')
 
 /** A list answer reads as words: a string list comma-joined; a list of rows by the names of the rows that hold an answer ("<n> added" when they have no name). */
-function reviewList(list: unknown[]): string {
-  const rows = list.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
-  if (!rows.length) return list.join(', ')
+function reviewList(list: unknown[], names?: Record<string, string>): string {
+  const all = list.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+  if (!all.length) return list.map((s) => names?.[s as string] ?? s).join(', ')
+  const rows = all.filter((r) => STA_VISIBLE || !HOLIDAY_STA_CONSENT_TYPES.includes(r.consentType as ConsentType))
   // The edit steps keep a row for every type, so a row only counts when it holds an answer besides its name; shortcut: a stale value left under "No" still counts.
-  const filled = rows.filter((r) => Object.entries(r).some(([k, v]) => !(k in ROW_NAME_LABELS) && answered(v)))
-  const names = filled.flatMap((r) => { const k = Object.keys(ROW_NAME_LABELS).find((c) => c in r); return k ? [ROW_NAME_LABELS[k]?.[String(r[k])] ?? String(r[k])] : [] })
-  return names.length ? names.join(', ') : filled.length ? `${filled.length} added` : ''
+  const filled = rows.filter((r) => declined(r) || Object.entries(r).some(([k, v]) => !(k in ROW_NAME_LABELS) && !HIDDEN_ROW_COLUMNS.includes(k) && answered(v)))
+  const named = filled.flatMap((r) => { const k = Object.keys(ROW_NAME_LABELS).find((c) => c in r); return k ? [`${ROW_NAME_LABELS[k][String(r[k])] ?? String(r[k])}${declined(r) ? ' (declined)' : ''}`] : [] })
+  return named.length ? named.join(', ') : filled.length ? `${filled.length} added` : ''
 }
 
 function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<CaregiverFormData>[]): ReviewGroup[] {
+  const v = values as Record<string, unknown>
   return steps.map((step) => ({
     stepKey: step.key,
     rows: step.key === 'aboutYou'
       ? [{ label: 'Your name', value: values.caregiverName || '—' }, { label: 'Relationship', value: values.caregiverRelationship || '—' }]
-      : step.fields.filter((f) => !CAREGIVER_INTERNAL_FIELDS.has(String(f))).map((f) => ({ label: fieldLabel(String(f)), value: reviewValue((values as Record<string, unknown>)[f as string]) })),
+      : step.fields.filter((f) => !CAREGIVER_INTERNAL_FIELDS.has(String(f)) && (SHOWN_WHEN[String(f)]?.(v) ?? true)).map((f) => ({ label: fieldLabel(String(f)), value: reviewValue(v[f as string], LIST_LABELS[f as string]) })),
   }))
 }

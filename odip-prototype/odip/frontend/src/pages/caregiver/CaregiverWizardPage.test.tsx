@@ -389,6 +389,64 @@ describe('CaregiverWizardPage — Review step (PP-6)', () => {
   })
 })
 
+// PB73 (hunt 85) — the Review step names what the carer saw and answered, in the words of the step.
+describe('CaregiverWizardPage — Review step reads like the steps (PB73)', () => {
+  async function reviewOf(current: Record<string, unknown>) {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto({ current: { firstName: 'Sophie', lastName: 'Rivers', ...current } }),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+    return (label: string | RegExp) => screen.getByText(label).nextElementSibling
+  }
+
+  it('names a declined consent, marked declined, and leaves a not-recorded one off', async () => {
+    const valueOf = await reviewOf({
+      consents: [{ consentType: 'PhotoVideo', granted: true }, { consentType: 'Privacy', granted: false }, { consentType: 'EmergencyMedical', granted: null }],
+    })
+    const line = valueOf(/^Consent & Terms/)
+    expect(line).toHaveTextContent(/^Photo & Video \(promotional use\), Privacy \(collection & use of information\) \(declined\)$/)
+    expect(line).not.toHaveTextContent('Emergency Medical')
+  })
+
+  it('shows a dash when every consent is not recorded', async () => {
+    const valueOf = await reviewOf({ consents: [{ consentType: 'PhotoVideo', granted: null }, { consentType: 'Privacy', granted: null }] })
+    expect(valueOf(/^Consent & Terms/)).toHaveTextContent(/^—$/)
+  })
+
+  it('leaves out the Holiday/STA consents, which the carer form never shows, even when granted or declined on the record', async () => {
+    const valueOf = await reviewOf({
+      consents: [{ consentType: 'PhotoVideo', granted: true }, { consentType: 'Alcohol', granted: true }, { consentType: 'TravelInsurance', granted: false }],
+    })
+    expect(valueOf(/^Consent & Terms/)).toHaveTextContent(/^Photo & Video \(promotional use\)$/)
+  })
+
+  it('shows the Specify Primary Diagnosis row only for Other, as the Medical step does', async () => {
+    const valueOf = await reviewOf({ primaryDiagnosis: 'Cerebral Palsy', primaryDiagnosisOther: 'left over from an earlier choice' })
+    expect(valueOf('Primary Diagnosis')).toHaveTextContent(/^Cerebral Palsy$/)
+    expect(screen.queryByText('Specify Primary Diagnosis')).not.toBeInTheDocument()
+  })
+
+  it('reads the HIDPA categories as the labels the Medical step shows', async () => {
+    const valueOf = await reviewOf({ hidpaSupportCategories: 'ComplexBowelCare, EnteralFeeding' })
+    expect(valueOf('HIDPA Support Categories')).toHaveTextContent(/^Complex Bowel Care, Enteral Feeding Support$/)
+  })
+
+  it('does not name an ADL row whose only answer is the How to Help Me text the carer cannot see', async () => {
+    const valueOf = await reviewOf({
+      adlAssessments: [{ adlType: 'Dressing', level: null, howToHelpNotes: 'Stay close' }, { adlType: 'Bathing', level: 'Supervision' }],
+    })
+    expect(valueOf(/^ADL Ratings/)).toHaveTextContent(/^Bathing \/ Showering$/)
+  })
+})
+
 // Task 6 — the route is registered as a sibling of /login, outside the authenticated app shell
 // (PrivateRoute, the admin layout chrome, UiPreferencesProvider). Exercises the real App.tsx
 // route table (not a test-only router) so a future accidental move of the route back inside
