@@ -89,6 +89,12 @@ public class TenantsController : ControllerBase
         if (ps is null || state is null || !HolidayCalendar.StateCodes.Contains(state))
             return BadRequest(ApiResponse<object>.Fail("Choose the organisation's state."));
 
+        // The first bank details print on invoices like any later ones: a new row has no stored value, so they are always checked.
+        var bsb = ps.BSB?.Trim();
+        var accountNumber = ps.AccountNumber?.Trim();
+        if ((ProviderSettingsController.BsbProblem(bsb) ?? ProviderSettingsController.AccountNumberProblem(accountNumber)) is { } bankProblem)
+            return BadRequest(ApiResponse<object>.Fail(bankProblem));
+
         // A blank organisation name falls back to the tenant's, which must then fit the column the same as one typed.
         if (string.IsNullOrWhiteSpace(ps.OrganisationName) && dto.Name.Length > 200)
             return BadRequest(ApiResponse<object>.Fail("The organisation name must be 200 characters or fewer."));
@@ -142,8 +148,8 @@ public class TenantsController : ControllerBase
             GSTRegistered = ps.GSTRegistered,
             IsPaceProvider = ps.IsPaceProvider,
             BankAccountName = ps.BankAccountName,
-            BSB = ps.BSB,
-            AccountNumber = ps.AccountNumber,
+            BSB = bsb,
+            AccountNumber = accountNumber,
             InvoiceFooterNotes = ps.InvoiceFooterNotes,
             MedicationCompetencyMode = ps.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn,
         });
