@@ -6,6 +6,8 @@ import { formatDateTimeAu, formatRelative, plural } from '@/lib/format'
 interface Props {
   entityType: string;
   entityId: string;
+  /** Plain names for the stored field names; a field not listed shows as stored. */
+  fieldLabels?: Record<string, string>;
 }
 
 /** An audit action's tone: a create is good news, a delete is the one to notice, an update is neutral information. */
@@ -18,7 +20,7 @@ const ACTION_TONES = { created: 'success', updated: 'info', deleted: 'danger' } 
 export function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
   return (
     <div className="flex items-start gap-2 text-xs text-[var(--color-muted-foreground)]">
-      <span className="font-medium min-w-[140px] shrink-0 text-[var(--color-muted-foreground)]">
+      <span className="font-medium w-[140px] shrink-0 break-words text-[var(--color-muted-foreground)]">
         {field}
       </span>
       <span className="line-through text-[var(--color-muted-foreground)] opacity-70">
@@ -36,7 +38,7 @@ export function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
  * AuditEntryRow: A single audit entry in the timeline.
  * Includes action badge, timestamp with tooltip, user info, and field changes.
  */
-function AuditEntryRow({ entry }: { entry: AuditEntry }) {
+function AuditEntryRow({ entry, fieldLabels }: { entry: AuditEntry; fieldLabels?: Record<string, string> }) {
 
   return (
     <div className="flex gap-3 py-2 border-b border-[var(--color-border)] last:border-0 tabular-nums">
@@ -62,11 +64,25 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
         {entry.changes.length > 0 && (
           <div className="flex flex-col gap-0.5 mt-1 pl-3 border-l-2 border-[var(--color-border)]">
             {entry.changes.map((c, i) => (
-              <FieldDiff key={i} {...c} />
+              <FieldDiff key={i} {...c} field={fieldLabels?.[c.field] ?? c.field} />
             ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Three placeholder rows while a history loads. */
+export function AuditHistorySkeleton() {
+  return (
+    <div className="flex flex-col gap-2 py-[var(--card-pad)]">
+      {[...Array(3)].map((_, i) => (
+        <div
+          key={i}
+          className="h-12 bg-[var(--color-surface-container)] rounded-[var(--radius-md)] animate-pulse"
+        />
+      ))}
     </div>
   );
 }
@@ -82,21 +98,10 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
  * - Timeline layout with semantic action badges
  * - Chronological listing (newest first, implicit from API)
  */
-export default function AuditHistoryTab({ entityType, entityId }: Props) {
+export default function AuditHistoryTab({ entityType, entityId, fieldLabels }: Props) {
   const { data, isLoading, isError, refetch } = useAuditHistory(entityType, entityId);
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-2 py-[var(--card-pad)]">
-        {[...Array(3)].map((_, i) => (
-          <div
-            key={i}
-            className="h-12 bg-[var(--color-surface-container)] rounded-[var(--radius-md)] animate-pulse"
-          />
-        ))}
-      </div>
-    );
-  }
+  if (isLoading) return <AuditHistorySkeleton />;
 
   if (isError) return <PageState kind="error" noun="history" onRetry={() => refetch()} />;
 
@@ -115,7 +120,7 @@ export default function AuditHistoryTab({ entityType, entityId }: Props) {
       </p>
       <div>
         {data.entries.map((entry) => (
-          <AuditEntryRow key={entry.id} entry={entry} />
+          <AuditEntryRow key={entry.id} entry={entry} fieldLabels={fieldLabels} />
         ))}
       </div>
     </div>

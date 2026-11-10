@@ -552,7 +552,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
     }
   })
 
-  it.each([['Admin', 26], ['Coordinator', 17], ['SuperAdmin', 30], ['SuperAdminNoOrg', 10]] as const)('gives %s a rail of %i sections', (role, count) => {
+  it.each([['Admin', 27], ['Coordinator', 17], ['SuperAdmin', 31], ['SuperAdminNoOrg', 10]] as const)('gives %s a rail of %i sections', (role, count) => {
     mockUsePermissions.mockReturnValue(SETTINGS_PERMS[role])
     renderSettingsPage()
     expect(within(rail()).getAllByRole('link')).toHaveLength(count)

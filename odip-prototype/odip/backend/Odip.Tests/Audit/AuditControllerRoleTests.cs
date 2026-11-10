@@ -28,4 +28,9 @@ public class AuditControllerRoleTests
     [InlineData("SuperAdmin", true), InlineData("Admin", true), InlineData("Coordinator", false), InlineData("SupportWorker", false), InlineData("ReadOnly", false)]
     public void TheDeletedList_AdmitsAdminAndSuperAdminOnly(string role, bool allowed) =>
         Assert.Equal(allowed, Allows(typeof(AuditController).GetMethod(nameof(AuditController.GetDeleted))!, role));
+
+    [Theory]
+    [InlineData("SuperAdmin", true), InlineData("Admin", true), InlineData("Coordinator", false), InlineData("SupportWorker", false), InlineData("ReadOnly", false)]
+    public void TheHistory_AdmitsAdminAndSuperAdminOnly(string role, bool allowed) =>
+        Assert.Equal(allowed, Allows(typeof(AuditController).GetMethod(nameof(AuditController.GetAuditHistory))!, role));
 }

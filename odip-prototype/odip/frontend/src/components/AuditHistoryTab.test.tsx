@@ -27,6 +27,14 @@ it("renders each change as field, old and new", () => {
   expect(screen.getByText("B")).toBeInTheDocument()
 })
 
+it('names a field from fieldLabels and leaves one it does not list as stored', () => {
+  mockUseAuditHistory.mockReturnValue({ data: { entries: [entry('a', 'Updated', '2026-10-28T01:00:00Z', [{ field: 'GSTRegistered', old: 'False', new: 'True' }, { field: 'Other', old: 'x', new: 'y' }])], total: 1, page: 1, pageSize: 50 }, isLoading: false, isError: false })
+  render(<AuditHistoryTab entityType="ProviderSettings" entityId="p1" fieldLabels={{ GSTRegistered: 'Registered for GST' }} />)
+  expect(screen.getByText('Registered for GST')).toBeInTheDocument()
+  expect(screen.queryByText('GSTRegistered')).not.toBeInTheDocument()
+  expect(screen.getByText('Other')).toBeInTheDocument()
+})
+
 describe('AuditHistoryTab', () => {
   it('colours the action pill by the house tones: Created success, Updated info, Deleted danger', () => {
     renderTab([entry('a', 'Created', '2026-10-28T01:00:00Z'), entry('b', 'Updated', '2026-10-28T01:00:00Z'), entry('c', 'Deleted', '2026-10-28T01:00:00Z')])
@@ -68,4 +76,9 @@ describe('AuditHistoryTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(refetch).toHaveBeenCalled()
   })
+})
+
+it('gives a field label a fixed 140px column that wraps, so the values line up', () => {
+  renderTab([entry('a', 'Updated', '2026-10-28T01:00:00Z', [{ field: 'Medication competency check', old: 'Warn', new: 'Block' }])])
+  expect(screen.getByText('Medication competency check')).toHaveClass('w-[140px]', 'shrink-0', 'break-words')
 })

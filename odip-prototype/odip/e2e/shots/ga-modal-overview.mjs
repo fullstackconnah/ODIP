@@ -162,6 +162,51 @@ const shot = async (page, name, { touch, light } = {}) => {
   return crop
 }
 
+// ── Polish batch 71 checks (computed styles; each fails on the code before the batch) ─────────────────────────────────────
+// Back to draft is a secondary sm Button: --control-h-sm tall, a --tap-min hit area at touch, and a border and text colour the "Workers can see it" hint lacks (GMR-F3; ghost was plain muted text on a mouse).
+const backToDraft = async (page, label, { touch }) => {
+  const t = await tokens(page)
+  const r = await sheet(page).evaluate((root) => {
+    const btn = [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Back to draft')
+    const hint = [...root.querySelectorAll('span')].find((s) => s.textContent.trim() === 'Workers can see it')
+    const cs = getComputedStyle(btn), hs = getComputedStyle(hint), before = getComputedStyle(btn, '::before')
+    return { h: btn.getBoundingClientRect().height, hit: before.position === 'absolute' ? parseFloat(before.height) || 0 : 0, border: parseFloat(cs.borderTopWidth), color: cs.color, hintColor: hs.color, hintBorder: parseFloat(hs.borderTopWidth) }
+  })
+  check(`${label}: Back to draft box >= --control-h-sm (${t.controlHSm})`, r.h >= t.controlHSm - 0.5, r.h)
+  if (touch) check(`${label}: Back to draft hit area >= --tap-min (${t.tapMin})`, Math.max(r.h, r.hit) >= t.tapMin - 0.5, { h: r.h, hit: r.hit })
+  check(`${label}: Back to draft has a border and a text colour unlike the hint's`, r.border >= 1 && r.hintBorder === 0 && r.color !== r.hintColor, r)
+}
+
+// Below lg the overview column is the dialog's own ground (--color-card), the same as the page pushed over it (GMR-F4). The seam only exists where the two tokens differ, so that is asserted too.
+const overviewGround = async (page, label) => {
+  const read = () => sheet(page).evaluate((dlg) => {
+    const probe = document.createElement('div'); document.body.append(probe)
+    const tok = (name) => { probe.style.backgroundColor = `var(${name})`; return getComputedStyle(probe).backgroundColor }
+    const r = { dialog: getComputedStyle(dlg).backgroundColor, card: tok('--color-card'), low: tok('--color-surface-container-low') }
+    probe.remove()
+    const aside = dlg.querySelector('aside[aria-label="Overview"]'), pushed = dlg.querySelector('section.ga-push')
+    return { ...r, aside: aside && getComputedStyle(aside).backgroundColor, pushed: pushed && getComputedStyle(pushed).backgroundColor }
+  })
+  const overview = await read()
+  await goRow(page, 'People')   // the push: the overview leaves, the page takes the dialog
+  const page2 = await read()
+  check(`${label}: narrow overview ground == the pushed page ground == --color-card`, overview.aside === page2.pushed && overview.aside === overview.card && page2.pushed === page2.card, { overview, page2 })
+  check(`${label}: --color-card differs from --color-surface-container-low in this theme (the seam check is not vacuous)`, overview.card !== overview.low, overview)
+}
+
+// Cancel activity is ghost-danger. On a mouse its fill is transparent at rest; under touch the house variant keeps its --color-error-container wash on (pointer-coarse, buttonClasses.ts), and hover cannot stick there (GMR-F5).
+const cancelFill = async (page, label, { touch }) => {
+  if (!touch) { await page.mouse.move(0, 0); await page.waitForTimeout(250) }   // the open click leaves the pointer over the board; background-color transitions 100 ms
+  const r = await sheet(page).evaluate((dlg) => {
+    const btn = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Cancel activity')
+    const probe = document.createElement('div'); document.body.append(probe); probe.style.backgroundColor = 'var(--color-error-container)'
+    const wash = getComputedStyle(probe).backgroundColor; probe.remove()
+    return { bg: getComputedStyle(btn).backgroundColor, wash, coarse: matchMedia('(pointer: coarse)').matches, canHover: matchMedia('(hover: hover)').matches, hovered: btn.matches(':hover') }
+  })
+  if (touch) check(`${label}: Cancel activity under touch (hover: none) carries the pointer-coarse --color-error-container wash`, r.coarse && !r.canHover && !r.hovered && r.bg === r.wash, r)
+  else check(`${label}: Cancel activity on a mouse is transparent at rest`, !r.coarse && !r.hovered && r.bg === 'rgba(0, 0, 0, 0)', r)
+}
+
 // WCAG ratios by pixel-free token sampling in the current theme: text on the card and on the overview fill, and the non-text marks.
 const contrast = (page) => page.evaluate(() => {
   const probe = document.createElement('div'); document.body.append(probe)
@@ -189,10 +234,10 @@ const STATES = [
   { name: 'saving', run: async (p) => { p.mode.postDelay = 6000; await openNew(p); await sheet(p).getByLabel(/Title/).fill('Picnic'); await sheet(p).getByRole('button', { name: 'Create draft' }).click(); await sheet(p).getByRole('button', { name: 'Creating…' }).waitFor() } },
   { name: 'server-error-on-save', light: true, run: async (p) => { p.mode.post = { status: 500, body: { success: false, message: 'The connection dropped.', errors: [] } }; await openNew(p); await sheet(p).getByLabel(/Title/).fill('Picnic'); await press(p, 'Create draft'); await sheet(p).getByText(/Couldn't save/).waitFor() } },
   { name: 'from-a-shift', light: true, run: async (p) => { await openFromShift(p); await sheet(p).getByLabel(/Title/).fill('Pool') } },
-  { name: 'edit-draft-overview', light: true, wide: false, run: async (p) => { await openEdit(p, 'draft') } },
+  { name: 'edit-draft-overview', light: true, wide: false, run: async (p) => { await openEdit(p, 'draft') }, measure: (p, label) => overviewGround(p, label) },
   { name: 'edit-draft-people', wide: true, run: async (p) => { await openEdit(p, 'draft') } },
-  { name: 'edit-published', light: true, run: async (p) => { await openEdit(p, 'published') } },
-  { name: 'started', light: true, run: async (p) => { await openEdit(p, 'started') } },
+  { name: 'edit-published', light: true, run: async (p) => { await openEdit(p, 'published') }, measure: backToDraft },
+  { name: 'started', light: true, run: async (p) => { await openEdit(p, 'started') }, measure: cancelFill },
   { name: 'completed', run: async (p) => { await openEdit(p, 'completed') } },
   { name: 'cancelled', run: async (p) => { await openEdit(p, 'cancelled') } },
   { name: 'loading', run: async (p) => { p.mode.getDelay = 8000; await p.emulateMedia({ reducedMotion: 'reduce' }); await p.addStyleTag({ content: '*, *::before, *::after { animation: none !important }' }); await p.locator(`[data-activity-card="${A.draft.id}"] [data-activity-open]`).first().click(); await sheet(p).locator('[aria-busy=true]').first().waitFor() } },
@@ -248,6 +293,7 @@ for (const vp of VIEWPORTS) {
         if (st.name === 'edit-draft-overview' || st.name === 'people') {
           if (theme === 'dark') for (const c of await contrast(page)) check(`${label}: contrast ${c.name} >= ${c.floor}`, c.value >= c.floor, c.value)
         }
+        if (st.measure) await st.measure(page, label, { touch: vp.touch })   // last: overviewGround pushes a page
         if (session.errors.length) check(`${label}: no page errors`, false, session.errors)
       } catch (e) {
         check(`${label}: state ran`, false, String(e.message).split('\n')[0])

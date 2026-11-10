@@ -223,4 +223,16 @@ describe('provider settings hooks — the readiness mode', () => {
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
     expect(mockApiPut).toHaveBeenLastCalledWith('/provider-settings', withMode)
   })
+
+  it('useUpsertProviderSettings makes Settings history read again after a save', async () => {
+    mockApiPut.mockResolvedValue('2026-11-10T00:00:00Z')
+    const queryClient = new QueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useUpsertProviderSettings(), { wrapper: wrapper(queryClient) })
+
+    result.current.mutate({ registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise', address: '1 Wattle St', gstRegistered: true, isPaceProvider: false })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['audit', 'ProviderSettings'] })
+  })
 })
