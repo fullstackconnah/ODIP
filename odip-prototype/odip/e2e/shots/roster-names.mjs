@@ -314,8 +314,8 @@ const SCENES = [
   { tag: '1600-dark', width: 1600, height: 900, touch: false, dark: true, full: true },
 ]
 const LONG_ROW = 'Lena Long'
-// The roster board's head and body frames scroll sideways by design (RosterGrid.tsx:66,69); nothing else is allowed.
-const BOARD_SCROLLER = ['div.overflow-x-auto.overflow-y-hidden']
+// These scroll sideways by design: the roster board's head and body frames (RosterGrid.tsx:66,69) and the staff puck list (StaffStrip.tsx:45,71). Nothing else is allowed.
+const BOARD_SCROLLER = ['div.overflow-x-auto.overflow-y-hidden', 'ul.overflow-x-auto.overflow-y-hidden']
 for (const s of SCENES) {
   try {
     const { context, page } = await openRoster(browser, s)
