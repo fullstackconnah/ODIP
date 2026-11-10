@@ -358,3 +358,46 @@ describe('CaregiverWizardPage - one save per click', () => {
     expect(saveLater()).toHaveAttribute('aria-disabled', 'true')
   })
 })
+
+// PB69-D1: a 409 means the form was sent from somewhere else (another tab), so the page reloads and shows its submitted view; a 404 keeps the next-step sentence and reads nothing.
+describe('CaregiverWizardPage - a refused Submit or save', () => {
+  const refused = (status: number) => ({ response: { status, data: { success: false, errors: ['refused'] } } })
+
+  async function openAtReview() {
+    server = makeDto({ current: projection as Record<string, unknown>, caregiverName: 'Jane Doe' })
+    const { user } = await open()
+    for (let i = 0; i < 7; i++) {
+      await user.click(nextButton())
+      await waitFor(() => expect(puts).toHaveLength(i + 1))
+    }
+    return user
+  }
+
+  it('a 409 on Submit reloads the form and shows the submitted view', async () => {
+    const user = await openAtReview()
+    const getsBefore = mockGet.mock.calls.length
+    mockPost.mockImplementationOnce(() => { server = { ...server, status: 'Submitted' }; return Promise.reject(refused(409)) })
+    await user.click(await screen.findByRole('button', { name: 'Submit for review' }))
+    expect(await screen.findByText(/your form has been submitted/i)).toBeInTheDocument()
+    expect(mockGet.mock.calls.length).toBe(getsBefore + 1)
+  })
+
+  it('a 409 on Save and continue later reloads the form and shows the submitted view', async () => {
+    const { user } = await open()
+    await user.type(nameField(), 'Jane Doe')
+    mockPut.mockImplementationOnce(() => { server = { ...server, status: 'Submitted' }; return Promise.reject(refused(409)) })
+    await user.click(saveLater())
+    expect(await screen.findByText(/your form has been submitted/i)).toBeInTheDocument()
+  })
+
+  it('a 404 on Submit keeps the typed values and the next-step sentence, and reads nothing', async () => {
+    const user = await openAtReview()
+    const getsBefore = mockGet.mock.calls.length
+    mockPost.mockRejectedValueOnce(refused(404))
+    await user.click(await screen.findByRole('button', { name: 'Submit for review' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This link is no longer valid. Please contact the person who sent it to you.')
+    expect(mockGet.mock.calls.length).toBe(getsBefore)
+    expect(screen.queryByText(/your form has been submitted/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+  })
+})
