@@ -289,24 +289,24 @@ public partial class ProviderSettingsController : ControllerBase
 
     private static string Blank(string? v) => v?.Trim() ?? "";
 
-    /// <summary>The refusal for a typed BSB (6 digits, an optional dash after the third), or null; blank clears the field and passes. Expects the trimmed value.</summary>
+    /// <summary>The refusal for a typed BSB (6 digits, an optional dash or space after the third), or null; blank clears the field and passes. Expects the trimmed value.</summary>
     internal static string? BsbProblem(string? bsb) =>
         string.IsNullOrEmpty(bsb) || BsbPattern().IsMatch(bsb) ? null : "Enter the BSB as 6 numbers, like 062-000.";
 
     /// <summary>The refusal for a typed account number (4 to 20 digits, spaces or dashes, starting with a digit), or null; blank passes. Expects the trimmed value.</summary>
     internal static string? AccountNumberProblem(string? accountNumber) =>
-        string.IsNullOrEmpty(accountNumber) || AccountNumberPattern().IsMatch(accountNumber) ? null : "Enter the account number using numbers only.";
+        string.IsNullOrEmpty(accountNumber) || AccountNumberPattern().IsMatch(accountNumber) ? null : "Enter the account number as 4 to 20 numbers.";
 
-    [GeneratedRegex(@"^\d{3}-?\d{3}\z")]
+    [GeneratedRegex(@"^\d{3}[- ]?\d{3}\z")]
     private static partial Regex BsbPattern();
 
     [GeneratedRegex(@"^[0-9][0-9 -]{3,19}\z")]
     private static partial Regex AccountNumberPattern();
 
-    /// <summary>A new row has nothing before it, so it writes none. <paramref name="mask"/> keeps the values out of the row: only set, changed or cleared.</summary>
+    /// <summary>A new row has nothing before it, so it writes none, except a bank field it fills ("set"). <paramref name="mask"/> keeps the values out of the row: only set, changed or cleared.</summary>
     private void AuditIfChanged(ProviderSettings s, string field, string? oldValue, string? newValue, bool mask = false)
     {
-        if (_db.Entry(s).State == EntityState.Added || Blank(oldValue) == Blank(newValue)) return;
+        if ((!mask && _db.Entry(s).State == EntityState.Added) || Blank(oldValue) == Blank(newValue)) return;
         if (mask) (oldValue, newValue) = (null, Blank(newValue).Length == 0 ? "cleared" : Blank(oldValue).Length == 0 ? "set" : "changed");
         _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ProviderSettings), s.Id, field, oldValue, newValue, User));
     }

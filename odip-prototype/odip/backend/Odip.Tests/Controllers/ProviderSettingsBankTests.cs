@@ -50,7 +50,7 @@ public class ProviderSettingsBankTests
     [InlineData("abc")]
     [InlineData("12-3456")]
     [InlineData("0620000")]
-    [InlineData("062 000")]
+    [InlineData("06 2000")]
     public async Task A_changed_BSB_that_is_not_six_digits_is_400_with_a_sentence_and_nothing_is_written(string bsb)
     {
         var (db, controller) = Create();
@@ -65,6 +65,7 @@ public class ProviderSettingsBankTests
     [Theory]
     [InlineData("062-000", "062-000")]
     [InlineData("062000", "062000")]
+    [InlineData("062 000", "062 000")]
     [InlineData("  062000 ", "062000")]
     public async Task A_valid_BSB_is_saved_trimmed(string typed, string stored)
     {
@@ -86,7 +87,7 @@ public class ProviderSettingsBankTests
         var (db, controller) = Create();
         using var _ = db;
 
-        Assert.Equal("Enter the account number using numbers only.", Refusal(await controller.Upsert(Dto(account: account), CancellationToken.None)));
+        Assert.Equal("Enter the account number as 4 to 20 numbers.", Refusal(await controller.Upsert(Dto(account: account), CancellationToken.None)));
 
         Assert.Equal("12345678", (await db.ProviderSettings.IgnoreQueryFilters().SingleAsync()).AccountNumber);
     }
@@ -133,6 +134,40 @@ public class ProviderSettingsBankTests
         Assert.Contains(rows, r => r.Changes!.Contains("set"));
         Assert.All(rows, r => Assert.DoesNotContain("8765", r.Changes));
         Assert.All(rows, r => Assert.DoesNotContain("12345678", r.Changes));
+    }
+
+    [Fact]
+    public async Task A_changed_bank_account_name_writes_one_row_without_either_name()
+    {
+        var (db, controller) = Create();
+        using var _ = db;
+        var dto = Dto();
+        dto.BankAccountName = "Brand New Holder";
+
+        await controller.Upsert(dto, CancellationToken.None);
+
+        var row = Assert.Single(await Audits(db));
+        Assert.Contains("BankAccountName", row.Changes);
+        Assert.DoesNotContain("Brand New", row.Changes);
+        Assert.DoesNotContain("Synthetic Org", row.Changes);
+    }
+
+    [Fact]
+    public async Task The_first_save_of_a_new_settings_row_writes_one_set_row_for_the_BSB_and_no_value()
+    {
+        var (db, controller) = Create();
+        using var _ = db;
+        db.ProviderSettings.RemoveRange(await db.ProviderSettings.IgnoreQueryFilters().ToListAsync());
+        db.SaveChanges();
+        var dto = Dto(bsb: "062-000", account: null);
+        dto.BankAccountName = null;
+
+        await controller.Upsert(dto, CancellationToken.None);
+
+        var row = Assert.Single(await Audits(db));
+        Assert.Contains("BSB", row.Changes);
+        Assert.Contains("set", row.Changes);
+        Assert.DoesNotContain("062", row.Changes);
     }
 
     [Fact]
