@@ -107,8 +107,17 @@ describe('Settings history', () => {
     show()
     await screen.findByText('Onboarding checklist')
     const [before, after] = screen.getAllByRole('list')
-    expect(within(before).getAllByRole('listitem').map(li => li.textContent)).toEqual(['complaints=Required', 'rights=Required', 'myProvider=Required', 'budget=Off'])
-    expect(within(after).getAllByRole('listitem').map(li => li.textContent)).toEqual(['complaints=Required', 'rights=Optional', 'myProvider=Required', 'budget=Off'])
+    expect(within(before).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Told how to make a complaint: Required', 'Rights explained: Required', 'Recorded as my provider: Required', 'Plan budget added: Off'])
+    expect(within(after).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Told how to make a complaint: Required', 'Rights explained: Optional', 'Recorded as my provider: Required', 'Plan budget added: Off'])
+  })
+
+  it('keeps the stored key for an Onboarding item the form does not know, even one named like an object property', async () => {
+    api.audit.mockResolvedValue(history([entry('a', [{ field: 'OnboardingItemModes', old: 'other=Required, constructor=Optional', new: 'other=Optional, constructor=Optional' }])]))
+    show()
+    await screen.findByText('Onboarding checklist')
+    const [before, after] = screen.getAllByRole('list')
+    expect(within(before).getAllByRole('listitem').map(li => li.textContent)).toEqual(['other: Required', 'constructor: Optional'])
+    expect(within(after).getAllByRole('listitem').map(li => li.textContent)).toEqual(['other: Optional', 'constructor: Optional'])
   })
 
   it('shows a masked bank row as set, changed or cleared, never as digits', async () => {

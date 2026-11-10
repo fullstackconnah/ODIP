@@ -1,6 +1,7 @@
 import AuditHistoryTab, { AuditHistorySkeleton } from '@/components/AuditHistoryTab'
 import { PageState } from '@/components/PageState'
 import { useProviderSettings } from '@/api/hooks'
+import { ITEM_LABELS } from './onboardingItems'
 import { MODE_OPTIONS } from './safetyModes'
 import { ZONES } from './timeZones'
 
@@ -19,8 +20,12 @@ const VALUE_LABELS = {
   ParticipantReadinessMode: MODE_WORDS, MedicationCompetencyMode: MODE_WORDS,
   TimeZoneId: Object.fromEntries(ZONES.map(z => [z.value, z.label])),
 }
-// The server writes the Onboarding checklist as one line ("complaints=Required, rights=Optional, ..."); it reads one item per line here. shortcut: a semicolon or comma inside an item would split it, fine while the writer has neither.
-const VALUE_FORMAT = { OnboardingItemModes: (value: string) => value.split(/[;,]/).map(item => item.trim()).filter(Boolean) }
+// The server writes the Onboarding checklist as one line ("complaints=Required, rights=Optional, ..."); it reads one item per line here, in the form's words. A key the form does not know shows as stored. shortcut: a semicolon or comma inside an item would split it, fine while the writer has neither.
+const itemLine = (item: string) => {
+  const [key, mode] = item.split('=')
+  return mode ? `${Object.hasOwn(ITEM_LABELS, key) ? ITEM_LABELS[key as keyof typeof ITEM_LABELS] : key}: ${mode}` : item
+}
+const VALUE_FORMAT = { OnboardingItemModes: (value: string) => value.split(/[;,]/).map(item => item.trim()).filter(Boolean).map(itemLine) }
 
 /** Settings → Settings history (Admin): who changed the organisation's provider settings, when, and from what to what. */
 export default function SettingsHistorySection() {
