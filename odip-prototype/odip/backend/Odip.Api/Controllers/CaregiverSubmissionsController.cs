@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -56,6 +57,7 @@ public class CaregiverSubmissionsController : ControllerBase
     // ── Links ──────────────────────────────────────────────
 
     private const string WaitingForReview = "A caregiver form is waiting for review. Accept or decline it before sending a new link.";
+    private const string LinkJustSent = "Another coordinator just sent a link for this participant. Reload and try again.";
 
     [HttpPost("/api/v1/participants/{participantId:guid}/caregiver-link")]
     public async Task<ActionResult<ApiResponse<CaregiverLinkDto>>> CreateLink(Guid participantId, CancellationToken ct)
@@ -76,7 +78,9 @@ public class CaregiverSubmissionsController : ControllerBase
             .ToListAsync(ct);
         foreach (var a in drafts)
         {
-            if (!await ClaimAsync(a.Id, CaregiverSubmissionStatus.Draft, CaregiverSubmissionStatus.Revoked, ct)) return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
+            // A lost claim is a caregiver Submit (a form now waits) or another coordinator's link that took the Draft (nothing waits).
+            if (!await ClaimAsync(a.Id, CaregiverSubmissionStatus.Draft, CaregiverSubmissionStatus.Revoked, ct))
+                return Conflict(ApiResponse<CaregiverLinkDto>.Fail(await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct) ? WaitingForReview : LinkJustSent));
             a.Status = CaregiverSubmissionStatus.Revoked;
         }
         if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
@@ -95,7 +99,15 @@ public class CaregiverSubmissionsController : ControllerBase
             ExpiresAt = DateTime.UtcNow.AddDays(_expiryDays),
         };
         _db.CaregiverProfileSubmissions.Add(sub);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        // The only insert in this save is the new link, so a unique violation is the one-active-link index: another coordinator's link committed since the checks above. Nothing is kept (no commit).
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return Conflict(ApiResponse<CaregiverLinkDto>.Fail(LinkJustSent));
+        }
         if (tx != null) await tx.CommitAsync(ct);
 
         return Ok(ApiResponse<CaregiverLinkDto>.Ok(new CaregiverLinkDto { Token = raw, ExpiresAt = sub.ExpiresAt }));

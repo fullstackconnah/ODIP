@@ -852,6 +852,32 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     await chooseFromDocuments(/regenerate caregiver link/i)
     await waitFor(() => expect(within(control).getByRole('alert')).toHaveTextContent('Generate refused'))
   })
+
+  // PB75-H86-1: the issued link is the panel's only copy, so it goes when the link is dead (revoked, or a 404 = no active link) and stays when the revoke failed and the link is still live.
+  it.each([
+    ['succeeds', async () => ({ success: true }), false, null],
+    ['answers 404 (no active link)', async () => { throw { response: { status: 404, data: { errors: ['No active caregiver link'] } } } }, false, 'No active caregiver link'],
+    ['fails with a 500', async () => { throw { response: { status: 500, data: { errors: ['Server error'] } } } }, true, 'Server error'],
+  ])('after Revoke %s the issued link panel goes only if the link is dead', async (_name, revokeResult, panelStays, errorText) => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn(async () => ({ success: true, data: { token: 'tok-123', expiresAt: '2026-09-17T00:00:00Z' } })), isPending: false, isError: false })
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn(revokeResult), isPending: false, isError: false })
+    withActiveLink()
+    setup()
+    await chooseFromDocuments(/regenerate caregiver link/i)
+    const control = screen.getByTestId('caregiver-link-control')
+    expect(await within(control).findByRole('button', { name: /copy link/i })).toBeInTheDocument()
+
+    await chooseFromDocuments(/revoke caregiver link/i)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^revoke$/i }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    if (panelStays) expect(within(control).getByRole('button', { name: /copy link/i })).toBeInTheDocument()
+    else expect(within(control).queryByRole('button', { name: /copy link/i })).not.toBeInTheDocument()
+    if (errorText) expect(within(control).getByRole('alert')).toHaveTextContent(errorText)
+    else expect(within(control).queryByRole('alert')).not.toBeInTheDocument()
+  })
 })
 
 // PP-39 — the History tab (and its content) must be gated on usePermissions()'s isAdmin/isSuperAdmin,

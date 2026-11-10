@@ -680,7 +680,11 @@ function useCaregiverLink(participantId: string): CaregiverLink {
         onConfirm={async () => {
           // A refusal closes the dialog too, so the message above is not left behind it.
           setLinkError(null)
-          await revoke.mutateAsync({ participantId }).catch((err: unknown) => setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.')))
+          await revoke.mutateAsync({ participantId }).then(() => setIssued(null), (err: unknown) => {
+            // A 404 means there was no active link, so the one on screen is already dead; any other failure leaves it live and the panel is its only copy.
+            if ((err as { response?: { status?: number } })?.response?.status === 404) setIssued(null)
+            setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.'))
+          })
           setConfirmingRevoke(false)
         }}
         title="Revoke caregiver link?"
