@@ -87,7 +87,7 @@ const reviewRows = (page) => page.evaluate(() => {
     braces: rows.filter((r) => /[[{]/.test(r.dd.textContent)).map((r) => r.dt.textContent),
     internal: rows.filter((r) => ['Preferred Staff Member', 'Behaviour Risk Rating'].includes(r.dt.textContent.trim())).map((r) => r.dt.textContent),
     mobility: valueOf('Mobility Support Options'),
-    conditions: valueOf('Health Conditions (structured grid)'),
+    conditions: valueOf('Health Conditions'),
     goals: (() => { const g = rows.find((r) => r.dt.textContent.trim() === 'Goals'); if (!g) return null; return { align: getComputedStyle(g.dd).textAlign, ratio: g.dd.getBoundingClientRect().width / g.row.getBoundingClientRect().width, text: g.dd.textContent.trim() } })(),
     dsoaWrapped: dsoa ? dsoa.dd.getBoundingClientRect().top > dsoa.dt.getBoundingClientRect().top + 1 : null,
   }

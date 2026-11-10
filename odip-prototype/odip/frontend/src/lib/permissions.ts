@@ -253,10 +253,11 @@ export function usePermissions() {
     canViewAlerts: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
-     * Coordinator sees Provider Settings tab but cannot save changes.
-     * False for Coordinator and SupportWorker.
+     * Gates every organisation-settings Save (and the links that send someone to edit them) — mirrors
+     * `ProviderSettingsController.Upsert`'s `[Authorize(Roles = "SuperAdmin,Admin")]` gate exactly.
+     * Coordinator reads the sections (the GET admits it) but cannot save; ReadOnly and SupportWorker get the same read-only branch.
      */
-    canEditProviderSettings: !isCoordinator && !isSupportWorker,
+    canEditProviderSettings: isSuperAdmin || isAdmin,
 
     /**
      * Bank details fields are hidden from Coordinator.

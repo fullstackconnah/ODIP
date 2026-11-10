@@ -261,7 +261,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const stepState = (n: number): 'done' | 'now' | 'next' => { const now = isNew ? 1 : shown === 'staff' || shown === 'pickStaff' ? 3 : 2; return n < now ? 'done' : n === now ? 'now' : 'next' }
 
   const overview = (
-    <aside aria-label="Overview" className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-surface-container-low)] lg:w-80 lg:flex-none lg:border-r lg:border-[var(--color-border)]">
+    <aside aria-label="Overview" className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-card)] lg:w-80 lg:bg-[var(--color-surface-container-low)] lg:flex-none lg:border-r lg:border-[var(--color-border)]">
       <header className="shrink-0 border-b border-[var(--color-border)] p-[var(--card-pad)]">
         <div className="flex items-start gap-2">
           <h2 id={headingId} ref={shown === null ? headingRef : undefined} tabIndex={-1} className="min-w-0 flex-1 break-words font-display text-lg font-semibold text-[var(--color-foreground)] focus:outline-none">{title}</h2>
@@ -273,7 +273,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={activity.status} label={activity.status === 'InProgress' ? 'In progress' : undefined} />
               {!readOnly && !started && activity.status === 'Draft' && <Button size="sm" onClick={() => setStatus('Published')} disabled={pendingKey === 'status'}>Publish</Button>}
-              {!readOnly && !started && activity.status === 'Published' && <Button size="sm" variant="ghost" onClick={() => setStatus('Draft')} disabled={pendingKey === 'status'}>Back to draft</Button>}
+              {!readOnly && !started && activity.status === 'Published' && <Button size="sm" variant="secondary" onClick={() => setStatus('Draft')} disabled={pendingKey === 'status'}>Back to draft</Button>}
               {activity.status === 'Published' && <span className="text-xs text-[var(--color-muted-foreground)]">Workers can see it</span>}
             </div>
           </>
