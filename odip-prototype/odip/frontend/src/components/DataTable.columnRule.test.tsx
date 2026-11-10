@@ -322,6 +322,14 @@ describe('RowMenu: a disabled item keeps its reason', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
+  it('dims only the icon, so the focus ring keeps full strength, and shows no hover wash', () => {
+    render(<MemoryRouter><RowMenu name="Pat" items={disabledItem(vi.fn(), 'Activate the pattern first')} /></MemoryRouter>)
+    const classes = screen.getAllByRole('button', { name: 'Generate shifts' })[0].className.split(/\s+/)
+    expect(classes).toContain('aria-disabled:[&>svg]:opacity-50')
+    expect(classes).toContain('aria-disabled:hover:bg-transparent')
+    expect(classes).not.toContain('aria-disabled:opacity-50')
+  })
+
   it('gives a disabled item with no reason no description', () => {
     render(<MemoryRouter><RowMenu name="Pat" items={disabledItem(vi.fn())} /></MemoryRouter>)
     const button = screen.getAllByRole('button', { name: 'Generate shifts' })[0]

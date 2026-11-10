@@ -62,13 +62,30 @@ async function keyboardScene(page, inactive, active) {
   const crop = await cropElement(page, inactive, path.join(OUT_DIR, 'rowmenu-disabled-focus-1280.png'), { touch: false, hideChrome: true, pad: 16 })
   add('crop holds the whole element: rowmenu-disabled-focus-1280.png', { clip: crop.clip, overlap: crop.overlap }, crop.overlap?.pass !== false)
 
-  // Opacity: the disabled button is its enabled sibling (Edit, same row) at half strength.
+  // Opacity: only the icon dims. The disabled button's own opacity stays 1 (opacity on the button dims its focus ring too); its svg is the enabled sibling's (Edit, same row) at half strength.
   const op = await page.evaluate(() => {
     const el = document.activeElement
     const sib = [...el.closest('tr').querySelectorAll('button')].find((b) => /^Edit /.test(b.getAttribute('aria-label') ?? ''))
-    return { disabled: parseFloat(getComputedStyle(el).opacity), sibling: parseFloat(getComputedStyle(sib).opacity), cursor: getComputedStyle(el).cursor }
+    return { button: parseFloat(getComputedStyle(el).opacity), svg: parseFloat(getComputedStyle(el.querySelector(':scope > svg')).opacity), siblingSvg: parseFloat(getComputedStyle(sib.querySelector(':scope > svg')).opacity), cursor: getComputedStyle(el).cursor }
   })
-  add('disabled opacity = enabled sibling x 0.5 (within 0.01), cursor not-allowed', op, Math.abs(op.disabled - op.sibling * 0.5) <= 0.01 && op.cursor === 'not-allowed')
+  add('disabled button opacity 1, its icon = enabled sibling icon x 0.5 (within 0.01), cursor not-allowed', op, op.button === 1 && Math.abs(op.svg - op.siblingSvg * 0.5) <= 0.01 && op.cursor === 'not-allowed')
+
+  // Focus ring: the focused disabled button's ring is the focused enabled sibling's. Computed outline-color ignores opacity, so also compare the effective opacity (the product up the ancestor chain).
+  const ring = () => page.evaluate(() => {
+    const el = document.activeElement
+    const cs = getComputedStyle(el)
+    let effective = 1
+    for (let n = el; n; n = n.parentElement) effective *= parseFloat(getComputedStyle(n).opacity)
+    return { label: el.getAttribute('aria-label'), focusVisible: el.matches(':focus-visible'), color: cs.outlineColor, style: cs.outlineStyle, width: cs.outlineWidth, effective }
+  })
+  const disabledRing = await ring()
+  await page.keyboard.press('Shift+Tab')
+  const enabledRing = await ring()
+  add("focus ring at full strength: the disabled button's outline matches the focused enabled sibling's (colour, solid, width, effective opacity within 0.01)", { disabledRing, enabledRing },
+    /^Edit /.test(enabledRing.label ?? '') && disabledRing.focusVisible && enabledRing.focusVisible && disabledRing.color === enabledRing.color && disabledRing.style === 'solid' && disabledRing.style === enabledRing.style && disabledRing.width === enabledRing.width && disabledRing.width !== '0px' && Math.abs(disabledRing.effective - enabledRing.effective) <= 0.01)
+  await page.keyboard.press('Tab')
+  const back = await ring()
+  add('Tab returns to the disabled "Generate shifts" button', back, /^Generate shifts for /.test(back.label ?? ''))
 
   // Enter fires click on a button: nothing may open.
   await page.keyboard.press('Enter')
@@ -84,11 +101,39 @@ async function keyboardScene(page, inactive, active) {
   await page.keyboard.press('Escape')
   await page.locator(DIALOG).first().waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
 
-  // Enabled row on a mouse: hover reveals its actions.
+  // Hover on a mouse: a disabled item shows no wash. Control: its enabled sibling does, so the check can fail.
   await page.evaluate(() => document.activeElement?.blur())
-  await active.hover()
-  const enabled = await cropElement(page, active, path.join(OUT_DIR, 'rowmenu-enabled-1280.png'), { touch: false, hideChrome: true, pad: 16 })
+  await page.mouse.move(2, 2)
+  const paint = (loc) => loc.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }))
+  const rest = await paint(generateIn(inactive))
+  await generateIn(inactive).hover()
+  await page.waitForTimeout(300)
+  const hovered = await paint(generateIn(inactive))
+  add('hovering the disabled button leaves its background rgba(0, 0, 0, 0) (300 ms)', { rest, hovered, colorChanged: rest.color !== hovered.color }, hovered.bg === 'rgba(0, 0, 0, 0)')
+  await editIn(inactive).hover()
+  await page.waitForTimeout(300)
+  const siblingHover = await paint(editIn(inactive))
+  add('control: hovering the enabled sibling shows a background wash', siblingHover, siblingHover.bg !== 'rgba(0, 0, 0, 0)')
+
+  // Enabled row on a mouse: hover reveals its actions. cropElement parks the mouse before it shoots, so hover inside `during` (after that, just before the screenshot) and wait up to 2 s for the overlay's own reveal (opacity 1).
+  const reveal = () => active.evaluate((row) => {
+    const overlay = row.querySelector('button[aria-label^="Edit "]').parentElement
+    const actions = [...overlay.querySelectorAll('a, button')]
+    return { overlay: parseFloat(getComputedStyle(overlay).opacity), actions: actions.length, minActionOpacity: Math.min(...actions.map((a) => parseFloat(getComputedStyle(a).opacity))), minIconOpacity: Math.min(...actions.map((a) => parseFloat(getComputedStyle(a.querySelector(':scope > svg')).opacity))) }
+  })
+  const enabled = await cropElement(page, active, path.join(OUT_DIR, 'rowmenu-enabled-1280.png'), {
+    touch: false, hideChrome: true, pad: 16,
+    during: async () => {
+      await active.hover()
+      const deadline = Date.now() + 2000
+      let m = await reveal()
+      while (m.overlay !== 1 && Date.now() < deadline) { await page.waitForTimeout(50); m = await reveal() }
+      return m
+    },
+  })
   add('crop holds the whole element: rowmenu-enabled-1280.png', { clip: enabled.clip, overlap: enabled.overlap }, enabled.overlap?.pass !== false)
+  add('enabled crop taken with the row actions revealed: overlay opacity 1, 3 or more actions, each button and icon at opacity 1', enabled.measured,
+    enabled.measured?.overlay === 1 && enabled.measured.actions >= 3 && enabled.measured.minActionOpacity === 1 && enabled.measured.minIconOpacity === 1)
   const state = await generateIn(active).evaluate((el) => ({ ariaDisabled: el.getAttribute('aria-disabled'), disabledAttr: el.disabled, describedby: el.getAttribute('aria-describedby') }))
   add('an enabled item has no aria-disabled, is not disabled and has no description', state, state.ariaDisabled === null && !state.disabledAttr && state.describedby === null)
   await page.mouse.move(2, 2)
