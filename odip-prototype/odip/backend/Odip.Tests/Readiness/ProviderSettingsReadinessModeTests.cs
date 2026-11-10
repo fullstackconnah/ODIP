@@ -227,7 +227,7 @@ public class ProviderSettingsReadinessModeTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(ParticipantReadinessMode.Enforce, await StoredMode(db, TenantA));
-        using var changes = JsonDocument.Parse((await db.AuditLogs.SingleAsync()).Changes);
+        using var changes = JsonDocument.Parse((await db.AuditLogs.SingleAsync(a => a.Changes!.Contains("ParticipantReadinessMode"))).Changes);
         Assert.Equal("Warn", changes.RootElement[0].GetProperty("Old").GetString());
     }
 

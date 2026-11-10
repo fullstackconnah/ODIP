@@ -286,10 +286,15 @@ public class ProviderSettingsControllerTests
             BankAccountName = "Test Org Operating", BSB = "062-000", AccountNumber = "12345678", MedicationCompetencyMode = MedicationCompetencyMode.Enforce,
         }, CancellationToken.None);
 
-        var row = Assert.Single(await AuditRowsAsync(db));
-        Assert.DoesNotContain("12345678", row.Changes);
-        Assert.DoesNotContain("062-000", row.Changes);
-        Assert.DoesNotContain("Operating", row.Changes);
+        // The first save also writes a masked "set" row for each bank field; none carries a value.
+        var rows = await AuditRowsAsync(db);
+        Assert.Equal(4, rows.Count);
+        Assert.All(rows, row =>
+        {
+            Assert.DoesNotContain("12345678", row.Changes);
+            Assert.DoesNotContain("062-000", row.Changes);
+            Assert.DoesNotContain("Operating", row.Changes);
+        });
         Assert.DoesNotContain(typeof(Odip.Domain.Entities.ProviderSettings), AuditedEntities.Types);   // it holds bank details: never audit the whole entity
     }
 

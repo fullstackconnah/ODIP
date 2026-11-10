@@ -35,10 +35,10 @@ public class ProviderSettingsBankTests
         return (db, new ProviderSettingsController(db, tenant.Object) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = principal } } });
     }
 
-    private static UpsertProviderSettingsDto Dto(string? bsb = "123-456", string? account = "12345678", bool gst = false, string state = "NSW") => new()
+    private static UpsertProviderSettingsDto Dto(string? bsb = "123-456", string? account = "12345678", bool gst = false, string state = "NSW", string? bankName = "Synthetic Org") => new()
     {
         RegistrationNumber = "REG", ABN = "12345678901", OrganisationName = "Org", Address = "1 St", State = state, GSTRegistered = gst,
-        BankAccountName = "Synthetic Org", BSB = bsb, AccountNumber = account
+        BankAccountName = bankName, BSB = bsb, AccountNumber = account
     };
 
     private static Task<List<AuditLog>> Audits(OdipDbContext db) => db.AuditLogs.IgnoreQueryFilters().ToListAsync();
@@ -141,10 +141,7 @@ public class ProviderSettingsBankTests
     {
         var (db, controller) = Create();
         using var _ = db;
-        var dto = Dto();
-        dto.BankAccountName = "Brand New Holder";
-
-        await controller.Upsert(dto, CancellationToken.None);
+        await controller.Upsert(Dto(bankName: "Brand New Holder"), CancellationToken.None);
 
         var row = Assert.Single(await Audits(db));
         Assert.Contains("BankAccountName", row.Changes);
@@ -159,10 +156,7 @@ public class ProviderSettingsBankTests
         using var _ = db;
         db.ProviderSettings.RemoveRange(await db.ProviderSettings.IgnoreQueryFilters().ToListAsync());
         db.SaveChanges();
-        var dto = Dto(bsb: "062-000", account: null);
-        dto.BankAccountName = null;
-
-        await controller.Upsert(dto, CancellationToken.None);
+        await controller.Upsert(Dto(bsb: "062-000", account: null, bankName: null), CancellationToken.None);
 
         var row = Assert.Single(await Audits(db));
         Assert.Contains("BSB", row.Changes);
