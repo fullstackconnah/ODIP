@@ -55,6 +55,8 @@ public class CaregiverSubmissionsController : ControllerBase
 
     // ── Links ──────────────────────────────────────────────
 
+    private const string WaitingForReview = "A caregiver form is waiting for review. Accept or decline it before sending a new link.";
+
     [HttpPost("/api/v1/participants/{participantId:guid}/caregiver-link")]
     public async Task<ActionResult<ApiResponse<CaregiverLinkDto>>> CreateLink(Guid participantId, CancellationToken ct)
     {
@@ -65,12 +67,25 @@ public class CaregiverSubmissionsController : ControllerBase
 
         // A new link would revoke the pending answers (they drop off the review list and Accept returns 409): make the reviewer decide first.
         if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
-            return Conflict(ApiResponse<CaregiverLinkDto>.Fail("A caregiver form is waiting for review. Accept or decline it before sending a new link."));
+            return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
 
-        var active = await _db.CaregiverProfileSubmissions
-            .Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
-            .ToListAsync(ct);
-        foreach (var a in active) a.Status = CaregiverSubmissionStatus.Revoked;
+        // One statement revokes only Draft rows, so a caregiver Submit that commits meanwhile is never overwritten; the re-check then refuses and the transaction rolls back.
+        // EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the tracked path stays there.
+        await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (tx != null)
+        {
+            await _db.CaregiverProfileSubmissions.Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
+                .ExecuteUpdateAsync(u => u.SetProperty(s => s.Status, CaregiverSubmissionStatus.Revoked), ct);
+            if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
+                return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
+        }
+        else
+        {
+            var active = await _db.CaregiverProfileSubmissions
+                .Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
+                .ToListAsync(ct);
+            foreach (var a in active) a.Status = CaregiverSubmissionStatus.Revoked;
+        }
 
         var raw = CaregiverTokenService.GenerateRawToken();
         var sub = new CaregiverProfileSubmission
@@ -86,6 +101,7 @@ public class CaregiverSubmissionsController : ControllerBase
         };
         _db.CaregiverProfileSubmissions.Add(sub);
         await _db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
 
         return Ok(ApiResponse<CaregiverLinkDto>.Ok(new CaregiverLinkDto { Token = raw, ExpiresAt = sub.ExpiresAt }));
     }
@@ -93,12 +109,18 @@ public class CaregiverSubmissionsController : ControllerBase
     [HttpDelete("/api/v1/participants/{participantId:guid}/caregiver-link")]
     public async Task<IActionResult> RevokeLink(Guid participantId, CancellationToken ct)
     {
-        var active = await _db.CaregiverProfileSubmissions
-            .Where(s => s.ParticipantId == participantId
-                && (s.Status == CaregiverSubmissionStatus.Draft || s.Status == CaregiverSubmissionStatus.Submitted))
-            .ToListAsync(ct);
-        if (active.Count == 0) return NotFound(ApiResponse<object>.Fail("No active caregiver link"));
-        foreach (var a in active) a.Status = CaregiverSubmissionStatus.Revoked;
+        // One statement, so a form an Accept just moved on is never overwritten with Revoked; InMemory (no ExecuteUpdate) keeps the tracked path.
+        var active = _db.CaregiverProfileSubmissions.Where(s => s.ParticipantId == participantId
+            && (s.Status == CaregiverSubmissionStatus.Draft || s.Status == CaregiverSubmissionStatus.Submitted));
+        if (_db.Database.IsRelational())
+        {
+            if (await active.ExecuteUpdateAsync(u => u.SetProperty(s => s.Status, CaregiverSubmissionStatus.Revoked), ct) == 0)
+                return NotFound(ApiResponse<object>.Fail("No active caregiver link"));
+            return NoContent();
+        }
+        var rows = await active.ToListAsync(ct);
+        if (rows.Count == 0) return NotFound(ApiResponse<object>.Fail("No active caregiver link"));
+        foreach (var a in rows) a.Status = CaregiverSubmissionStatus.Revoked;
         await _db.SaveChangesAsync(ct);
         return NoContent();
     }
