@@ -99,7 +99,8 @@ const measure = (page) => page.evaluate(`(() => {
   document.body.appendChild(probe)
   const warningContainer = getComputedStyle(probe).backgroundColor
   probe.remove()
-  const heads = [...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]') && h.querySelector('[role=img][aria-label$=" support"]'))
+  // Every row header, with or without chips: the ratio chip is drawn only when not 1:1 (ParticipantRow.tsx:96, #594), so it cannot select rows.
+  const heads = [...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]'))
   return {
     coarse: matchMedia('(pointer: coarse)').matches,
     colWidth: heads[0] ? Math.round(r(heads[0]).width) : null,
@@ -130,6 +131,7 @@ const measure = (page) => page.evaluate(`(() => {
         hasTag: !!tag,
         ratioRight: ratioEl ? r(ratioEl).right : null,
         coverRight: cover ? r(cover).right : null,
+        coverLeft: cover ? r(cover).left : null,
         triggerBg: trigger ? getComputedStyle(trigger).backgroundColor : null,
         triggerIcon: svg ? svg.getAttribute('class') : null,
         coverBg: cover && coverSvg ? getComputedStyle(cover).backgroundColor : null,
@@ -255,16 +257,22 @@ function runChecks(tag, s, m) {
     { trigger: trigRows.map((x) => x.triggerIcon), badge: [...new Set(rows.map((x) => x.coverIcon))] })
   // 5
   const spread = (key) => { const v = rows.map((x) => x[key]).filter((n) => n !== null); return +(Math.max(...v) - Math.min(...v)).toFixed(2) }
-  check(`${tag} 5: ratio right edges within 1px`, spread('ratioRight') <= 2, spread('ratioRight'))
+  // Both chips are optional (ratio only when not 1:1, badge only on a gap: ParticipantRow.tsx:96-116), so the right-aligned column is the rightmost chip of each row, and the ratio sits one gap-2 (8px, :90) left of a badge.
+  const chipRight = rows.map((x) => x.coverRight ?? x.ratioRight).filter((n) => n !== null)
+  const ratioGap = rows.filter((x) => x.ratioRight !== null && x.coverLeft !== null).map((x) => +(x.coverLeft - x.ratioRight).toFixed(2))
+  check(`${tag} 5: the rightmost chip of every row ends at one right edge within 1px`, chipRight.length > 0 && Math.max(...chipRight) - Math.min(...chipRight) <= 2, chipRight)
+  check(`${tag} 5: the ratio chip sits 8px left of the coverage badge (+- 1)`, ratioGap.length > 0 && ratioGap.every((g) => Math.abs(g - 8) <= 1), ratioGap)
   check(`${tag} 5: coverage right edges within 1px`, spread('coverRight') <= 2, spread('coverRight'))
   // 6
   const near = (a, b) => a !== undefined && Math.abs(a - b) <= 1
   if (fine) {
     check(`${tag} 6: header content <= 34px on every row`, rows.every((x) => x.contentH <= 34), rows.map((x) => x.contentH))
-    check(`${tag} 6: empty rows are 34 +- 1 (ready and not ready)`, near(findRow(rows, 'Wes Zero')?.headH, 34) && near(findRow(rows, 'Hal Noshifts')?.headH, 34), [findRow(rows, 'Wes Zero')?.headH, findRow(rows, 'Hal Noshifts')?.headH])
+    // min-h-14 (ParticipantRow.tsx:60, #594): an empty row is 56 on a fine pointer, ready or not.
+    check(`${tag} 6: empty rows are 56 +- 1 (ready and not ready)`, near(findRow(rows, 'Wes Zero')?.headH, 56) && near(findRow(rows, 'Hal Noshifts')?.headH, 56), [findRow(rows, 'Wes Zero')?.headH, findRow(rows, 'Hal Noshifts')?.headH])
   } else {
-    check(`${tag} 6: empty ready row 48, empty not-ready row 60, rows with shifts 73 (+- 1)`,
-      near(findRow(rows, 'Wes Zero')?.headH, 48) && near(findRow(rows, 'Hal Noshifts')?.headH, 60) && near(findRow(rows, 'Rae Ready')?.headH, 73) && near(findRow(rows, 'Cleo Short')?.headH, 73),
+    // Coarse: the ready empty row is the 56 minimum; the not-ready one is content-driven, py-1.5 + 16 + gap-y-3 + 16 + pb-3 + py-1.5 = 67 (ParticipantRow.tsx:57-60).
+    check(`${tag} 6: empty ready row 56, empty not-ready row 67, rows with shifts 73 (+- 1)`,
+      near(findRow(rows, 'Wes Zero')?.headH, 56) && near(findRow(rows, 'Hal Noshifts')?.headH, 67) && near(findRow(rows, 'Rae Ready')?.headH, 73) && near(findRow(rows, 'Cleo Short')?.headH, 73),
       { zero: findRow(rows, 'Wes Zero')?.headH, emptyNotReady: findRow(rows, 'Hal Noshifts')?.headH, rae: findRow(rows, 'Rae Ready')?.headH, cleo: findRow(rows, 'Cleo Short')?.headH })
   }
   // 7
@@ -306,6 +314,8 @@ const SCENES = [
   { tag: '1600-dark', width: 1600, height: 900, touch: false, dark: true, full: true },
 ]
 const LONG_ROW = 'Lena Long'
+// These scroll sideways by design: the roster board's head and body frames (RosterGrid.tsx:66,69) and the staff puck list (StaffStrip.tsx:45,71). Nothing else is allowed.
+const BOARD_SCROLLER = ['div.overflow-x-auto.overflow-y-hidden', 'ul.overflow-x-auto.overflow-y-hidden']
 for (const s of SCENES) {
   try {
     const { context, page } = await openRoster(browser, s)
@@ -370,12 +380,22 @@ for (const s of SCENES) {
       }
     }
     if (s.full) {
-      if (!s.touch) await page.setViewportSize({ width: s.width, height: 1400 })
-      const rowsBottom = await page.evaluate(() => Math.max(...[...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]')).map((h) => h.getBoundingClientRect().bottom)))
-      const f = await fullPage(page, path.join(OUT_DIR, 'full', `${s.tag}.png`), { touch: s.touch })
-      // The page tracks the viewport height (scrollHeight = viewport + ~87 at any size), so the library's "not truncated" check cannot hold on a fine pointer; the real claim is that every participant row is in the shot.
-      for (const c of f.checks) if (s.touch || !c.name.startsWith('full page not truncated')) checks.push({ ...c, name: `${s.tag}: ${c.name}` })
-      if (!s.touch) check(`${s.tag}: full page holds every participant row`, rowsBottom <= 1400, { rowsBottom })
+      // From lg the board scrolls vertically inside itself (RosterGrid.tsx:63) and a fit-screen page keeps its height at the viewport's, so fullPage's own grow and its truncation check (main alone) never fit or see the rows,
+      // and a board left scrolled by the crops puts the pinned band over them. Grow the viewport by the board's overflow at scrollTop 0, then prove none is left. Below lg the window scrolls and fullPage's check covers it.
+      const board = () => page.evaluate(() => {
+        let b = document.querySelector('div.sticky a[title]')?.closest('div.sticky')
+        while (b && getComputedStyle(b).overflowY !== 'auto') b = b.parentElement
+        if (b) b.scrollTop = 0
+        return b && { over: b.scrollHeight - b.clientHeight, top: b.scrollTop, vh: innerHeight }
+      })
+      if (!s.touch) {
+        const b0 = await board()
+        if (b0 && b0.over > 1) { await page.setViewportSize({ width: s.width, height: b0.vh + b0.over }); await settle(page) }
+        const b1 = await board()
+        check(`${s.tag}: the board scroller holds every participant row (no vertical overflow, scrollTop 0)`, b1 && b1.over <= 1 && b1.top === 0, b1)
+      }
+      const f = await fullPage(page, path.join(OUT_DIR, 'full', `${s.tag}.png`), { touch: s.touch, allow: BOARD_SCROLLER })
+      for (const c of f.checks) checks.push({ ...c, name: `${s.tag}: ${c.name}` })
     }
     await context.close()
   } catch (e) {
