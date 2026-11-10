@@ -301,7 +301,7 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
     {
         Skip.IfNot(_pg.Available, NoPg);
         var (_, id, token) = await SeedCaregiverAsync();
-        await using var db = AnonymousDb();
+        await using var db = AnonymousDb(audited: true);
 
         Assert.IsType<NoContentResult>(await CaregiverFor(db).SaveDraft(token, SubmitBody("Jane Smith"), CancellationToken.None));
 
@@ -310,5 +310,6 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal("Jane Smith", state.Name);
         Assert.NotEqual(OriginalPayload, state.Payload);
         Assert.Equal(0, state.Notifications);
+        Assert.Equal(1, state.Audits);
     }
 }

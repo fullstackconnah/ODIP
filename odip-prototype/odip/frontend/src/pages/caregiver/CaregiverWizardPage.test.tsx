@@ -264,9 +264,9 @@ describe('CaregiverWizardPage — submit', () => {
     await waitFor(() => expect(mockSubmitMutateAsync).toHaveBeenCalledTimes(1))
   })
 
-  // PB68-D2: a revoked link (404) or a form already in (409) says so; a 500 keeps the plain line. Typed values stay in all cases.
+  // PB68-D2: a revoked link (404, PB69-F1: the client sentence names a next step, not the server body) or a form already in (409) says so; a 500 keeps the plain line. Typed values stay in all cases.
   it.each([
-    [404, 'This link is not valid.', 'This link is not valid.'],
+    [404, 'This link is not valid.', 'This link is no longer valid. Please contact the person who sent it to you.'],
     [409, 'This form has already been submitted and is awaiting review.', 'This form has already been submitted and is awaiting review.'],
     [500, 'boom', "We couldn't submit the form. Please try again."],
   ])('a %i on Submit shows the right sentence and keeps what was typed', async (status, serverSentence, shown) => {

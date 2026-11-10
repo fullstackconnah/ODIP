@@ -1,4 +1,4 @@
-// PB68-D2: the public caregiver form's Submit answered 404 / 409 / 500. Numeric: the server's own sentence shows in a role=alert for 404 and 409, the plain fallback for 500, the alert is
+// PB68-D2: the public caregiver form's Submit answered 404 / 409 / 500. Numeric: the server's own sentence shows in a role=alert for 409, our own next-step sentence (PB69-F1) for 404, the plain fallback for 500, the alert is
 // destructive coloured, no server internals show, no horizontal scroll, and at touch Submit is at least --tap-min (44). The API calls are answered in the script (no caregiver routes in the mock).
 // Exit 1 on any failed check.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/caregiver-submit-errors.mjs <outdir>
@@ -17,7 +17,7 @@ const check = (name, pass, detail = '') => { checks.push({ name, pass: !!pass, d
 const TAP_MIN = 44
 
 const STATES = [
-  { name: 'submit-404', status: 404, body: failure('This link is not valid.'), shown: 'This link is not valid.' },
+  { name: 'submit-404', status: 404, body: failure('This link is not valid.'), shown: 'This link is no longer valid. Please contact the person who sent it to you.' },
   { name: 'submit-409', status: 409, body: failure('This form has already been submitted and is awaiting review.'), shown: 'This form has already been submitted and is awaiting review.' },
   { name: 'submit-500', status: 500, body: failure('boom: NullReferenceException at Odip.Api'), shown: "We couldn't submit the form. Please try again." },
 ]
