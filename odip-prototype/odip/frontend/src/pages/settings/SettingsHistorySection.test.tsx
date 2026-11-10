@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsHistorySection from './SettingsHistorySection'
@@ -63,7 +63,7 @@ describe('Settings history', () => {
     expect(await screen.findByText(/Couldn't load this history\./)).toBeInTheDocument()
   })
 
-  it('names each field as Settings does, shows the values as stored, and leaves an unknown field raw', async () => {
+  it('names each field as Settings does, reads True and False as Yes and No, and leaves an unknown field raw', async () => {
     api.audit.mockResolvedValue(history([entry('a', [
       { field: 'GSTRegistered', old: 'False', new: 'True' },
       { field: 'ParticipantReadinessMode', old: 'Warn', new: 'Enforce' },
@@ -71,12 +71,44 @@ describe('Settings history', () => {
     ])]))
     show()
     expect(await screen.findByText('Registered for GST')).toBeInTheDocument()
-    expect(screen.getByText('False')).toBeInTheDocument()
-    expect(screen.getByText('True')).toBeInTheDocument()
+    expect(screen.getByText('No')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
     expect(screen.getByText('Participant readiness check')).toBeInTheDocument()
     expect(screen.getByText('SomethingNew')).toBeInTheDocument()
     expect(screen.getByText('by Sam Admin')).toBeInTheDocument()
     expect(screen.getByText('1 event recorded')).toBeInTheDocument()
+  })
+
+  it('reads a mode and a time zone in the words Settings shows for them, and leaves a value it has no option for as stored (PSA-O3)', async () => {
+    api.audit.mockResolvedValue(history([entry('a', [
+      { field: 'ParticipantReadinessMode', old: 'Warn', new: 'Enforce' },
+      { field: 'MedicationCompetencyMode', old: 'Enforce', new: 'Warn' },
+      { field: 'TimeZoneId', old: 'Australia/Sydney', new: 'Australia/Brisbane' },
+      { field: 'State', old: 'VIC', new: 'NSW' },
+      { field: 'BankAccountName', old: null, new: 'McDonald Care' },
+    ])]))
+    show()
+    expect(await screen.findByText('Participant readiness check')).toBeInTheDocument()
+    expect(screen.getAllByText('Warn only')).toHaveLength(2)
+    expect(screen.getAllByText('Enforce')).toHaveLength(2)
+    expect(screen.getByText('Sydney (NSW, ACT)')).toBeInTheDocument()
+    expect(screen.getByText('Brisbane (QLD)')).toBeInTheDocument()
+    expect(screen.queryByText('Warn')).not.toBeInTheDocument()
+    expect(screen.getByText('VIC')).toBeInTheDocument()
+    expect(screen.getByText('McDonald Care')).toBeInTheDocument()
+  })
+
+  it('shows the Onboarding checklist value one item per line, split on commas or on semicolons, with no empty line', async () => {
+    api.audit.mockResolvedValue(history([entry('a', [{
+      field: 'OnboardingItemModes',
+      old: 'complaints=Required, rights=Required, myProvider=Required, budget=Off',
+      new: 'complaints=Required; rights=Optional,  ; myProvider=Required, budget=Off',
+    }])]))
+    show()
+    await screen.findByText('Onboarding checklist')
+    const [before, after] = screen.getAllByRole('list')
+    expect(within(before).getAllByRole('listitem').map(li => li.textContent)).toEqual(['complaints=Required', 'rights=Required', 'myProvider=Required', 'budget=Off'])
+    expect(within(after).getAllByRole('listitem').map(li => li.textContent)).toEqual(['complaints=Required', 'rights=Optional', 'myProvider=Required', 'budget=Off'])
   })
 
   it('shows a masked bank row as set, changed or cleared, never as digits', async () => {

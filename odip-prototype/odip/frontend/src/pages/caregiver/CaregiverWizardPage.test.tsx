@@ -411,21 +411,21 @@ describe('CaregiverWizardPage — Review step reads like the steps (PB73)', () =
     const valueOf = await reviewOf({
       consents: [{ consentType: 'PhotoVideo', granted: true }, { consentType: 'Privacy', granted: false }, { consentType: 'EmergencyMedical', granted: null }],
     })
-    const line = valueOf(/^Consent & Terms/)
+    const line = valueOf('Consents')
     expect(line).toHaveTextContent(/^Photo & Video \(promotional use\), Privacy \(collection & use of information\) \(declined\)$/)
     expect(line).not.toHaveTextContent('Emergency Medical')
   })
 
   it('shows a dash when every consent is not recorded', async () => {
     const valueOf = await reviewOf({ consents: [{ consentType: 'PhotoVideo', granted: null }, { consentType: 'Privacy', granted: null }] })
-    expect(valueOf(/^Consent & Terms/)).toHaveTextContent(/^—$/)
+    expect(valueOf('Consents')).toHaveTextContent(/^—$/)
   })
 
   it('leaves out the Holiday/STA consents, which the carer form never shows, even when granted or declined on the record', async () => {
     const valueOf = await reviewOf({
       consents: [{ consentType: 'PhotoVideo', granted: true }, { consentType: 'Alcohol', granted: true }, { consentType: 'TravelInsurance', granted: false }],
     })
-    expect(valueOf(/^Consent & Terms/)).toHaveTextContent(/^Photo & Video \(promotional use\)$/)
+    expect(valueOf('Consents')).toHaveTextContent(/^Photo & Video \(promotional use\)$/)
   })
 
   it('shows the Specify Primary Diagnosis row only for Other, as the Medical step does', async () => {
@@ -444,6 +444,21 @@ describe('CaregiverWizardPage — Review step reads like the steps (PB73)', () =
       adlAssessments: [{ adlType: 'Dressing', level: null, howToHelpNotes: 'Stay close' }, { adlType: 'Bathing', level: 'Supervision' }],
     })
     expect(valueOf(/^ADL Ratings/)).toHaveTextContent(/^Bathing \/ Showering$/)
+  })
+
+  // PB73-F3 — the step hides an ADL row's notes box until a level is picked, so notes alone are no answer.
+  it('does not name an ADL row that holds notes but no level, which the step shows as Not assessed', async () => {
+    const valueOf = await reviewOf({
+      adlAssessments: [{ adlType: 'Dressing', level: '', notes: 'Takes a while' }, { adlType: 'Grooming', level: null, notes: 'Needs a mirror' }, { adlType: 'Bathing', level: 'Supervision', notes: 'Stay close' }],
+    })
+    expect(valueOf(/^ADL Ratings/)).toHaveTextContent(/^Bathing \/ Showering$/)
+  })
+
+  // PB73-F1 — the carer is never asked about alcohol, OTC medication, travel insurance or the terms, so the row does not name them.
+  it('titles the consents row Consents, not the staff label that lists consents the carer is never asked', async () => {
+    const valueOf = await reviewOf({ consents: [{ consentType: 'PhotoVideo', granted: true }] })
+    expect(valueOf('Consents')).toHaveTextContent(/^Photo & Video \(promotional use\)$/)
+    expect(screen.queryByText(/^Consent & Terms/)).not.toBeInTheDocument()
   })
 })
 

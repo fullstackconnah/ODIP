@@ -10,12 +10,9 @@ import { TONE } from '@/lib/tone'
 import { IncompleteProfileNote } from './BillingDetailsSection'
 import { SettingsGroup, SettingsSection, type SectionFrame } from './SettingsSection'
 import { useProviderRow } from './providerRow'
+import { MODE_OPTIONS } from './safetyModes'
 
 type Mode = 'Warn' | 'Enforce'
-const MODE_OPTIONS: { key: Mode; label: string }[] = [
-  { key: 'Warn', label: 'Warn only' },
-  { key: 'Enforce', label: 'Enforce' },
-]
 
 /** Each check: its heading, when it applies, what each mode does, and the sentence the tightening confirm says. */
 const CHECKS = {

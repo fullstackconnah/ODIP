@@ -156,3 +156,63 @@ describe('RosterBoardPage: ?activity= deep link from the Group activities list',
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+// H86-3 — a dialog's opener is unmounted in the commit that opens the group activity modal, so focus went to the page body on close.
+describe('RosterBoardPage: closing the group activity modal puts focus back where the keyboard user started (H86-3)', () => {
+  const ZED = makeShift({ id: 'shift-9', participantId: 'participant-2', participantName: 'Zed Park', serviceDate: '2026-08-17', isGroupLine: true, groupActivityId: null, staffId: null, staffName: null })
+  const chip = () => document.querySelector<HTMLElement>('[data-shift-open="shift-9"]')
+  const closeModal = async (user: ReturnType<typeof userEvent.setup>) => {
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  }
+
+  beforeEach(() => {
+    h.board.mockReturnValue({
+      data: makeParticipantBoard({ groupActivitiesEnabled: true, groupActivities: [], participantRows: [makeParticipantRow({ participantId: 'participant-2', fullName: 'Zed Park', shifts: [ZED] })] }),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+  })
+
+  it('Add to an activity, then New activity, then close: focus is on that shift', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Actions for Zed/ }))
+    await user.click(await screen.findByRole('option', { name: 'Add to an activity…' }))
+    await user.click(await screen.findByRole('radio', { name: 'New activity' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await closeModal(user)
+    expect(chip()).not.toBeNull()
+    expect(document.activeElement).toBe(chip())
+  })
+
+  it('Make a group activity from the shift slide-over, then close: focus is on that shift', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByRole('button', { name: /^Actions for Zed/ })
+    await user.click(chip()!)
+    await user.click(await screen.findByRole('button', { name: 'Make a group activity' }))
+    await closeModal(user)
+    expect(document.activeElement).toBe(chip())
+  })
+
+  it('opening a group activity card and closing it still returns focus to its card', async () => {
+    const user = userEvent.setup()
+    h.board.mockReturnValue({ data: BOARD, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const card = await screen.findByRole('button', { name: /^Group activity, Bowling/ })
+    await user.click(card)
+    await closeModal(user)
+    expect(document.activeElement).toBe(card)
+  })
+
+  it('New > Group activity returns focus to the New button', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const newButton = await screen.findByRole('button', { name: 'New' })
+    await user.click(newButton)
+    await user.click(await screen.findByRole('option', { name: 'Group activity' }))
+    await closeModal(user)
+    expect(document.activeElement).toBe(newButton)
+  })
+})

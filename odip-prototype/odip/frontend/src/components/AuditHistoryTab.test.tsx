@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
-import AuditHistoryTab from './AuditHistoryTab'
+import type { ComponentProps } from 'react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import AuditHistoryTab, { FieldDiff } from './AuditHistoryTab'
 import { TONE } from '@/lib/tone'
 import type { AuditChange } from '../api/hooks'
 
@@ -78,7 +79,57 @@ describe('AuditHistoryTab', () => {
   })
 })
 
-it('gives a field label a fixed 140px column that wraps, so the values line up', () => {
-  renderTab([entry('a', 'Updated', '2026-10-28T01:00:00Z', [{ field: 'Medication competency check', old: 'Warn', new: 'Block' }])])
-  expect(screen.getByText('Medication competency check')).toHaveClass('w-[140px]', 'shrink-0', 'break-words')
+describe('AuditHistoryTab values read as words (PSA-O3)', () => {
+  const show = (changes: AuditChange[], props: Partial<ComponentProps<typeof AuditHistoryTab>> = {}) => {
+    mockUseAuditHistory.mockReturnValue({ data: { entries: [entry('a', 'Updated', '2026-10-28T01:00:00Z', changes)], total: 1, page: 1, pageSize: 20 }, isLoading: false, isError: false })
+    return render(<AuditHistoryTab entityType="ProviderSettings" entityId="p1" {...props} />)
+  }
+
+  it('reads a stored True and False as Yes and No, with no labels given', () => {
+    show([{ field: 'GSTRegistered', old: 'False', new: 'True' }])
+    expect(screen.getByText('No')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(screen.queryByText('True')).not.toBeInTheDocument()
+    expect(screen.queryByText('False')).not.toBeInTheDocument()
+  })
+
+  it('reads True and False as Yes and No for a deleted record\'s field list, which may hold one value only', () => {
+    render(<FieldDiff field="IsActive" old="True" new={null} />)
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('replaces a stored value with the words valueLabels gives it for that field, and shows an unlisted value as stored', () => {
+    show([{ field: 'ParticipantReadinessMode', old: 'Warn', new: 'Enforce' }, { field: 'ParticipantReadinessMode', old: 'Other', new: null }, { field: 'State', old: 'VIC', new: 'NSW' }], {
+      valueLabels: { ParticipantReadinessMode: { Warn: 'Warn only' } },
+    })
+    expect(screen.getByText('Warn only')).toBeInTheDocument()
+    expect(screen.getByText('Enforce')).toBeInTheDocument()
+    expect(screen.getByText('Other')).toBeInTheDocument()
+    expect(screen.getByText('VIC')).toBeInTheDocument()
+  })
+
+  it('never splits, re-cases or looks up other values: McDonald, a value that is a property name, a lower-case true', () => {
+    show([{ field: 'LastName', old: 'McDonald', new: 'constructor' }, { field: 'Note', old: 'true', new: 'TRUE' }], { valueLabels: { LastName: { Warn: 'Warn only' } } })
+    for (const text of ['McDonald', 'constructor', 'true', 'TRUE']) expect(screen.getByText(text)).toBeInTheDocument()
+  })
+
+  it('shows a field with a valueFormat one item per line in a plain list, for the old and the new value', () => {
+    show([{ field: 'Modes', old: 'a=1; b=2', new: 'a=1; b=3;  ; c=4' }, { field: 'Other', old: 'x; y', new: null }], { valueFormat: { Modes: v => v.split(/\s*;\s*/).filter(Boolean) } })
+    const lists = screen.getAllByRole('list')
+    expect(lists).toHaveLength(2)
+    expect(lists.map(l => within(l).getAllByRole('listitem').map(li => li.textContent))).toEqual([['a=1', 'b=2'], ['a=1', 'b=3', 'c=4']])
+    expect(lists[0]).toHaveClass('list-none')
+    expect(screen.getByText('x; y')).toBeInTheDocument()
+  })
+})
+
+it('is a size container: the label stacks over the values under 35rem and takes its 140px column from there up (PSA-F3)', () => {
+  renderTab([entry('a', 'Updated', '2026-10-28T01:00:00Z', [{ field: 'Onboarding checklist', old: 'x', new: 'y' }])])
+  const label = screen.getByText('Onboarding checklist')
+  const row = label.parentElement as HTMLElement
+  expect(row.parentElement).toHaveClass('@container')
+  expect(row).toHaveClass('flex-col', '@[35rem]:flex-row')
+  expect(label).toHaveClass('@[35rem]:w-[140px]', '@[35rem]:shrink-0')
+  expect(label.nextElementSibling).toHaveClass('flex-wrap', '@[35rem]:flex-nowrap')
 })
