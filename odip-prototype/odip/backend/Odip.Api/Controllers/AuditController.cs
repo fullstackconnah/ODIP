@@ -131,7 +131,7 @@ public class AuditController : ControllerBase
             Action = a.Action.ToString(),
             a.ChangedAt,
             a.ChangedByName,
-            Changes = DeserializeChanges(a.Changes)
+            Changes = DeserializeChanges(a.Changes, maskBank: canonicalEntityType == "ProviderSettings")
         }).ToList();
 
         return Ok(new
@@ -170,17 +170,28 @@ public class AuditController : ControllerBase
     private static readonly JsonSerializerOptions StoredOptions = new() { PropertyNameCaseInsensitive = true };
 
     // Stored as {"Field","Old","New"}; a typed list lets MVC re-case them to field/old/new. JsonElement keeps a non-string value readable.
-    private static List<AuditChangeDto> DeserializeChanges(string json)
+    private static List<AuditChangeDto> DeserializeChanges(string json, bool maskBank = false)
     {
         try
         {
-            return JsonSerializer.Deserialize<List<AuditChangeDto>>(json, StoredOptions) ?? [];
+            var changes = JsonSerializer.Deserialize<List<AuditChangeDto>>(json, StoredOptions) ?? [];
+            return maskBank ? changes.Select(c => BankFields.Contains(c.Field) ? c with { Old = MaskBank(c.Old), New = MaskBank(c.New) } : c).ToList() : changes;
         }
         catch (JsonException)
         {
             return [];
         }
     }
+
+    // ProviderSettingsController.AuditIfChanged writes only these words for a bank field; a raw value (an older or hand-made row) reads as changed instead of leaving the server.
+    private static readonly string[] BankFields = ["BankAccountName", "BSB", "AccountNumber"];
+    private static readonly string[] BankWords = ["set", "changed", "cleared"];
+    private static JsonElement? MaskBank(JsonElement? v) => v switch
+    {
+        null or { ValueKind: JsonValueKind.Null } => v,
+        { ValueKind: JsonValueKind.String } when BankWords.Contains(v.Value.GetString()) => v,
+        _ => JsonSerializer.SerializeToElement("changed"),
+    };
 
     private sealed record AuditChangeDto(string? Field, JsonElement? Old, JsonElement? New);
 }
