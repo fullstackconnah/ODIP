@@ -272,5 +272,43 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(CaregiverSubmissionStatus.Submitted, state.Status);
         Assert.Equal(1, state.Notifications);
         Assert.Equal(1, state.Audits);
+        // The Status change itself, not SubmittedAt: the claim already set the column, so only the tracked entity keeps the audit row honest.
+        Assert.Contains("\"Field\":\"Status\",\"Old\":\"Draft\",\"New\":\"Submitted\"", Assert.Single(await RevokeAuditChangesAsync(id)));
+    }
+
+    // PB68-D3: a draft save claims the Draft too, so a revoke that committed since the load keeps its row untouched.
+    [SkippableFact]
+    public async Task SaveDraft_WhenStaffRevokeCommitsFirst_Answers404_TheFormStaysRevokedAndNothingIsStored()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (_, id, token) = await SeedCaregiverAsync();
+        await using var db = AnonymousDb(async () =>
+        {
+            await using var other = PostgresFixture.NewContext(_pg.ConnectionString);
+            await other.CaregiverProfileSubmissions.IgnoreQueryFilters().Where(x => x.Id == id).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, CaregiverSubmissionStatus.Revoked));
+        });
+
+        Assert.IsType<NotFoundObjectResult>(await CaregiverFor(db).SaveDraft(token, SubmitBody("Jane Smith"), CancellationToken.None));
+
+        var state = await StateAsync(id);
+        Assert.Equal(CaregiverSubmissionStatus.Revoked, state.Status);
+        Assert.Equal(OriginalPayload, state.Payload);
+        Assert.Null(state.Name);
+    }
+
+    [SkippableFact]
+    public async Task SaveDraft_OnALiveDraft_StoresNameAndPayloadAndLeavesItADraft()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (_, id, token) = await SeedCaregiverAsync();
+        await using var db = AnonymousDb();
+
+        Assert.IsType<NoContentResult>(await CaregiverFor(db).SaveDraft(token, SubmitBody("Jane Smith"), CancellationToken.None));
+
+        var state = await StateAsync(id);
+        Assert.Equal(CaregiverSubmissionStatus.Draft, state.Status);
+        Assert.Equal("Jane Smith", state.Name);
+        Assert.NotEqual(OriginalPayload, state.Payload);
+        Assert.Equal(0, state.Notifications);
     }
 }

@@ -54,9 +54,9 @@ import { extractErrorMessage } from '@/lib/utils'
 import { Wordmark } from '@/components/Wordmark'
 import { CaregiverProgress } from './CaregiverProgress'
 
-/** The server's own words for a refusal (a 400 names the limit that was passed); anything else keeps the plain line, so this public page shows no internals. */
+/** The server's own words for a refusal (a 400 names the limit that was passed, a 404 or 409 says the link is gone or the form is already in); anything else keeps the plain line, so this public page shows no internals. */
 function saveFailure(err: unknown, fallback: string): string {
-  return (err as { response?: { status?: number } })?.response?.status === 400 ? extractErrorMessage(err, fallback) : fallback
+  return [400, 404, 409].includes((err as { response?: { status?: number } })?.response?.status ?? 0) ? extractErrorMessage(err, fallback) : fallback
 }
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
