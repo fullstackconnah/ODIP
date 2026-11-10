@@ -6,9 +6,10 @@ import type { ReviewGroup, ReviewRow, WizardStepDef } from './types'
  * need to reimplement it; one that isn't can override via `renderRow`. */
 function defaultRenderRow(row: ReviewRow) {
   return (
-    <div key={row.label} className="flex justify-between gap-4">
+    // Wraps rather than squeezes: a value that cannot sit beside a long label drops under it, so a short word is never split.
+    <div key={row.label} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
       <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
-      <dd className="font-medium text-right min-w-0 break-words">{row.value}</dd>
+      <dd className="font-medium text-right min-w-0 ml-auto break-words">{row.value}</dd>
     </div>
   )
 }

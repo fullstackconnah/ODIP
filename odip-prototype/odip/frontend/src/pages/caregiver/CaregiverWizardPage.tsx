@@ -341,11 +341,18 @@ function SubmittedPage({ caregiverName, firstName, providerName }: { caregiverNa
   )
 }
 
+/** A yes/no answer (a boolean, or the form's 'true'/'false' string) reads Yes or No, as on the Profile and Intake review steps; a blank reads a dash. */
+function reviewValue(v: unknown): string {
+  if (v === true || v === 'true') return 'Yes'
+  if (v === false || v === 'false') return 'No'
+  return normValue(v) || '—'
+}
+
 function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<CaregiverFormData>[]): ReviewGroup[] {
   return steps.map((step) => ({
     stepKey: step.key,
     rows: step.key === 'aboutYou'
       ? [{ label: 'Your name', value: values.caregiverName || '—' }, { label: 'Relationship', value: values.caregiverRelationship || '—' }]
-      : step.fields.map((f) => ({ label: fieldLabel(String(f)), value: normValue((values as Record<string, unknown>)[f as string]) || '—' })),
+      : step.fields.map((f) => ({ label: fieldLabel(String(f)), value: reviewValue((values as Record<string, unknown>)[f as string]) })),
   }))
 }
