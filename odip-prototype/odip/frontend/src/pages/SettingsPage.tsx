@@ -18,6 +18,7 @@ import ServiceLocationsSection from '@/pages/settings/ServiceLocationsSection'
 import ComplianceDatesSection from '@/pages/settings/ComplianceDatesSection'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import DeletedRecordsTab from '@/pages/settings/DeletedRecordsTab'
+import SettingsHistorySection from '@/pages/settings/SettingsHistorySection'
 import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import WhatsNewSection from '@/pages/settings/WhatsNewSection'
 import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
@@ -155,6 +156,7 @@ export default function SettingsPage() {
       case 'retention': return framed(<DataRetentionTab />)
       case 'integrations': return framed(<IntegrationsTab />)
       case 'deleted-records': return framed(<DeletedRecordsTab />)
+      case 'settings-history': return framed(<SettingsHistorySection />)
       case 'failed-sends': return framed(<AdminNotificationsTab />)
       case 'alpha-signups': return framed(<AlphaSignupsTab />)
       case 'whats-new': return framed(<WhatsNewSection />)
