@@ -878,9 +878,32 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     if (errorText) expect(within(control).getByRole('alert')).toHaveTextContent(errorText)
     else expect(within(control).queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  // PB81-H88-3: a 409 on Regenerate means the link on screen is dead (a caregiver submitted through it, or another coordinator replaced it), so the panel goes; any other failure keeps it, as it may still be the live link.
+  it.each([
+    ['answers 409', 409, 'This participant\x27s link just changed. Reload and try again.', false],
+    ['fails with a 500', 500, 'Server error', true],
+  ])('after a Regenerate that %s the issued link panel goes only if the link is dead', async (_name, status, message, panelStays) => {
+    setUserRole('Admin')
+    const generate = vi.fn()
+      .mockResolvedValueOnce({ success: true, data: { token: 'tok-123', expiresAt: '2026-09-17T00:00:00Z' } })
+      .mockRejectedValueOnce({ response: { status, data: { success: false, errors: [message] } } })
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: generate, isPending: false, isError: false })
+    withActiveLink()
+    setup()
+    await chooseFromDocuments(/regenerate caregiver link/i)
+    const control = screen.getByTestId('caregiver-link-control')
+    expect(await within(control).findByRole('button', { name: /copy link/i })).toBeInTheDocument()
+
+    await chooseFromDocuments(/regenerate caregiver link/i)
+
+    expect(await within(control).findByRole('alert')).toHaveTextContent(message)
+    if (panelStays) expect(within(control).getByRole('button', { name: /copy link/i })).toBeInTheDocument()
+    else expect(within(control).queryByRole('button', { name: /copy link/i })).not.toBeInTheDocument()
+  })
 })
 
-// PP-39 — the History tab (and its content) must be gated on usePermissions()'s isAdmin/isSuperAdmin,
+// PP-39— the History tab (and its content) must be gated on usePermissions()'s isAdmin/isSuperAdmin,
 // not a raw localStorage-derived role check, so SuperAdmin also sees it.
 describe('ParticipantDetailPage — PP-39 History section permissions', () => {
   it.each(['SuperAdmin', 'Admin'])('shows the History section at the end of Notes & records for %s', role => {
