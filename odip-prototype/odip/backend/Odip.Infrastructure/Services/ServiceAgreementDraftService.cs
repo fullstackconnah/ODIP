@@ -208,10 +208,12 @@ public sealed class ServiceAgreementDraftService
     private const int MaxServiceTypes = 20;
     private const int MaxServiceTypeLength = 100;
     private const int ServiceTypesColumnLength = 4000;
+    private const int MaxHandTypedLines = 50; // one catalogue query per line
 
     /// <summary>The first reason the free text of a hand-typed save is refused, or null: control characters, and the limits that keep it inside the column.</summary>
     private static string? FreeTextProblem(CreateServiceAgreementDraftDto request)
     {
+        if (request.Lines.Count > MaxHandTypedLines) return $"An agreement can have at most {MaxHandTypedLines} lines.";
         if (request.ServiceTypes.Count > MaxServiceTypes) return $"A draft has at most {MaxServiceTypes} service types.";
         if (request.ServiceTypes.Any(type => string.IsNullOrWhiteSpace(type))) return "A service type cannot be empty.";
         if (request.ServiceTypes.Any(type => type.Length > MaxServiceTypeLength)) return $"A service type is at most {MaxServiceTypeLength} characters.";
