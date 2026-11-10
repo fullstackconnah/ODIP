@@ -57,10 +57,13 @@ public class ParticipantConsentsController : ControllerBase
         var tenantId = await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
         if (tenantId == null) return NotFound(ApiResponse<ParticipantConsentDto>.Fail("Participant not found"));
 
-        var dateError = ParticipantGridRules.SignedDateError(dto.SignedDate, await ProviderTimeZoneResolver.TodayAsync(_db, tenantId.Value, _clock, ct));
+        var row = await _db.ParticipantConsents.FirstOrDefaultAsync(c => c.ParticipantId == participantId && c.ConsentType == type, ct);
+        // A date the row already holds saves as it was (a legacy date can still be ticked or renamed), as the patch and full-update paths do; a changed or first date is checked.
+        var dateError = row != null && row.SignedDate == dto.SignedDate
+            ? null
+            : ParticipantGridRules.SignedDateError(dto.SignedDate, await ProviderTimeZoneResolver.TodayAsync(_db, tenantId.Value, _clock, ct));
         if (dateError != null) return BadRequest(ApiResponse<ParticipantConsentDto>.Fail(dateError));
 
-        var row = await _db.ParticipantConsents.FirstOrDefaultAsync(c => c.ParticipantId == participantId && c.ConsentType == type, ct);
         if (row == null)
         {
             row = new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = participantId, TenantId = tenantId.Value, ConsentType = type };
