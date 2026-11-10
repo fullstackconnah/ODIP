@@ -376,4 +376,18 @@ public class BudgetLedgerClaimReplacesBookingTests
             Assert.Equal(left, period.BookedAhead == 0m);
         }
     }
+
+    // PB62-D3: the boundary of that rule is the trip's own days: a live shift claim the day after the trip ends leaves the booking booked ahead.
+    [Fact]
+    public async Task ABookingWhoseParticipantHasALiveShiftClaimTheDayAfterTheTripEndsIsStillBookedAhead()
+    {
+        var (kit, person, trip, _) = ArrangeTripStarting(Today);
+        using (kit)
+        {
+            var shift = kit.SeedShift(person, trip.EndDate.AddDays(1), ShiftStatus.Completed);
+            kit.SeedShiftClaim(person, TripClaimStatus.Draft, 100m, shift);
+
+            Assert.NotEqual(0m, (await PeriodOf(kit, person)).BookedAhead);
+        }
+    }
 }
