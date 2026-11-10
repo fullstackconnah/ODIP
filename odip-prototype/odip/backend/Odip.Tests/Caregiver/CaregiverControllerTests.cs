@@ -385,6 +385,32 @@ public class CaregiverControllerTests
     }
 
     [Fact]
+    public async Task Submit_BadPhone_Returns400WithTheApplierSentenceAndStaysDraft()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var payload = new PatchParticipantDto { PersonalDetails = new PatchPersonalDetailsDto { FirstName = "Sophie", LastName = "Brown", Phone = "abc" } };
+        var result = await MakeController(db).Submit(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload }, CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Please provide a valid phone number.", Assert.IsType<ApiResponse<object>>(bad.Value).Errors!.Single());
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(CaregiverSubmissionStatus.Draft, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task Submit_BlankParticipantFirstName_Returns400NamingTheParticipantAndStaysDraft()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var payload = new PatchParticipantDto { PersonalDetails = new PatchPersonalDetailsDto { FirstName = "", LastName = "Brown" } };
+        var result = await MakeController(db).Submit(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload }, CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Enter the participant's first name.", Assert.IsType<ApiResponse<object>>(bad.Value).Errors!.Single());
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(CaregiverSubmissionStatus.Draft, reloaded.Status);
+    }
+
+    [Fact]
     public async Task Submit_Valid_SetsSubmittedAndTimestamp()
     {
         using var db = CreateDb();

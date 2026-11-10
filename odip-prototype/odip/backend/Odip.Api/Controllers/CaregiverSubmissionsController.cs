@@ -173,6 +173,10 @@ public class CaregiverSubmissionsController : ControllerBase
         }
         payload = CaregiverFieldPolicy.Sanitise(payload, s.Participant);
 
+        // Claim the row first (Submitted to Accepted in one statement) so a racing Accept or Reject loses with 409; any failure below disposes the transaction and the claim goes with it.
+        await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (!await ClaimAsync(id, CaregiverSubmissionStatus.Accepted, ct)) return AlreadyHandled();
+
         var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, s.Participant, payload, null, ct);
         if (error != null) return BadRequest(ApiResponse<object>.Fail(error));
 
@@ -180,6 +184,7 @@ public class CaregiverSubmissionsController : ControllerBase
         s.ReviewedByUserId = CurrentUserId();
         s.ReviewedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return NoContent();
     }
 
@@ -193,6 +198,9 @@ public class CaregiverSubmissionsController : ControllerBase
         if (s.Status != CaregiverSubmissionStatus.Submitted)
             return Conflict(ApiResponse<object>.Fail("Only a submitted form can be rejected."));
 
+        await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (!await ClaimAsync(id, CaregiverSubmissionStatus.Draft, ct)) return AlreadyHandled();
+
         s.Status = CaregiverSubmissionStatus.Draft;
         s.SubmittedAt = null;
         s.RejectionNote = body.Note.Trim();
@@ -200,8 +208,17 @@ public class CaregiverSubmissionsController : ControllerBase
         s.ReviewedAt = DateTime.UtcNow;
         s.ExpiresAt = DateTime.UtcNow.AddDays(_expiryDays);
         await _db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return NoContent();
     }
+
+    /// <summary>Compare-and-set on the status: only one caller moves a Submitted form on. EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the earlier status check stands alone there.</summary>
+    private async Task<bool> ClaimAsync(Guid id, CaregiverSubmissionStatus to, CancellationToken ct) =>
+        !_db.Database.IsRelational()
+        || await _db.CaregiverProfileSubmissions.Where(x => x.Id == id && x.Status == CaregiverSubmissionStatus.Submitted)
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, to), ct) == 1;
+
+    private ObjectResult AlreadyHandled() => Conflict(ApiResponse<object>.Fail("This form was already handled by someone else. It has been refreshed."));
 
     private async Task<JsonObject> BuildProjectionAsync(Participant p, CancellationToken ct) =>
         CaregiverFieldPolicy.BuildProjection(await ParticipantDetailMapper.ToDetailDtoAsync(_db, p, ct));
