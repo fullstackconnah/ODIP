@@ -26,8 +26,8 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ParticipantPatchApplier
 {
-    /// <summary>The first problem in the names, gender, phone, email, postcode and MM level groups, or null. Accept runs it through <see cref="ApplyAsync"/>; a caregiver Submit runs it too, so a form Accept would refuse never reaches staff.</summary>
-    public static string? GroupError(PatchParticipantDto dto)
+    /// <summary>The first problem in the names, gender, phone, email, postcode and MM level groups, or null. Accept runs it through <see cref="ApplyAsync"/>; a caregiver Submit runs it too, so a form Accept would refuse never reaches staff. With <paramref name="stored"/> (caregiver Submit), a name, phone or email equal to the stored value is skipped: the caregiver cannot see or fix it, and staff meet it on Accept.</summary>
+    public static string? GroupError(PatchParticipantDto dto, Participant? stored = null)
     {
         if (dto.PersonalDetails is { } pdValidate)
         {
@@ -37,13 +37,13 @@ public static class ParticipantPatchApplier
                 Gender = pdValidate.Gender, GenderSelfDescription = pdValidate.GenderSelfDescription,
                 Phone = pdValidate.Phone, Email = pdValidate.Email,
             };
-            var namesError = ValidateNames(transient);
+            var namesError = stored is not null && transient.FirstName == stored.FirstName && transient.LastName == stored.LastName ? null : ValidateNames(transient);
             if (namesError != null) return namesError;
             var genderError = ValidateGender(transient);
             if (genderError != null) return genderError;
-            var phoneError = ValidatePhone(transient);
+            var phoneError = stored is not null && transient.Phone == stored.Phone ? null : ValidatePhone(transient);
             if (phoneError != null) return phoneError;
-            var emailError = ValidateEmail(transient);
+            var emailError = stored is not null && transient.Email == stored.Email ? null : ValidateEmail(transient);
             if (emailError != null) return emailError;
         }
 

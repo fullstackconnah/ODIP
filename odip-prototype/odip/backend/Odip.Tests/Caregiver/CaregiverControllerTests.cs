@@ -397,6 +397,35 @@ public class CaregiverControllerTests
         Assert.Equal(CaregiverSubmissionStatus.Draft, reloaded.Status);
     }
 
+    [Theory]
+    [InlineData("n/a", null)]
+    [InlineData(null, "none")]
+    public async Task Submit_StoredLegacyPhoneOrEmailUntouched_StillSubmits(string? phone, string? email)
+    {
+        using var db = CreateDb();
+        var (p, s, raw) = Seed(db);
+        p.Phone = phone; p.Email = email;
+        db.SaveChanges();
+        var payload = new PatchParticipantDto { PersonalDetails = new PatchPersonalDetailsDto { FirstName = "Sophie", LastName = "Brown", Phone = phone, Email = email, Gender = Gender.Female } };
+        var result = await MakeController(db).Submit(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload }, CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+        var reloaded = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Equal(CaregiverSubmissionStatus.Submitted, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task Submit_GenderOtherWithoutDescription_Returns400WithTheGenderSentence()
+    {
+        using var db = CreateDb();
+        var (p, _, raw) = Seed(db);
+        p.Phone = "n/a";
+        db.SaveChanges();
+        var payload = new PatchParticipantDto { PersonalDetails = new PatchPersonalDetailsDto { FirstName = "Sophie", LastName = "Brown", Phone = "n/a", Gender = Gender.Other } };
+        var result = await MakeController(db).Submit(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload }, CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("You chose Other for the participant's gender. Go back and describe it.", Assert.IsType<ApiResponse<object>>(bad.Value).Errors!.Single());
+    }
+
     [Fact]
     public async Task Submit_BlankParticipantFirstName_Returns400NamingTheParticipantAndStaysDraft()
     {

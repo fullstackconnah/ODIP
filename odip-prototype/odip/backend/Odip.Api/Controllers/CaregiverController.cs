@@ -147,7 +147,7 @@ public class CaregiverController : ControllerBase
             var effective = CaregiverFieldPolicy.Sanitise(body.Payload, participant);
             if (body.Base is not null)
                 effective = CaregiverFieldPolicy.MergeAgainstBase(await BuildProjectionAsync(participant, ct), effective, CaregiverFieldPolicy.Sanitise(body.Base, participant));
-            if (ParticipantPatchApplier.GroupError(CaregiverFieldPolicy.Sanitise(effective, participant)) is { } groupError)
+            if (ParticipantPatchApplier.GroupError(CaregiverFieldPolicy.Sanitise(effective, participant), participant) is { } groupError)
                 // The caregiver form also asks for "Your name", so the applier's staff sentences are reworded to name the participant.
                 return BadRequest(ApiResponse<object>.Fail(groupError switch
                 {
