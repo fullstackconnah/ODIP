@@ -10,7 +10,7 @@ export function HeaderIcon({ label, onClick, disabled, size = 'md', className = 
   )
 }
 
-export const CloseIcon = () => <X className="h-5 w-5" aria-hidden="true" />
+const CloseIcon = () => <X className="h-5 w-5" aria-hidden="true" />
 
 /**
  * One page of the sheet: the SlideOver's header pattern (back, heading, close), a body that scrolls, and a footer that stays. The heading takes focus when the page opens.

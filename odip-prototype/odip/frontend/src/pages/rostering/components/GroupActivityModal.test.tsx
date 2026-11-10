@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -95,6 +95,27 @@ describe('GroupActivityModal create', () => {
     expect(screen.getByLabelText(/Title/)).toHaveValue('Bowling')
     expect(screen.getByLabelText(/Location details/)).toHaveValue('Lane 4')
     expect(screen.getByRole('button', { name: 'Create draft' })).toBeEnabled()
+  })
+})
+
+describe('GroupActivityModal create, step 1 is the root', () => {
+  it('shows no Back button, and Escape with a typed title asks before discarding; Keep editing leaves the title', async () => {
+    const onClose = open(newTarget)
+    const title = await screen.findByLabelText(/Title/)
+    expect(screen.queryByRole('button', { name: 'Back to overview' })).toBeNull()
+    await userEvent.type(title, 'Bowling')
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/Title/)).toHaveValue('Bowling')
+  })
+
+  it('Escape on a clean Create closes at once, with no prompt', async () => {
+    const onClose = open(newTarget)
+    await screen.findByLabelText(/Title/)
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Keep editing' })).toBeNull()
   })
 })
 
@@ -403,5 +424,45 @@ describe('GroupActivityModal attendance', () => {
     expect(await screen.findByRole('button', { name: "Mark Mia Chen as didn't attend" })).toBeDisabled()
     expect(screen.getByText("You're offline. Attendance changes wait until you're back.")).toBeInTheDocument()
     online.mockRestore()
+  })
+})
+
+describe('GroupActivityModal from lg (two panes)', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+  })
+  afterEach(() => { Reflect.deleteProperty(window, 'matchMedia') })
+
+  it('shows the overview and the People page together, and Escape on that page closes', async () => {
+    const onClose = open(editTarget)
+    expect(await screen.findByRole('complementary', { name: 'Overview' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'People', level: 2 })).toBeInTheDocument()
+    expect(await overviewRow('Details')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Escape on the staff picker goes back to Staff, not out', async () => {
+    const onClose = open(editTarget)
+    await goTo('Staff')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add staff' }))
+    expect(await screen.findByRole('heading', { name: 'Add staff', level: 2 })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('heading', { name: 'Staff', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Add staff', level: 2 })).toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('Skip for now on People moves on to Staff, as walking would', async () => {
+    post.mockResolvedValue(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    serve(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    expect(await screen.findByRole('heading', { name: 'Staff', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'People', level: 2 })).toBeNull()
   })
 })

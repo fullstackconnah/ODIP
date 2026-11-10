@@ -99,8 +99,9 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
     for (const k of Object.keys(next) as (keyof Form)[]) if (next[k] === initial[k]) delete next[k]
     return next
   })
-  const dirtyIn = (keys: (keyof Form)[]) => keys.some(k => k in edits)
-  const dirty = Object.keys(edits).length > 0
+  const changed = (k: keyof Form) => k in edits && edits[k] !== initial[k]
+  const dirtyIn = (keys: (keyof Form)[]) => keys.some(changed)
+  const dirty = (Object.keys(edits) as (keyof Form)[]).some(changed)
 
   const [tried, setTried] = useState(false)
   const [minTried, setMinTried] = useState(false)
@@ -162,7 +163,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const back = () => setPage(shown && PARENT[shown] ? PARENT[shown]! : null)
   useDialogBehavior({
     open, containerRef: dialogRef, initialFocusRef: titleRef,
-    onClose: () => { if (page && (!wide || PARENT[page])) back(); else requestClose() },
+    onClose: () => { if (page && !isNew && (!wide || PARENT[page])) back(); else requestClose() },
   })
 
   // The heading takes focus when a page opens (the title field does on create); back on the overview, the row that opened the page does.
@@ -270,7 +271,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           <>
             <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{formatServiceDate(activity.serviceDate)} · {timeRange}{place ? ` · ${place}` : ''}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <StatusBadge status={activity.status} />
+              <StatusBadge status={activity.status} label={activity.status === 'InProgress' ? 'In progress' : undefined} />
               {!readOnly && !started && activity.status === 'Draft' && <Button size="sm" onClick={() => setStatus('Published')} disabled={pendingKey === 'status'}>Publish</Button>}
               {!readOnly && !started && activity.status === 'Published' && <Button size="sm" variant="ghost" onClick={() => setStatus('Draft')} disabled={pendingKey === 'status'}>Back to draft</Button>}
               {activity.status === 'Published' && <span className="text-xs text-[var(--color-muted-foreground)]">Workers can see it</span>}
@@ -321,7 +322,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const frame = (p: PageId, hint: string | undefined, footer: ReactNode, body: ReactNode) => (
     <PageFrame
       key={p} title={p === 'when' && isNew ? 'What and when' : PAGE_TITLE[p]} hint={hint} headingId={`${headingId}-${p}`} headingRef={headingRef}
-      onBack={wide && !PARENT[p] ? undefined : back} backLabel={PARENT[p] ? `Back to ${PAGE_TITLE[PARENT[p]!]}` : 'Back to overview'} onClose={requestClose} footer={footer}
+      onBack={isNew && p === 'when' ? undefined : wide && !PARENT[p] ? undefined : back} backLabel={PARENT[p] ? `Back to ${PAGE_TITLE[PARENT[p]!]}` : 'Back to overview'} onClose={requestClose} footer={footer}
     >{body}</PageFrame>
   )
   const saveCallout = saveError && <div className="mb-3"><Callout tone="danger">{saveError}</Callout></div>
@@ -405,7 +406,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
     const footer = readOnly ? closeFooter : step ? (
       <>
         <AddButton primary disabled={!activity} onClick={() => openPage('pickPerson')}>Add participant</AddButton>
-        <Button variant="ghost" onClick={() => { setWalking(false); setPage(null) }}>Skip for now</Button>
+        <Button variant="ghost" onClick={() => { setWalking(false); setPage(wide ? 'staff' : null) }}>Skip for now</Button>
         <Button variant="secondary" onClick={() => setPage('staff')}>Next: Staff</Button>
       </>
     ) : started ? closeFooter : <AddButton primary disabled={!activity} onClick={() => openPage('pickPerson')}>Add participant</AddButton>

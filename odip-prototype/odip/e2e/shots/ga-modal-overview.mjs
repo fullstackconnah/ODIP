@@ -257,7 +257,7 @@ for (const vp of VIEWPORTS) {
     }
   }
 
-  // One full page per breakpoint (the board behind the sheet, with the edit overview open).
+  // One full page per breakpoint: the board with the edit-draft overview open over it.
   let session
   try {
     session = await openBoard(browser, { width: vp.w, height: vp.h, touch: vp.touch })
@@ -267,13 +267,8 @@ for (const vp of VIEWPORTS) {
     const fullFile = path.join(OUT_DIR, 'full', `b-full-page-${vp.w}-dark.png`)
     const allow = ['.overflow-x-auto']   // the roster board's sideways strip
     checks.push(await layoutCheck(session.page, sheet(session.page), `sheet @${vp.w}`, { allow }))
-    let full = await fullPage(session.page, fullFile, { touch: vp.touch, allow })
-    if (full.checks.some((c) => !c.pass)) {
-      // the board behind the scrim is not part of this check: retake the page with the sheet closed (the scoped sheet check above stays)
-      await session.page.keyboard.press('Escape')
-      await sheet(session.page).waitFor({ state: 'hidden', timeout: 10_000 })
-      full = await fullPage(session.page, fullFile, { touch: vp.touch, allow })
-    }
+    // The sheet stays open. fullPage checks <main>, so a fault it reports is a board element behind the scrim (queued as GMR-B1), never the sheet: the scoped check above covers that.
+    const full = await fullPage(session.page, fullFile, { touch: vp.touch, allow })
     checks.push(...full.checks)
   } catch (e) {
     check(`full page @${vp.w}: ran`, false, String(e.message).split('\n')[0])
