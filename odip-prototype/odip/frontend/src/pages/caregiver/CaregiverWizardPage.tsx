@@ -35,7 +35,7 @@ import {
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
   type ParticipantFormData,
 } from '@/lib/participantSchema'
-import { buildCaregiverWire, CAREGIVER_STEP_LABELS } from '@/lib/caregiverPayload'
+import { buildCaregiverWire, CAREGIVER_STEP_LABELS, STA_VISIBLE } from '@/lib/caregiverPayload'
 import { CAREGIVER_INTERNAL_FIELDS } from '@/lib/caregiverFields'
 import { label as fieldLabel, norm as normValue } from '@/lib/caregiverDiff'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -68,7 +68,7 @@ function saveFailure(err: unknown, fallback: string): string {
 }
 
 // What the carer form shows its steps (Holiday/STA consents, How to Help Me notes): the steps get these, and Review reads the same values.
-const STA_VISIBLE = false
+// STA_VISIBLE lives with the payload builder, so what the wire sends follows it.
 const CA_VISIBLE = false
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
