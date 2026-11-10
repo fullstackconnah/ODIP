@@ -20,8 +20,11 @@ export { norm }
 
 export type DiffRow = { field: string; label: string; group: string; current: string; proposed: string; staffChanged?: boolean }
 
+// UI-only helper fields have no document-mapping row; they read as the label MedicalDetailStep shows for them.
+const HELPER_LABELS: Record<string, string> = { primaryDiagnosisOther: 'Specify Primary Diagnosis' }
+
 export function label(field: string): string {
-  return getFieldMapping(field)?.label ?? field
+  return getFieldMapping(field)?.label ?? HELPER_LABELS[field] ?? field
 }
 
 /** The section name for a payload group: the caregiver wizard step that owns it, so staff and caregiver read the same words. */
