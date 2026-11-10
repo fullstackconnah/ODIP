@@ -59,12 +59,13 @@ public class AuditController : ControllerBase
             ["Complaint"] = "Complaint",
             ["Shift"] = "Shift",
             ["ShiftPattern"] = "ShiftPattern",
+            ["ProviderSettings"] = "ProviderSettings",
         };
 
         if (!allowedTypes.TryGetValue(entityType, out var canonicalEntityType))
             return BadRequest(new { error = "Invalid entity type." });
 
-        // AuditLog has no organisation column or query filter, so history is shown only for an entity the caller can see: found through its own tenant-filtered table, or, for the
+        // Rows before 2026-11 have no TenantId, so history is shown only for an entity the caller can see: found through its own tenant-filtered table, or, for the
         // tables without a filter, through the trip, user or vehicle it hangs off.
         var visible = canonicalEntityType switch
         {
@@ -83,6 +84,8 @@ public class AuditController : ControllerBase
             "Complaint" => await _db.Complaints.AnyAsync(e => e.Id == entityId, ct),
             "Shift" => await _db.Shifts.AnyAsync(e => e.Id == entityId, ct),
             "ShiftPattern" => await _db.ShiftPatterns.AnyAsync(e => e.Id == entityId, ct),
+            // Scoped, never _db.ProviderSettings: a SuperAdmin's query filter is off, so a plain query would show any organisation's settings history.
+            "ProviderSettings" => await _db.ScopedProviderSettings().AnyAsync(e => e.Id == entityId, ct),
             _ => false,
         };
         // A hard-deleted record is gone from its table. Its history stays readable to its own organisation while the newest row says Deleted.
