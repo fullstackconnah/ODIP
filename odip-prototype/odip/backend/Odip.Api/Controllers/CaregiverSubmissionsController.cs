@@ -57,7 +57,7 @@ public class CaregiverSubmissionsController : ControllerBase
     // ── Links ──────────────────────────────────────────────
 
     private const string WaitingForReview = "A caregiver form is waiting for review. Accept or decline it before sending a new link.";
-    private const string LinkJustSent = "Another coordinator just sent a link for this participant. Reload and try again.";
+    private const string LinkJustSent = "This participant's link just changed. Reload and try again.";
 
     [HttpPost("/api/v1/participants/{participantId:guid}/caregiver-link")]
     public async Task<ActionResult<ApiResponse<CaregiverLinkDto>>> CreateLink(Guid participantId, CancellationToken ct)

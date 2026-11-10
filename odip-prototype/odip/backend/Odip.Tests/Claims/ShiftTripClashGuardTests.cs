@@ -56,7 +56,7 @@ public class ShiftTripClashGuardTests
         var left = Assert.Single(preview.LeftOut);
         Assert.Equal(onTripDay.Id, left.ShiftId);
         Assert.Contains("TC-TRIP-1", left.Reason);
-        Assert.StartsWith(Today.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture), left.Reason);   // the row's lead already names the participant
+        Assert.StartsWith("It is already on trip claim TC-TRIP-1", left.Reason);   // the clash is on the shift's own date, so no date lead
 
         var run = await service.GenerateAsync(person.Id, Today, Today.AddDays(1), Ct);
         Assert.Equal(1, run.ShiftCount);

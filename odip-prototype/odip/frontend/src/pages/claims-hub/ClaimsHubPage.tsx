@@ -47,7 +47,8 @@ export default function ClaimsHubPage() {
   const batches = useClaimBatches()
 
   // The claim run lives in the URL as well, so the dashboard's Unclaimed shifts tile can open it; closing it drops the param, and Back leaves the page.
-  const claimRun = hasOrganisation && params.get('run') === 'shifts'
+  // Writing too, as New claim does: a user who can't write lands on the hub with no modal and the param left in the URL.
+  const claimRun = hasOrganisation && canWrite && params.get('run') === 'shifts'
   // The tile for older shifts also names the run's start date; anything but a plain date is ignored, so the default window is used.
   const runFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.get('from') ?? '') ? params.get('from')! : undefined
   const setClaimRun = useCallback((open: boolean) => setParams(p => {

@@ -18,10 +18,15 @@ const { mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, moc
 
 // Only the API layer is mocked — FormField, Dropdown, SearchableSelect, ConfirmDialog are the
 // real components, so this exercises the actual Default staff field wiring.
-const { catalogue } = vi.hoisted(() => ({ catalogue: { current: { data: [] as unknown[], isLoading: false, isError: false } } }))
+const { catalogue, compat } = vi.hoisted(() => ({
+  catalogue: { current: { data: [] as unknown[], isLoading: false, isError: false } },
+  compat: { current: [] as unknown[] },
+}))
 
 vi.mock('@/api/hooks', () => ({
   useSupportCatalogue: () => catalogue.current,
+  // Like the real hook, nothing until a participant is picked.
+  useCompatibility: (participantId?: string) => ({ data: participantId ? compat.current : undefined }),
   useCreatePattern: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdatePattern: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeletePattern: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
@@ -63,6 +68,7 @@ beforeEach(() => {
   mockUpdateMutateAsync.mockClear()
   mockDeleteMutateAsync.mockClear()
   mockChangeMutateAsync.mockReset()
+  compat.current = []
 })
 
 describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01 migration)', () => {
@@ -751,5 +757,51 @@ describe('PatternSlideOver support type', () => {
     open(pattern, false)
     expect(screen.getByText('Set from the service agreement when it made this pattern.')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Support type' })).toBeDisabled()
+  })
+})
+
+describe('PatternSlideOver Regular — the compatibility matrix (R8)', () => {
+  const row = (staffId: string, level: string, rank = 0) => ({ staffId, staffName: staffId, participantId: 'participant-1', participantName: 'Mia Chen', level, rank, reason: null, updatedAt: '2026-11-01T00:00:00Z' })
+  const renderRegular = (pattern: ShiftPatternDto) => {
+    render(<PatternSlideOver target={{ mode: 'edit', pattern }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    return { user: userEvent.setup(), field: screen.getByRole('combobox', { name: 'Regular' }) }
+  }
+  const openRegular = async (pattern: ShiftPatternDto) => {
+    const { user, field } = renderRegular(pattern)
+    await user.click(field)
+    return { user, field, options: screen.getAllByRole('option') }
+  }
+
+  it('greys out a worker marked No, says why, and lists them last', async () => {
+    compat.current = [row('staff-1', 'Excluded'), row('staff-3', 'Preferred', 1)]
+    const { user, field, options } = await openRegular(makePattern({ defaultStaffId: null, defaultStaffName: null }))
+
+    expect(options.map(o => o.textContent)).toEqual([
+      'Unassigned', 'Bianca NovakPreferred #1 for this participant', 'Jordan Smith', 'Alex RiveraCan’t be rostered: marked No for this participant',
+    ])
+    expect(options[3]).toHaveAttribute('aria-disabled', 'true')
+    expect(options[1]).not.toHaveAttribute('aria-disabled')
+
+    await user.click(options[3])
+    expect(screen.getAllByRole('option')).toHaveLength(4)   // a disabled option does nothing: the list stays open
+    await user.keyboard('{Escape}')
+    expect(field).toHaveValue('Unassigned')
+  })
+
+  it('keeps the worker already on the pattern pickable, even when they are now marked No', async () => {
+    compat.current = [row('staff-1', 'Excluded')]
+    const { user, field } = renderRegular(makePattern())
+    expect(field).toHaveValue('Alex Rivera')
+    await user.click(field)
+    const options = screen.getAllByRole('option')
+    const alex = options.find(o => o.textContent?.startsWith('Alex Rivera'))!
+    expect(alex).not.toHaveAttribute('aria-disabled')
+    expect(alex).toHaveTextContent('marked No for this participant')
+  })
+
+  it('lists the staff as before when the participant has no compatibility rows', async () => {
+    const { options } = await openRegular(makePattern({ defaultStaffId: null, defaultStaffName: null }))
+    expect(options.map(o => o.textContent)).toEqual(['Unassigned', 'Alex Rivera', 'Jordan Smith', 'Bianca Novak'])
+    expect(options.some(o => o.hasAttribute('aria-disabled'))).toBe(false)
   })
 })

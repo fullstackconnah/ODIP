@@ -127,4 +127,33 @@ public class ShiftHeldPostgresFacts : IClassFixture<PostgresFixture>
         var body = Assert.IsType<ApiResponse<bool>>(conflict.Value);
         Assert.Contains(ClaimSubmission.ShiftHeldMessage, body.Errors!);
     }
+
+    // CLI-T1: a claim marked Rejected by hand keeps its lines Submitted, so the index still holds the shift. A real run (make on) must leave the shift out and name that claim, not make a second claim or hit the index.
+    [SkippableFact(DisplayName = "Postgres: a real claim run leaves out a shift held by a hand-rejected claim, and makes no claim")]
+    public async Task RunAsync_WhenTheShiftSitsOnAHandRejectedClaim_MakesNoClaim_AndLeavesTheShiftOutNamingIt()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (db, tenantId) = await _pg.NewTenantContextAsync(_pg.ConnectionString);
+        using var kit = LedgerKit.Wrap(db, tenantId);
+        kit.SeedProvider("NSW");
+        kit.EnsureCommunityAccessCatalogue();
+        var person = kit.SeedParticipant();
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 5), ShiftStatus.Completed);
+        var held = kit.SeedShiftClaim(person, TripClaimStatus.Submitted, 400m, shift);
+        (await kit.Db.ClaimLineItems.SingleAsync(l => l.TripClaimId == held.Id)).Status = ClaimLineItemStatus.Submitted;
+        held.Status = TripClaimStatus.Rejected;   // the claim status only, as ClaimsController.cs:489 does: the line stays Submitted
+        await kit.Db.SaveChangesAsync();
+
+        var tenant = TenantOf(tenantId);
+        await using var own = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", own.Database.ProviderName);
+
+        var run = await new ShiftClaimGenerationService(own).RunAsync(tenantId, From, To);
+
+        Assert.Equal(0, run.ClaimsMade);
+        Assert.Equal(1, await own.TripClaims.CountAsync());   // only the hand-rejected claim
+        var left = Assert.Single(run.LeftOut);
+        Assert.Equal(shift.Id, left.ShiftId);
+        Assert.StartsWith("It is on rejected claim", left.Reason);
+    }
 }

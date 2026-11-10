@@ -813,6 +813,14 @@ describe('ClaimsHubPage: New claim', () => {
     renderPage('/claims?run=shifts')
     expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
   })
+
+  // A reader has no organisation either (hasOrganisation is Admin and Coordinator), so this pins the outcome; the canWrite term is the guard if a role ever has one without the other.
+  it('does not open for a user who cannot write, even from the URL, and leaves the link as it is', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderPage('/claims?run=shifts')
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+    expect(screen.getByTestId('where')).toHaveTextContent('run=shifts')
+  })
 })
 
 describe('ClaimsHubPage: the Plan- and self-managed tab pages on the server', () => {

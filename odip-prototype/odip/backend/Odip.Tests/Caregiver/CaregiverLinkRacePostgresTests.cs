@@ -107,7 +107,7 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
     private static string ConflictError(ActionResult<ApiResponse<CaregiverLinkDto>> result) =>
         Assert.Single(((ApiResponse<CaregiverLinkDto>)Assert.IsType<ConflictObjectResult>(result.Result).Value!).Errors!);
 
-    private const string LinkJustSent = "Another coordinator just sent a link for this participant. Reload and try again.";
+    private const string LinkJustSent = "This participant's link just changed. Reload and try again.";
 
     // PB75-H86-2: another coordinator's link commits between this request's checks and its insert, so the unique index on active links rejects the insert: 409, not a 500.
     [SkippableFact]
