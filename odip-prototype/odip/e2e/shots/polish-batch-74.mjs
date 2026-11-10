@@ -63,15 +63,27 @@ const measureTiles = (page) => page.evaluate(() => {
   const tiles = all.filter((t) => t.getAttribute('role') === 'group' && t.querySelector(':scope > a')).map((tile) => {
     const text = tile.querySelector(':scope > div'), link = tile.querySelector(':scope > a')
     const label = text.querySelector('span'), detail = text.querySelectorAll('span')[1] ?? null
-    const words = link.querySelector('span')
+    // The link holds one run (an outer span): the label's head, then the last word and the chevron in a no-wrap span (PB74-F1). `words` is the last-word span (sr-only on a phone).
+    const run = link.firstElementChild, chev = link.querySelector('svg'), words = chev.previousElementSibling
+    const texts = []
+    for (const w = document.createTreeWalker(run, NodeFilter.SHOW_TEXT); w.nextNode();) if (w.currentNode.textContent.trim()) texts.push(w.currentNode)
+    const textRects = () => texts.flatMap((n) => { const r = document.createRange(); r.selectNodeContents(n); return [...r.getClientRects()] }).filter((q) => q.width > 0.5)
     // The old row (flex; the text flex 1 with min-width 0; the link shrink-0, so its words at their one-line width): what is left for the text once the figure, the link and the two gaps are taken.
-    const wrap = words.style.whiteSpace; words.style.whiteSpace = 'nowrap'
-    const oneLine = words.getBoundingClientRect().width
-    words.style.whiteSpace = wrap
+    const wrap = run.style.whiteSpace; run.style.whiteSpace = 'nowrap'
+    const one = textRects()
+    const oneLine = words.getBoundingClientRect().width > 1.5 && one.length ? Math.max(...one.map((q) => q.right)) - Math.min(...one.map((q) => q.left)) : 0
+    run.style.whiteSpace = wrap
     const tb = box(tile), xb = box(text), lb = box(link), wb = box(words)
     const ts = getComputedStyle(tile), figure = tile.firstElementChild.getBoundingClientRect().width
     const linkOld = (oneLine > 1.5 ? oneLine + 2 : 0) + 16
     const before = Math.max(0, tile.clientWidth - parseFloat(ts.paddingLeft) - parseFloat(ts.paddingRight) - figure - linkOld - 2 * parseFloat(ts.columnGap))
+    // The words' last line (text rects only, one per line and text node): the chevron must sit right after it, on the same line.
+    const rects = textRects(), lastTop = rects.length ? Math.max(...rects.map((q) => q.top)) : 0
+    const onLast = rects.filter((q) => q.top > lastTop - 3)
+    const last = onLast.length ? { top: Math.min(...onLast.map((q) => q.top)), bottom: Math.max(...onLast.map((q) => q.bottom)), right: Math.max(...onLast.map((q) => q.right)) } : null
+    const lines = rects.map((q) => q.top).sort((a, b) => a - b).filter((t, i, a) => i === 0 || t - a[i - 1] > 3).length
+    const cb = box(chev)
+    const chevGap = last ? cb.l - last.right : null, chevOnLine = !!last && cb.t >= last.top - 4 && cb.b <= last.bottom + 4
     const after = getComputedStyle(link, '::after'), cs = getComputedStyle(tile)
     return {
       label: (label?.textContent ?? '').trim(), tile: tb, text: xb, link: lb, words: wb,
@@ -79,7 +91,7 @@ const measureTiles = (page) => page.evaluate(() => {
       folded: lb.t >= xb.b - 1, left: lb.l - xb.l,
       inside: lb.l >= tb.l - 1 && lb.r <= tb.r + 1 && lb.b <= tb.b + 1 && xb.l >= tb.l - 1 && xb.r <= tb.r + 1,
       coversTile: after.position === 'absolute' && after.top === '0px' && after.left === '0px' && after.right === '0px' && after.bottom === '0px',
-      container: `${cs.containerType} ${cs.containerName}`, textMin: xb.w / rem, before, oneLine,
+      container: `${cs.containerType} ${cs.containerName}`, textMin: xb.w / rem, before, oneLine, lines, chevGap, chevOnLine,
     }
   })
   return { rem, tapMin, perRow, rows: tops.length, tiles, labels: all.map((t) => t.getAttribute('aria-label') ?? t.textContent.trim().slice(0, 30)) }
@@ -139,6 +151,8 @@ try {
       // A tile under 36rem folds; one at 36rem or more keeps the link beside the text. Either way the link never touches the text column.
       check(tag, 'a tile under 36rem has its link under the text, left edge on the text column', m.tiles.filter((t) => t.tile.w < 36 * m.rem).every((t) => t.folded && Math.abs(t.left) <= 1), m.tiles.map((t) => ({ l: t.label, w: fmt(t.tile.w), folded: t.folded, left: fmt(t.left) })))
       check(tag, 'a tile at 36rem or more has its link beside the text', m.tiles.filter((t) => t.tile.w >= 36 * m.rem).every((t) => !t.folded))
+      // PB74-F1: wrapped or not, the chevron follows the last word: 0 to 8px after the last line box, inside that line box (4px).
+      if (profile.width === 1440) check(tag, 'every link chevron sits 0 to 8px after the last line of its words, on that line', m.tiles.length > 0 && m.tiles.every((t) => t.chevGap !== null && t.chevGap >= 0 && t.chevGap <= 8 && t.chevOnLine), m.tiles.map((t) => ({ l: t.label, lines: t.lines, gap: fmt(t.chevGap), onLine: t.chevOnLine })))
     } else {
       check(tag, 'the detail is hidden in every action tile', m.tiles.every((t) => !t.detailShown))
       check(tag, 'the link words are sr-only (1px) in every action tile', m.tiles.every((t) => !t.wordsShown), m.tiles.map((t) => fmt(t.words.w)))

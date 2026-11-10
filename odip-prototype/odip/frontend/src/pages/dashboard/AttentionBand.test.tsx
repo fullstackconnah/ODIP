@@ -59,7 +59,7 @@ describe('AttentionBand — what is a tile', () => {
 
     const alpha = screen.getByRole('group', { name: 'Alpha 3' })
     expect(within(alpha).getByText('3')).toHaveClass('text-display')
-    expect(within(alpha).getByText('Alpha')).toBeInTheDocument()
+    expect(within(alpha).getByText('Alpha', { selector: '.font-semibold' })).toBeInTheDocument() // the link's last word is also 'Alpha'
     expect(within(alpha).getByText('Alpha line.')).toBeInTheDocument()
     expect(within(alpha).getByRole('link', { name: 'Open Alpha' })).toHaveAttribute('href', '/alpha')
     const gamma = screen.getByRole('group', { name: 'Gamma 2' })

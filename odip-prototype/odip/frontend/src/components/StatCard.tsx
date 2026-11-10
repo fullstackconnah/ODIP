@@ -190,14 +190,16 @@ const ACTION_WASH: Record<'quiet' | Attention, string> = {
 
 // The link's `::after` fills the (positioned) tile, so the whole tile is the target while the page keeps ONE link with a name of its own ("Open overdue
 // tasks"). The focus ring is drawn on that pseudo-element for the same reason: it surrounds the tile, not just the words. `--tap-min` floors the link's own
-// box at 44px on touch.
+// box at 44px on touch. The words and the chevron are ONE inline run; the last word and the chevron share a no-wrap span, because a browser may break before an
+// inline icon (the chevron alone would drop to a new line).
 const ACTION_LINK =
-  'inline-flex min-h-[var(--tap-min)] items-center gap-0.5 text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
+  'flex min-h-[var(--tap-min)] items-center text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
   '@min-[36rem]/band:@max-[36rem]/tile:col-[2/-1] @min-[36rem]/band:@max-[36rem]/tile:row-start-2 ' +
   'after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-[var(--color-ring)]'
 
 function ActionTile({ label, value, className, tone = 'neutral', detail, action }: StatCardProps & { action: StatCardAction }) {
   const attention = attentionOf(tone)
+  const cut = action.label.lastIndexOf(' ')
   const classes = `${ACTION_TILE} ${ACTION_WASH[attention ?? 'quiet']} ${className ?? ''}`.trim()
 
   // A named group, so its accessible name carries the number as well as the label (like the compact tile without a link).
@@ -211,8 +213,17 @@ function ActionTile({ label, value, className, tone = 'neutral', detail, action 
         {detail && <span className="text-[13px] leading-snug text-balance @max-[36rem]/band:hidden">{detail}</span>}
       </div>
       <Link to={action.to} className={ACTION_LINK}>
-        <span className="@max-[36rem]/band:sr-only">{action.label}</span>
-        <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>
+          {cut > 0 && (
+            <>
+              <span className="@max-[36rem]/band:sr-only">{action.label.slice(0, cut)}</span>{' '}
+            </>
+          )}
+          <span className="whitespace-nowrap">
+            <span className="@max-[36rem]/band:sr-only">{action.label.slice(cut + 1)}</span>
+            <ChevronRight className="ml-0.5 inline h-4 w-4 align-[-3px]" aria-hidden="true" />
+          </span>
+        </span>
       </Link>
     </div>
   )

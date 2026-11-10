@@ -353,8 +353,21 @@ describe('StatCard — attention variant, the tall action tile', () => {
   it('hides the link\'s arrow from assistive tech: the chevron is decoration', () => {
     renderTall()
 
-    const icon = screen.getByRole('link', { name: 'Open overdue tasks' }).querySelector('svg')
+    const link = screen.getByRole('link', { name: 'Open overdue tasks' })
+    const icon = link.querySelector('svg')
     expect(icon).toHaveAttribute('aria-hidden', 'true')
+    // PB74-F1: the words and the chevron are ONE inline run, and the last word shares a no-wrap span with the chevron, so a wrapped label never strands it.
+    expect(link.textContent).toBe('Open overdue tasks')
+    expect(icon?.parentElement).toHaveClass('whitespace-nowrap')
+    expect(icon?.parentElement).toHaveTextContent(/^tasks$/)
+  })
+
+  it('keeps a one-word link whole, with the chevron in the same no-wrap span', () => {
+    renderTall({ action: { label: 'Review', to: '/x' } })
+
+    const link = screen.getByRole('link', { name: 'Review' })
+    expect(link.textContent).toBe('Review')
+    expect(link.querySelector('svg')?.parentElement).toHaveTextContent(/^Review$/)
   })
 
   it('drops the line when there is none, rather than leaving an empty row', () => {
@@ -377,7 +390,7 @@ describe('StatCard — attention variant, the tall action tile', () => {
     expect(link).toHaveAttribute('aria-busy', 'true')
     expect(link).not.toHaveAttribute('data-attention')
     expect(screen.queryByText('Expired.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Open overdue tasks')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open overdue tasks' })).not.toBeInTheDocument()
   })
 
   it('falls back to the compact tile after a failed request too', () => {
@@ -422,7 +435,7 @@ describe('StatCard attention action tile — the compact row on a narrow band', 
     expect(tile).toHaveClass('grid', 'items-center')
     expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('@max-[36rem]/band:hidden')
     const link = within(tile).getByRole('link', { name: 'Open overdue tasks' })
-    expect(within(link).getByText('Open overdue tasks')).toHaveClass('@max-[36rem]/band:sr-only')
+    for (const part of ['Open overdue', 'tasks']) expect(within(link).getByText(part)).toHaveClass('@max-[36rem]/band:sr-only')
     expect(link).not.toHaveClass('ml-auto')
   })
 
