@@ -5,6 +5,7 @@ using Odip.Application.DTOs;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
@@ -39,14 +40,15 @@ public class InvoiceService
         var invoice = BuildSnapshot(claim, group, settings);
         invoice.DisplayNumber = $"INV-{claim.ClaimReference}-{group.GroupId.ToString("N")[..8].ToUpper()}";
         invoice.IssueDate = Heading(settings.GSTRegistered, claim, settings.State).Date;
-        return (Render(invoice, legacy: true), $"{invoice.DisplayNumber}.pdf");
+        return (Render(invoice, legacy: true, perItemLines: await PerItemLinesAsync(invoice, ct)), $"{invoice.DisplayNumber}.pdf");
     }
 
     /// <summary>The "DRAFT – not issued" preview of a claim not yet submitted: the invoice submitting would issue, with no number and no dates.</summary>
     public async Task<(byte[] Content, string FileName)> PreviewAsync(Guid claimId, Guid groupId, CancellationToken ct = default)
     {
         var (claim, group, settings) = await GroupForRenderAsync(claimId, groupId, ct);
-        return (Render(BuildSnapshot(claim, group, settings)), $"DRAFT-{claim.ClaimReference}.pdf");
+        var snapshot = BuildSnapshot(claim, group, settings);
+        return (Render(snapshot, perItemLines: await PerItemLinesAsync(snapshot, ct)), $"DRAFT-{claim.ClaimReference}.pdf");
     }
 
     /// <summary>The invoice each plan- or self-managed payer would get if the claim were submitted now: never saved, never numbered.</summary>
@@ -163,9 +165,9 @@ public class InvoiceService
     /// Draws every invoice PDF from an <see cref="Invoice"/>: an issued one, a credit note, a void or credited one (a band, and no payment block, so it
     /// never invites payment), the never-saved preview (no number: "DRAFT – not issued") and, with <paramref name="legacy"/>, the derived invoice of a
     /// claim submitted before numbering, exactly as it always printed. <paramref name="creditedBy"/> and <paramref name="creditedOn"/> name the credit
-    /// note of a credited invoice.
+    /// note of a credited invoice. <paramref name="perItemLines"/> are the ids of the lines whose catalogue unit is Each; they print their quantity as "1 each", not as hours.
     /// </summary>
-    public static byte[] Render(Invoice inv, bool legacy = false, string? creditedBy = null, DateOnly? creditedOn = null)
+    public static byte[] Render(Invoice inv, bool legacy = false, string? creditedBy = null, DateOnly? creditedOn = null, IReadOnlySet<Guid>? perItemLines = null)
     {
         var preview = !legacy && inv.DisplayNumber.Length == 0;
         var creditNote = inv.Kind == InvoiceKind.CreditNote;
@@ -279,7 +281,7 @@ public class InvoiceService
                         {
                             header.Cell().Background("#e2e8f0").Padding(4).Text("Support Item").Bold();
                             header.Cell().Background("#e2e8f0").Padding(4).Text("Date Range").Bold();
-                            header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Hours").Bold();
+                            header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Hours / qty").Bold();
                             header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Rate").Bold();
                             header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Amount").Bold();
                             if (inv.GstRegistered)
@@ -294,7 +296,7 @@ public class InvoiceService
 
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).Text(item.SupportItemCode);
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).Text(dateRange);
-                            table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(item.Hours.ToString("F2", CultureInfo.InvariantCulture));
+                            table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(perItemLines?.Contains(item.Id) == true ? string.Create(CultureInfo.InvariantCulture, $"{item.Hours:0.##} each") : item.Hours.ToString("F2", CultureInfo.InvariantCulture));
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(string.Create(CultureInfo.InvariantCulture, $"${item.UnitPrice:F2}"));
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(Money(item.LineTotal));
                             if (inv.GstRegistered)
@@ -531,6 +533,14 @@ public class InvoiceService
         };
     }
 
+    /// <summary>The ids of the invoice lines whose catalogue item (on the line's service date) is unit Each, from one catalogue query; a code the catalogue no longer holds reads as hours.</summary>
+    private async Task<HashSet<Guid>> PerItemLinesAsync(Invoice inv, CancellationToken ct)
+    {
+        var codes = inv.Lines.Select(l => l.SupportItemCode).Distinct().ToList();
+        var rows = await _db.SupportCatalogueItems.AsNoTracking().Where(i => codes.Contains(i.ItemNumber)).ToListAsync(ct);
+        return inv.Lines.Where(l => EffectiveCatalogueResolver.NewestVersion(rows.Where(r => r.ItemNumber == l.SupportItemCode && EffectiveCatalogueResolver.IsValidOn(r, l.ServiceFrom)).ToList()).FirstOrDefault()?.Unit == "E").Select(l => l.Id).ToHashSet();
+    }
+
     /// <summary>An issued invoice or credit note's PDF, drawn from its snapshot only; null when the caller's organisation has no such row.</summary>
     public async Task<(byte[] Content, string FileName)?> RenderStoredAsync(Guid invoiceId, CancellationToken ct)
     {
@@ -540,7 +550,7 @@ public class InvoiceService
         var creditNote = invoice.Status == InvoiceStatus.Credited
             ? await _db.Invoices.AsNoTracking().Where(c => c.CreditsInvoiceId == invoice.Id).Select(c => new { c.DisplayNumber, c.IssueDate }).FirstOrDefaultAsync(ct)
             : null;
-        return (Render(invoice, creditedBy: creditNote?.DisplayNumber, creditedOn: creditNote?.IssueDate), $"{invoice.DisplayNumber}.pdf");
+        return (Render(invoice, creditedBy: creditNote?.DisplayNumber, creditedOn: creditNote?.IssueDate, perItemLines: await PerItemLinesAsync(invoice, ct)), $"{invoice.DisplayNumber}.pdf");
     }
 
     /// <summary>"TAX INVOICE" only for a GST-registered provider; the date is the claim's own (submitted, else created) in the zone of the State on the document (never the zone setting), so a re-download never moves it.</summary>

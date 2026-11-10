@@ -148,8 +148,8 @@ private static Invoice FixedInvoice(string serviceReference) => new()
     };
 
     // Golden text captured from the renderer BEFORE the label change (run 20261102-012337-3640); the only edit since is "NDIS Registration" -> "Registration" (Skeleton: NDSRegsraon -> Regsraon). PDF metadata differs per render, so the comparison is on extracted text.
-    private const string GoldenTrip = "NVOCEesProvderNV11esSssued23Oc2026ABN12345678901Due06Nov2026RegsraonPR001BlloParcpanSamLeeSamLeerpCoasalweekendSupporemDaeRangeHoursRaeAmoun0410401256103102026100100001000004102026Suboal10000oal10000Paymenerms14daysPleasepayby06Nov2026anduseNV1ashereerence";
-    private const string GoldenShift = "NVOCEesProvderNV11esSssued23Oc2026ABN12345678901Due06Nov2026RegsraonPR001BlloParcpanSamLeeSamLeePerod01Oc202614Oc2026SupporemDaeRangeHoursRaeAmoun0410401256103102026100100001000004102026Suboal10000oal10000Paymenerms14daysPleasepayby06Nov2026anduseNV1ashereerence";
+    private const string GoldenTrip = "NVOCEesProvderNV11esSssued23Oc2026ABN12345678901Due06Nov2026RegsraonPR001BlloParcpanSamLeeSamLeerpCoasalweekendSupporemDaeRangeHoursqyRaeAmoun0410401256103102026100100001000004102026Suboal10000oal10000Paymenerms14daysPleasepayby06Nov2026anduseNV1ashereerence";
+    private const string GoldenShift = "NVOCEesProvderNV11esSssued23Oc2026ABN12345678901Due06Nov2026RegsraonPR001BlloParcpanSamLeeSamLeePerod01Oc202614Oc2026SupporemDaeRangeHoursqyRaeAmoun0410401256103102026100100001000004102026Suboal10000oal10000Paymenerms14daysPleasepayby06Nov2026anduseNV1ashereerence";
 
     [Fact]
     public void TripAndShiftInvoices_AreUnchanged_ExceptTheRegistrationLabel()
@@ -173,5 +173,53 @@ private static Invoice FixedInvoice(string serviceReference) => new()
         Assert.StartsWith("%PDF-", Encoding.ASCII.GetString(InvoiceService.Render(invoice), 0, 5));
         invoice.DisplayNumber = string.Empty;   // the DRAFT title
         Assert.StartsWith("%PDF-", Encoding.ASCII.GetString(InvoiceService.Render(invoice), 0, 5));
+    }
+}
+
+/// <summary>PB83: a per-item (unit Each) line, such as a Sleepover, reads as a count ("1 each"), not as hours; an hourly line stays "8.00". Amounts are untouched.</summary>
+[Collection(InvoicePdfs.Name)]
+public class InvoiceQuantityWordingTests
+{
+    [Fact]
+    public void RenderedInvoice_PrintsAnEachLineAsACount_AndKeepsTheHourlyLineAndTotals()
+    {
+        var hourly = new InvoiceLine { Id = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", ServiceFrom = new DateOnly(2026, 10, 3), ServiceTo = new DateOnly(2026, 10, 3), Hours = 8m, UnitPrice = 50m, LineTotal = 400m };
+        var sleepover = new InvoiceLine { Id = Guid.NewGuid(), SupportItemCode = "01_SLEEP", ServiceFrom = new DateOnly(2026, 10, 3), ServiceTo = new DateOnly(2026, 10, 3), Hours = 1m, UnitPrice = 150m, LineTotal = 150m };
+        var invoice = new Invoice
+        {
+            Kind = InvoiceKind.Invoice, Status = InvoiceStatus.Issued, DisplayNumber = "INV-1", IssueDate = new DateOnly(2026, 10, 23), DueDate = new DateOnly(2026, 11, 6),
+            BillToName = "Sam Lee", ParticipantName = "Sam Lee", ServiceReference = "Trip: Coastal weekend", SellerOrganisationName = "Test Provider", SellerAbn = "12345678901",
+            SellerRegistrationNumber = "PR001", SellerAddress = "1 Test St", SellerState = "NSW", PaymentTermsDays = 14, Subtotal = 550m, Total = 550m, Lines = [hourly, sleepover],
+        };
+
+        var text = TextOf(InvoiceService.Render(invoice, perItemLines: new HashSet<Guid> { sleepover.Id }));
+
+        Assert.Contains(Skeleton("Hours / qty"), text);
+        Assert.Contains(Skeleton("1 each"), text);
+        Assert.Contains(Skeleton("8.00"), text);
+        Assert.Contains(Skeleton("Total: $550.00"), text);
+    }
+
+    [Fact]
+    public async Task ServiceInvoice_ReadsTheUnitFromTheCatalogue_AndFallsBackToHoursForAnUnknownItem()
+    {
+        var kit = InvoiceKit.Create();
+        kit.Settings(gst: false);
+        var trip = kit.Trip();
+        var booking = kit.Book(trip, kit.Person("Sam", "Lee", PlanType.SelfManaged));
+        var claim = kit.TripClaim(trip, TripClaimStatus.Draft, (booking, 8m, 50m, 400m, GSTCode.P2), (booking, 1m, 150m, 150m, GSTCode.P2));
+        kit.Db.ClaimLineItems.First(l => l.TripClaimId == claim.Id && l.Hours == 1m).SupportItemCode = "01_SLEEP";
+        kit.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
+        {
+            Id = Guid.NewGuid(), ActivityGroupId = Guid.NewGuid(), ItemNumber = "01_SLEEP", Description = "Sleepover", Unit = "E", DayType = ClaimDayType.Weekday,
+            CatalogueVersion = "2026-27", EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
+        });
+        kit.Db.SaveChanges();
+
+        var text = TextOf((await kit.Service.GenerateInvoiceAsync(claim.Id, booking.Id)).Content);
+
+        Assert.Contains(Skeleton("1 each"), text);
+        Assert.Contains(Skeleton("8.00"), text);
+        Assert.Contains(Skeleton("Subtotal: $550.00"), text);
     }
 }
