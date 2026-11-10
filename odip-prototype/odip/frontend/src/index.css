@@ -429,6 +429,20 @@
   .modal-panel { animation: modalIn 0.16s cubic-bezier(0.2, 0, 0, 1); }
 }
 
+/* Group activity modal: a page pushes in over the overview (24px slide + fade, 240ms). From lg the pages sit beside the overview, so a page change is a fade; reduced motion fades at every width. Transform and opacity only. */
+@keyframes gaPushIn {
+  from { opacity: 0; transform: translateX(24px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ga-push { animation: gaPushIn 0.24s cubic-bezier(0.2, 0, 0, 1); }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 64rem) {
+  .ga-push { animation: scrimIn 0.15s ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ga-push { animation: scrimIn 0.15s linear; }
+}
+
 /*
  * Folds (native <details>): the opened content fades in over 150ms, opacity only (no height animation, so nothing below jumps); close is instant.
  * One rule for every fold; a fold marked data-fold-static, open when it mounts, appears at once. The routine tick's check (portal DuringSection) fades in over 100ms.

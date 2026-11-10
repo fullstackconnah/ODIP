@@ -32,6 +32,16 @@ describe('caregiver hooks', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['caregiver-submissions'] })
   })
 
+  it('useGenerateCaregiverLink still reloads the participant and the list on a 409', async () => {
+    vi.mocked(apiPostRaw).mockRejectedValueOnce({ response: { status: 409 } })
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useGenerateCaregiverLink(), { wrapper: wrapper(qc) })
+    await expect(result.current.mutateAsync({ participantId: 'p1' })).rejects.toBeDefined()
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ['participant', 'p1'] }))
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['caregiver-submissions'] })
+  })
+
   it('usePublicCaregiverForm reads through the public client', async () => {
     const qc = new QueryClient()
     const { result } = renderHook(() => usePublicCaregiverForm('tok'), { wrapper: wrapper(qc) })
