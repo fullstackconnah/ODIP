@@ -284,6 +284,7 @@ function ImportSummary({ summary, fileName, onReviewRejected }: { summary: Resul
   return (
     <Callout tone="success" polite title="Results imported">
       <p>{summary.successful} successful · {summary.rejected} rejected</p>
+      {summary.amountDiffers > 0 && <p>{plural(summary.amountDiffers, 'paid amount')} {summary.amountDiffers === 1 ? 'differs' : 'differ'} from what was claimed.</p>}
       {summary.leftAlone > 0 && <p>{plural(summary.leftAlone, 'line')} already had a result and {summary.leftAlone === 1 ? 'was' : 'were'} left alone.</p>}
       {summary.conflicts.length > 0 && <p>{plural(summary.conflicts.length, 'line')} already had a different result, so {summary.conflicts.length === 1 ? 'it wasn’t' : 'they weren’t'} changed: {summary.conflicts.map(c => c.rowReference).join(', ')}.</p>}
       {summary.unreadRows.length > 0 && <p>{plural(summary.unreadRows.length, 'row')} couldn't be read: {summary.unreadRows.map(r => `row ${r.row} (${r.note})`).join(', ')}.</p>}
@@ -328,30 +329,39 @@ function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto
 }
 
 function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetailDto; lines: BatchLineDto[]; onClose: () => void; announce: (m: string) => void }) {
-  const [amounts, setAmounts] = useState<Record<string, number>>(() => Object.fromEntries(lines.map(l => [l.batchLineId, l.resultAmount ?? l.amount])))
+  // The cap is the line total (the server's rule). A line the NDIA paid nothing, or more than claimed, starts blank and is left unpaid.
+  const [amounts, setAmounts] = useState<Record<string, number>>(() => Object.fromEntries(lines.map(l => {
+    const r = l.resultAmount
+    return [l.batchLineId, r == null ? l.amount : r >= 0.01 && r <= l.amount ? r : Number.NaN]
+  })))
   const [serverError, setServerError] = useState<string | null>(null)
   const paid = useMarkBatchPaid()
-  const overBy = (l: BatchLineDto) => (amounts[l.batchLineId] ?? 0) > (l.resultAmount ?? l.amount)
-  // A paid line needs a real amount: a blank or $0 entry is more likely a slip than a payment.
-  const missing = (l: BatchLineDto) => { const v = amounts[l.batchLineId]; return Number.isNaN(v) || v <= 0 }
-  const invalid = lines.some(l => overBy(l) || missing(l))
+  const overBy = (l: BatchLineDto) => amounts[l.batchLineId] > l.amount
+  // A blank line stays unpaid. A typed $0 or less is more likely a slip than a payment.
+  const missing = (l: BatchLineDto) => amounts[l.batchLineId] <= 0
+  const filled = lines.filter(l => !Number.isNaN(amounts[l.batchLineId]))
+  const invalid = filled.length === 0 || lines.some(l => overBy(l) || missing(l))
   const submit = () => {
     if (invalid || paid.isPending) return
     setServerError(null)
-    paid.mutate({ batchId: batch.id, lines: lines.map(l => ({ batchLineId: l.batchLineId, amount: amounts[l.batchLineId] })) }, {
-      onSuccess: () => { announce(`${plural(lines.length, 'line')} marked as paid.`); onClose() },
+    paid.mutate({ batchId: batch.id, lines: filled.map(l => ({ batchLineId: l.batchLineId, amount: amounts[l.batchLineId] })) }, {
+      onSuccess: () => {
+        const left = lines.length - filled.length
+        announce(`${plural(filled.length, 'line')} marked as paid.${left > 0 ? ` ${plural(left, 'line')} left to mark later.` : ''}`)
+        onClose()
+      },
       onError: async err => setServerError(await serverSentence(isAxiosError(err) ? err.response?.data : undefined, "Couldn't mark the lines as paid. Try again.")),
     })
   }
   const columns: Column<BatchLineDto>[] = [
     { key: 'participant', header: 'Participant', mobile: 'primary', render: l => l.participantName ?? '—' },
     { key: 'item', header: 'Item', mobile: 'meta', render: l => <CellText>{l.supportNumber}</CellText> },
-    { key: 'claimed', header: 'Claimed', align: 'right', mobile: 'meta', render: l => formatCurrency(l.resultAmount ?? l.amount) },
+    { key: 'claimed', header: 'Claimed', align: 'right', mobile: 'meta', render: l => formatCurrency(l.amount) },
     {
       key: 'paid', header: 'Paid', align: 'right',
       render: l => (
-        <NumberField label={`Paid for ${l.participantName ?? l.rowReference}`} className="[&_label]:sr-only" inputMode="decimal" step="0.01" min={0} max={l.resultAmount ?? l.amount}
-          value={amounts[l.batchLineId] ?? 0} onChange={v => setAmounts(a => ({ ...a, [l.batchLineId]: Math.round(v * 100) / 100 }))}
+        <NumberField label={`Paid for ${l.participantName ?? l.rowReference}`} className="[&_label]:sr-only" inputMode="decimal" step="0.01" min={0} max={l.amount}
+          value={amounts[l.batchLineId]} onChange={v => setAmounts(a => ({ ...a, [l.batchLineId]: Math.round(v * 100) / 100 }))}
           error={overBy(l) ? "Can't be more than the amount claimed." : missing(l) ? 'Enter the amount paid.' : undefined} />
       ),
     },
@@ -363,13 +373,16 @@ function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetail
       size="lg"
       title="Mark as paid"
       footer={(
-        <div className="flex w-full justify-end gap-2">
-          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="md" onClick={submit} aria-disabled={invalid || paid.isPending} className="aria-disabled:opacity-60">{paid.isPending ? 'Saving…' : 'Mark as paid'}</Button>
+        <div className="w-full">
+          {filled.length === 0 && <div id="mark-paid-why" className="mb-3"><Callout tone="warning" polite>Enter an amount for at least one line.</Callout></div>}
+          <div className="flex w-full justify-end gap-2">
+            <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" size="md" onClick={submit} aria-disabled={invalid || paid.isPending} aria-describedby={filled.length === 0 ? 'mark-paid-why' : undefined} className="aria-disabled:opacity-60">{paid.isPending ? 'Saving…' : 'Mark as paid'}</Button>
+          </div>
         </div>
       )}
     >
-      <p className="mb-3 text-sm">Each amount starts at what was claimed. Change it if the NDIA paid less, for example a capped price.</p>
+      <p className="mb-3 text-sm">Each amount starts at what the NDIA paid, or the claimed amount if the results had none. A line the NDIA paid nothing or more than claimed starts blank. Leave a line blank to mark it paid later.</p>
       {serverError && <Callout tone="danger" className="mb-3">{serverError}</Callout>}
       <DataTable data={lines} columns={columns} keyField="batchLineId" />
     </Modal>

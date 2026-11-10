@@ -385,4 +385,18 @@ public class ClaimBatchBuildTests
         Assert.Equal(404, result.Status);
         Assert.Empty(await f.Db.ClaimBatches.ToListAsync());
     }
+
+    [Fact]
+    public async Task A_named_line_the_tenant_filtered_load_misses_is_a_404_and_builds_nothing()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim(2);
+        lines[1].TenantId = null; // the column is nullable: the claim passes the 404 check, the row load drops the line
+        f.Db.SaveChanges();
+
+        var result = await f.BuildAsync(lines[0].Id, lines[1].Id);
+
+        Assert.Equal((404, "Not found."), (result.Status, result.Errors![0]));
+        Assert.Empty(await f.Db.ClaimBatches.ToListAsync());
+    }
 }

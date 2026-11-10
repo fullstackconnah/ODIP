@@ -28,6 +28,15 @@ public sealed record BatchLineDto(
     decimal Amount, int Attempt, string RowReference, ClaimBatchLineOutcome Outcome, string? RejectCode, string? RejectMessage, string? Hint, bool? NeedsDecision,
     decimal? ResultAmount, ClaimLineItemStatus? LineStatus, decimal? PaidAmount, DateTime? DismissedAt);
 
+/// <summary>An accepted line the default mark-paid left unpaid: a line is left out when the NDIA amount is zero, negative or above the line total; a missing amount pays the line total.</summary>
+public sealed record PaidLeftOutDto(Guid BatchLineId, string ClaimReference, decimal? NdiaAmount, decimal LineTotal);
+
+public sealed record PaidResultDto : BatchDto
+{
+    public PaidResultDto(BatchDto batch, List<PaidLeftOutDto> leftOut) : base(batch) { LeftOut = leftOut; }
+    public List<PaidLeftOutDto> LeftOut { get; init; }
+}
+
 public sealed record BatchDetailDto : BatchDto
 {
     public BatchDetailDto(BatchDto batch, List<BatchLineDto> lines) : base(batch) { Lines = lines; }
@@ -37,7 +46,7 @@ public sealed record BatchDetailDto : BatchDto
 public sealed record ResultConflictDto(string RowReference, string Current, string Incoming);
 
 public sealed record ResultsImportDto(
-    int Successful, int Rejected, int Unchanged, int LeftAlone, List<ResultConflictDto> Conflicts, List<string> UnknownReferences, List<UnreadRow> UnreadRows, BatchDto Batch);
+    int Successful, int Rejected, int Unchanged, int LeftAlone, List<ResultConflictDto> Conflicts, List<string> UnknownReferences, List<UnreadRow> UnreadRows, BatchDto Batch, int AmountDiffers);
 
 /// <summary>Claims sent and paid by provider-local week (Monday start), oldest first, plus where the money stands today. Money is never summed on the client.</summary>
 public sealed record PipelineDto(DateOnly Today, List<PipelineWeekDto> Weeks, decimal WithNdia, decimal AcceptedUnpaid, decimal UndatedPaid);

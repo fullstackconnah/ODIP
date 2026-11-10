@@ -145,6 +145,13 @@ export interface ResultsImportDto {
   unknownReferences: string[]
   unreadRows: { row: number; value: string; note: string }[]
   batch: BatchDto
+  /** Successful rows whose paid amount is not the line amount, to the cent. Nothing is changed for them. */
+  amountDiffers: number
+}
+
+/** POST claim-batches/{id}/paid: with no lines chosen, an accepted line whose NDIA amount is zero or above the line is left unpaid and listed here. */
+export interface PaidResultDto extends BatchDto {
+  leftOut: { batchLineId: string; claimReference: string; ndiaAmount: number | null; lineTotal: number }[]
 }
 
 export interface MarkPaidRequestDto {

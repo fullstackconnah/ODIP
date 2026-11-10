@@ -355,6 +355,78 @@ public class ClaimBatchFlowTests
     }
 
     [Fact]
+    public async Task Mark_all_pays_the_valid_lines_and_returns_the_ones_it_leaves_out()
+    {
+        var (f, up) = await AcceptedAsync(3);
+        using (f)
+        {
+            var rows = await f.Db.ClaimBatchLines.OrderBy(l => l.RowReference).ToListAsync();
+            rows[0].ResultAmount = 0m;    // no amount to pay
+            rows[1].ResultAmount = 500m;  // above the 120.00 line
+            rows[2].ResultAmount = 100m;
+            await f.Db.SaveChangesAsync();
+
+            var paid = await f.Service.MarkPaidAsync(f.TenantId, f.User, up.Id, [], default);
+
+            Assert.True(paid.Ok, string.Join("; ", paid.Errors ?? []));
+            Assert.Equal((1, 100m), (paid.Value!.Paid, paid.Value.PaidAmount));
+            Assert.Equal(new[] { 0m, 500m }, paid.Value.LeftOut.Select(l => l.NdiaAmount!.Value).Order());
+            Assert.All(paid.Value.LeftOut, l => Assert.Equal(120m, l.LineTotal));
+            Assert.All(paid.Value.LeftOut, l => Assert.StartsWith("TC-", l.ClaimReference));
+            Assert.Equal(2, await f.Db.ClaimLineItems.CountAsync(l => l.Status == ClaimLineItemStatus.Approved));
+        }
+    }
+
+    [Fact]
+    public async Task Mark_all_with_every_accepted_amount_bad_is_refused_and_pays_nothing()
+    {
+        var (f, up) = await AcceptedAsync(2);
+        using (f)
+        {
+            var rows = await f.Db.ClaimBatchLines.OrderBy(l => l.RowReference).ToListAsync();
+            rows[0].ResultAmount = 0m;
+            rows[1].ResultAmount = 500m;
+            await f.Db.SaveChangesAsync();
+
+            var paid = await f.Service.MarkPaidAsync(f.TenantId, f.User, up.Id, [], default);
+
+            Assert.Equal((400, "No accepted lines are waiting to be marked paid."), (paid.Status, paid.Errors![0]));
+            Assert.Equal(2, await f.Db.ClaimLineItems.CountAsync(l => l.Status == ClaimLineItemStatus.Approved));
+        }
+    }
+
+    [Fact]
+    public async Task Marking_chosen_lines_still_refuses_the_whole_request_for_a_bad_amount()
+    {
+        var (f, up) = await AcceptedAsync(2);
+        using (f)
+        {
+            var paid = await f.Service.MarkPaidAsync(f.TenantId, f.User, up.Id, [new PaidLineRequest(up.Lines[0].BatchLineId, null), new PaidLineRequest(up.Lines[1].BatchLineId, 500m)], default);
+
+            Assert.Equal(400, paid.Status);
+            Assert.Single(((BuildRefusalDto)paid.Data!).Problems);
+            Assert.Equal(2, await f.Db.ClaimLineItems.CountAsync(l => l.Status == ClaimLineItemStatus.Approved));
+        }
+    }
+
+    [Fact]
+    public async Task Import_counts_the_paid_amounts_that_differ_from_the_line_and_changes_no_totals()
+    {
+        using var f = new BatchFixture();
+        var (claim, lines, _) = f.AddClaim(3);
+        var up = await UploadedAsync(f, lines.Select(l => l.Id).ToArray());
+        var r = up.Lines.OrderBy(l => l.RowReference).Select(l => l.RowReference).ToArray();
+
+        var imported = await f.Service.ImportResultsAsync(f.TenantId, f.User, up.Id,
+            Csv($"{r[0]},Successful,,,150.00", $"{r[1]},Successful,,,90.00", $"{r[2]},Successful,,,120.00"), default);
+
+        Assert.True(imported.Ok, string.Join("; ", imported.Errors ?? []));
+        Assert.Equal((3, 2), (imported.Value!.Successful, imported.Value.AmountDiffers));
+        Assert.Equal(360m, (await f.Db.TripClaims.SingleAsync()).TotalAmount);
+        Assert.All(await f.Db.ClaimLineItems.ToListAsync(), l => Assert.Equal(120m, l.TotalAmount));
+    }
+
+    [Fact]
     public async Task Mark_paid_with_nothing_accepted_is_a_400()
     {
         using var f = new BatchFixture();

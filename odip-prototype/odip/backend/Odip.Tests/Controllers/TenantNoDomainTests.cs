@@ -123,6 +123,18 @@ public class TenantNoDomainTests
     }
 
     [Fact]
+    public async Task Create_with_setup_refuses_a_bad_BSB_with_its_sentence_and_creates_nothing()
+    {
+        using var db = SuperAdminDb();
+        var result = await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "", new TenantSetupProviderDto { State = "VIC", BSB = "abc" }, null), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<object>>(Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Equal("Enter the BSB as 6 numbers, like 062-000.", body.Errors![0]);
+        Assert.Empty(await db.Tenants.ToListAsync());
+        Assert.Empty(await db.ProviderSettings.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
     public async Task Create_with_setup_refuses_a_request_with_no_provider_settings_at_all()
     {
         using var db = SuperAdminDb();

@@ -128,6 +128,22 @@ public class CatalogueAgreementDraftTests
     }
 
     [Fact]
+    public async Task A_hand_typed_draft_has_at_most_50_lines_and_a_longer_one_writes_nothing()
+    {
+        var (db, participantId) = await ImportedDbAsync();
+        await using var _ = db;
+        var service = new ServiceAgreementDraftService(db);
+        List<CreateServiceAgreementDraftLineDto> Lines(int n) => Enumerable.Range(0, n).Select(_ => new CreateServiceAgreementDraftLineDto { ServiceType = "Community access", ItemCode = "04_104_0125_6_1", Hours = 1m }).ToList();
+
+        var refused = await service.SaveAsync(TenantId, participantId, Request("04_104_0125_6_1") with { Lines = Lines(51) }, "actor", CancellationToken.None);
+        Assert.Equal("An agreement can have at most 50 lines.", Assert.Single(refused.Errors));
+        Assert.Empty(db.ServiceAgreementDrafts);
+
+        var saved = await service.SaveAsync(TenantId, participantId, Request("04_104_0125_6_1") with { Lines = Lines(50) }, "actor", CancellationToken.None);
+        Assert.Empty(saved.Errors);
+    }
+
+    [Fact]
     public async Task Twenty_ordinary_service_types_and_a_line_with_ordinary_text_still_save()
     {
         var (db, participantId) = await ImportedDbAsync();

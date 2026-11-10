@@ -106,6 +106,8 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         var allIds = await db.ClaimLineItems.AsNoTracking().Where(l => touched.Contains(l.TripClaimId)).Select(l => l.Id).ToListAsync(ct);
         var rows = await bpr.LoadRowsAsync(t, allIds, ct);
         var wanted = lineIds.ToHashSet();
+        // The row load filters on the line's own nullable TenantId: a named line it misses must not be dropped from the file silently.
+        if (wanted.Any(id => rows.All(r => r.Line.Id != id))) return Fail<ClaimBatch>(404, NotFound);
         var expand = claimIds.ToHashSet();
         var selected = rows.Where(r => wanted.Contains(r.Line.Id)
             || (expand.Contains(r.Claim.Id) && r.PlanType == PlanType.AgencyManaged && r.Line.Status == ClaimLineItemStatus.Draft)).ToList();
@@ -368,7 +370,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         var items = await db.ClaimLineItems.Where(l => lineIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
         var byReference = lines.ToDictionary(l => l.RowReference, StringComparer.Ordinal);
 
-        int successful = 0, rejected = 0, unchanged = 0, leftAlone = 0;
+        int successful = 0, rejected = 0, unchanged = 0, leftAlone = 0, amountDiffers = 0;
         var conflicts = new List<ResultConflictDto>();
         var unknown = new List<string>();
         var touched = new HashSet<Guid>();
@@ -391,6 +393,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
             {
                 successful++;
                 line.ResultAmount = row.Amount;
+                if (row.Amount is { } paidAmount && paidAmount != line.Amount) amountDiffers++;
                 if (moves) item!.Status = ClaimLineItemStatus.Approved;
             }
             else
@@ -415,7 +418,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         await held.CommitAsync(ct);
 
         var summary = await SummaryAsync(t, id, ct);
-        return Done(new ResultsImportDto(successful, rejected, unchanged, leftAlone, conflicts, unknown, parsed.Unread.ToList(), summary.Value!));
+        return Done(new ResultsImportDto(successful, rejected, unchanged, leftAlone, conflicts, unknown, parsed.Unread.ToList(), summary.Value!, amountDiffers));
     });
 
     private static string Describe(ClaimBatchLineOutcome outcome, string? code) => outcome == ClaimBatchLineOutcome.Rejected && code != null ? $"Rejected ({code})" : outcome.ToString();
@@ -432,11 +435,11 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
 
     // ---- paid ----
 
-    public Task<BatchResult<BatchDto>> MarkPaidAsync(Guid t, ClaimsPrincipal user, Guid id, IReadOnlyCollection<PaidLineRequest> requested, CancellationToken ct) => Guard(async () =>
+    public Task<BatchResult<PaidResultDto>> MarkPaidAsync(Guid t, ClaimsPrincipal user, Guid id, IReadOnlyCollection<PaidLineRequest> requested, CancellationToken ct) => Guard(async () =>
     {
         await using var held = await LockBatchAsync(t, ct);
         var batch = await db.ClaimBatches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.TenantId == t, ct);
-        if (batch is null) return Fail<BatchDto>(404, NotFound);
+        if (batch is null) return Fail<PaidResultDto>(404, NotFound);
 
         var lines = await db.ClaimBatchLines.Where(l => l.BatchId == id).ToListAsync(ct);
         var lineIds = lines.Where(l => l.ClaimLineItemId != null).Select(l => l.ClaimLineItemId!.Value).ToList();
@@ -444,14 +447,15 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         await LockClaimsAsync(claimIds, ct);
         var items = await db.ClaimLineItems.Include(l => l.TripClaim).Where(l => lineIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
 
-        if (requested.Select(r => r.BatchLineId).Distinct().Count() < requested.Count) return Fail<BatchDto>(400, "Each line can be marked paid once per request.");
+        if (requested.Select(r => r.BatchLineId).Distinct().Count() < requested.Count) return Fail<PaidResultDto>(400, "Each line can be marked paid once per request.");
         var targets = requested.Count > 0
             ? requested.Select(r => (Request: r, Line: lines.FirstOrDefault(l => l.Id == r.BatchLineId))).ToList()
             : lines.Where(l => l.Outcome == ClaimBatchLineOutcome.Successful && l.ClaimLineItemId is { } cid && items.TryGetValue(cid, out var it) && it.Status == ClaimLineItemStatus.Approved)
                 .Select(l => (Request: new PaidLineRequest(l.Id, null), Line: (ClaimBatchLine?)l)).ToList();
-        if (targets.Count == 0) return Fail<BatchDto>(400, "No accepted lines are waiting to be marked paid.");
+        if (targets.Count == 0) return Fail<PaidResultDto>(400, "No accepted lines are waiting to be marked paid.");
 
         var problems = new List<BuildProblemDto>();
+        var leftOut = new List<PaidLeftOutDto>();
         var paying = new List<(ClaimLineItem Item, decimal Amount)>();
         foreach (var (request, line) in targets)
         {
@@ -466,12 +470,15 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
             var amount = request.Amount ?? line.ResultAmount ?? item.TotalAmount;
             if (PaidAmountRefusal(amount, item.TotalAmount) is { } refusal)
             {
+                // "Mark all" pays what it can at the NDIA amount and hands back the rest to be paid by hand; chosen lines still refuse the request.
+                if (requested.Count == 0) { leftOut.Add(new PaidLeftOutDto(request.BatchLineId, reference, line.ResultAmount, item.TotalAmount)); continue; }
                 problems.Add(new BuildProblemDto(request.BatchLineId, reference, "Amount", refusal));
                 continue;
             }
             paying.Add((item, amount));
         }
-        if (problems.Count > 0) return Fail<BatchDto>(400, $"{problems.Count} line(s) can't be marked paid.", new BuildRefusalDto(problems));
+        if (paying.Count == 0 && leftOut.Count > 0) return Fail<PaidResultDto>(400, "No accepted lines are waiting to be marked paid.");
+        if (problems.Count > 0) return Fail<PaidResultDto>(400, $"{problems.Count} line(s) can't be marked paid.", new BuildRefusalDto(problems));
 
         foreach (var (item, amount) in paying)
         {
@@ -483,7 +490,8 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         Audit("ClaimBatch", id, "Paid", null, $"{paying.Count} lines, ${Money(paying.Sum(p => p.Amount))}", user);
         await db.SaveChangesAsync(ct);
         await held.CommitAsync(ct);
-        return await SummaryAsync(t, id, ct);
+        var summary = await SummaryAsync(t, id, ct);
+        return Done(new PaidResultDto(summary.Value!, leftOut));
     });
 
     // ---- dismiss ----
