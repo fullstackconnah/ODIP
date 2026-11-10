@@ -70,7 +70,7 @@ export function AttentionBand({ items }: { items: BandItem[] }) {
   const styles = bandTileStyles(tiles.length)
 
   return (
-    <section aria-label="Alerts" className="@container">
+    <section aria-label="Alerts" className="@container/band">
       {tiles.length === 0 ? (
         // Every alert at zero is a name in the row. The field ("Nothing needs you") is the PAGE's, drawn only when the whole page is clear.
         <AllClearRow labels={clear} />

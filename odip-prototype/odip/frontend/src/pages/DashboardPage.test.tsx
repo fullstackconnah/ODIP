@@ -482,7 +482,7 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
     showAll()
     renderPage()
 
-    expect(band()).toHaveClass('@container')
+    expect(band()).toHaveClass('@container/band')
     expect(grid().className).toBe(BAND_GRID_CLASS)
     // No auto-fit, no viewport breakpoint: rows are balanced by count and by the band's own width.
     expect(grid().className).not.toMatch(/auto-fit|minmax/)
