@@ -404,6 +404,10 @@ describe('ClaimsHubPage: finish round 2', () => {
     expect(ok.querySelector('[data-pass]')).not.toBeNull()
     expect(bad.querySelector('[data-pass]')).toBeNull()
     expect(bad).toHaveTextContent('The price is over the limit')
+
+    // Hours / qty is hidden at 1280, so Checks keeps a desktop floor (DataTable minWidth, md-only) instead of wrapping to five lines.
+    const cell = [...bad.querySelectorAll('td')].find(td => td.textContent?.includes('The price is over the limit')) as HTMLElement
+    expect(cell.style.getPropertyValue('--col-min')).toBe('16rem')
   })
 
   it('shows delivered dates with a month name, ranges keeping the year', () => {
