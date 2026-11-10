@@ -53,6 +53,11 @@ export function StaffPicker({ target, sheet, onClose, ...body }: StaffPickerProp
   )
 }
 
+/** The picker's body on its own, for a caller that draws it as a page of its own (the group activity modal) instead of a panel or sheet. */
+export function StaffPickerPage({ target, inputRef, ...body }: Omit<StaffPickerProps, 'sheet' | 'onClose'> & { target: ShiftDto; inputRef: RefObject<HTMLInputElement | null> }) {
+  return <PickerBody target={target} {...body} inputRef={inputRef} />
+}
+
 export type SwapPickerProps = {
   /** The assigned shift whose person is swapped. Null: closed. */
   source: ShiftDto | null

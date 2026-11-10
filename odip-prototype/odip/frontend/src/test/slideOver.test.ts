@@ -113,7 +113,7 @@ describe('useDialogBehavior', () => {
   })
 
   it('aria-modal appears only on dialogs that run on the hook', () => {
-    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx']
+    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx', 'pages/rostering/components/GroupActivityModal.tsx']
     expect(offendersOf(text => /aria-modal=/.test(text), allowed)).toEqual([])
     for (const path of allowed) expect(textOf(path), `${path} marks itself modal, so it must run on the hook`).toMatch(/useDialogBehavior\(/)
   })
