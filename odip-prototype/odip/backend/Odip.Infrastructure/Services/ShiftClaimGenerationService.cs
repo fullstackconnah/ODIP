@@ -366,7 +366,9 @@ public partial class ShiftClaimGenerationService
             var clash = outcome.Lines.FirstOrDefault(l => tripClaimByDay.ContainsKey(l.Date));
             if (clash is not null)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"{clash.Date:dd/MM/yyyy} is already on trip claim {tripClaimByDay[clash.Date]}. Reject or cancel that claim to claim this shift.") });
+                // The row already shows the shift's date, so a clash on that day does not repeat it; the after-midnight day is news.
+                var which = clash.Date == shift.ServiceDate ? "It" : FormattableString.Invariant($"{clash.Date:dd/MM/yyyy}");
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{which} is already on trip claim {tripClaimByDay[clash.Date]}. Reject or cancel that claim to claim this shift." });
                 continue;
             }
 

@@ -31,6 +31,7 @@ vi.mock('@/api/hooks', () => ({
   useDeletePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useGeneratePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
   usePatternChange: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCompatibility: () => ({ data: undefined }),
 }))
 
 const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
