@@ -162,7 +162,7 @@ function scanLayout(snapshot, { allow = [] } = {}) {
       if (t.inControls.includes(i)) continue
       const ox = Math.min(c.rect.right, t.rect.right) - Math.max(c.rect.left, t.rect.left)
       const oy = Math.min(c.rect.bottom, t.rect.bottom) - Math.max(c.rect.top, t.rect.top)
-      if (ox > 2 && oy > 2) faults.push({ kind: 'control-over-text', selector: c.selector, detail: { text: t.selector, overlap: { x: Math.round(ox), y: Math.round(oy) } } })
+      if (ox > 2 && oy > 2) faults.push({ kind: 'control-over-text', selector: c.selector, detail: { text: t.selector, overlap: { x: Math.round(ox), y: Math.round(oy) }, control: c.rect, textRect: t.rect } })
     }
   })
   return { faults, allowed }
@@ -171,12 +171,13 @@ function scanLayout(snapshot, { allow = [] } = {}) {
 // kind: inner-scroll | clipped-text | control-over-text. `allow`: CSS selectors of containers meant to scroll sideways.
 export const layoutFaults = (snapshot, opts) => scanLayout(snapshot, opts).faults
 
-// One evaluate inside `root`: skips hidden or sub-2px elements (sr-only), clips text rects to their scrolling/clipping ancestors, excludes the document scrollers (fullPage measures those).
+// One evaluate inside `root`: skips hidden (closed <details>, opacity 0 included) or sub-2px elements (sr-only), cuts text rects down to the part their scrolling/clipping ancestors (a truncate box included) leave visible, excludes the document scrollers (fullPage measures those).
 export function collectLayout(root, allow = []) {
   return root.evaluate((rootEl, allowSel) => {
     const name = (e) => e.tagName.toLowerCase() + (e.id ? `#${e.id}` : '') + [...e.classList].slice(0, 2).map((c) => `.${c}`).join('')
     const box = (r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
-    const seen = (e) => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.visibility !== 'hidden' && s.display !== 'none' && r.width >= 2 && r.height >= 2 }
+    // checkVisibility also drops a closed <details> body (content-visibility: hidden keeps real rects) and opacity 0; Playwright's Chromium always has it
+    const seen = (e) => { const r = e.getBoundingClientRect(); return r.width >= 2 && r.height >= 2 && e.checkVisibility({ opacityProperty: true, visibilityProperty: true }) }
     const all = [rootEl, ...rootEl.querySelectorAll('*')].filter((e) => !['SCRIPT', 'STYLE', 'OPTION', 'HTML', 'BODY'].includes(e.tagName) && seen(e))
     const controls = all.filter((e) => e.matches('button,a[href],[role=button],input,select'))
     const elements = all.map((e) => {
@@ -190,8 +191,9 @@ export function collectLayout(root, allow = []) {
       const range = document.createRange(); range.selectNodeContents(n)
       const clips = clipRects(e)
       for (const r of range.getClientRects()) {
-        if (r.width < 1 || r.height < 1 || clips.some((c) => r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom)) continue
-        texts.push({ selector: name(e), rect: box(r), inControls: controls.flatMap((c, i) => (c.contains(e) ? [i] : [])) })
+        const v = clips.reduce((a, c) => ({ left: Math.max(a.left, c.left), top: Math.max(a.top, c.top), right: Math.min(a.right, c.right), bottom: Math.min(a.bottom, c.bottom) }), box(r))
+        if (r.width < 1 || r.height < 1 || v.right - v.left < 1 || v.bottom - v.top < 1) continue
+        texts.push({ selector: name(e), rect: v, inControls: controls.flatMap((c, i) => (c.contains(e) ? [i] : [])) })
       }
     }
     return { elements, controls: controls.map((c) => ({ selector: name(c), rect: box(c.getBoundingClientRect()) })), texts }
@@ -213,13 +215,19 @@ export async function fullPage(page, file, { touch, allow } = {}) {
   const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
   return withViewport(page, 0, Math.min(h, 4000), touch, async () => {
     await settle(page)
-    const m = await page.evaluate(() => ({ scrollLeft: document.scrollingElement.scrollLeft, scrollWidth: document.scrollingElement.scrollWidth, clientWidth: document.scrollingElement.clientWidth, scrollHeight: document.scrollingElement.scrollHeight }))
+    const m = await page.evaluate(() => {
+      // A fit-screen page (AppLayout's lg:has-[[data-fit-screen]]) re-grows main with the viewport, so its footer stays below the fold: judge main and its vertical scrollers (cut = the most scrollHeight past clientHeight), not the document.
+      const main = document.querySelector('main'), d = document.scrollingElement
+      const fit = matchMedia('(min-width:1024px)').matches && !!main?.querySelector('[data-fit-screen]')
+      const cut = fit ? Math.max(...[main, ...main.querySelectorAll('*')].filter((e) => e === main || /auto|scroll/.test(getComputedStyle(e).overflowY)).map((e) => e.scrollHeight - e.clientHeight)) : 0
+      return { scrollLeft: d.scrollLeft, scrollWidth: d.scrollWidth, clientWidth: d.clientWidth, scrollHeight: d.scrollHeight, fit, cut }
+    })
     const coarse = await isCoarse(page)
     const vh = page.viewportSize().height
     const name = path.basename(file)
     const checks = [
       { name: `no horizontal scroll: ${name}`, pass: m.scrollLeft === 0 && m.scrollWidth <= m.clientWidth, detail: m },
-      { name: `full page not truncated: ${name}`, pass: m.scrollHeight <= vh, detail: { scrollHeight: m.scrollHeight, viewportHeight: vh } },
+      { name: `full page not truncated: ${name}`, pass: m.scrollHeight <= vh || (m.fit && m.cut <= 1), detail: { scrollHeight: m.scrollHeight, viewportHeight: vh, fit: m.fit, cut: m.cut } },
     ]
     if (touch) checks.push({ name: `full page keeps touch emulation: ${name}`, pass: coarse, detail: { coarse } })
     const main = page.locator('main').first()
