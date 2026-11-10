@@ -141,6 +141,15 @@ public class CaregiverController : ControllerBase
         // A date Accept would refuse can never be accepted, so it never reaches staff. A date unchanged from the stored consent is left alone, as on a staff save.
         if (submit && ParticipantGridRules.ConsentDateError(body.Payload.Consents, await ProviderTodayAsync(sub.TenantId, ct), participant.Consents) is { } consentDateError)
             return BadRequest(ApiResponse<object>.Fail(consentDateError));
+        // The same sanitise-and-merge Accept runs, so only what the caregiver changed is checked: a stored value that predates a rule never blocks an untouched field.
+        if (submit)
+        {
+            var effective = CaregiverFieldPolicy.Sanitise(body.Payload, participant);
+            if (body.Base is not null)
+                effective = CaregiverFieldPolicy.MergeAgainstBase(await BuildProjectionAsync(participant, ct), effective, CaregiverFieldPolicy.Sanitise(body.Base, participant));
+            if (ParticipantPatchApplier.GroupError(CaregiverFieldPolicy.Sanitise(effective, participant)) is { } groupError)
+                return BadRequest(ApiResponse<object>.Fail(groupError));
+        }
 
         sub.CaregiverName = body.CaregiverName.Trim();
         sub.CaregiverRelationship = string.IsNullOrWhiteSpace(body.CaregiverRelationship) ? null : body.CaregiverRelationship.Trim();

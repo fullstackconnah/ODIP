@@ -26,6 +26,39 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ParticipantPatchApplier
 {
+    /// <summary>The first problem in the names, gender, phone, email, postcode and MM level groups, or null. Accept runs it through <see cref="ApplyAsync"/>; a caregiver Submit runs it too, so a form Accept would refuse never reaches staff.</summary>
+    public static string? GroupError(PatchParticipantDto dto)
+    {
+        if (dto.PersonalDetails is { } pdValidate)
+        {
+            var transient = new CreateParticipantDto
+            {
+                FirstName = pdValidate.FirstName, LastName = pdValidate.LastName,
+                Gender = pdValidate.Gender, GenderSelfDescription = pdValidate.GenderSelfDescription,
+                Phone = pdValidate.Phone, Email = pdValidate.Email,
+            };
+            var namesError = ValidateNames(transient);
+            if (namesError != null) return namesError;
+            var genderError = ValidateGender(transient);
+            if (genderError != null) return genderError;
+            var phoneError = ValidatePhone(transient);
+            if (phoneError != null) return phoneError;
+            var emailError = ValidateEmail(transient);
+            if (emailError != null) return emailError;
+        }
+
+        if (dto.Address is { } adValidate)
+        {
+            var postcodeError = ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = adValidate.AddressPostcode });
+            if (postcodeError != null) return postcodeError;
+        }
+
+        if (dto.Remoteness is { MmLevel: < 1 or > 7 })
+            return "Choose a level from 1 to 7.";
+
+        return null;
+    }
+
     /// <returns>A validation error message to surface as 400, or null on success (changes saved).</returns>
     public static async Task<string?> ApplyAsync(
         OdipDbContext db,
@@ -45,35 +78,10 @@ public static class ParticipantPatchApplier
         // validator (ServiceProfile, CulturalBackground, BehaviourCommunication,
         // CommunityAccessBehaviour, MealsAndDiet, AboutMe, SupportsLookLike, RisksHazardsSummary)
         // have nothing to check here, matching today's full submit exactly.
-        if (dto.PersonalDetails is { } pdValidate)
-        {
-            var transient = new CreateParticipantDto
-            {
-                FirstName = pdValidate.FirstName, LastName = pdValidate.LastName,
-                Gender = pdValidate.Gender, GenderSelfDescription = pdValidate.GenderSelfDescription,
-                Phone = pdValidate.Phone, Email = pdValidate.Email,
-            };
-            var namesError = ValidateNames(transient);
-            if (namesError != null) return namesError;
-            var genderError = ValidateGender(transient);
-            if (genderError != null) return genderError;
-            var phoneError = ValidatePhone(transient);
-            if (phoneError != null) return phoneError;
-            var emailError = ValidateEmail(transient);
-            if (emailError != null) return emailError;
-        }
+        if (GroupError(dto) is { } groupError) return groupError;
 
         if (dto.PreferredStaff is { } psdValidate && !await IsValidPreferredUserRefAsync(db, psdValidate.PreferredStaffId, ct))
             return "Preferred staff member not found.";
-
-        if (dto.Address is { } adValidate)
-        {
-            var postcodeError = ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = adValidate.AddressPostcode });
-            if (postcodeError != null) return postcodeError;
-        }
-
-        if (dto.Remoteness is { MmLevel: < 1 or > 7 })
-            return "Choose a level from 1 to 7.";
 
         // Only a consent that carries a date needs the provider's today (the caregiver accept path has no request clock, so it uses the system one).
         if (dto.Consents?.Any(c => c.SignedDate.HasValue) == true
