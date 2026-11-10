@@ -124,6 +124,8 @@ export type DialogBehaviorOptions = {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Put focus back on whatever had it when the layer opened, once the layer closes. Default true. */
   returnFocus?: boolean
+  /** Where focus goes on close when the opener is gone (a card that re-rendered away, say). Only used then; default none. */
+  returnTo?: () => HTMLElement | null
 }
 
 /**
@@ -144,12 +146,13 @@ export function useDialogBehavior({
   lockScroll = true,
   initialFocusRef,
   returnFocus = true,
+  returnTo,
 }: DialogBehaviorOptions): void {
   // The stack holds ONE entry per open layer for its whole life, so the latest callbacks are read through a ref instead of
   // re-registering (which would move the layer to the top of the stack) every time the caller re-renders.
-  const latest = useRef({ onClose, closeOnEscape })
+  const latest = useRef({ onClose, closeOnEscape, returnTo })
   useLayoutEffect(() => {
-    latest.current = { onClose, closeOnEscape }
+    latest.current = { onClose, closeOnEscape, returnTo }
   })
 
   // A layout effect, not a passive one: the layer must be on the stack the moment its dialog is in the DOM, or an Escape that
@@ -192,7 +195,7 @@ export function useDialogBehavior({
     // An opener inside the layer itself is no opener to speak of.
     const back = opener && !container?.contains(opener) ? opener : null
     return () => {
-      if (returnFocus && back?.isConnected) back.focus()
+      if (returnFocus) (back?.isConnected ? back : latest.current.returnTo?.())?.focus()
     }
   }, [open, containerRef, initialFocusRef, returnFocus, opener])
 }

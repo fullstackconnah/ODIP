@@ -26,10 +26,13 @@ export const COLLECTION_KEYS: Record<string, string> = {
 // Groups the Key Identifiers step builds but the caregiver cannot see or edit; the server drops them too. Left out, an untouched form equals its base.
 const INTERNAL_GROUPS = ['preferredStaff', 'ndisPlan'] as const
 
+/** Whether the carer form shows the Holiday/STA consents. The wizard's steps and Review read this, and the wire is built with the same value, so a consent is sent only when it is shown. */
+export const STA_VISIBLE = false
+
 /** One PatchParticipantDto for the whole form: every caregiver step's group patch merged. */
-export function buildCaregiverWire(values: ParticipantFormData): PatchParticipantDto {
+export function buildCaregiverWire(values: ParticipantFormData, staVisible = STA_VISIBLE): PatchParticipantDto {
   const wire = PROFILE_STEP_GROUP_KEYS
-    .map((k) => buildProfileStepPatch(k, values, false) ?? {})
+    .map((k) => buildProfileStepPatch(k, values, staVisible) ?? {})
     .reduce((acc, part) => ({ ...acc, ...part }), {} as Record<string, unknown>)
   for (const g of INTERNAL_GROUPS) delete wire[g]
   return wire as PatchParticipantDto

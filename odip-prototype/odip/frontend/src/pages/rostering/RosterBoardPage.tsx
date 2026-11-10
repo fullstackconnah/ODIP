@@ -66,9 +66,10 @@ function focusChipMenu(id: string) {
   document.querySelector<HTMLElement>(`[data-shift-chip="${id}"] button[aria-label^="Actions for"]`)?.focus({ preventScroll: true })
 }
 
-/** Focus on a shift's open control (ShiftChip's data-shift-open): the thing a keyboard drop changed. */
+/** A shift's open control (ShiftChip's data-shift-open): the thing a keyboard drop changed. */
+const shiftOpenControl = (id: string) => document.querySelector<HTMLElement>(`[data-shift-open="${id}"]`)
 function focusShift(id: string) {
-  document.querySelector<HTMLElement>(`[data-shift-open="${id}"]`)?.focus()
+  shiftOpenControl(id)?.focus()
 }
 
 /** What the server reads as "no regular was shown" in a Make or Stop (REV281B). */
@@ -1104,6 +1105,7 @@ export default function RosterBoardPage() {
           lateRefusal={modalLateRefusal}
           onLateRefusalClear={() => setModalLateRefusal(null)}
           onClose={() => { setActivityTarget(null); setModalLateRefusal(null) }}
+          returnTo={() => (activityTarget?.mode === 'new' && activityTarget.fromShift ? shiftOpenControl(activityTarget.fromShift.id) : null)}
         />
       )}
       {groupActivities && (

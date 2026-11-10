@@ -35,7 +35,7 @@ import {
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
   type ParticipantFormData,
 } from '@/lib/participantSchema'
-import { buildCaregiverWire, CAREGIVER_STEP_LABELS } from '@/lib/caregiverPayload'
+import { buildCaregiverWire, CAREGIVER_STEP_LABELS, STA_VISIBLE } from '@/lib/caregiverPayload'
 import { CAREGIVER_INTERNAL_FIELDS } from '@/lib/caregiverFields'
 import { label as fieldLabel, norm as normValue } from '@/lib/caregiverDiff'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -68,7 +68,7 @@ function saveFailure(err: unknown, fallback: string): string {
 }
 
 // What the carer form shows its steps (Holiday/STA consents, How to Help Me notes): the steps get these, and Review reads the same values.
-const STA_VISIBLE = false
+// STA_VISIBLE lives with the payload builder, so what the wire sends follows it.
 const CA_VISIBLE = false
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
@@ -365,6 +365,8 @@ const ROW_NAME_LABELS: Record<string, Record<string, string>> = {
 }
 // A string list's stored codes read as the labels its step shows.
 const LIST_LABELS: Record<string, Record<string, string>> = { hidpaSupportCategories: HIDPA_CATEGORY_LABELS }
+// A Review row title that differs from the staff label: the staff label for consents lists ones the carer is never asked about.
+const REVIEW_LABELS: Record<string, string> = { consents: 'Consents' }
 // A field's Review row shows only while its step shows the field.
 const SHOWN_WHEN: Record<string, (v: Record<string, unknown>) => boolean> = { primaryDiagnosisOther: (v) => v.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL }
 // A row column the carer cannot see is no answer of theirs.
@@ -379,7 +381,8 @@ function reviewList(list: unknown[], names?: Record<string, string>): string {
   if (!all.length) return list.map((s) => names?.[s as string] ?? s).join(', ')
   const rows = all.filter((r) => STA_VISIBLE || !HOLIDAY_STA_CONSENT_TYPES.includes(r.consentType as ConsentType))
   // The edit steps keep a row for every type, so a row only counts when it holds an answer besides its name; shortcut: a stale value left under "No" still counts.
-  const filled = rows.filter((r) => declined(r) || Object.entries(r).some(([k, v]) => !(k in ROW_NAME_LABELS) && !HIDDEN_ROW_COLUMNS.includes(k) && answered(v)))
+  // An ADL row's notes box only shows once a level is picked, so its level is its one answer.
+  const filled = rows.filter((r) => declined(r) || ('adlType' in r ? answered(r.level) : Object.entries(r).some(([k, v]) => !(k in ROW_NAME_LABELS) && !HIDDEN_ROW_COLUMNS.includes(k) && answered(v))))
   const named = filled.flatMap((r) => { const k = Object.keys(ROW_NAME_LABELS).find((c) => c in r); return k ? [`${ROW_NAME_LABELS[k][String(r[k])] ?? String(r[k])}${declined(r) ? ' (declined)' : ''}`] : [] })
   return named.length ? named.join(', ') : filled.length ? `${filled.length} added` : ''
 }
@@ -390,6 +393,6 @@ function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<Caregiver
     stepKey: step.key,
     rows: step.key === 'aboutYou'
       ? [{ label: 'Your name', value: values.caregiverName || '—' }, { label: 'Relationship', value: values.caregiverRelationship || '—' }]
-      : step.fields.filter((f) => !CAREGIVER_INTERNAL_FIELDS.has(String(f)) && (SHOWN_WHEN[String(f)]?.(v) ?? true)).map((f) => ({ label: fieldLabel(String(f)), value: reviewValue(v[f as string], LIST_LABELS[f as string]) })),
+      : step.fields.filter((f) => !CAREGIVER_INTERNAL_FIELDS.has(String(f)) && (SHOWN_WHEN[String(f)]?.(v) ?? true)).map((f) => ({ label: REVIEW_LABELS[String(f)] ?? fieldLabel(String(f)), value: reviewValue(v[f as string], LIST_LABELS[f as string]) })),
   }))
 }
