@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { DataTable, RowMenu } from './DataTable'
 import type { Column } from './DataTable'
@@ -303,13 +304,46 @@ describe('DataTable — hideWhenEmpty and overlay columns', () => {
 })
 
 describe('RowMenu: a disabled item keeps its reason', () => {
-  it('shows it disabled with the reason as its title, and never runs it', () => {
+  const disabledItem = (onSelect: () => void, description?: string) => [{ label: 'Generate shifts', icon: <span />, onSelect, disabled: true, description }]
+
+  it('stays in the tab order as aria-disabled, with the reason as its description and title, and never runs it', async () => {
     const onSelect = vi.fn()
-    render(<MemoryRouter><RowMenu name="Pat" items={[{ label: 'Generate shifts', icon: <span />, onSelect, disabled: true, description: 'Activate the pattern first' }]} /></MemoryRouter>)
+    render(<MemoryRouter><RowMenu name="Pat" items={disabledItem(onSelect, 'Activate the pattern first')} /></MemoryRouter>)
     const button = screen.getAllByRole('button', { name: 'Generate shifts' })[0]
-    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).not.toBeDisabled()
+    expect(button).toHaveAccessibleDescription('Activate the pattern first')
     expect(button).toHaveAttribute('title', 'Activate the pattern first')
+    button.focus()
+    expect(button).toHaveFocus()
     button.click()
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('dims only the icon, so the focus ring keeps full strength, and shows no hover wash', () => {
+    render(<MemoryRouter><RowMenu name="Pat" items={disabledItem(vi.fn(), 'Activate the pattern first')} /></MemoryRouter>)
+    const classes = screen.getAllByRole('button', { name: 'Generate shifts' })[0].className.split(/\s+/)
+    expect(classes).toContain('aria-disabled:[&>svg]:opacity-50')
+    expect(classes).toContain('aria-disabled:hover:bg-transparent')
+    expect(classes).not.toContain('aria-disabled:opacity-50')
+  })
+
+  it('gives a disabled item with no reason no description', () => {
+    render(<MemoryRouter><RowMenu name="Pat" items={disabledItem(vi.fn())} /></MemoryRouter>)
+    const button = screen.getAllByRole('button', { name: 'Generate shifts' })[0]
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('leaves an enabled item as it was: not aria-disabled, no description, and it runs', () => {
+    const onSelect = vi.fn()
+    render(<MemoryRouter><RowMenu name="Pat" items={[{ label: 'Edit', icon: <span />, onSelect, description: 'Edit it' }]} /></MemoryRouter>)
+    const button = screen.getAllByRole('button', { name: 'Edit' })[0]
+    expect(button).not.toHaveAttribute('aria-disabled')
+    expect(button).not.toHaveAttribute('aria-describedby')
+    button.click()
+    expect(onSelect).toHaveBeenCalledTimes(1)
   })
 })

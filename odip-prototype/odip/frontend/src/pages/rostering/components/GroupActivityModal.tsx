@@ -42,6 +42,8 @@ export type GroupActivityModalProps = {
   lateRefusal?: string | null
   onLateRefusalClear?: () => void
   onClose: () => void
+  /** Where focus goes on close when the opener is gone: the menu that started this modal unmounts, so the board names the chip. */
+  returnTo?: () => HTMLElement | null
 }
 
 type Form = { title: string; activityId: string; serviceDate: string; startTime: string; endTime: string; endsNextDay: boolean; serviceLocationId: string; location: string; minStaff: string; notes: string }
@@ -78,7 +80,7 @@ const minStaffInvalid = (v: string) => v.trim() !== '' && !(Number.isInteger(Num
  * The group-activity sheet (SHAPE direction B): an overview of four rows, each opening its own page. Below lg one pane shows at a time; from lg the overview is a left column and the open page sits beside it.
  * Create walks the same pages (What and when, People, Staff). Fields save per page; participants and staff are immediate writes. The parent keys it by target.
  */
-export function GroupActivityModal({ target, canWrite, participants, pickerData, boardShifts, onAddStaff, lateRefusal, onLateRefusalClear, onClose }: GroupActivityModalProps) {
+export function GroupActivityModal({ target, canWrite, participants, pickerData, boardShifts, onAddStaff, lateRefusal, onLateRefusalClear, onClose, returnTo }: GroupActivityModalProps) {
   const open = target !== null
   const [savedId, setSavedId] = useState<string | null>(null)
   const id = target?.mode === 'edit' ? target.id : savedId
@@ -162,7 +164,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const openPage = (p: PageId) => { if (!PARENT[p]) lastRow.current = p; setPage(p) }
   const back = () => setPage(shown && PARENT[shown] ? PARENT[shown]! : null)
   useDialogBehavior({
-    open, containerRef: dialogRef, initialFocusRef: titleRef,
+    open, containerRef: dialogRef, initialFocusRef: titleRef, returnTo,
     onClose: () => { if (page && !isNew && (!wide || PARENT[page])) back(); else requestClose() },
   })
 
