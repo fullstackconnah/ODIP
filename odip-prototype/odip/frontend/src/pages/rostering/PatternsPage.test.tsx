@@ -359,7 +359,8 @@ describe('PatternsPage — row actions keep their touch areas apart', () => {
     render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     const generate = screen.getByRole('button', { name: /^Generate shifts for / })
-    expect(generate).toBeDisabled()
+    expect(generate).toHaveAttribute('aria-disabled', 'true')
+    expect(generate).toHaveAccessibleDescription('Inactive patterns generate nothing')
     expect(generate).toHaveAttribute('title', 'Inactive patterns generate nothing')
   })
 

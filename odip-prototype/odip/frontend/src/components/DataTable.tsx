@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, type RefObject, Children, Fragment, useState, useMemo, useRef, useEffect } from 'react'
+import { type CSSProperties, type ReactNode, type RefObject, Children, Fragment, useState, useMemo, useRef, useEffect, useId } from 'react'
 import { formatDateAu, formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Check, MoreHorizontal } from 'lucide-react'
@@ -845,7 +845,7 @@ export function RowActions({ children, overlay = false, className = '' }: { chil
   )
 }
 
-/** `disabled` keeps the item visible with its reason in `description` (the icon's title from md up, the menu line on a phone). */
+/** `disabled` keeps the item visible with its reason in `description` (from md up the icon's title and its accessible description, on a phone the menu line). */
 export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => void; to?: string; disabled?: boolean; description?: string; /** Tints the item with the destructive colour (a delete); archive stays neutral. */ danger?: boolean; /** The icon button's accessible name when the label alone would not tell two rows apart. */ ariaLabel?: string }
 
 /**
@@ -855,15 +855,20 @@ export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => voi
  */
 export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string }) {
   const navigate = useNavigate()
+  const reasonId = useId()
   if (items.length === 0) return null
   const run = (item: RowMenuItem) => (item.to ? navigate(item.to) : item.onSelect?.())
   return (
     <>
       <RowActions overlay className="max-md:hidden">
-        {items.map(item => item.to ? (
+        {items.map((item, index) => item.to ? (
           <Button key={item.label} to={item.to} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.ariaLabel ?? item.label} onClick={e => e.stopPropagation()}>{item.icon}</Button>
         ) : (
-          <Button key={item.label} variant={item.danger ? 'ghost-danger' : 'ghost'} size="sm" iconOnly title={item.disabled && item.description ? item.description : item.label} aria-label={item.ariaLabel ?? item.label} disabled={item.disabled} onClick={e => { e.stopPropagation(); item.onSelect?.() }}>{item.icon}</Button>
+          // aria-disabled, not disabled: the button stays focusable and its reason is read as the description (a native disabled one is skipped by Tab and has none). Only the icon dims: opacity on the button would dim its focus ring under 3:1.
+          <Button key={item.label} variant={item.danger ? 'ghost-danger' : 'ghost'} size="sm" iconOnly className="aria-disabled:[&>svg]:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:cursor-not-allowed" title={item.disabled && item.description ? item.description : item.label} aria-label={item.ariaLabel ?? item.label} aria-disabled={item.disabled || undefined} aria-describedby={item.disabled && item.description ? `${reasonId}-${index}` : undefined} onClick={e => { e.stopPropagation(); if (!item.disabled) item.onSelect?.() }}>
+            {item.icon}
+            {item.disabled && item.description && <span id={`${reasonId}-${index}`} className="sr-only">{item.description}</span>}
+          </Button>
         ))}
       </RowActions>
       {/* The panel is portalled, but React still bubbles its events to the row: keep a row that opens on click from opening. */}
