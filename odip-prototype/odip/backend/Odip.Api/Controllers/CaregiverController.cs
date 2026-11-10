@@ -158,6 +158,17 @@ public class CaregiverController : ControllerBase
                 }));
         }
 
+        // Submit claims the Draft row first (Draft to Submitted in one statement), so a staff revoke or a second Submit that committed since the load wins and nothing here is saved.
+        await using var tx = submit && _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (submit && !await ClaimSubmitAsync(sub.Id, ct))
+        {
+            var now = await _db.CaregiverProfileSubmissions.AsNoTracking().IgnoreQueryFilters([TenantFilter.Name])
+                .Where(x => x.Id == sub.Id).Select(x => x.Status).FirstAsync(ct);
+            return now == CaregiverSubmissionStatus.Revoked
+                ? NotFound(ApiResponse<object>.Fail(NotFoundMessage))
+                : Conflict(ApiResponse<object>.Fail("This form has already been submitted and is awaiting review."));
+        }
+
         sub.CaregiverName = body.CaregiverName.Trim();
         sub.CaregiverRelationship = string.IsNullOrWhiteSpace(body.CaregiverRelationship) ? null : body.CaregiverRelationship.Trim();
         sub.Payload = JsonSerializer.Serialize(body.Payload, Json);
@@ -190,8 +201,16 @@ public class CaregiverController : ControllerBase
         // Attribute the audit row to the caregiver — there is no authenticated principal here.
         HttpContext.Items[AuditInterceptor.ActorItemKey] = $"caregiver:{sub.CaregiverName}";
         await _db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return NoContent();
     }
+
+    /// <summary>Compare-and-set Draft to Submitted. EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the earlier status check stands alone there.</summary>
+    private async Task<bool> ClaimSubmitAsync(Guid id, CancellationToken ct) =>
+        !_db.Database.IsRelational()
+        || await _db.CaregiverProfileSubmissions.IgnoreQueryFilters([TenantFilter.Name])
+            .Where(x => x.Id == id && x.Status == CaregiverSubmissionStatus.Draft)
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, CaregiverSubmissionStatus.Submitted), ct) == 1;
 
     private async Task<JsonObject> BuildProjectionAsync(Participant p, CancellationToken ct) =>
         CaregiverFieldPolicy.BuildProjection(await ParticipantDetailMapper.ToDetailDtoAsync(_db, p, ct));

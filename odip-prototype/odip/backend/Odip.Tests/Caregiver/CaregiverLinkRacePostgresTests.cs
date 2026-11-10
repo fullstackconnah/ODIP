@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Audit;
@@ -163,5 +164,113 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
 
         var changes = Assert.Single(await RevokeAuditChangesAsync(id));
         Assert.Contains("Revoked", changes);
+    }
+
+    // PB66-O1: a caregiver Submit claims the Draft first, so a revoke or another Submit that committed since the load is never overwritten.
+    private const string OriginalPayload = "{\"original\": true}";
+
+    private async Task<(Guid TenantId, Guid SubmissionId, string Token)> SeedCaregiverAsync()
+    {
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        await using (seed)
+        {
+            var raw = CaregiverTokenService.GenerateRawToken();
+            var p = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+            var s = new CaregiverProfileSubmission
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, TokenHash = CaregiverTokenService.Hash(raw),
+                Status = CaregiverSubmissionStatus.Draft, CreatedByUserId = Guid.NewGuid(), ExpiresAt = DateTime.UtcNow.AddDays(14), Payload = OriginalPayload,
+            };
+            seed.Participants.Add(p);
+            seed.CaregiverProfileSubmissions.Add(s);
+            seed.Users.Add(new User { Id = Guid.NewGuid(), TenantId = tenantId, Username = "admin" + Guid.NewGuid().ToString("N"), Email = Guid.NewGuid().ToString("N") + "@example.test", FirstName = "A", LastName = "B", Role = UserRole.Admin, IsActive = true });
+            await seed.SaveChangesAsync();
+            return (tenantId, s.Id, raw);
+        }
+    }
+
+    private static CaregiverController CaregiverFor(OdipDbContext db)
+    {
+        var http = new DefaultHttpContext();
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(http);
+        return new CaregiverController(db, accessor.Object) { ControllerContext = new ControllerContext { HttpContext = http } };
+    }
+
+    private static CaregiverDraftDto SubmitBody(string name) => new() { CaregiverName = name, Payload = new PatchParticipantDto() };
+
+    /// <summary>The public route has no ambient tenant.</summary>
+    private OdipDbContext AnonymousDb(Func<Task>? otherCommits = null, bool audited = false)
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString);
+        if (otherCommits != null) options.AddInterceptors(new OtherPartyCommitsFirst(otherCommits));
+        if (audited) options.AddInterceptors(new AuditInterceptor(new HttpContextAccessor()));
+        return new OdipDbContext(options.Options, tenant.Object);
+    }
+
+    private async Task<(CaregiverSubmissionStatus Status, string? Payload, string? Name, int Notifications, int Audits)> StateAsync(Guid id)
+    {
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString);
+        var row = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == id);
+        var notices = await db.NotificationOutbox.IgnoreQueryFilters().CountAsync(o => o.EntityId == id);
+        var audits = await db.AuditLogs.IgnoreQueryFilters().CountAsync(a => a.EntityId == id && a.EntityType == nameof(CaregiverProfileSubmission) && a.Action == AuditAction.Updated);
+        return (row.Status, row.Payload, row.CaregiverName, notices, audits);
+    }
+
+    [SkippableFact]
+    public async Task Submit_WhenStaffRevokeCommitsFirst_Answers404_TheFormStaysRevokedAndNothingIsStored()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (_, id, token) = await SeedCaregiverAsync();
+        await using var db = AnonymousDb(async () =>
+        {
+            await using var other = PostgresFixture.NewContext(_pg.ConnectionString);
+            await other.CaregiverProfileSubmissions.IgnoreQueryFilters().Where(x => x.Id == id).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, CaregiverSubmissionStatus.Revoked));
+        });
+
+        Assert.IsType<NotFoundObjectResult>(await CaregiverFor(db).Submit(token, SubmitBody("Jane Smith"), CancellationToken.None));
+
+        var state = await StateAsync(id);
+        Assert.Equal(CaregiverSubmissionStatus.Revoked, state.Status);
+        Assert.Equal(OriginalPayload, state.Payload);
+        Assert.Null(state.Name);
+        Assert.Equal(0, state.Notifications);
+    }
+
+    [SkippableFact]
+    public async Task Submit_WhenAnotherSubmitCommitsFirst_Answers409_TheFormStaysSubmittedWithOneNotification()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (_, id, token) = await SeedCaregiverAsync();
+        await using var db = AnonymousDb(async () =>
+        {
+            await using var other = AnonymousDb();
+            Assert.IsType<NoContentResult>(await CaregiverFor(other).Submit(token, SubmitBody("First Caregiver"), CancellationToken.None));
+        });
+
+        Assert.IsType<ConflictObjectResult>(await CaregiverFor(db).Submit(token, SubmitBody("Second Caregiver"), CancellationToken.None));
+
+        var state = await StateAsync(id);
+        Assert.Equal(CaregiverSubmissionStatus.Submitted, state.Status);
+        Assert.Equal("First Caregiver", state.Name);
+        Assert.Equal(1, state.Notifications);
+    }
+
+    [SkippableFact]
+    public async Task Submit_OnADraft_Succeeds_SetsSubmittedAndWritesAnAuditRow()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (_, id, token) = await SeedCaregiverAsync();
+        await using var db = AnonymousDb(audited: true);
+
+        Assert.IsType<NoContentResult>(await CaregiverFor(db).Submit(token, SubmitBody("Jane Smith"), CancellationToken.None));
+
+        var state = await StateAsync(id);
+        Assert.Equal(CaregiverSubmissionStatus.Submitted, state.Status);
+        Assert.Equal(1, state.Notifications);
+        Assert.Equal(1, state.Audits);
     }
 }
