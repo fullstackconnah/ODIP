@@ -176,8 +176,12 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
 // figure and the wash are tinted, and the dark band is a gentle wash on the card, not a solid maroon. The glance strip's compact tile keeps the solid pair
 // (ATTENTION_LOOK). Colour is never the only cue: the number, the label and the line each say it in words.
 // The warning wash is the container at 50%: the tone's own soft wash IS the solid container, which would be the glance strip's fill.
+// The tile is its own size container (`tile`): 3 or 4 tiles share a row of a wide band, so the band's width says nothing about how much room one tile has. The row is three
+// tracks (figure, text, link); a tile under 36rem in a band that shows the line moves the link to a second row, under the text (the `fold` variants on the text and the link).
+// 36rem: border + padding + figure + gaps + the 12rem text column + the longest link ("Review NDIS Commission reports", about 270px) come to about 34rem.
+// shortcut: that sum assumes the longest link label is about 30 characters, so a longer label needs a larger threshold here and on the text and link.
 const ACTION_TILE =
-  'relative flex min-w-0 items-center gap-3 rounded-md border border-[var(--color-border)] p-[var(--card-pad)] text-[var(--color-foreground)] transition-opacity has-[a:hover]:opacity-90'
+  '@container/tile relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] content-center items-center gap-x-3 gap-y-1 rounded-md border border-[var(--color-border)] p-[var(--card-pad)] text-[var(--color-foreground)] transition-opacity has-[a:hover]:opacity-90'
 const ACTION_WASH: Record<'quiet' | Attention, string> = {
   quiet: 'bg-[var(--color-card)] text-[var(--color-muted-foreground)]',
   warning: 'bg-[var(--color-warning-container)]/50',
@@ -188,7 +192,8 @@ const ACTION_WASH: Record<'quiet' | Attention, string> = {
 // tasks"). The focus ring is drawn on that pseudo-element for the same reason: it surrounds the tile, not just the words. `--tap-min` floors the link's own
 // box at 44px on touch.
 const ACTION_LINK =
-  'ml-auto inline-flex min-h-[var(--tap-min)] shrink-0 items-center gap-0.5 text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
+  'inline-flex min-h-[var(--tap-min)] items-center gap-0.5 text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
+  '@min-[36rem]/band:@max-[36rem]/tile:col-[2/-1] @min-[36rem]/band:@max-[36rem]/tile:row-start-2 ' +
   'after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-[var(--color-ring)]'
 
 function ActionTile({ label, value, className, tone = 'neutral', detail, action }: StatCardProps & { action: StatCardAction }) {
@@ -200,13 +205,13 @@ function ActionTile({ label, value, className, tone = 'neutral', detail, action 
     <div role="group" aria-label={`${label} ${value}`} data-attention={attention} className={classes}>
       <span className={`text-display tabular-nums ${attention ? TONE[tone].ink : ''}`.trim()}>{value}</span>
       {/* In a band under 36rem (a phone: one tile a row) the line folds away and the link's words become its name only; the link still covers the tile.
-          Seven tiles ran about 1300px there before any trip showed. */}
-      <div className="flex min-w-0 flex-1 flex-col">
+          Seven tiles ran about 1300px there before any trip showed. Those two rules name the band, because a bare container query now means the tile. */}
+      <div className="flex min-w-0 flex-col @min-[36rem]/band:@max-[36rem]/tile:col-[2/-1]">
         <span className="text-sm font-semibold leading-tight">{label}</span>
-        {detail && <span className="text-[13px] leading-snug text-balance @max-[36rem]:hidden">{detail}</span>}
+        {detail && <span className="text-[13px] leading-snug text-balance @max-[36rem]/band:hidden">{detail}</span>}
       </div>
       <Link to={action.to} className={ACTION_LINK}>
-        <span className="@max-[36rem]:sr-only">{action.label}</span>
+        <span className="@max-[36rem]/band:sr-only">{action.label}</span>
         <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
       </Link>
     </div>

@@ -35,7 +35,7 @@ describe('AttentionBand — what is a tile', () => {
     renderBand(FOUR)
 
     expect(screen.getAllByRole('region')).toHaveLength(1)
-    expect(band()).toHaveClass('@container')
+    expect(band()).toHaveClass('@container/band')
   })
 
   it('makes a tile of each item above zero, in the order given, and of nothing else', () => {
