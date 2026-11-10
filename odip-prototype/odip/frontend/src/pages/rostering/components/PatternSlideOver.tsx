@@ -6,7 +6,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { useCreatePattern, useUpdatePattern, useDeletePattern, usePatternChange } from '@/api/hooks'
+import { useCreatePattern, useUpdatePattern, useDeletePattern, usePatternChange, useCompatibility } from '@/api/hooks'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { buttonClasses } from '@/components/buttonClasses'
@@ -21,6 +21,7 @@ import { addDays } from '@/lib/planQuote'
 import { formatServiceDate } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
+import { compatibleStaffItems } from '../lib/compatibilityOrder'
 import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 
 export type PatternSlideOverTarget =
@@ -129,6 +130,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const updatePattern = useUpdatePattern()
   const deletePattern = useDeletePattern()
   const changePattern = usePatternChange()
+  // A worker marked No for this participant can't be rostered (R8): greyed out in the Regular list, as in a shift's Staff list. The one already on the pattern stays pickable.
+  const { data: compatibilityRows = [] } = useCompatibility(participantId || undefined)
 
   if (!open) return null
 
@@ -318,7 +321,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
             onChange={v => setDefaultStaffId(v || null)}
             disabled={!canWrite}
             placeholder="Unassigned"
-            items={[{ value: '', label: 'Unassigned' }, ...staffOptions]}
+            items={[{ value: '', label: 'Unassigned' }, ...compatibleStaffItems(staffOptions, compatibilityRows, existing?.defaultStaffId)]}
           />
         </FormField>
 

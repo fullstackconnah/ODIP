@@ -12,7 +12,7 @@ import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { RefreshBoardAction } from './RefreshBoardAction'
-import { compareCompatibility } from '../lib/compatibilityOrder'
+import { compatibleStaffItems, tierPlace } from '../lib/compatibilityOrder'
 import { BOARD_REFRESHED, moveGoneSentence } from '../lib/boardChanged'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RequirementChips } from '@/components/RequirementChips'
@@ -99,9 +99,6 @@ const BUDGET_REASON_COPY = {
   placeholder: 'Why this shift should go ahead over budget',
   error: 'Add a reason to save this shift over budget.',
 } as const
-
-/** "Backup #2" for a ranked tier, the bare level for an unranked one. */
-const tierPlace = (level: string, rank: number) => (rank > 0 ? `${level} #${rank}` : level)
 
 export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, loadFailed, groupBy = 'participant', participantReadiness, participantsNote, onMakeActivity, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
@@ -215,23 +212,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     compatibilityRows.forEach(row => map.set(row.staffId, { level: row.level, rank: row.rank, reason: row.reason }))
     return map
   }, [compatibilityRows])
-  const sortedStaffOptions: DropdownItem[] = useMemo(() => {
-    return staffOptions
-      .map(option => {
-        const compat = compatibilityByStaffId.get(option.value)
-        const level = compat?.level
-        return {
-          ...option,
-          description: compat && (level === 'Preferred' || level === 'Backup' || level === 'Emergency') ? `${tierPlace(level, compat.rank)} for this participant`
-            : level === 'Excluded' ? 'Can’t be rostered: marked No for this participant'
-            : undefined,
-          // The worker already on this shift stays pickable so the field keeps showing them; the server still lets the shift be reassigned, unassigned or cancelled.
-          disabled: (level === 'Excluded' && option.value !== existing?.staffId),
-        }
-      })
-      // The one order (lib/compatibilityOrder): tiers by rank, unlisted, No last. The name tiebreak is the caller's own order, kept by the stable sort.
-      .sort((a, b) => compareCompatibility({ ...compatibilityByStaffId.get(a.value), name: '' }, { ...compatibilityByStaffId.get(b.value), name: '' }))
-  }, [staffOptions, compatibilityByStaffId, existing?.staffId])
+  // The worker already on this shift stays pickable (keepStaffId); an Excluded one is greyed out. The same picker items as a pattern's Regular.
+  const sortedStaffOptions: DropdownItem[] = useMemo(() => compatibleStaffItems(staffOptions, compatibilityRows, existing?.staffId), [staffOptions, compatibilityRows, existing?.staffId])
   const selectedStaffCompatibility = staffId ? compatibilityByStaffId.get(staffId) : undefined
   const selectedStaffLabel = staffOptions.find(s => s.value === staffId)?.label ?? 'This staff member'
   const relevantRoutines = participantId && serviceDate && startTime && endTime
