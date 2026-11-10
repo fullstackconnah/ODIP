@@ -54,9 +54,11 @@ import { extractErrorMessage } from '@/lib/utils'
 import { Wordmark } from '@/components/Wordmark'
 import { CaregiverProgress } from './CaregiverProgress'
 
-/** The server's own words for a refusal (a 400 names the limit that was passed); anything else keeps the plain line, so this public page shows no internals. */
+/** The server's own words for a refusal (a 400 names the limit that was passed, a 409 says the form is already in); a 404 is our own sentence, which names a next step like InvalidLinkPage does; anything else keeps the plain line, so this public page shows no internals. */
 function saveFailure(err: unknown, fallback: string): string {
-  return (err as { response?: { status?: number } })?.response?.status === 400 ? extractErrorMessage(err, fallback) : fallback
+  const status = (err as { response?: { status?: number } })?.response?.status
+  if (status === 404) return 'This link is no longer valid. Please contact the person who sent it to you.'
+  return [400, 409].includes(status ?? 0) ? extractErrorMessage(err, fallback) : fallback
 }
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
@@ -275,7 +277,7 @@ export default function CaregiverWizardPage() {
           summaryOwnRow={!!saveError}
           summary={
             <div className="text-sm">
-              {saveError && <p role="alert" className="text-[var(--color-destructive)]">{saveError}</p>}
+              {saveError && <p role="alert" className="text-pretty text-[var(--color-destructive)]">{saveError}</p>}
               {/* Always mounted: screen readers announce a change inside a live region, not a region inserted already filled. */}
               <p role="status">{progressSaved ? 'Progress saved. Open this link again to carry on.' : ''}</p>
             </div>
