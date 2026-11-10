@@ -1,6 +1,7 @@
 // PB68-D2: the public caregiver form's Submit answered 404 / 409 / 500. Numeric: the server's own sentence shows in a role=alert for 409, our own next-step sentence (PB69-F1) for 404, the plain fallback for 500, the alert is
 // destructive coloured, no server internals show, no horizontal scroll, and at touch Submit is at least --tap-min (44). The API calls are answered in the script (no caregiver routes in the mock).
 // PB70-F4: the Review step reads yes/no answers as Yes or No, every row label is a human label, and no value is wider than its row or has a word split across lines (`review-step`).
+// PB70 fix 1: a list or collection reads as words (never [ or {), the two staff-only rows are gone, and a long free-text value takes the full row, left aligned.
 // PB70-D1: a 409 on Submit reloads the form; when the reload says Submitted the page shows its submitted view, not the form and the alert (`submit-409-moved`).
 // Exit 1 on any failed check.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/caregiver-submit-errors.mjs <outdir>
@@ -28,8 +29,10 @@ const VIEWPORTS = [
   { name: 'touch-390', width: 390, height: 844, touch: true },
 ]
 const form = { status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2099-01-01T00:00:00Z', rejectionNote: null, providerName: 'Ability Options', current: { firstName: 'Sophie', lastName: 'Rivers' }, editable: [], draft: null }
+const goalsText = 'Learn to catch the bus on my own, shop for the week and cook two simple meals without a support worker.'
 // A boolean false (DSOA), a tri-state true (anaphylaxis) and an "Other" diagnosis with its typed text: the three rows that used to show `false`, `true` and a raw key.
-const reviewForm = { ...form, current: { ...form.current, isDsoa: false, isAnaphylaxisRisk: true, primaryDiagnosis: 'Other — specify', primaryDiagnosisOther: 'Rare condition' } }
+// Plus a string list, one health condition and a 100-character Goals value: the rows that showed JSON or sat as a ragged right-aligned block.
+const reviewForm = { ...form, current: { ...form.current, isDsoa: false, isAnaphylaxisRisk: true, primaryDiagnosis: 'Other — specify', primaryDiagnosisOther: 'Rare condition', mobilitySupportOptions: ['Wheelchair', 'Walking frame'], healthConditions: [{ conditionType: 'Epilepsy', has: true }], goals: goalsText } }
 const overflowX = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 const destructiveColour = (page) => page.evaluate(() => { const p = document.createElement('i'); p.style.color = 'var(--color-destructive)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c })
 
@@ -81,6 +84,11 @@ const reviewRows = (page) => page.evaluate(() => {
     dsoa: valueOf('Disability Support for Older Australians (DSOA)'),
     anaphylaxis: valueOf('Anaphylaxis Risk'),
     other: valueOf('Specify Primary Diagnosis'),
+    braces: rows.filter((r) => /[[{]/.test(r.dd.textContent)).map((r) => r.dt.textContent),
+    internal: rows.filter((r) => ['Preferred Staff Member', 'Behaviour Risk Rating'].includes(r.dt.textContent.trim())).map((r) => r.dt.textContent),
+    mobility: valueOf('Mobility Support Options'),
+    conditions: valueOf('Health Conditions (structured grid)'),
+    goals: (() => { const g = rows.find((r) => r.dt.textContent.trim() === 'Goals'); if (!g) return null; return { align: getComputedStyle(g.dd).textAlign, ratio: g.dd.getBoundingClientRect().width / g.row.getBoundingClientRect().width, text: g.dd.textContent.trim() } })(),
     dsoaWrapped: dsoa ? dsoa.dd.getBoundingClientRect().top > dsoa.dt.getBoundingClientRect().top + 1 : null,
   }
 })
@@ -135,6 +143,12 @@ try {
       check(`${tag}: no value reads true or false`, r.rawBooleans.length === 0, r.rawBooleans.join(', '))
       check(`${tag}: no value or label is wider than its row`, r.wide.length === 0, r.wide.join(', '))
       check(`${tag}: no word is split across lines`, r.splitWords.length === 0, r.splitWords.join(', '))
+      check(`${tag}: no value contains [ or {`, r.braces.length === 0, r.braces.join(', '))
+      check(`${tag}: the staff-only rows are not listed`, r.internal.length === 0, r.internal.join(', '))
+      check(`${tag}: the string list reads Wheelchair, Walking frame`, r.mobility === 'Wheelchair, Walking frame', r.mobility)
+      check(`${tag}: the health condition reads Epilepsy`, r.conditions === 'Epilepsy', r.conditions)
+      check(`${tag}: the long Goals value is left aligned`, ['left', 'start'].includes(r.goals?.align), r.goals?.align)
+      check(`${tag}: the long Goals value takes at least 90% of its row`, (r.goals?.ratio ?? 0) >= 0.9, r.goals?.ratio)
       console.log(`INFO ${tag}: DSOA value wrapped under its label = ${r.dsoaWrapped}`)
       check(`${tag}: no horizontal scroll`, (await overflowX(page)) <= 0, await overflowX(page))
       await cropWith(page, cardOf(page, 'Key Identifiers'), path.join(OUT_DIR, `review-step-${vp.name}.png`))

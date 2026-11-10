@@ -355,6 +355,38 @@ describe('CaregiverWizardPage — Review step (PP-6)', () => {
     for (const term of screen.getAllByRole('term')) expect(term.textContent).not.toMatch(/^[a-z]+[A-Z]/)
     for (const value of screen.getAllByRole('definition')) expect(value.textContent).not.toMatch(/^(true|false)$/)
   })
+
+  // PB70-F1 and fix round 1 — the Review step listed staff-only rows, and read a list or collection answer as JSON.
+  it('leaves out the staff-only rows and reads a list or a collection as words, never JSON', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto({
+        current: {
+          firstName: 'Sophie', lastName: 'Rivers',
+          mobilitySupportOptions: ['Wheelchair', 'Walking frame'],
+          healthConditions: [{ conditionType: 'Epilepsy', has: true }, { conditionType: 'Asthma', has: false }],
+          adlAssessments: [{ adlType: 'Dressing', level: 'Independent' }, { adlType: 'Bathing', level: 'Supervision' }, { adlType: 'Grooming', level: '' }],
+          goals: 'Learn to catch the bus on my own and shop for the week without a support worker.',
+        },
+      }),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+
+    const valueOf = (label: string) => screen.getByText(label).nextElementSibling
+    expect(screen.queryByText('Preferred Staff Member')).not.toBeInTheDocument()
+    expect(screen.queryByText('Behaviour Risk Rating')).not.toBeInTheDocument()
+    expect(valueOf('Mobility Support Options')).toHaveTextContent(/^Wheelchair, Walking frame$/)
+    expect(valueOf('Health Conditions (structured grid)')).toHaveTextContent(/^Epilepsy$/)
+    expect(valueOf('ADL Ratings (Personal + Community/Domestic, structured grid)')).toHaveTextContent(/^Dressing, Bathing \/ Showering$/)
+    for (const value of screen.getAllByRole('definition')) expect(value.textContent).not.toMatch(/[[{]/)
+  })
 })
 
 // Task 6 — the route is registered as a sibling of /login, outside the authenticated app shell

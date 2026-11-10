@@ -398,5 +398,6 @@ describe('CaregiverWizardPage - a refused Submit or save', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('This link is no longer valid. Please contact the person who sent it to you.')
     expect(mockGet.mock.calls.length).toBe(getsBefore)
     expect(screen.queryByText(/your form has been submitted/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
   })
 })
