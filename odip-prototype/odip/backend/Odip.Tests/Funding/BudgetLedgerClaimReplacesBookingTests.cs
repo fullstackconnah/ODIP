@@ -2,6 +2,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Funding.LedgerKit;
@@ -355,6 +356,24 @@ public class BudgetLedgerClaimReplacesBookingTests
             Assert.Equal(0m, current.BookedAhead);              // the booking is gone, wherever the line lands
             Assert.Equal(0m, current.Pending);
             Assert.Equal(480m, later.Pending);                  // counted by the line's own service date
+        }
+    }
+
+    // H75-1: the trip claim run leaves out a participant with a live shift claim line on a trip day, so the forecast must not count that booking either.
+    [Theory]
+    [InlineData(TripClaimStatus.Draft, true)]
+    [InlineData(TripClaimStatus.Rejected, false)]
+    public async Task ABookingWhoseParticipantHasALiveShiftClaimOnATripDayIsNotBookedAhead(TripClaimStatus shiftClaim, bool left)
+    {
+        var (kit, person, trip, _) = ArrangeTripStarting(Today);
+        using (kit)
+        {
+            var shift = kit.SeedShift(person, trip.StartDate, ShiftStatus.Completed);
+            kit.SeedShiftClaim(person, shiftClaim, 100m, shift);
+
+            var period = await PeriodOf(kit, person);
+
+            Assert.Equal(left, period.BookedAhead == 0m);
         }
     }
 }

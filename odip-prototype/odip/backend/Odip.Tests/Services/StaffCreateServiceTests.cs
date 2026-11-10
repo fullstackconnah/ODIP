@@ -68,13 +68,13 @@ public class StaffCreateServiceTests
     public async Task Username_of_an_unrelated_name_does_not_count() => Assert.Equal("jo.ng", await UsernameForJoNgAsync("joxng", "jo.ngo", "jo.ng2"));
 
     [Fact]
-    public async Task Stage_answers_conflict_for_an_email_used_in_another_organisation()
+    public async Task Stage_refuses_without_saying_it_exists_an_email_used_in_another_organisation()
     {
         var (db, tenantId) = TwoOrganisations();
         using var _ = db;
         var result = await new StaffCreateService(db, null).StageAsync(Staff("Sam.Lee@gmail.com"), As("Admin"), tenantId, CancellationToken.None);
-        Assert.True(result.IsConflict);
-        Assert.Equal("A user with this email already exists.", result.Error);
+        Assert.False(result.IsConflict);
+        Assert.Equal(StaffCreateService.OtherOrganisationMessage, result.Error);
     }
 
     [Fact]

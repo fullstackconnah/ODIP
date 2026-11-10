@@ -400,7 +400,11 @@ public sealed class BudgetLedgerService
                 // be counted as booked ahead - the same rule the shift query above follows for a completed shift that has a claim line.
                 // "Already counted" is exactly ClaimLinesQuery's rule: the claim is neither rejected nor cancelled, and the line is not
                 // itself rejected. A claim or line the ledger drops leaves the booking's own estimate standing.
-                && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ParticipantBookingId == b.Id))
+                && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ParticipantBookingId == b.Id)
+                // The trip claim run leaves out a participant with a live shift claim line on any day of the trip (ClaimGenerationService, shiftClaimsOnTripDays: the same
+                // ClaimLineStillCounts and the same StartDate..StartDate+DurationDays-1 window), so no trip claim will replace this booking: it is not forecast either.
+                && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.Shift != null && l.Shift.ParticipantId == b.ParticipantId
+                    && l.SupportsDeliveredFrom >= b.TripInstance.StartDate && l.SupportsDeliveredFrom <= b.TripInstance.StartDate.AddDays(b.TripInstance.DurationDays - 1)))
             .Select(b => new BookingRow(
                 b.Id, b.ParticipantId, b.PlanTypeOverride, b.TripInstanceId, b.TripInstance.TripName, b.TripInstance.StartDate, b.TripInstance.DurationDays, b.TripInstance.DepartureTime,
                 b.TripInstance.ReturnTime, b.TripInstance.ActiveHoursPerDay, b.TripInstance.DefaultActivityGroupId));

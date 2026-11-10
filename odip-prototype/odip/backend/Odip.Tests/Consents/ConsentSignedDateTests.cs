@@ -241,4 +241,29 @@ public class ConsentSignedDateTests
         Assert.Equal(TooOld, Assert.IsType<ApiResponse<ParticipantDetailDto>>(bad.Value).Errors.Single());
         Assert.Equal(new DateOnly(1999, 6, 1), (await db.ParticipantConsents.SingleAsync()).SignedDate);
     }
+
+    // H78-1: the single-row PUT leaves an unchanged legacy date alone too, so the consent can still be ticked or renamed.
+    [Fact]
+    public async Task Upsert_AcceptsAnUnchangedLegacyDate_ButRefusesAChangedOneAndANewRow()
+    {
+        using var db = TestDb.Create(Guid.NewGuid().ToString());
+        var p = Seed(db);
+        var legacy = new DateOnly(1999, 1, 1);
+        db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), ParticipantId = p.Id, ConsentType = ConsentType.Privacy, Granted = true, SignedByName = "Guardian", SignedDate = legacy });
+        db.SaveChanges();
+        UpsertParticipantConsentDto Dto(bool granted, DateOnly signed) => new() { Granted = granted, SignedByName = "Guardian", SignedDate = signed };
+        var controller = new ParticipantConsentsController(db, Clock);
+
+        Assert.IsType<OkObjectResult>((await controller.Upsert(p.Id, nameof(ConsentType.Privacy), Dto(false, legacy), CancellationToken.None)).Result);
+        var row = await db.ParticipantConsents.SingleAsync();
+        Assert.False(row.Granted);
+        Assert.Equal(legacy, row.SignedDate);
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await controller.Upsert(p.Id, nameof(ConsentType.Privacy), Dto(true, new DateOnly(1998, 1, 1)), CancellationToken.None)).Result);
+        Assert.Equal(TooOld, Assert.IsType<ApiResponse<ParticipantConsentDto>>(bad.Value).Errors.Single());
+
+        // No stored row for this type: the first save is checked, whatever another type holds.
+        var first = Assert.IsType<BadRequestObjectResult>((await controller.Upsert(p.Id, nameof(ConsentType.Alcohol), Dto(true, legacy), CancellationToken.None)).Result);
+        Assert.Equal(TooOld, Assert.IsType<ApiResponse<ParticipantConsentDto>>(first.Value).Errors.Single());
+    }
 }
