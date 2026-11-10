@@ -249,7 +249,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   { entryPhase: 'profile', field: 'allergyManagementNotes', label: 'Allergy Management Notes', sources: [], notes: 'NEW (sub-wave C1). ODIP elaboration (EpiPen location, action plan) — no direct source-form field, judged alongside the allergy detail/risk flag.' },
   {
     entryPhase: 'profile',
-    field: 'healthConditions', label: 'Health Conditions (structured grid)', sources: ['profile'], dictionaryId: 'MED-002..011',
+    field: 'healthConditions', label: 'Health Conditions', sources: ['profile'], dictionaryId: 'MED-002..011',
     notes: 'NEW (sub-wave C1). §4.6: structured per-condition fields for Intellectual Disability/Visual/Hearing Impairment/Mental Health/High BP/Wound Care/Epilepsy/Diabetes/Asthma/Dysphagia (Yes-No + severity + plan-provided + training-required shape) — "ALL NEW... none of the structured shape is modelled" per the gap analysis, now backed by the ParticipantHealthCondition entity (one row per HealthConditionType). This grid is support-planning DETAIL — the pre-existing primaryDiagnosis/otherDiagnoses fields (DIAG-01) remain the participant\'s clinical diagnosis labels; the two are deliberately not merged (see ParticipantHealthCondition\'s backend type doc for the full reconciliation, including the one-way, transition-only Epilepsy-diagnosis-to-grid derivation).',
   },
 
@@ -324,7 +324,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   // except the two dedup calls documented below. ──────────────────────────────────────────
   {
     entryPhase: 'profile',
-    field: 'adlAssessments', label: 'ADL Ratings (Personal + Community/Domestic, structured grid)', sources: ['profile'], dictionaryId: 'PADL-002..007, CADL-001..015',
+    field: 'adlAssessments', label: 'ADL Ratings (Personal + Community/Domestic)', sources: ['profile'], dictionaryId: 'PADL-002..007, CADL-001..015',
     notes: 'NEW (sub-wave C2). §4.9: "Personal-ADL I/S/A/F levels... NEW — no I/S/A/F level field anywhere"; "the entire Community/Domestic ADL domain — ALL NEW, complete gap, no ADL-level fields exist". Now backed by the ParticipantAdlAssessment entity (one row per AdlType, 20 values: 6 Personal §1c-15 + 14 Community/Domestic §1c-17). Level scale "I/S/A/F" is unexpanded in the source form — see the backend AdlLevel enum doc for the flagged plain-English-reading caveat, not a confirmed source expansion. UPDATE (INTAKE-03): each row also gained an optional howToHelpNotes column (research spec §3) — a per-ADL-row "how to help me" instruction, CommunityAccessDailyLiving-gated in the wizard, distinct from this same row\'s always-visible `notes`. Not split into a separate DOCUMENT_MAPPING entry (sub-field granularity isn\'t this table\'s shape) — the whole adlAssessments field stays tagged \'all\' since the base grid itself is relevant regardless of stream; only its howToHelpNotes column is CA-specific.',
   },
   {

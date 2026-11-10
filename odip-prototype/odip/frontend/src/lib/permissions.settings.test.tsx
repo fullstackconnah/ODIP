@@ -23,6 +23,20 @@ describe('hasOrganisation (Settings shows the organisation groups only then)', (
   })
 })
 
+// Mirrors ProviderSettingsController.Upsert's [Authorize(Roles = "SuperAdmin,Admin")]: ReadOnly (and Coordinator) get the read-only branch.
+describe('canEditProviderSettings (who may save the organisation settings)', () => {
+  it.each([
+    ['SuperAdmin', true],
+    ['Admin', true],
+    ['Coordinator', false],
+    ['SupportWorker', false],
+    ['ReadOnly', false],
+  ] as const)('%s: %s', (role, expected) => {
+    signIn(role)
+    expect(renderHook(() => usePermissions()).result.current.canEditProviderSettings).toBe(expected)
+  })
+})
+
 describe('username and tenantName (Settings › Profile)', () => {
   it('reads them from odip_user, and null when the sign-in response had none', () => {
     signIn('Admin')
