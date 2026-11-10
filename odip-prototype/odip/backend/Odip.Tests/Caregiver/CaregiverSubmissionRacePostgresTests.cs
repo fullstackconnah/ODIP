@@ -23,7 +23,7 @@ public class CaregiverSubmissionRacePostgresTests : IClassFixture<PostgresFixtur
 {
     private const string NoPg = "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.";
     private const string Phone = "0400 000 000";
-    private const string Handled = "This form was already handled by someone else. Refresh to see it.";
+    private const string Handled = "This form was already handled by someone else. It has been refreshed.";
     private readonly PostgresFixture _pg;
     public CaregiverSubmissionRacePostgresTests(PostgresFixture pg) => _pg = pg;
 

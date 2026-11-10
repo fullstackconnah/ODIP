@@ -148,7 +148,14 @@ public class CaregiverController : ControllerBase
             if (body.Base is not null)
                 effective = CaregiverFieldPolicy.MergeAgainstBase(await BuildProjectionAsync(participant, ct), effective, CaregiverFieldPolicy.Sanitise(body.Base, participant));
             if (ParticipantPatchApplier.GroupError(CaregiverFieldPolicy.Sanitise(effective, participant)) is { } groupError)
-                return BadRequest(ApiResponse<object>.Fail(groupError));
+                // The caregiver form also asks for "Your name", so the applier's staff sentences are reworded to name the participant.
+                return BadRequest(ApiResponse<object>.Fail(groupError switch
+                {
+                    "First name is required." => "Enter the participant's first name.",
+                    "Last name is required." => "Enter the participant's last name.",
+                    "Please provide a gender self-description." => "You chose Other for the participant's gender. Go back and describe it.",
+                    _ => groupError,
+                }));
         }
 
         sub.CaregiverName = body.CaregiverName.Trim();

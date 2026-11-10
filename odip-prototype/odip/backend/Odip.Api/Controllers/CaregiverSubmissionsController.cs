@@ -218,7 +218,7 @@ public class CaregiverSubmissionsController : ControllerBase
         || await _db.CaregiverProfileSubmissions.Where(x => x.Id == id && x.Status == CaregiverSubmissionStatus.Submitted)
             .ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, to), ct) == 1;
 
-    private ObjectResult AlreadyHandled() => Conflict(ApiResponse<object>.Fail("This form was already handled by someone else. Refresh to see it."));
+    private ObjectResult AlreadyHandled() => Conflict(ApiResponse<object>.Fail("This form was already handled by someone else. It has been refreshed."));
 
     private async Task<JsonObject> BuildProjectionAsync(Participant p, CancellationToken ct) =>
         CaregiverFieldPolicy.BuildProjection(await ParticipantDetailMapper.ToDetailDtoAsync(_db, p, ct));
