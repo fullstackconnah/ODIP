@@ -1,4 +1,4 @@
-// Claims hub file panel, polish batch 63: the paid result that names the lines left unpaid, and the import summary's "paid amounts differ" line.
+// Claims hub file panel, polish batch 63: the Mark paid modal's amounts (a $0 and an over-total line start blank), and the import summary's "paid amounts differ" line.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/claims-batch-amounts.mjs <outdir>
 // The mock API serves the files (mock-api/claimHub.js); the two POST answers are stubbed with page.route (synthetic rows). Exit 1 on any failed check.
 import { mkdirSync } from 'node:fs'
@@ -17,12 +17,8 @@ prepareOutDir(OUT_DIR)
 const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const devUsers = envelope([{ username: 'dev.coordinator', role: 'Coordinator', tenantName: 'Sample Support Co' }])
 const devLogin = envelope({ id: '00000000-0000-0000-0000-0000000000a2', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username: 'dev.coordinator', fullName: 'Dev Coordinator', role: 'Coordinator', tenantName: 'Sample Support Co' })
-const LONG_REF = 'TC-46003-20261001-A-LONGER-THAN-USUAL-REFERENCE-WITH-NO-SPACES-AT-ALL'
-const LEFT_OUT = [
-  { batchLineId: 'b-results-l1', claimReference: 'TC-46001-20261001', ndiaAmount: 0, lineTotal: 135.12 },
-  { batchLineId: 'b-results-l2', claimReference: 'TC-46002-20261001', ndiaAmount: 500, lineTotal: 135.12 },
-  { batchLineId: 'b-results-l3', claimReference: LONG_REF, ndiaAmount: 0, lineTotal: 135.12 },
-]
+// The Lines table scrolls sideways on purpose at 1280 (PB63-F2), so layoutCheck skips that scroller.
+const LINES_SCROLLER = [String.raw`div.relative.md\:bg-\[var\(--color-card\)\]`]
 const batchDto = (id, fileName, status, extra) => ({ id, fileName, status, createdAt: '2026-10-20T01:00:00Z', createdByName: 'Sam Lee', uploadedAt: '2026-10-21T01:00:00Z', uploadedByName: 'Jo Carter', resultsImportedAt: null, discardedAt: null, lineCount: 120, totalAmount: 16214.4, pending: 0, successful: 0, rejected: 0, withdrawn: 0, paid: 0, paidAmount: 0, ...extra })
 
 const checks = []
@@ -63,28 +59,28 @@ const browser = await chromium.launch({ headless: true })
 for (const vp of VPS) {
   const t = (n) => `${vp.name}: ${n}`
 
-  // paid-left-out: Mark 6 lines as paid, the server answers with three lines left unpaid (one long reference).
+  // mark-paid-modal: Mark 6 lines as paid. The mock's first line was paid $0 and its second above its total, so both start blank; the rest hold the NDIA amount.
   try {
-    const { context, page } = await openPanel(browser, vp, 'b-results', async (p) => {
-      await p.route('**/api/v1/claim-batches/b-results/paid', (r) => r.fulfill({ json: envelope({ ...batchDto('b-results', 'BPR261020001.csv', 'ResultsImported', { successful: 6, rejected: 6, resultsImportedAt: '2026-10-22T01:00:00Z' }), leftOut: LEFT_OUT }) }))
-    })
+    const { context, page } = await openPanel(browser, vp, 'b-results', async () => {})
     await page.getByRole('button', { name: 'Mark 6 lines as paid' }).click({ timeout: 60_000 })
-    await page.getByRole('button', { name: 'Mark as paid' }).click()
-    const callout = calloutOf(page, /^\d+ lines? need an amount:/)
-    await callout.waitFor({ state: 'visible', timeout: 30_000 })
-    const text = await callout.innerText()
-    check(t('paid-left-out: says how many were marked'), text.includes('Marked 3 lines as paid.'), text)
-    check(t('paid-left-out: names every left-out reference'), text.includes(`3 lines need an amount: TC-46001-20261001, TC-46002-20261001, ${LONG_REF}.`), text)
-    const again = page.getByRole('button', { name: 'Mark 6 lines as paid' })
-    check(t('paid-left-out: the Mark as paid button is still there'), await again.isEnabled(), '')
-    if (vp.touch) { const h = (await again.boundingBox())?.height ?? 0; check(t('paid-left-out: button is a touch target (>= 44 px)'), h >= 44, h) }
-    await fitChecks(page, callout, t('paid-left-out'))
-    await crop(page, callout, `paid-left-out-${vp.name}.png`, vp, 24)
-    const panel = page.getByRole('dialog').first()
-    checks.push(await layoutCheck(page, panel, t('paid-left-out panel')))
-    await crop(page, panel, `paid-left-out-panel-${vp.name}.png`, vp, 0)
+    const modal = page.getByRole('dialog').last()
+    const input = (name) => modal.getByLabel(`Paid for ${name}`)
+    await input('Ava Nguyen').waitFor({ state: 'visible', timeout: 30_000 })
+    check(t('mark-paid-modal: the line paid $0 starts empty'), (await input('Ava Nguyen').inputValue()) === '', await input('Ava Nguyen').inputValue())
+    check(t('mark-paid-modal: the line paid above its total starts empty'), (await input('Sam Lee').inputValue()) === '', await input('Sam Lee').inputValue())
+    check(t('mark-paid-modal: a normal line holds its NDIA amount'), Number(await input('Jo Carter').inputValue()) === 135.12, await input('Jo Carter').inputValue())
+    const hint = modal.getByText(/^Each amount starts at what the NDIA paid/)
+    const hm = await hint.evaluate((el) => { const r = el.getBoundingClientRect(); return { over: el.scrollWidth - el.clientWidth, right: r.right, vw: document.documentElement.clientWidth, h: r.height } })
+    check(t('mark-paid-modal: hint visible and unclipped'), (await hint.isVisible()) && hm.over <= 1 && hm.right <= hm.vw && hm.h > 0, hm)
+    if (vp.touch) {
+      const tapMin = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap-min')))
+      const hs = await Promise.all(['Ava Nguyen', 'Sam Lee', 'Jo Carter'].map(async (n) => (await input(n).boundingBox())?.height ?? 0))
+      check(t('mark-paid-modal: each input is at least --tap-min'), tapMin > 0 && hs.every((h) => h >= tapMin), { tapMin, hs })
+    }
+    checks.push(await layoutCheck(page, modal, t('mark-paid-modal'), { allow: LINES_SCROLLER }))
+    await crop(page, modal, `mark-paid-modal-${vp.name}.png`, vp, 0)
     await context.close()
-  } catch (e) { check(t('paid-left-out ran'), false, String(e.message).split('\n')[0]) }
+  } catch (e) { check(t('mark-paid-modal ran'), false, String(e.message).split('\n')[0]) }
 
   // import-differs: 2 differ (plural, captured); 1 differs (singular); 0 (no line).
   for (const [n, capture] of [[2, true], [1, false], [0, false]]) {
@@ -103,7 +99,7 @@ for (const vp of VPS) {
         await fitChecks(page, callout, t('import-differs'))
         await crop(page, callout, `import-differs-${vp.name}.png`, vp, 24)
         const panel = page.getByRole('dialog').first()
-        checks.push(await layoutCheck(page, panel, t('import-differs panel')))
+        checks.push(await layoutCheck(page, panel, t('import-differs panel'), { allow: LINES_SCROLLER }))
         await crop(page, panel, `import-differs-panel-${vp.name}.png`, vp, 0)
       }
       await context.close()

@@ -28,7 +28,7 @@ public sealed record BatchLineDto(
     decimal Amount, int Attempt, string RowReference, ClaimBatchLineOutcome Outcome, string? RejectCode, string? RejectMessage, string? Hint, bool? NeedsDecision,
     decimal? ResultAmount, ClaimLineItemStatus? LineStatus, decimal? PaidAmount, DateTime? DismissedAt);
 
-/// <summary>An accepted line the default mark-paid left unpaid: the NDIA amount is missing, zero or above the line.</summary>
+/// <summary>An accepted line the default mark-paid left unpaid: a line is left out when the NDIA amount is zero, negative or above the line total; a missing amount pays the line total.</summary>
 public sealed record PaidLeftOutDto(Guid BatchLineId, string ClaimReference, decimal? NdiaAmount, decimal LineTotal);
 
 public sealed record PaidResultDto : BatchDto

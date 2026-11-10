@@ -93,7 +93,7 @@ function create({ respond, failEnvelope, FILE }) {
     lines = {
       'b-built': batchLines('b-built', 4, () => 'Pending'),
       'b-uploaded': batchLines('b-uploaded', 120, () => 'Pending'),
-      'b-results': batchLines('b-results', 12, (i) => (i >= 6 ? 'Rejected' : 'Successful')),
+      'b-results': batchLines('b-results', 12, (i) => (i >= 6 ? 'Rejected' : 'Successful')).map((l, i) => (i === 0 ? { ...l, resultAmount: 0 } : i === 1 ? { ...l, resultAmount: 500 } : l)),
       'b-partial': batchLines('b-partial', 5, (i) => (i < 2 ? 'Rejected' : 'Pending')),
       'b-paid': batchLines('b-paid', 3, () => 'Successful'),
       'b-discarded': batchLines('b-discarded', 2, () => 'Withdrawn'),
