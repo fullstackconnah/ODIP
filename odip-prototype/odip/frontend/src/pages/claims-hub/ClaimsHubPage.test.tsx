@@ -560,6 +560,20 @@ describe('ClaimsHubPage: file panel', () => {
       expect(submitBtn()).toHaveAttribute('aria-disabled', 'true')
     })
 
+    it('says why submit is off while every line is blank, and stops once one amount is typed', async () => {
+      const user = await open([line(1), line(2)])
+      const why = 'Enter an amount for at least one line.'
+      expect(screen.queryByText(why)).not.toBeInTheDocument()
+      await user.clear(screen.getByLabelText('Paid for P1'))
+      await user.clear(screen.getByLabelText('Paid for P2'))
+      expect(screen.getByText(why)).toBeInTheDocument()
+      expect(submitBtn()).toHaveAttribute('aria-disabled', 'true')
+      expect(submitBtn()).toHaveAccessibleDescription(why)
+      await user.type(screen.getByLabelText('Paid for P1'), '5')
+      expect(screen.queryByText(why)).not.toBeInTheDocument()
+      expect(submitBtn()).not.toHaveAttribute('aria-disabled', 'true')
+    })
+
     it('says how many were marked and how many are left', async () => {
       m.paid.mockImplementation((_v, o) => o.onSuccess(undefined))
       const user = await open([line(1), line(2), line(3), line(4, { resultAmount: 0 })])

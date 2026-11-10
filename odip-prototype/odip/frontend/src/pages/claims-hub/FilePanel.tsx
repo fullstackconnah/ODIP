@@ -373,9 +373,12 @@ function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetail
       size="lg"
       title="Mark as paid"
       footer={(
-        <div className="flex w-full justify-end gap-2">
-          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="md" onClick={submit} aria-disabled={invalid || paid.isPending} className="aria-disabled:opacity-60">{paid.isPending ? 'Saving…' : 'Mark as paid'}</Button>
+        <div className="w-full">
+          {filled.length === 0 && <div id="mark-paid-why" className="mb-3"><Callout tone="warning" polite>Enter an amount for at least one line.</Callout></div>}
+          <div className="flex w-full justify-end gap-2">
+            <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" size="md" onClick={submit} aria-disabled={invalid || paid.isPending} aria-describedby={filled.length === 0 ? 'mark-paid-why' : undefined} className="aria-disabled:opacity-60">{paid.isPending ? 'Saving…' : 'Mark as paid'}</Button>
+          </div>
         </div>
       )}
     >
