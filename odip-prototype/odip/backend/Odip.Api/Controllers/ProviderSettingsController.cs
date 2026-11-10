@@ -139,6 +139,12 @@ public partial class ProviderSettingsController : ControllerBase
         if (dto.ABN != s.ABN && !Regex.IsMatch(dto.ABN, @"^[0-9 ]+\z"))
             return BadRequest(ApiResponse<bool>.Fail("Enter the ABN as numbers only, like 12 345 678 901."));
 
+        // Bank details print on every invoice. Checked on the trimmed value and only when changed, like the ABN, so an odd stored value still re-saves; blank clears.
+        var bsb = dto.BSB?.Trim();
+        var accountNumber = dto.AccountNumber?.Trim();
+        var bankProblem = (Blank(bsb) != Blank(s.BSB) ? BsbProblem(bsb) : null) ?? (Blank(accountNumber) != Blank(s.AccountNumber) ? AccountNumberProblem(accountNumber) : null);
+        if (bankProblem != null) return BadRequest(ApiResponse<bool>.Fail(bankProblem));
+
         // The version the form loaded goes into the UPDATE's WHERE (not a read-then-compare, which would race): another Admin's save since then is a 409.
         // A new row has nothing to compare with. No version sent (an older open tab) saves as before.
         if (dto.ExpectedUpdatedAt is DateTime expected && _db.Entry(s).State != EntityState.Added)
@@ -167,11 +173,21 @@ public partial class ProviderSettingsController : ControllerBase
         // The effective zone (a null row follows its State); a brand-new row had the Sydney fallback, not the entity's default State.
         var previousZone = _db.Entry(s).State == EntityState.Added ? StateTimeZoneMap.Resolve(null) : s.TimeZoneId ?? StateTimeZoneMap.Resolve(s.State);
 
+        // Money and identity fields: one field-change row each, only when the value moves (the row is never audited whole). Bank values are never copied, only that they changed.
+        AuditIfChanged(s, nameof(ProviderSettings.RegistrationNumber), s.RegistrationNumber, dto.RegistrationNumber);
+        AuditIfChanged(s, nameof(ProviderSettings.ABN), s.ABN, dto.ABN);
+        AuditIfChanged(s, nameof(ProviderSettings.State), s.State, state);
+        AuditIfChanged(s, nameof(ProviderSettings.GSTRegistered), s.GSTRegistered.ToString(), dto.GSTRegistered.ToString());
+        AuditIfChanged(s, nameof(ProviderSettings.IsPaceProvider), s.IsPaceProvider.ToString(), dto.IsPaceProvider.ToString());
+        AuditIfChanged(s, nameof(ProviderSettings.BankAccountName), s.BankAccountName, dto.BankAccountName, mask: true);
+        AuditIfChanged(s, nameof(ProviderSettings.BSB), s.BSB, bsb, mask: true);
+        AuditIfChanged(s, nameof(ProviderSettings.AccountNumber), s.AccountNumber, accountNumber, mask: true);
+
         s.RegistrationNumber = dto.RegistrationNumber; s.ABN = dto.ABN;
         s.OrganisationName = dto.OrganisationName; s.Address = dto.Address;
         s.GSTRegistered = dto.GSTRegistered; s.IsPaceProvider = dto.IsPaceProvider;
-        s.BankAccountName = dto.BankAccountName; s.BSB = dto.BSB;
-        s.AccountNumber = dto.AccountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
+        s.BankAccountName = dto.BankAccountName; s.BSB = bsb;
+        s.AccountNumber = accountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
         s.State = state; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
         // Null leaves the stored value (every section echoes the row); blank clears it. Plain profile fields like the manager contact, so no audit row.
         if (dto.TradingName is not null) s.TradingName = TrimmedOrNull(dto.TradingName);
@@ -270,6 +286,30 @@ public partial class ProviderSettingsController : ControllerBase
         _ when !prefix.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') => "Use letters, digits, - _ or . only.",
         _ => null,
     };
+
+    private static string Blank(string? v) => v?.Trim() ?? "";
+
+    /// <summary>The refusal for a typed BSB (6 digits, an optional dash after the third), or null; blank clears the field and passes. Expects the trimmed value.</summary>
+    internal static string? BsbProblem(string? bsb) =>
+        string.IsNullOrEmpty(bsb) || BsbPattern().IsMatch(bsb) ? null : "Enter the BSB as 6 numbers, like 062-000.";
+
+    /// <summary>The refusal for a typed account number (4 to 20 digits, spaces or dashes, starting with a digit), or null; blank passes. Expects the trimmed value.</summary>
+    internal static string? AccountNumberProblem(string? accountNumber) =>
+        string.IsNullOrEmpty(accountNumber) || AccountNumberPattern().IsMatch(accountNumber) ? null : "Enter the account number using numbers only.";
+
+    [GeneratedRegex(@"^\d{3}-?\d{3}\z")]
+    private static partial Regex BsbPattern();
+
+    [GeneratedRegex(@"^[0-9][0-9 -]{3,19}\z")]
+    private static partial Regex AccountNumberPattern();
+
+    /// <summary>A new row has nothing before it, so it writes none. <paramref name="mask"/> keeps the values out of the row: only set, changed or cleared.</summary>
+    private void AuditIfChanged(ProviderSettings s, string field, string? oldValue, string? newValue, bool mask = false)
+    {
+        if (_db.Entry(s).State == EntityState.Added || Blank(oldValue) == Blank(newValue)) return;
+        if (mask) (oldValue, newValue) = (null, Blank(newValue).Length == 0 ? "cleared" : Blank(oldValue).Length == 0 ? "set" : "changed");
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ProviderSettings), s.Id, field, oldValue, newValue, User));
+    }
 
     private void AuditNumbering(ProviderSettings s, string field, string oldValue, string newValue) =>
         _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ProviderSettings), s.Id, field, oldValue, newValue, User));

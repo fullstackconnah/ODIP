@@ -139,7 +139,11 @@ public class ProviderSettingsReadinessModeTests
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(ParticipantReadinessMode.Enforce, await StoredMode(db, TenantA));
 
-        var row = Assert.Single(await db.AuditLogs.ToListAsync());
+        // The bank edits write masked "set/changed" rows of their own (H80-1); the mode is still exactly one row, and no row holds a bank value.
+        var rows = await db.AuditLogs.ToListAsync();
+        Assert.Equal(4, rows.Count);
+        Assert.All(rows, r => { foreach (var secret in new[] { "Acme", "New Bank Name", "123-456", "999-999", "98765432", "11112222" }) Assert.DoesNotContain(secret, r.Changes); });
+        var row = Assert.Single(rows, r => r.Changes.Contains("ParticipantReadinessMode"));
         Assert.Equal("ProviderSettings", row.EntityType);
         Assert.Equal(settings.Id, row.EntityId);
         Assert.Equal(AuditAction.Updated, row.Action);
@@ -157,7 +161,7 @@ public class ProviderSettingsReadinessModeTests
     }
 
     [Fact]
-    public async Task Upsert_ChangingOnlyOtherFields_WritesNoAuditRowAtAll()
+    public async Task Upsert_ChangingOnlyOtherFields_WritesNoAuditRowForTheModes()
     {
         var (db, controller) = Create(TenantA, isSuperAdmin: false);
         using var _ = db;
@@ -165,7 +169,10 @@ public class ProviderSettingsReadinessModeTests
 
         await controller.Upsert(Dto() with { BSB = "555-555", ManagerName = "Priya" }, CancellationToken.None);
 
-        Assert.Empty(await db.AuditLogs.ToListAsync());
+        // Only the masked BSB row: no mode row, and not the number.
+        var row = Assert.Single(await db.AuditLogs.ToListAsync());
+        Assert.Contains("BSB", row.Changes);
+        Assert.DoesNotContain("555", row.Changes);
     }
 
     [Fact]

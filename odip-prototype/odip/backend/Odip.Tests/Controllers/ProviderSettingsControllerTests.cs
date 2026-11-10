@@ -382,16 +382,16 @@ public class ProviderSettingsControllerTests
     {
         var name = Guid.NewGuid().ToString();
         using (var seed = CreateDb(name))
-            await new ProviderSettingsController(seed).Upsert(MinimalUpsertDto() with { AccountNumber = "111" }, CancellationToken.None);
+            await new ProviderSettingsController(seed).Upsert(MinimalUpsertDto() with { AccountNumber = "1111" }, CancellationToken.None);
         using var dbA = CreateDb(name);
         using var dbB = CreateDb(name);
         var loadedA = await LoadedUpdatedAtAsync(dbA);
         var loadedB = await LoadedUpdatedAtAsync(dbB);
 
-        var first = await new ProviderSettingsController(dbA).Upsert(MinimalUpsertDto() with { AccountNumber = "222", ExpectedUpdatedAt = loadedA }, CancellationToken.None);
+        var first = await new ProviderSettingsController(dbA).Upsert(MinimalUpsertDto() with { AccountNumber = "2222", ExpectedUpdatedAt = loadedA }, CancellationToken.None);
         // A fresh context, so EF holds no tracked original: only ExpectedUpdatedAt can make this a 409.
         using var dbB2 = CreateDb(name);
-        var second = await new ProviderSettingsController(dbB2).Upsert(MinimalUpsertDto() with { AccountNumber = "111", ManagerPhone = "0412345007", ExpectedUpdatedAt = loadedB }, CancellationToken.None);
+        var second = await new ProviderSettingsController(dbB2).Upsert(MinimalUpsertDto() with { AccountNumber = "1111", ManagerPhone = "0412345007", ExpectedUpdatedAt = loadedB }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(first.Result);
         var conflict = Assert.IsType<ConflictObjectResult>(second.Result);
@@ -400,7 +400,7 @@ public class ProviderSettingsControllerTests
         Assert.Equal("PROVIDER_SETTINGS_CHANGED", refusal.Code);
         using var check = CreateDb(name);
         var row = await check.ProviderSettings.SingleAsync();
-        Assert.Equal("222", row.AccountNumber);
+        Assert.Equal("2222", row.AccountNumber);
         Assert.Null(row.ManagerPhone);
     }
 
@@ -425,7 +425,7 @@ public class ProviderSettingsControllerTests
         var before = await LoadedUpdatedAtAsync(db);
         await Task.Delay(5);
 
-        var result = await controller.Upsert(MinimalUpsertDto() with { AccountNumber = "333" }, CancellationToken.None);
+        var result = await controller.Upsert(MinimalUpsertDto() with { AccountNumber = "3333" }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.True(await LoadedUpdatedAtAsync(db) > before);

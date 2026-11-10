@@ -44,7 +44,7 @@ public class ProviderSettingsPostgresTests : IClassFixture<PostgresFixture>
         var (seed, tenantId) = await _pg.NewTenantContextAsync();
         await using (seed)
         {
-            seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Test Org", AccountNumber = "111" });
+            seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Test Org", AccountNumber = "1111" });
             await seed.SaveChangesAsync();
         }
         DateTime loadedA, loadedB;
@@ -52,12 +52,12 @@ public class ProviderSettingsPostgresTests : IClassFixture<PostgresFixture>
         { var (db, c) = Request(tenantId); await using var _ = db; loadedB = await LoadedAsync(c); }
 
         // The version a GET sends must match the stored one exactly (whole microseconds), or the first save would already be a 409.
-        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Upsert(Form("222", loadedA), CancellationToken.None)).Result); }
-        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Upsert(Form("111", loadedB), CancellationToken.None)).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Upsert(Form("2222", loadedA), CancellationToken.None)).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Upsert(Form("1111", loadedB), CancellationToken.None)).Result); }
 
         var (check, _c) = Request(tenantId);
         await using (check)
-            Assert.Equal("222", (await check.ProviderSettings.SingleAsync()).AccountNumber);
+            Assert.Equal("2222", (await check.ProviderSettings.SingleAsync()).AccountNumber);
     }
 
     private sealed class FixedClock(DateTime utc) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(utc, TimeSpan.Zero); }
@@ -88,14 +88,14 @@ public class ProviderSettingsPostgresTests : IClassFixture<PostgresFixture>
         var (seed, tenantId) = await _pg.NewTenantContextAsync();
         await using (seed)
         {
-            seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Test Org", State = "VIC", AccountNumber = "111" });
+            seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Test Org", State = "VIC", AccountNumber = "1111" });
             await seed.SaveChangesAsync();
         }
         DateTime loaded;
         { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c); }
-        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Upsert(Form("222", loaded), CancellationToken.None)).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Upsert(Form("2222", loaded), CancellationToken.None)).Result); }
 
-        var stale = Form("222", loaded, "Australia/Perth");
+        var stale = Form("2222", loaded, "Australia/Perth");
         { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Upsert(stale, CancellationToken.None)).Result); }
 
         var (check, _c) = Request(tenantId);
