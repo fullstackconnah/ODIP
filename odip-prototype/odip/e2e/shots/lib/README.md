@@ -35,6 +35,13 @@ Faults it prevents: frames taken before layout settled; crops that cut the eleme
 - `clipped-text`: an element with its own text, `overflow-x: hidden|clip` and `scrollWidth > clientWidth + 1`, unless `text-overflow: ellipsis` (a silent cut such as a date reading `10/11/202`).
 - `control-over-text`: a visible button, link, `[role=button]`, input or select whose rect overlaps a visible text run outside it by more than 2 px on both axes (a button on top of a date).
 
-`allow`: CSS selectors of containers meant to scroll sideways (the roster board); their skips are listed in `detail.allowed`. Elements under 2 px (sr-only) and hidden ones are ignored, and text scrolled out of a clipping ancestor is not counted. `layoutFaults(snapshot, { allow })` is pure and unit-tested in `capture.test.mjs`; `e2e/shots/layout-checks-proof.mjs` is its live test.
+`allow`: CSS selectors of containers meant to scroll sideways (the roster board); their skips are listed in `detail.allowed`. Elements under 2 px (sr-only) and hidden ones (`checkVisibility`: `display: none`, `visibility: hidden`, opacity 0, a closed `<details>` body) are ignored. `layoutFaults(snapshot, { allow })` is pure and unit-tested in `capture.test.mjs`; `e2e/shots/layout-checks-proof.mjs` is its live test.
+
+Measured as the eye sees it (2026-11-10, roster board triage; the proofs are in `layout-checks-proof.mjs`):
+- Text is cut to the part its clipping ancestors leave visible, a `truncate` box included, so a neighbour's control over the hidden tail of a title is no fault; a control over the visible part still is.
+- `full page not truncated` on a fit-screen page (`main [data-fit-screen]` from 1024 px up, where main re-grows with the viewport and the footer stays below the fold) judges main alone: `cut` (its scrollHeight past clientHeight) must be at most 1 px, and a column scrolling inside main scrolls by design. `detail` carries `fit` and `cut`.
+- With an open `[role=dialog]` or `[role=alertdialog]` with `aria-modal="true"` inside the scanned root, `control-over-text` pairs only controls and text inside the dialog (the page behind the scrim is inert); `inner-scroll` and `clipped-text` still scan all of root. A dialog portalled outside the root is not seen: pass it as the root.
+- Each `control-over-text` fault carries `control` and `textRect` (viewport rects of the control and the text run) next to `overlap`.
+- Hidden controls and text never count: a closed `<details>` body and opacity-0 elements are skipped (`checkVisibility`).
 
 Limit: it measures only what is rendered in that state; open the dialog, tab or row first, then call `fullPage` or `layoutCheck(page, locator, name, { allow })`.
