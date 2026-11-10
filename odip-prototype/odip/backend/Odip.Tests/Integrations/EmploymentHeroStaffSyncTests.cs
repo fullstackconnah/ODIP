@@ -762,6 +762,23 @@ public class EmploymentHeroStaffSyncTests
     }
 
     [Fact]
+    public async Task A_repoint_into_another_organisations_email_domain_is_refused_and_the_login_keeps_its_address()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Tom", "Ito", "tom@acme.org.au", "102"));   // never signed in
+        await using var _ = db;
+        db.Tenants.Add(new Tenant { Id = Guid.NewGuid(), Name = "Rival Care", EmailDomain = "rival.org.au" });   // no user there: only the domain makes it another organisation's
+        await db.SaveChangesAsync();
+
+        await RunAsync(db, tenant, Eh(Employee(102, "Tom", "Ito", "tom@rival.org.au", startDate: null)));
+
+        var tom = await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Tom");
+        Assert.Equal(("tom@acme.org.au", (bool?)null), (tom.Email, tom.SignInAddressUnconfirmed));
+        var item = await db.EmploymentHeroAttentions.SingleAsync(a => a.ExternalEmployeeId == "102");   // a FixInEmploymentHero item names the EH employee, not the user
+        Assert.Equal((EmploymentHeroAttentionKind.FixInEmploymentHero, "Their email in Employment Hero belongs to another organisation on Bunya Support."), (item.Kind, item.Reason));
+        Assert.DoesNotContain(db.AuditLogs, a => a.EntityId == tom.Id && a.Action == AuditAction.Updated);
+    }
+
+    [Fact]
     public async Task An_existing_never_signed_in_linked_user_is_held_on_the_next_sync_and_one_who_has_signed_in_is_not()
     {
         var (db, tenant) = await OrganisationAsync(
