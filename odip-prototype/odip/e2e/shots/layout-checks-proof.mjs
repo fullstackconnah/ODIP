@@ -1,4 +1,4 @@
-// Live test of layoutCheck and fullPage (no app needed; set-content pages): faulty fixtures give exactly their kind, clean ones (a card, a truncated title beside a chip, a closed <details>, a transparent control) give none, and a fit-screen page with a footer holds.
+// Live test of layoutCheck and fullPage (no app needed; set-content pages): faulty fixtures give exactly their kind, clean ones (a card, a truncated title beside a chip, a closed <details>, a transparent control, a modal dialog over a busy page) give none, and a fit-screen page holds unless main itself is cut off.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots <abs path to>/e2e/shots/layout-checks-proof.mjs <outdir>
 import path from 'node:path'
 import { fullPage, layoutCheck, prepareOutDir, writeChecks } from '../shots/lib/capture.mjs'
@@ -20,6 +20,10 @@ const fixtures = {
   // the same title with the chip over its visible part is still a fault
   'control-over-text on the visible part of a truncated title': '<div style="position:relative;width:60px;height:20px"><p style="margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Movie matinee with snacks</p><button style="position:absolute;left:20px;top:0">Go</button></div>',
   'clean closed details': '<details><summary>Steps</summary><div style="position:relative"><p style="margin:0">Hidden text here</p><button style="position:absolute;left:0;top:0">Hidden</button></div></details>',
+  // an open modal dialog lies over page text and controls behind its scrim: its button over the board text, and the board button over its title, pair across the dialog edge and are no fault
+  'clean dialog over page text and controls': '<div style="position:relative;height:60px"><p style="margin:0">Board 10/11/2026</p><button style="position:absolute;left:300px;top:0;width:120px;height:30px">Board action</button><div style="position:fixed;inset:0;background:rgba(0,0,0,.5)"></div><div role="alertdialog" aria-modal="true" style="position:absolute;left:0;top:0;width:500px;height:50px;background:#fff"><p style="position:absolute;left:300px;top:5px;margin:0">Sheet title</p><button style="position:absolute;left:40px;top:0;width:120px;height:30px">Close</button></div></div>',
+  // a control inside the dialog over text inside the dialog is still a fault
+  'control-over-text inside an open dialog': '<div style="position:relative;height:60px"><p style="margin:0">Board 10/11/2026</p><div role="dialog" aria-modal="true" style="position:absolute;left:0;top:30px;width:300px;height:60px;background:#fff"><p style="margin:0">Date 10/11/2026 and more words</p><button style="position:absolute;left:40px;top:0;width:120px;height:30px">Show details</button></div></div>',
   'clean transparent control': '<div style="position:relative;width:300px;height:60px"><p style="margin:0">Date 10/11/2026 and more words</p><button style="position:absolute;left:40px;top:0;width:120px;height:30px;opacity:0">Show details</button></div>',
 }
 
@@ -41,11 +45,15 @@ try {
   const skipped = await layoutCheck(page, page.locator('main'), 'allowed board', { allow: ['.board'] })
   checks.push({ name: 'allow skips a scroller and lists it', pass: skipped.pass && skipped.detail.allowed.length === 1, detail: skipped.detail })
 
-  // fullPage on a fit-screen page at 1440: the footer stays below the fold however far the viewport grows, so only main's own overflow decides
+  // fullPage on a fit-screen page at 1440: the footer stays below the fold however far the viewport grows, so only main's own overflow decides (a column scrolling inside main scrolls by design)
   await page.setViewportSize({ width: 1440, height: 900 })
-  for (const [name, html, pass] of [['fit-screen page with a footer holds', '<p style="margin:0">Board</p>', true], ['fit-screen page whose inner scroller is cut off still fails', '<div style="height:200px;overflow-y:auto"><div style="height:3000px">Board</div></div>', false]]) {
+  for (const [key, name, html, pass] of [
+    ['footer', 'fit-screen page with a footer holds', '<p style="margin:0">Board</p>', true],
+    ['scroller', 'fit-screen page with an inner scroller taller than its box holds', '<div style="height:200px;overflow-y:auto"><div style="height:3000px">Board</div></div>', true],
+    ['cut', 'fit-screen page whose main is cut off still fails', '<div style="height:6000px">Board</div>', false],
+  ]) {
     await page.setContent(fit(html))
-    const trunc = (await fullPage(page, path.join(OUT_DIR, 'full', `fit-${pass}.png`))).checks.find((c) => c.name.startsWith('full page not truncated'))
+    const trunc = (await fullPage(page, path.join(OUT_DIR, 'full', `fit-${key}.png`))).checks.find((c) => c.name.startsWith('full page not truncated'))
     checks.push({ name: `fullPage: ${name}`, pass: trunc.pass === pass, detail: trunc.detail })
   }
 } finally { await browser.close() }

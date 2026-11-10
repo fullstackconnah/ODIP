@@ -172,6 +172,8 @@ function scanLayout(snapshot, { allow = [] } = {}) {
 export const layoutFaults = (snapshot, opts) => scanLayout(snapshot, opts).faults
 
 // One evaluate inside `root`: skips hidden (closed <details>, opacity 0 included) or sub-2px elements (sr-only), cuts text rects down to the part their scrolling/clipping ancestors (a truncate box included) leave visible, excludes the document scrollers (fullPage measures those).
+// With a modal dialog open inside `root`, controls and text runs come from inside it only (the page behind the scrim is inert); inner-scroll and clipped-text still scan all of root.
+// shortcut: a dialog portalled outside `root` is not seen, so root is scanned whole; pass the dialog as `root` for that case.
 export function collectLayout(root, allow = []) {
   return root.evaluate((rootEl, allowSel) => {
     const name = (e) => e.tagName.toLowerCase() + (e.id ? `#${e.id}` : '') + [...e.classList].slice(0, 2).map((c) => `.${c}`).join('')
@@ -179,7 +181,9 @@ export function collectLayout(root, allow = []) {
     // checkVisibility also drops a closed <details> body (content-visibility: hidden keeps real rects) and opacity 0; Playwright's Chromium always has it
     const seen = (e) => { const r = e.getBoundingClientRect(); return r.width >= 2 && r.height >= 2 && e.checkVisibility({ opacityProperty: true, visibilityProperty: true }) }
     const all = [rootEl, ...rootEl.querySelectorAll('*')].filter((e) => !['SCRIPT', 'STYLE', 'OPTION', 'HTML', 'BODY'].includes(e.tagName) && seen(e))
-    const controls = all.filter((e) => e.matches('button,a[href],[role=button],input,select'))
+    const dialog = all.filter((e) => e.matches('[role="dialog"][aria-modal="true"],[role="alertdialog"][aria-modal="true"]') && e !== rootEl).pop()
+    const inScope = (e) => !dialog || dialog.contains(e)
+    const controls = all.filter((e) => inScope(e) && e.matches('button,a[href],[role=button],input,select'))
     const elements = all.map((e) => {
       const s = getComputedStyle(e)
       return { selector: name(e), overflowX: s.overflowX, scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, textOverflow: s.textOverflow, ownText: [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()), matchedBy: allowSel.filter((a) => e.matches(a)) }
@@ -187,7 +191,7 @@ export function collectLayout(root, allow = []) {
     const clipRects = (e) => { const out = []; for (let a = e; a && a !== rootEl.parentElement; a = a.parentElement) if (getComputedStyle(a).overflowX !== 'visible' && a !== document.documentElement && a !== document.body) out.push(a.getBoundingClientRect()); return out }
     const texts = []
     for (const e of all) for (const n of e.childNodes) {
-      if (n.nodeType !== 3 || !n.textContent.trim()) continue
+      if (!inScope(e) || n.nodeType !== 3 || !n.textContent.trim()) continue
       const range = document.createRange(); range.selectNodeContents(n)
       const clips = clipRects(e)
       for (const r of range.getClientRects()) {
@@ -216,10 +220,10 @@ export async function fullPage(page, file, { touch, allow } = {}) {
   return withViewport(page, 0, Math.min(h, 4000), touch, async () => {
     await settle(page)
     const m = await page.evaluate(() => {
-      // A fit-screen page (AppLayout's lg:has-[[data-fit-screen]]) re-grows main with the viewport, so its footer stays below the fold: judge main and its vertical scrollers (cut = the most scrollHeight past clientHeight), not the document.
+      // A fit-screen page (AppLayout's lg:has-[[data-fit-screen]]) re-grows main with the viewport, so its footer stays below the fold: judge main alone (cut = its scrollHeight past clientHeight), not the document; columns scrolling inside main scroll by design.
       const main = document.querySelector('main'), d = document.scrollingElement
       const fit = matchMedia('(min-width:1024px)').matches && !!main?.querySelector('[data-fit-screen]')
-      const cut = fit ? Math.max(...[main, ...main.querySelectorAll('*')].filter((e) => e === main || /auto|scroll/.test(getComputedStyle(e).overflowY)).map((e) => e.scrollHeight - e.clientHeight)) : 0
+      const cut = fit ? main.scrollHeight - main.clientHeight : 0
       return { scrollLeft: d.scrollLeft, scrollWidth: d.scrollWidth, clientWidth: d.clientWidth, scrollHeight: d.scrollHeight, fit, cut }
     })
     const coarse = await isCoarse(page)

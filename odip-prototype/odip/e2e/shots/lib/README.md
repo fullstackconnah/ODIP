@@ -39,7 +39,8 @@ Faults it prevents: frames taken before layout settled; crops that cut the eleme
 
 Measured as the eye sees it (2026-11-10, roster board triage; the proofs are in `layout-checks-proof.mjs`):
 - Text is cut to the part its clipping ancestors leave visible, a `truncate` box included, so a neighbour's control over the hidden tail of a title is no fault; a control over the visible part still is.
-- `full page not truncated` on a fit-screen page (`main [data-fit-screen]` from 1024 px up, where main re-grows with the viewport and the footer stays below the fold) judges main and the vertical scrollers inside it: `cut` (the most scrollHeight past clientHeight) must be at most 1 px. `detail` carries `fit` and `cut`.
+- `full page not truncated` on a fit-screen page (`main [data-fit-screen]` from 1024 px up, where main re-grows with the viewport and the footer stays below the fold) judges main alone: `cut` (its scrollHeight past clientHeight) must be at most 1 px, and a column scrolling inside main scrolls by design. `detail` carries `fit` and `cut`.
+- With an open `[role=dialog]` or `[role=alertdialog]` with `aria-modal="true"` inside the scanned root, `control-over-text` pairs only controls and text inside the dialog (the page behind the scrim is inert); `inner-scroll` and `clipped-text` still scan all of root. A dialog portalled outside the root is not seen: pass it as the root.
 - Each `control-over-text` fault carries `control` and `textRect` (viewport rects of the control and the text run) next to `overlap`.
 - Hidden controls and text never count: a closed `<details>` body and opacity-0 elements are skipped (`checkVisibility`).
 
