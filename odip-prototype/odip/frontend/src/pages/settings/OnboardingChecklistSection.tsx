@@ -6,16 +6,17 @@ import { retryingAfterError } from '@/lib/queryPhase'
 import { TONE } from '@/lib/tone'
 import { IncompleteProfileNote } from './BillingDetailsSection'
 import { SettingsGroup, SettingsSection, type SectionFrame } from './SettingsSection'
+import { ITEM_LABELS } from './onboardingItems'
 import { useProviderRow } from './providerRow'
 
 const PRACTICE_STANDARDS = 'NDIS-registered providers must record this (Practice Standards).'
 
 /** Each item the organisation can choose: the checklist's own label, the line under it, and the two modes it allows. */
 const ITEMS: { key: OnboardingItemKey; label: string; line: string; standards: boolean; off: boolean }[] = [
-  { key: 'complaints', label: 'Told how to make a complaint', line: PRACTICE_STANDARDS, standards: true, off: false },
-  { key: 'rights', label: 'Rights explained', line: PRACTICE_STANDARDS, standards: true, off: false },
-  { key: 'myProvider', label: 'Recorded as my provider', line: 'Only for NDIS participants whose funds are agency or plan managed.', standards: false, off: false },
-  { key: 'budget', label: 'Plan budget added', line: "For participants who aren't NDIS-funded. NDIS participants already have the required Funding item.", standards: false, off: true },
+  { key: 'complaints', label: ITEM_LABELS.complaints, line: PRACTICE_STANDARDS, standards: true, off: false },
+  { key: 'rights', label: ITEM_LABELS.rights, line: PRACTICE_STANDARDS, standards: true, off: false },
+  { key: 'myProvider', label: ITEM_LABELS.myProvider, line: 'Only for NDIS participants whose funds are agency or plan managed.', standards: false, off: false },
+  { key: 'budget', label: ITEM_LABELS.budget, line: "For participants who aren't NDIS-funded. NDIS participants already have the required Funding item.", standards: false, off: true },
 ]
 
 const options = (off: boolean) => [{ key: off ? 'Off' : 'Required', label: off ? 'Off' : 'Required' }, { key: 'Optional', label: 'Optional' }]
