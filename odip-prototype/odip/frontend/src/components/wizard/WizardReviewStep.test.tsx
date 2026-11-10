@@ -19,6 +19,15 @@ describe('WizardReviewStep', () => {
     expect(screen.getByText('Jamie')).toBeInTheDocument()
   })
 
+  it('gives a value over 40 characters the full row, left aligned, and keeps a short one on the right', () => {
+    const long = 'Learn to catch the bus on my own and shop for the week without help.'
+    const rows = [{ label: 'Goals', value: long }, { label: 'Name', value: 'Jamie' }]
+    render(<WizardReviewStep groups={[{ stepKey: 'identity', rows }]} steps={steps} onEdit={vi.fn()} />)
+    expect(screen.getByText(long)).toHaveClass('basis-full', 'text-left')
+    expect(screen.getByText('Jamie')).not.toHaveClass('basis-full')
+    expect(screen.getByText('Jamie')).toHaveClass('text-right')
+  })
+
   it('calls onEdit with the group\'s stepKey when its Edit button is clicked', async () => {
     const user = userEvent.setup()
     const onEdit = vi.fn()

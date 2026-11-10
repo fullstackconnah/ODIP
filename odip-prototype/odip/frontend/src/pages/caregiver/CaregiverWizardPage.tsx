@@ -39,6 +39,9 @@ import { buildCaregiverWire, CAREGIVER_STEP_LABELS } from '@/lib/caregiverPayloa
 import { CAREGIVER_INTERNAL_FIELDS } from '@/lib/caregiverFields'
 import { label as fieldLabel, norm as normValue } from '@/lib/caregiverDiff'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
+import { ADL_TYPE_LABELS } from '@/api/types/adl-assessments'
+import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
+import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { KeyIdentifiersStep } from '../profile/steps/KeyIdentifiersStep'
 import { CulturalDepthConsentsStep } from '../profile/steps/CulturalDepthConsentsStep'
@@ -341,11 +344,35 @@ function SubmittedPage({ caregiverName, firstName, providerName }: { caregiverNa
   )
 }
 
+/** A yes/no answer (a boolean, or the form's 'true'/'false' string) reads Yes or No, as on the Profile and Intake review steps; a blank reads a dash. */
+function reviewValue(v: unknown): string {
+  if (v === true || v === 'true') return 'Yes'
+  if (v === false || v === 'false') return 'No'
+  if (Array.isArray(v)) return reviewList(v) || '—'
+  return normValue(v) || '—'
+}
+
+// The column each fixed one-row-per-type list names its rows by, with the label its edit step shows as the row title.
+const ROW_NAME_LABELS: Record<string, Record<string, string> | undefined> = {
+  consentType: CONSENT_TYPE_LABELS, conditionType: HEALTH_CONDITION_TYPE_LABELS, adlType: ADL_TYPE_LABELS, itemType: undefined,
+}
+const answered = (v: unknown) => v != null && v !== '' && v !== false && v !== 'false'
+
+/** A list answer reads as words: a string list comma-joined; a list of rows by the names of the rows that hold an answer ("<n> added" when they have no name). */
+function reviewList(list: unknown[]): string {
+  const rows = list.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+  if (!rows.length) return list.join(', ')
+  // The edit steps keep a row for every type, so a row only counts when it holds an answer besides its name; shortcut: a stale value left under "No" still counts.
+  const filled = rows.filter((r) => Object.entries(r).some(([k, v]) => !(k in ROW_NAME_LABELS) && answered(v)))
+  const names = filled.flatMap((r) => { const k = Object.keys(ROW_NAME_LABELS).find((c) => c in r); return k ? [ROW_NAME_LABELS[k]?.[String(r[k])] ?? String(r[k])] : [] })
+  return names.length ? names.join(', ') : filled.length ? `${filled.length} added` : ''
+}
+
 function reviewBuilder(values: CaregiverFormData, steps: WizardStepDef<CaregiverFormData>[]): ReviewGroup[] {
   return steps.map((step) => ({
     stepKey: step.key,
     rows: step.key === 'aboutYou'
       ? [{ label: 'Your name', value: values.caregiverName || '—' }, { label: 'Relationship', value: values.caregiverRelationship || '—' }]
-      : step.fields.map((f) => ({ label: fieldLabel(String(f)), value: normValue((values as Record<string, unknown>)[f as string]) || '—' })),
+      : step.fields.filter((f) => !CAREGIVER_INTERNAL_FIELDS.has(String(f))).map((f) => ({ label: fieldLabel(String(f)), value: reviewValue((values as Record<string, unknown>)[f as string]) })),
   }))
 }

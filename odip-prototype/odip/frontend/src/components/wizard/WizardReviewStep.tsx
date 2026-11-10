@@ -5,10 +5,13 @@ import type { ReviewGroup, ReviewRow, WizardStepDef } from './types'
 /** Today's `<dl>`/`dt`/`dd` row layout, extracted verbatim — a consumer happy with this doesn't
  * need to reimplement it; one that isn't can override via `renderRow`. */
 function defaultRenderRow(row: ReviewRow) {
+  // A long free-text value (Goals, Notes) takes the full row and reads left to right; a short one stays on the right edge.
+  const long = row.value.length > 40
   return (
-    <div key={row.label} className="flex justify-between gap-4">
+    // Wraps rather than squeezes: a value that cannot sit beside a long label drops under it, so a short word is never split.
+    <div key={row.label} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
       <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
-      <dd className="font-medium text-right min-w-0 break-words">{row.value}</dd>
+      <dd className={`font-medium min-w-0 ml-auto break-words ${long ? 'basis-full text-left' : 'text-right'}`}>{row.value}</dd>
     </div>
   )
 }
@@ -30,7 +33,7 @@ export type WizardReviewStepProps<V> = {
  */
 export function WizardReviewStep<V>({ groups, steps, onEdit, renderRow = defaultRenderRow }: WizardReviewStepProps<V>) {
   return (
-    <div className="grid md:grid-cols-2 gap-[var(--section-gap)]">
+    <div className="grid md:grid-cols-2 items-start gap-[var(--section-gap)]">
       {groups.map((group) => {
         const label = steps.find((s) => s.key === group.stepKey)?.label ?? group.stepKey
         return (

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGetWithDefault, apiPostRaw, apiDeleteRaw } from '../client'
 import { caregiverGet, caregiverPut, caregiverPost } from '../caregiverClient'
 import type {
@@ -18,11 +18,19 @@ export function usePublicCaregiverForm(token: string | undefined) {
   })
 }
 
+/** A 409 says the form was sent from somewhere else (another tab): reload it, and the page shows its submitted view. A 404 reads nothing, the link is gone. */
+function reloadWhenAlreadySubmitted(qc: QueryClient, token: string | undefined) {
+  return (err: unknown) => {
+    if ((err as { response?: { status?: number } })?.response?.status === 409) void qc.invalidateQueries({ queryKey: ['public-caregiver', token] })
+  }
+}
+
 export function useSaveCaregiverDraft(token: string | undefined) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: CaregiverDraftDto) => caregiverPut(`/public/caregiver/${token}/draft`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['public-caregiver', token] }),
+    onError: reloadWhenAlreadySubmitted(qc, token),
   })
 }
 
@@ -31,6 +39,7 @@ export function useSubmitCaregiverForm(token: string | undefined) {
   return useMutation({
     mutationFn: (body: CaregiverDraftDto) => caregiverPost(`/public/caregiver/${token}/submit`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['public-caregiver', token] }),
+    onError: reloadWhenAlreadySubmitted(qc, token),
   })
 }
 
