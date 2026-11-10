@@ -46,6 +46,8 @@ export function useUpsertProviderSettings() {
       qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent, expectedUpdatedAt: undefined, updatedAt }) as unknown as ProviderSettingsDto)
       qc.invalidateQueries({ queryKey: ['provider-settings'] })
       qc.invalidateQueries({ queryKey: ['missed-guidance-contact'] })
+      // Settings history reads this row's audit rows, so a save shows there at once (the app's 30s staleTime would hide it).
+      qc.invalidateQueries({ queryKey: ['audit', 'ProviderSettings'] })
     },
     // A 409 means the row changed since this form loaded it: refetch, so the next save goes out with the version that is there now.
     onError: () => { qc.invalidateQueries({ queryKey: ['provider-settings'] }) },
