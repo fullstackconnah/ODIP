@@ -82,7 +82,16 @@ const crop = async (page, locator, name, vp, pad = 16) => {
   const r = await cropElement(page, locator, path.join(OUT_DIR, name), { touch: vp.touch, natural: true, pad })
   checks.push(checkCropHolds({ ...r, touch: vp.touch }))
 }
-const full = async (page, name, vp) => checks.push(...(await fullPage(page, path.join(OUT_DIR, name), { touch: vp.touch })).checks)
+// The shell grows with the viewport (a sticky foot and min-heights), so grow the viewport until the page fits it before fullPage measures (as budget-settings-copy.mjs does).
+const full = async (page, name, vp) => {
+  for (let i = 0; i < 4 && !vp.touch; i++) {
+    const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
+    if (h <= page.viewportSize().height) break
+    await page.setViewportSize({ width: vp.width, height: h })
+    await page.waitForTimeout(300)
+  }
+  checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', name), { touch: vp.touch })).checks)
+}
 // Every FieldDiff row (the flex line holding an arrow) must end inside the section's frame; the 140 px label column is the component's own.
 const rowsInFrame = async (page, vp, ctx) => {
   const m = await page.evaluate(() => {
