@@ -495,7 +495,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
     }
     return frame('pickPerson', undefined, undefined, (
       <div className="flex flex-col">
-        <input type="search" aria-label="Find participant" placeholder="Find participant" value={personSearch} onChange={e => setPersonSearch(e.target.value)} className="sticky top-0 z-[1] mb-2" />
+        <input type="search" aria-label="Find participant" placeholder="Find participant" value={personSearch} onChange={e => setPersonSearch(e.target.value)} className={`${inputClass} sticky top-0 z-[1] mb-2`} />
         {booked.length > 0 && <PickGroup label="Booked for group support today">
           {booked.filter(s => s.participantName.toLowerCase().includes(search)).map(s => (
             <PickRow key={s.id} label={s.participantName} sub={noBreak(formatShiftTimeRange(s.startTime, s.endTime))} onPick={() => { if (activity) pick(s.participantName, () => attach.mutateAsync({ id: activity.id, shiftIds: [s.id] })) }} />
