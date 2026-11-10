@@ -1095,7 +1095,7 @@ function withPackageFields(shiftId, completion) {
   const breakMins = wholeMinutes(breakMinutes)
   return {
     handoverText: null, nothingToHandOver: false, nothingToNoteConfirmed: false,
-    originalActualStart: null, originalActualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
+    originalActualStart: null, originalActualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null, missingDetails: [],
     ...completion,
     timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
     breaks: breaks.map((b) => breakDto(b, nowMs)), breakMinutes: breakMins, netWorkedMinutes: Math.max(0, gross - breakMins),
@@ -1603,6 +1603,8 @@ const completionQueueItems = Object.values(portalShiftBase)
       timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
       // The incidents the completion's own detail lists (its fixture's `incidents`): what the server's queue counts.
       incidentCount: (completion.incidents || []).length,
+      // The server always sends the list (empty unless a "details later" finish left answers out); no mock completion is one.
+      missingDetails: [],
     }
   })
   .filter(Boolean)
@@ -1613,7 +1615,7 @@ const dashboardQueueRow = (shiftId, staffName, participantName, o) => ({
   shiftId, completionId: `sc-${shiftId}`, participantName, staffName, serviceDate: '2026-10-13',
   rosteredStart: '2026-10-12T23:00:00Z', rosteredEnd: '2026-10-13T05:00:00Z', actualStart: '2026-10-12T23:02:00Z', actualEnd: '2026-10-13T05:04:00Z',
   varianceMinutesStart: 2, varianceMinutesEnd: 4, status: 'PendingReview', timeZoneId: 'Australia/Brisbane', isOutlierVariance: false,
-  varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 30, startWasManual: false, incidentCount: 0, ...o,
+  varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 30, startWasManual: false, incidentCount: 0, missingDetails: [], ...o,
 })
 completionQueueItems.push(
   dashboardQueueRow('shift-dash-clean', 'Priya Nadarajah', 'Liam Okafor', {}),
