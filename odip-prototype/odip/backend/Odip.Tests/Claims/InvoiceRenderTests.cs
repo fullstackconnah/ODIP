@@ -1,8 +1,11 @@
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Services;
 using Xunit;
+using static Odip.Tests.Claims.InvoiceKit;
 using static Odip.Tests.PlanPricing.DraftSigningAndPdfTests;
 
 namespace Odip.Tests.Claims;
@@ -221,5 +224,34 @@ public class InvoiceQuantityWordingTests
         Assert.Contains(Skeleton("1 each"), text);
         Assert.Contains(Skeleton("8.00"), text);
         Assert.Contains(Skeleton("Subtotal: $550.00"), text);
+    }
+    [Fact]
+    public async Task AStoredCreditNote_PrintsTheSleepoverAsOneEach_AndTheHourlyLineAsHours()
+    {
+        var kit = InvoiceKit.Create();
+        kit.Settings(gst: false);
+        var trip = kit.Trip();
+        var booking = kit.Book(trip, kit.Person("Sam", "Lee", PlanType.SelfManaged));
+        var claim = kit.TripClaim(trip, TripClaimStatus.Draft, (booking, 8m, 50m, 400m, GSTCode.P2), (booking, 1m, 150m, 150m, GSTCode.P2));
+        kit.Db.ClaimLineItems.First(l => l.TripClaimId == claim.Id && l.Hours == 1m).SupportItemCode = "01_SLEEP";
+        kit.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
+        {
+            Id = Guid.NewGuid(), ActivityGroupId = Guid.NewGuid(), ItemNumber = "01_SLEEP", Description = "Sleepover", Unit = "E", DayType = ClaimDayType.Weekday,
+            CatalogueVersion = "2026-27", EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
+        });
+        kit.Db.SaveChanges();
+        Assert.Equal(200, StatusOf(await kit.Controller().UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, CancellationToken.None)));
+        var invoice = kit.Db.Invoices.AsNoTracking().Single(i => i.Kind == InvoiceKind.Invoice);
+        foreach (var line in kit.Db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claim.Id).ToList())
+            await kit.Controller().UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, CancellationToken.None);
+        Assert.Equal(200, StatusOf(await kit.Controller().IssueCreditNote(invoice.Id, new InvoiceReasonDto { Reason = "Wrong rate" }, CancellationToken.None)));
+        var credit = kit.Db.Invoices.AsNoTracking().Single(i => i.Kind == InvoiceKind.CreditNote);
+
+        var stored = await kit.Service.RenderStoredAsync(credit.Id, CancellationToken.None);
+
+        var text = TextOf(stored!.Value.Content);
+        Assert.Contains(Skeleton("Hours / qty"), text);
+        Assert.Contains(Skeleton("1 each"), text);
+        Assert.Contains(Skeleton("8.00"), text);
     }
 }
