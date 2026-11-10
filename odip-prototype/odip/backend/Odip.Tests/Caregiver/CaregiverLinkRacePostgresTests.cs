@@ -9,6 +9,7 @@ using Moq;
 using Odip.Api.Controllers;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Audit;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -58,7 +59,7 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
     }
 
     /// <summary>A staff controller whose context has already loaded the form (a stale view), with an optional other party who commits mid-request.</summary>
-    private async Task<(CaregiverSubmissionsController Controller, OdipDbContext Db)> StaffAsync(Guid tenantId, Guid submissionId, CaregiverSubmissionStatus? otherSets = null)
+    private async Task<(CaregiverSubmissionsController Controller, OdipDbContext Db)> StaffAsync(Guid tenantId, Guid submissionId, CaregiverSubmissionStatus? otherSets = null, bool audited = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
@@ -70,6 +71,7 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
                 await using var other = PostgresFixture.NewContext(_pg.ConnectionString);
                 await other.CaregiverProfileSubmissions.IgnoreQueryFilters().Where(x => x.Id == submissionId).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, status));
             }));
+        if (audited) options.AddInterceptors(new AuditInterceptor(new HttpContextAccessor()));
         var db = new OdipDbContext(options.Options, tenant.Object);
         await db.CaregiverProfileSubmissions.SingleAsync(s => s.Id == submissionId);
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test");
@@ -125,5 +127,41 @@ public class CaregiverLinkRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<NoContentResult>(await staff.RevokeLink(participantId, CancellationToken.None));
 
         Assert.Equal([CaregiverSubmissionStatus.Revoked], await StatusesAsync(participantId));
+    }
+
+    private async Task<List<string>> RevokeAuditChangesAsync(Guid submissionId)
+    {
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString);
+        return await db.AuditLogs.IgnoreQueryFilters()
+            .Where(a => a.EntityId == submissionId && a.EntityType == nameof(CaregiverProfileSubmission) && a.Action == AuditAction.Updated)
+            .Select(a => a.Changes).ToListAsync();
+    }
+
+    [SkippableFact]
+    public async Task RevokeLink_WritesAnAuditRowForTheRevoke()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (tenantId, participantId, id) = await SeedAsync(CaregiverSubmissionStatus.Draft);
+        var (staff, db) = await StaffAsync(tenantId, id, audited: true);
+        await using var _ = db;
+
+        await staff.RevokeLink(participantId, CancellationToken.None);
+
+        var changes = Assert.Single(await RevokeAuditChangesAsync(id));
+        Assert.Contains("Revoked", changes);
+    }
+
+    [SkippableFact]
+    public async Task CreateLink_WritesAnAuditRowForTheDraftItRevokes()
+    {
+        Skip.IfNot(_pg.Available, NoPg);
+        var (tenantId, participantId, id) = await SeedAsync(CaregiverSubmissionStatus.Draft);
+        var (staff, db) = await StaffAsync(tenantId, id, audited: true);
+        await using var _ = db;
+
+        Assert.IsType<OkObjectResult>((await staff.CreateLink(participantId, CancellationToken.None)).Result);
+
+        var changes = Assert.Single(await RevokeAuditChangesAsync(id));
+        Assert.Contains("Revoked", changes);
     }
 }

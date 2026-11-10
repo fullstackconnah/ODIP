@@ -57,7 +57,7 @@ public class CatalogueAgreementDraftTests
     }
 
     [Fact]
-    public async Task Hand_typed_hours_are_stored_to_two_decimals_so_the_saved_total_matches_a_reload()
+    public async Task Hand_typed_hours_are_stored_to_two_decimals()
     {
         var (db, participantId) = await ImportedDbAsync();
         await using var _ = db;

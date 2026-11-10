@@ -69,23 +69,18 @@ public class CaregiverSubmissionsController : ControllerBase
         if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
             return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
 
-        // One statement revokes only Draft rows, so a caregiver Submit that commits meanwhile is never overwritten; the re-check then refuses and the transaction rolls back.
-        // EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the tracked path stays there.
+        // Claim each Draft in one statement, so a caregiver Submit that commits meanwhile is never overwritten (409, the transaction rolls back); the tracked save keeps the audit row.
         await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
-        if (tx != null)
+        var drafts = await _db.CaregiverProfileSubmissions
+            .Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
+            .ToListAsync(ct);
+        foreach (var a in drafts)
         {
-            await _db.CaregiverProfileSubmissions.Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
-                .ExecuteUpdateAsync(u => u.SetProperty(s => s.Status, CaregiverSubmissionStatus.Revoked), ct);
-            if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
-                return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
+            if (!await ClaimAsync(a.Id, CaregiverSubmissionStatus.Draft, CaregiverSubmissionStatus.Revoked, ct)) return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
+            a.Status = CaregiverSubmissionStatus.Revoked;
         }
-        else
-        {
-            var active = await _db.CaregiverProfileSubmissions
-                .Where(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Draft)
-                .ToListAsync(ct);
-            foreach (var a in active) a.Status = CaregiverSubmissionStatus.Revoked;
-        }
+        if (await _db.CaregiverProfileSubmissions.AnyAsync(s => s.ParticipantId == participantId && s.Status == CaregiverSubmissionStatus.Submitted, ct))
+            return Conflict(ApiResponse<CaregiverLinkDto>.Fail(WaitingForReview));
 
         var raw = CaregiverTokenService.GenerateRawToken();
         var sub = new CaregiverProfileSubmission
@@ -109,19 +104,23 @@ public class CaregiverSubmissionsController : ControllerBase
     [HttpDelete("/api/v1/participants/{participantId:guid}/caregiver-link")]
     public async Task<IActionResult> RevokeLink(Guid participantId, CancellationToken ct)
     {
-        // One statement, so a form an Accept just moved on is never overwritten with Revoked; InMemory (no ExecuteUpdate) keeps the tracked path.
-        var active = _db.CaregiverProfileSubmissions.Where(s => s.ParticipantId == participantId
-            && (s.Status == CaregiverSubmissionStatus.Draft || s.Status == CaregiverSubmissionStatus.Submitted));
-        if (_db.Database.IsRelational())
+        // Claim each row in one statement, so a form an Accept just moved on is never overwritten with Revoked; the tracked save keeps the audit row.
+        await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
+        var rows = await _db.CaregiverProfileSubmissions
+            .Where(s => s.ParticipantId == participantId && (s.Status == CaregiverSubmissionStatus.Draft || s.Status == CaregiverSubmissionStatus.Submitted))
+            .ToListAsync(ct);
+        var claimed = 0;
+        foreach (var a in rows)
         {
-            if (await active.ExecuteUpdateAsync(u => u.SetProperty(s => s.Status, CaregiverSubmissionStatus.Revoked), ct) == 0)
-                return NotFound(ApiResponse<object>.Fail("No active caregiver link"));
-            return NoContent();
+            if (_db.Database.IsRelational() && await _db.CaregiverProfileSubmissions
+                    .Where(x => x.Id == a.Id && (x.Status == CaregiverSubmissionStatus.Draft || x.Status == CaregiverSubmissionStatus.Submitted))
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, CaregiverSubmissionStatus.Revoked), ct) == 0) continue;
+            a.Status = CaregiverSubmissionStatus.Revoked;
+            claimed++;
         }
-        var rows = await active.ToListAsync(ct);
-        if (rows.Count == 0) return NotFound(ApiResponse<object>.Fail("No active caregiver link"));
-        foreach (var a in rows) a.Status = CaregiverSubmissionStatus.Revoked;
+        if (claimed == 0) return NotFound(ApiResponse<object>.Fail("No active caregiver link"));
         await _db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return NoContent();
     }
 
@@ -197,7 +196,7 @@ public class CaregiverSubmissionsController : ControllerBase
 
         // Claim the row first (Submitted to Accepted in one statement) so a racing Accept or Reject loses with 409; any failure below disposes the transaction and the claim goes with it.
         await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
-        if (!await ClaimAsync(id, CaregiverSubmissionStatus.Accepted, ct)) return AlreadyHandled();
+        if (!await ClaimAsync(id, CaregiverSubmissionStatus.Submitted, CaregiverSubmissionStatus.Accepted, ct)) return AlreadyHandled();
 
         var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, s.Participant, payload, null, ct);
         if (error != null) return BadRequest(ApiResponse<object>.Fail(error));
@@ -221,7 +220,7 @@ public class CaregiverSubmissionsController : ControllerBase
             return Conflict(ApiResponse<object>.Fail("Only a submitted form can be rejected."));
 
         await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
-        if (!await ClaimAsync(id, CaregiverSubmissionStatus.Draft, ct)) return AlreadyHandled();
+        if (!await ClaimAsync(id, CaregiverSubmissionStatus.Submitted, CaregiverSubmissionStatus.Draft, ct)) return AlreadyHandled();
 
         s.Status = CaregiverSubmissionStatus.Draft;
         s.SubmittedAt = null;
@@ -234,10 +233,10 @@ public class CaregiverSubmissionsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Compare-and-set on the status: only one caller moves a Submitted form on. EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the earlier status check stands alone there.</summary>
-    private async Task<bool> ClaimAsync(Guid id, CaregiverSubmissionStatus to, CancellationToken ct) =>
+    /// <summary>Compare-and-set on the status: only one caller moves a form on from the given status. EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the earlier status check stands alone there.</summary>
+    private async Task<bool> ClaimAsync(Guid id, CaregiverSubmissionStatus from, CaregiverSubmissionStatus to, CancellationToken ct) =>
         !_db.Database.IsRelational()
-        || await _db.CaregiverProfileSubmissions.Where(x => x.Id == id && x.Status == CaregiverSubmissionStatus.Submitted)
+        || await _db.CaregiverProfileSubmissions.Where(x => x.Id == id && x.Status == from)
             .ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, to), ct) == 1;
 
     private ObjectResult AlreadyHandled() => Conflict(ApiResponse<object>.Fail("This form was already handled by someone else. It has been refreshed."));
