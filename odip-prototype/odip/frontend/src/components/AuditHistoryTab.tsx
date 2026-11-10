@@ -20,7 +20,7 @@ const ACTION_TONES = { created: 'success', updated: 'info', deleted: 'danger' } 
 export function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
   return (
     <div className="flex items-start gap-2 text-xs text-[var(--color-muted-foreground)]">
-      <span className="font-medium min-w-[140px] shrink-0 text-[var(--color-muted-foreground)]">
+      <span className="font-medium w-[140px] shrink-0 break-words text-[var(--color-muted-foreground)]">
         {field}
       </span>
       <span className="line-through text-[var(--color-muted-foreground)] opacity-70">

@@ -77,3 +77,8 @@ describe('AuditHistoryTab', () => {
     expect(refetch).toHaveBeenCalled()
   })
 })
+
+it('gives a field label a fixed 140px column that wraps, so the values line up', () => {
+  renderTab([entry('a', 'Updated', '2026-10-28T01:00:00Z', [{ field: 'Medication competency check', old: 'Warn', new: 'Block' }])])
+  expect(screen.getByText('Medication competency check')).toHaveClass('w-[140px]', 'shrink-0', 'break-words')
+})

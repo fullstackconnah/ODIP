@@ -179,6 +179,14 @@ describe('Rostering rules and Alert windows entries', () => {
   })
 })
 
+describe('Settings history pointers', () => {
+  it('tells a reader who cannot open Settings history that Admins can see each change', () => {
+    for (const key of ['safety', 'onboarding']) {
+      expect(SECTIONS.find(s => s.key === key)?.description.endsWith('Admins can see each change in Settings history.')).toBe(true)
+    }
+  })
+})
+
 describe('Data retention section', () => {
   const keys = (role: RoleCase, viewingAs = false) => visibleSections({ ...ROLES[role](), viewingAs }).map(s => s.key)
 

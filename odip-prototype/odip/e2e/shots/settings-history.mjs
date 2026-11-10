@@ -103,6 +103,19 @@ const rowsInFrame = async (page, vp, ctx) => {
   check(`${ctx}: every field row ends inside the section (${m.n} rows)`, m.n > 0 && m.over.length === 0, m)
 }
 
+// Every row (FieldDiff) starts its first value at the same x (+-1 px), and that value sits at least 4 px right of its label, so a long label wraps inside its 140 px column instead of pushing the values out of line.
+const valuesAligned = async (page, ctx) => {
+  const m = await page.evaluate(() => {
+    const section = [...document.querySelectorAll('main section')].find((s) => s.querySelector('h2')?.textContent === 'Settings history')
+    const rows = [...section.querySelectorAll('div.flex.items-start')].filter((d) => d.textContent.includes('→'))
+    const cells = rows.map((r) => ({ label: r.children[0].getBoundingClientRect().right, value: r.children[1].getBoundingClientRect().left }))
+    return { n: cells.length, xs: cells.map((c) => Math.round(c.value * 10) / 10), gaps: cells.map((c) => Math.round((c.value - c.label) * 10) / 10) }
+  })
+  const spread = Math.max(...m.xs) - Math.min(...m.xs)
+  check(`${ctx}: every row's first value starts at the same x (+-1 px, ${m.n} rows)`, m.n > 0 && spread <= 1, m.xs)
+  check(`${ctx}: every value starts at least 4 px right of its label`, m.n > 0 && m.gaps.every((g) => g >= 4), m.gaps)
+}
+
 const VPS = [{ name: '1280', width: 1280, height: 900, touch: false }, { name: '390', width: 390, height: 844, touch: true }]
 const browser = await chromium.launch({ headless: true })
 for (const vp of VPS) {
@@ -119,6 +132,7 @@ for (const vp of VPS) {
     check(t('list: count line reads "4 events recorded"'), text.includes('4 events recorded'))
     await noHScroll(page, t('list'))
     await rowsInFrame(page, vp, t('list'))
+    await valuesAligned(page, t('list'))
     await crop(page, frame(page, TITLE), `list-masked-${vp.name}.png`, vp)
     await full(page, `full-page-${vp.name}.png`, vp)
     if (!vp.touch) {
