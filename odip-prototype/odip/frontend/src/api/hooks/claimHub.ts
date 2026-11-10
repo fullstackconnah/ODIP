@@ -5,7 +5,7 @@ import { readText, serverSentence } from './data-export'
 import { fetchPagedList } from './pagedList'
 import { awaitsData } from '@/lib/queryPhase'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
-import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, ManualClaimPreviewDto, ManualClaimRequestDto, ManagedClaimDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
+import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, ManualClaimPreviewDto, ManualClaimRequestDto, ManagedClaimDto, MarkPaidRequestDto, PaidResultDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
@@ -108,7 +108,7 @@ function useBatchWrite<TVars, TOut>(write: (vars: TVars) => Promise<TOut>) {
 export const useMarkBatchUploaded = () => useBatchWrite((batchId: string) => apiPost<BatchDto>(`/claim-batches/${batchId}/uploaded`))
 export const useDiscardBatch = () => useBatchWrite((batchId: string) => apiPost<BatchDto>(`/claim-batches/${batchId}/discard`))
 export const useDismissBatchLine = () => useBatchWrite((batchLineId: string) => apiPost<BatchLineDto>(`/claim-batch-lines/${batchLineId}/dismiss`))
-export const useMarkBatchPaid = () => useBatchWrite(({ batchId, ...body }: MarkPaidRequestDto & { batchId: string }) => apiPost<BatchDto>(`/claim-batches/${batchId}/paid`, body))
+export const useMarkBatchPaid = () => useBatchWrite(({ batchId, ...body }: MarkPaidRequestDto & { batchId: string }) => apiPost<PaidResultDto>(`/claim-batches/${batchId}/paid`, body))
 
 export const useImportResults = () => useBatchWrite(({ batchId, file }: { batchId: string; file: File }) => {
   const form = new FormData()

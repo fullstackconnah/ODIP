@@ -267,7 +267,7 @@ describe('ClaimsHubPage: files', () => {
   it('holds Import results until a file is chosen, then shows what was left alone and what was not in the file', async () => {
     const user = userEvent.setup()
     m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
-    const summary: ResultsImportDto = { successful: 3, rejected: 1, unchanged: 0, leftAlone: 2, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch() }
+    const summary: ResultsImportDto = { successful: 3, rejected: 1, unchanged: 0, leftAlone: 2, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch(), amountDiffers: 0 }
     m.importResults.mockImplementation((_v, o) => o.onSuccess(summary))
     renderPage('/claims?file=b-1')
 
@@ -284,12 +284,24 @@ describe('ClaimsHubPage: files', () => {
     expect(await screen.findByText('Results imported')).toBeInTheDocument()
     expect(screen.getByText('2 lines already had a result and were left alone.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /1 line in the file weren't in BPR261030001/ })).toBeInTheDocument()
+    expect(screen.queryByText(/differ from what was claimed|differs from what was claimed/)).not.toBeInTheDocument()
+  })
+
+  it('says how many paid amounts differ from what was claimed, only when some do', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 3, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: [], unreadRows: [], batch: batch(), amountDiffers: 2 }))
+    renderPage('/claims?file=b-1')
+
+    await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
+    await user.click(screen.getByTestId('file-next-action'))
+    expect(await screen.findByText('2 paid amounts differ from what was claimed.')).toBeInTheDocument()
   })
 
   it("says the results belong to another file when none of the lines match", async () => {
     const user = userEvent.setup()
     m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
-    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 0, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch() }))
+    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 0, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch(), amountDiffers: 0 }))
     renderPage('/claims?file=b-1')
 
     await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
@@ -506,16 +518,77 @@ describe('ClaimsHubPage: file panel', () => {
     expect(screen.getByTestId('file-step-name').closest('li')!.textContent).toBe('Upload BPR261030001.csv')
   })
 
-  it('will not mark a line paid with a cleared amount, and says so', async () => {
-    const user = userEvent.setup()
-    m.batch.mockReturnValue(query(resultsIn({ rejected: 0 })))
-    renderPage('/claims?file=b-1')
+  describe('the Mark paid modal amounts', () => {
+    const line = (n: number, over: Record<string, unknown> = {}) => ({ batchLineId: `bl-${n}`, claimId: 'c-1', participantName: `P${n}`, supportNumber: 'x', from: '2026-08-01', to: '2026-08-01', amount: 175, attempt: 1, rowReference: `R${n}`, outcome: 'Successful' as const, resultAmount: 175, ...over })
+    const open = async (lines: ReturnType<typeof line>[]) => {
+      const user = userEvent.setup()
+      m.batch.mockReturnValue(query(resultsIn({ rejected: 0, successful: lines.length, lines })))
+      renderPage('/claims?file=b-1')
+      await user.click(screen.getByRole('button', { name: `Mark ${lines.length} lines as paid` }))
+      return user
+    }
+    const submitBtn = () => screen.getByRole('button', { name: 'Mark as paid' })
 
-    await user.click(screen.getByRole('button', { name: 'Mark 1 line as paid' }))
-    await user.clear(screen.getByLabelText('Paid for Alex Park'))
-    await user.click(screen.getByRole('button', { name: 'Mark as paid' }))
-    expect(m.paid).not.toHaveBeenCalled()
-    expect(screen.getByText('Enter the amount paid.')).toBeInTheDocument()
+    it('starts a line the NDIA paid nothing for blank, and sends only the other lines', async () => {
+      m.paid.mockImplementation((_v, o) => o.onSuccess(undefined))
+      const user = await open([line(1), line(2, { resultAmount: 0 })])
+      expect(screen.getByLabelText('Paid for P1')).toHaveValue(175)
+      expect(screen.getByLabelText('Paid for P2')).toHaveValue(null)
+      await user.click(submitBtn())
+      expect(m.paid.mock.calls[0][0].lines).toEqual([{ batchLineId: 'bl-1', amount: 175 }])
+      expect(screen.getByText('1 line marked as paid. 1 line left to mark later.')).toBeInTheDocument()
+    })
+
+    it('starts a line paid above its total blank, and will not take a typed amount above it', async () => {
+      const user = await open([line(1), line(2, { resultAmount: 500 })])
+      expect(screen.getByLabelText('Paid for P2')).toHaveValue(null)
+      await user.type(screen.getByLabelText('Paid for P2'), '176')
+      await user.click(submitBtn())
+      expect(m.paid).not.toHaveBeenCalled()
+      expect(screen.getByText("Can't be more than the amount claimed.")).toBeInTheDocument()
+    })
+
+    it('starts a line with no result amount at what was claimed, and shows the claimed amount', async () => {
+      await open([line(1, { resultAmount: null }), line(2)])
+      expect(screen.getByLabelText('Paid for P1')).toHaveValue(175)
+    })
+
+    it('will not submit when every line is blank', async () => {
+      const user = await open([line(1, { resultAmount: 0 }), line(2, { resultAmount: 0 })])
+      await user.click(submitBtn())
+      expect(m.paid).not.toHaveBeenCalled()
+      expect(submitBtn()).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('says why submit is off while every line is blank, and stops once one amount is typed', async () => {
+      const user = await open([line(1), line(2)])
+      const why = 'Enter an amount for at least one line.'
+      expect(screen.queryByText(why)).not.toBeInTheDocument()
+      await user.clear(screen.getByLabelText('Paid for P1'))
+      await user.clear(screen.getByLabelText('Paid for P2'))
+      expect(screen.getByText(why)).toBeInTheDocument()
+      expect(submitBtn()).toHaveAttribute('aria-disabled', 'true')
+      expect(submitBtn()).toHaveAccessibleDescription(why)
+      await user.type(screen.getByLabelText('Paid for P1'), '5')
+      expect(screen.queryByText(why)).not.toBeInTheDocument()
+      expect(submitBtn()).not.toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('says how many were marked and how many are left', async () => {
+      m.paid.mockImplementation((_v, o) => o.onSuccess(undefined))
+      const user = await open([line(1), line(2), line(3), line(4, { resultAmount: 0 })])
+      await user.click(submitBtn())
+      expect(screen.getByText('3 lines marked as paid. 1 line left to mark later.')).toBeInTheDocument()
+    })
+
+    it('will not mark a typed zero as paid, and says so', async () => {
+      const user = await open([line(1), line(2)])
+      await user.clear(screen.getByLabelText('Paid for P1'))
+      await user.type(screen.getByLabelText('Paid for P1'), '0')
+      await user.click(submitBtn())
+      expect(m.paid).not.toHaveBeenCalled()
+      expect(screen.getByText('Enter the amount paid.')).toBeInTheDocument()
+    })
   })
 
   it('counts a file with no successful lines as finished: no badge, no strip, no Mark paid', () => {
