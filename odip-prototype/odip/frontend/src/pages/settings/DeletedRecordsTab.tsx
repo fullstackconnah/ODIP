@@ -8,9 +8,11 @@ import AuditHistoryTab, { FieldDiff } from '@/components/AuditHistoryTab'
 import { DELETED_RECORDS_PAGE_SIZE, useDeletedRecords, type DeletedRecord } from '@/api/hooks'
 import { formatDateTimeAu } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
-import { recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
+import { fieldLabel, recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
 
 type Row = DeletedRecord & { label: string }
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const detailId = (row: Row) => `deleted-detail-${row.id}`
 
@@ -21,12 +23,14 @@ const FULL_HISTORY_TYPES = ['Shift', 'ShiftPattern']
 function Detail({ row }: { row: Row }) {
   const [history, setHistory] = useState(false)
   const participantId = row.fields.find(f => f.field === 'ParticipantId')?.old
+  // A bare id tells the reader nothing; the participant has its own link below.
+  const shown = row.fields.filter(f => !(f.field.endsWith('Id') && GUID.test(f.old ?? '')))
   return (
     <div id={detailId(row)} className="min-w-0 [overflow-wrap:anywhere] py-2">
       <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-[var(--color-border)]">
         <p className="text-xs font-semibold text-[var(--color-muted-foreground)]">What it held</p>
-        {row.fields.length > 0
-          ? row.fields.map((f, i) => <FieldDiff key={i} {...f} />)
+        {shown.length > 0
+          ? shown.map((f, i) => <FieldDiff key={i} {...f} field={fieldLabel(f.field)} />)
           : <p className="text-xs text-[var(--color-muted-foreground)]">No details were kept for this record.</p>}
         {participantId && (
           <Link className="mt-1 flex w-fit items-center text-xs underline pointer-coarse:min-h-[var(--tap-min)]" to={`/participants/${participantId}`}>Open participant</Link>

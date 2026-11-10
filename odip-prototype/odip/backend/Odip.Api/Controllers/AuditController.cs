@@ -161,7 +161,8 @@ public class AuditController : ControllerBase
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(a => new { a.Id, a.EntityType, a.EntityId, a.ChangedAt, a.ChangedByName, a.Changes })
             .ToListAsync(ct);
-        result.Items = rows.Select(a => new DeletedRecordDto(a.Id, a.EntityType, a.EntityId, a.ChangedAt, a.ChangedByName, DeserializeChanges(a.Changes))).ToList();
+        // Bank fields are matched by name, so any deleted row holding one (a ProviderSettings row, say) is masked as its history is.
+        result.Items = rows.Select(a => new DeletedRecordDto(a.Id, a.EntityType, a.EntityId, a.ChangedAt, a.ChangedByName, DeserializeChanges(a.Changes, maskBank: true))).ToList();
         return Ok(ApiResponse<PagedResult<DeletedRecordDto>>.Ok(result));
     }
 

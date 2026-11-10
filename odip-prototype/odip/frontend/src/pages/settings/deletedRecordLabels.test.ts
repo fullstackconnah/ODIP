@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
+import { fieldLabel, recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
 
 const held = (o: Record<string, string>) => Object.entries(o).map(([field, old]) => ({ field, old, new: null }))
 const DASH = ' –⁠ '
@@ -18,6 +18,15 @@ describe('typeName', () => {
     expect(TYPE_FILTER_ITEMS[0]).toEqual({ value: '', label: 'All types' })
     expect(labels.slice(1)).toEqual([...labels.slice(1)].sort((a, b) => a.localeCompare(b)))
     expect(TYPE_FILTER_ITEMS.find(i => i.label === 'Routine')?.value).toBe('ParticipantRoutine')
+  })
+})
+
+describe('fieldLabel', () => {
+  it.each([['ServiceDate', 'Date'], ['StartTime', 'Start'], ['EndTime', 'End'], ['DayOfWeek', 'Day']])('%s is "%s"', (field, label) => expect(fieldLabel(field)).toBe(label))
+
+  it('splits and sentence-cases a name it does not map', () => {
+    expect(fieldLabel('DueDate')).toBe('Due date')
+    expect(fieldLabel('Notes')).toBe('Notes')
   })
 })
 

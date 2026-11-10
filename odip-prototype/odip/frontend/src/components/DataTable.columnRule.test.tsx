@@ -330,6 +330,17 @@ describe('RowMenu: a disabled item keeps its reason', () => {
     expect(classes).not.toContain('aria-disabled:opacity-50')
   })
 
+  it('keeps a disabled item its resting colour on hover, and leaves the danger item as it was', () => {
+    const items = [
+      { label: 'Generate shifts', icon: <span />, disabled: true },
+      { label: 'Remove', icon: <span />, disabled: true, danger: true },
+    ]
+    render(<MemoryRouter><RowMenu name="Pat" items={items} /></MemoryRouter>)
+    const classes = (name: string) => screen.getAllByRole('button', { name })[0].className.split(/\s+/)
+    expect(classes('Generate shifts')).toContain('aria-disabled:hover:text-[var(--color-muted-foreground)]')
+    expect(classes('Remove')).not.toContain('aria-disabled:hover:text-[var(--color-muted-foreground)]')
+  })
+
   it('gives a disabled item with no reason no description', () => {
     render(<MemoryRouter><RowMenu name="Pat" items={disabledItem(vi.fn())} /></MemoryRouter>)
     const button = screen.getAllByRole('button', { name: 'Generate shifts' })[0]

@@ -22,6 +22,12 @@ const splitCase = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').
 
 export const typeName = (entityType: string) => TYPE_NAMES[entityType] ?? splitCase(entityType)
 
+// The names whose split-case reads badly ("Service date", "Start time"); any other field falls back to splitCase.
+const FIELD_LABELS: Record<string, string> = { ServiceDate: 'Date', StartTime: 'Start', EndTime: 'End', DayOfWeek: 'Day' }
+
+/** A kept field's server property name, in words: "DueDate" -> "Due date". */
+export const fieldLabel = (field: string) => FIELD_LABELS[field] ?? splitCase(field)
+
 export const TYPE_FILTER_ITEMS = [
   { value: '', label: 'All types' },
   ...Object.entries(TYPE_NAMES).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label)),

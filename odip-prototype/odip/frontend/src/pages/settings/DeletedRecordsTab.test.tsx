@@ -43,7 +43,7 @@ describe('DeletedRecordsTab', () => {
     expect(screen.getAllByRole('button', { name: /^Hide details for Tue 10 Nov 2026/ }).length).toBeGreaterThan(0)
     const detail = document.getElementById('deleted-detail-d1')!
     expect(within(detail).getByText('What it held')).toBeInTheDocument()
-    expect(within(detail).getByText('ServiceDate')).toBeInTheDocument()
+    expect(within(detail).getByText('Date')).toBeInTheDocument()
     expect(within(detail).getByRole('link', { name: 'Open participant' })).toHaveAttribute('href', '/participants/p-1')
 
     await userEvent.click(screen.getAllByRole('button', { name: /^Show details for Wed 11 Nov 2026/ })[0])
@@ -63,6 +63,28 @@ describe('DeletedRecordsTab', () => {
 
     await userEvent.click(screen.getAllByRole('button', { name: /^Show details for Choking risk/ })[0])
     expect(screen.queryByRole('button', { name: /full history/ })).toBeNull()
+  })
+
+  it('reads what it held in words and leaves out a bare id, keeping the way to the participant', async () => {
+    const guid = '3f2b8c1e-5a47-4d0e-9b6a-1c2d3e4f5a6b'
+    mockUseDeletedRecords.mockReturnValue(result([row({ fields: [
+      { field: 'ServiceDate', old: '2026-11-10', new: null }, { field: 'StartTime', old: '09:00:00', new: null }, { field: 'ParticipantId', old: guid, new: null },
+    ] })]))
+    show()
+    await userEvent.click(screen.getAllByRole('button', { name: /^Show details for Tue 10 Nov 2026/ })[0])
+    const detail = document.getElementById('deleted-detail-d1')!
+    expect(within(detail).getByText('Date')).toBeInTheDocument()
+    expect(within(detail).getByText('Start')).toBeInTheDocument()
+    expect(within(detail).queryByText(/ServiceDate|StartTime|ParticipantId/)).toBeNull()
+    expect(detail.textContent).not.toContain(guid)
+    expect(within(detail).getByRole('link', { name: 'Open participant' })).toHaveAttribute('href', `/participants/${guid}`)
+  })
+
+  it('says so when the only values kept were ids', async () => {
+    mockUseDeletedRecords.mockReturnValue(result([row({ fields: [{ field: 'StaffId', old: '3f2b8c1e-5a47-4d0e-9b6a-1c2d3e4f5a6b', new: null }] })]))
+    show()
+    await userEvent.click(screen.getAllByRole('button', { name: /^Show details for Shift/ })[0])
+    expect(screen.getByText('No details were kept for this record.')).toBeInTheDocument()
   })
 
   it('says so when a record kept no values', async () => {
