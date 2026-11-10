@@ -263,6 +263,25 @@ describe('CaregiverWizardPage — submit', () => {
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
     await waitFor(() => expect(mockSubmitMutateAsync).toHaveBeenCalledTimes(1))
   })
+
+  // PB68-D2: a revoked link (404, PB69-F1: the client sentence names a next step, not the server body) or a form already in (409) says so; a 500 keeps the plain line. Typed values stay in all cases.
+  it.each([
+    [404, 'This link is not valid.', 'This link is no longer valid. Please contact the person who sent it to you.'],
+    [409, 'This form has already been submitted and is awaiting review.', 'This form has already been submitted and is awaiting review.'],
+    [500, 'boom', "We couldn't submit the form. Please try again."],
+  ])('a %i on Submit shows the right sentence and keeps what was typed', async (status, serverSentence, shown) => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    mockSubmitMutateAsync.mockRejectedValue({ response: { status, data: { success: false, errors: [serverSentence] } } })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    for (let i = 0; i < 7; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /submit for review/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(shown)
+    await user.click(within(stepNav()).getByRole('button', { name: /about you/i }))
+    expect(screen.getByLabelText(/your name/i)).toHaveValue('Jane Doe')
+  })
 })
 
 describe('CaregiverWizardPage — Review step (PP-6)', () => {

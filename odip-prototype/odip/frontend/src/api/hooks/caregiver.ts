@@ -41,7 +41,8 @@ export function useGenerateCaregiverLink() {
   return useMutation({
     mutationFn: ({ participantId }: { participantId: string }) =>
       apiPostRaw<CaregiverLinkDto>(`/participants/${participantId}/caregiver-link`, {}),
-    onSuccess: (_, vars) => {
+    // Settled: a 409 (a form already waiting) must also reload the participant and the list.
+    onSettled: (_, __, vars) => {
       qc.invalidateQueries({ queryKey: ['participant', vars.participantId] })
       qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
     },

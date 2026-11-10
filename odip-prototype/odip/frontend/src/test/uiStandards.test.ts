@@ -64,6 +64,8 @@ const BASELINE: Record<Rule, Record<string, number>> = {
   overlay: {
     // Anchored non-modal staff picker on useDialogBehavior (lead, 2026-10-15): below md it is the house SlideOver.
     'pages/rostering/components/StaffPicker.tsx': 1,
+    // The group activity sheet (direction B): an overview with pages pushed inside it, which Modal cannot host (one title, one footer). Runs on useDialogBehavior; the scrim and the dialog are its two matches.
+    'pages/rostering/components/GroupActivityModal.tsx': 2,
   },
   format: {},
 }
