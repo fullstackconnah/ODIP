@@ -139,6 +139,59 @@ public class CrossTenantStaffVehicleTests
         Assert.Equal(VehicleAssignmentStatus.Cancelled, (await db.VehicleAssignments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
     }
 
+    // An unscoped SuperAdmin (no X-View-As-Tenant) sees every organisation: the trip's own organisation must still own the vehicle and the driver.
+    [Fact]
+    public async Task VehicleAssignmentCreate_UnscopedSuperAdmin_VehicleOrDriverOfAnotherTenant_IsRefused_AndWritesNothing()
+    {
+        using var db = Db(isSuperAdmin: true);
+        var trip = Trip(db, A);
+        var ownVehicle = Vehicle(db, A);
+        var foreignVehicle = Vehicle(db, B);
+        var foreignDriver = User(db, B);
+        var controller = new VehicleAssignmentsController(db);
+
+        var withVehicle = await controller.Create(new CreateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = foreignVehicle.Id }, CancellationToken.None);
+        var withDriver = await controller.Create(new CreateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = ownVehicle.Id, DriverStaffId = foreignDriver.Id }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(withVehicle.Result);
+        Assert.IsType<BadRequestObjectResult>(withDriver.Result);
+        Assert.Empty(await db.VehicleAssignments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task VehicleAssignmentUpdate_UnscopedSuperAdmin_VehicleOrDriverOfAnotherTenant_IsRefused_AndKeepsTheRow()
+    {
+        using var db = Db(isSuperAdmin: true);
+        var own = PlantVehicleAssignment(db, A, out var ownVehicle, out _);
+        var foreignVehicle = Vehicle(db, B);
+        var foreignDriver = User(db, B);
+        var controller = new VehicleAssignmentsController(db);
+
+        var withVehicle = await controller.Update(own.Id,
+            new UpdateVehicleAssignmentDto { TripInstanceId = own.TripInstanceId, VehicleId = foreignVehicle.Id, Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
+        var withDriver = await controller.Update(own.Id,
+            new UpdateVehicleAssignmentDto { TripInstanceId = own.TripInstanceId, VehicleId = ownVehicle.Id, DriverStaffId = foreignDriver.Id, Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(withVehicle.Result);
+        Assert.IsType<BadRequestObjectResult>(withDriver.Result);
+        var stored = await db.VehicleAssignments.AsNoTracking().SingleAsync(a => a.Id == own.Id);
+        Assert.Equal((ownVehicle.Id, (Guid?)null), (stored.VehicleId, stored.DriverUserId));
+    }
+
+    [Fact]
+    public async Task VehicleAssignmentCreate_UnscopedSuperAdmin_SameTenantVehicleAndDriver_Saves()
+    {
+        using var db = Db(isSuperAdmin: true);
+        var trip = Trip(db, A);
+        var vehicle = Vehicle(db, A);
+        var driver = User(db, A);
+
+        var result = await new VehicleAssignmentsController(db).Create(new CreateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = vehicle.Id, DriverStaffId = driver.Id, OverrideReason = "Driver licence checked offline" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(driver.Id, (await db.VehicleAssignments.SingleAsync()).DriverUserId);
+    }
+
     // ── staff/{id}/availability and staff/{id}/assignments ─────────────────────────────────────
 
     [Fact]

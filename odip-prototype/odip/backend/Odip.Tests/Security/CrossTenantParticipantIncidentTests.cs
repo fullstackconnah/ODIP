@@ -188,6 +188,33 @@ public class CrossTenantParticipantIncidentTests
     }
 
     [Fact]
+    public async Task IncidentUpdateAndCreate_WitnessOfAnotherTenant_IsRefused_AndSavesNothing()
+    {
+        using var db = Db();
+        var own = PlantIncident(db, A, out var reporter);
+        var foreignWitness = User(db, B);
+        var witnesses = new List<CreateIncidentWitnessDto> { new() { WitnessUserId = foreignWitness.Id } };
+        var controller = new IncidentsController(db);
+
+        var updated = await controller.Update(own.Id, new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low, Title = "Hijacked", Description = "Hijacked",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc), Status = IncidentStatus.Draft, Witnesses = witnesses,
+        }, CancellationToken.None);
+        var created = await controller.Create(new CreateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low, Title = "t", Description = "d",
+            IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc), Witnesses = witnesses,
+        }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(updated.Result);
+        Assert.IsType<BadRequestObjectResult>(created.Result);
+        Assert.Single(await db.IncidentReports.ToListAsync());
+        Assert.Empty(await db.IncidentWitnesses.ToListAsync());
+        Assert.Equal("Original", (await db.IncidentReports.AsNoTracking().SingleAsync()).Title);
+    }
+
+    [Fact]
     public async Task Incident_OwnRows_StillUpdateAndArchive()
     {
         using var db = Db();

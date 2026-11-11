@@ -204,4 +204,18 @@ public class DeletedRecordsTests
         Assert.Equal((200, 1), await HistoryAsync(name, A, "Shift", id));
         Assert.Equal(404, (await HistoryAsync(name, B, "Shift", id)).Status);
     }
+
+    [Fact]
+    public async Task A_bank_field_is_masked_whatever_its_case_and_other_fields_are_not()
+    {
+        var changes = "[{\"Field\":\"Bsb\",\"Old\":\"062000\",\"New\":null},{\"Field\":\"BankAccountName\",\"Old\":\"Sam Lee\",\"New\":null},{\"Field\":\"Name\",\"Old\":\"Sam Lee\",\"New\":null},{\"Field\":null,\"Old\":\"x\",\"New\":null}]";
+        var name = await SeedAsync(Row(A, "ProviderSettings", changes: changes));
+
+        var fields = (await ListAsync(name, A)).GetProperty("items")[0].GetProperty("fields");
+
+        Assert.Equal("changed", fields[0].GetProperty("old").GetString());
+        Assert.Equal("changed", fields[1].GetProperty("old").GetString());
+        Assert.Equal("Sam Lee", fields[2].GetProperty("old").GetString());
+        Assert.Equal("x", fields[3].GetProperty("old").GetString());
+    }
 }

@@ -174,9 +174,10 @@ public class VehicleAssignmentsController : ControllerBase
     /// </summary>
     private const string ArchivedVehicleMessage = "This vehicle is archived. Choose another vehicle.";
 
-    private Task<bool> IsValidDriverRefAsync(Guid? driverUserId, CancellationToken ct) =>
+    // An unscoped SuperAdmin sees every organisation, so the driver and the vehicle must also belong to the trip's own organisation.
+    private Task<bool> IsValidDriverRefAsync(Guid? driverUserId, Guid tripTenantId, CancellationToken ct) =>
         driverUserId.HasValue
-            ? _db.Users.AnyAsync(u => u.Id == driverUserId.Value && u.IsActive, ct)
+            ? _db.Users.AnyAsync(u => u.Id == driverUserId.Value && u.IsActive && u.TenantId == tripTenantId, ct)
             : Task.FromResult(true);
 
     /// <summary>
@@ -248,11 +249,11 @@ public class VehicleAssignmentsController : ControllerBase
         if (trip == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Trip not found"));
 
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == dto.VehicleId, ct);
-        if (vehicle == null)
+        if (vehicle == null || vehicle.TenantId != trip.TenantId)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
         if (!vehicle.IsActive)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail(ArchivedVehicleMessage));
-        if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
+        if (!await IsValidDriverRefAsync(dto.DriverStaffId, trip.TenantId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
         var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, Guid.Empty, ct, dto.DriverStaffId);
@@ -302,13 +303,14 @@ public class VehicleAssignmentsController : ControllerBase
         var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
+        var tripTenantId = await _db.TripInstances.Where(t => t.Id == a.TripInstanceId).Select(t => t.TenantId).FirstAsync(ct);
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == dto.VehicleId, ct);
-        if (vehicle == null)
+        if (vehicle == null || vehicle.TenantId != tripTenantId)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
         // Only a switch to an archived vehicle is refused: an assignment of a since-archived one can still be edited or cancelled.
         if (!vehicle.IsActive && vehicle.Id != a.VehicleId)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail(ArchivedVehicleMessage));
-        if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
+        if (!await IsValidDriverRefAsync(dto.DriverStaffId, tripTenantId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
         // Cancelling via PUT mirrors StaffAssignmentsController.Update: a Cancelled row is excluded
