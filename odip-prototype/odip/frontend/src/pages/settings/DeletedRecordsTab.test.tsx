@@ -51,6 +51,13 @@ describe('DeletedRecordsTab', () => {
     expect(within(document.getElementById('deleted-detail-d2')!).queryByRole('link')).toBeNull() // no ParticipantId held
   })
 
+  it('shows a change that has no field name instead of failing', async () => {
+    mockUseDeletedRecords.mockReturnValue(result([row({ fields: [{ field: null, old: 'Kept note', new: null }] })]))
+    show()
+    await userEvent.click(screen.getAllByRole('button', { name: /^Show details for/ })[0])
+    expect(within(document.getElementById('deleted-detail-d1')!).getByText('Kept note')).toBeInTheDocument()
+  })
+
   it('offers the full history for a shift or pattern only, and shows it on request', async () => {
     mockUseDeletedRecords.mockReturnValue(result([row(), row({ id: 'd2', entityType: 'ShiftPattern', entityId: 'e2' }), row({ id: 'd3', entityType: 'ParticipantRiskEntry', fields: [{ field: 'Description', old: 'Choking risk', new: null }] })]))
     show()
