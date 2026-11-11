@@ -502,6 +502,12 @@ public sealed class BudgetLedgerService
                 : null;
     }
 
+    /// <summary>A claim line's quantity in words: a sleepover shift's nights, a shift-less Each item as "1 each" (as the claim screens and the invoice say it), else hours.</summary>
+    private static string ClaimLineQuantity(LineRow line, Pricing pricing) =>
+        !pricing.IsSleepover(line.ItemCode, line.From) ? ClaimPricing.Quantity(line.Hours, false)
+        : line.ShiftId is not null ? ClaimPricing.Quantity(line.Hours, true)
+        : string.Create(CultureInfo.InvariantCulture, $"{line.Hours:0.##} each");
+
     private static LedgerItem ClaimLineItemOf(LineRow line, PersonRow person, Pricing pricing)
     {
         // Draft and ready claims have not gone to the NDIA: they are pending. Submitted, approved and paid ones are claimed, and a paid one is counted at what was paid when that is recorded.
@@ -512,7 +518,7 @@ public sealed class BudgetLedgerService
             Kind = LedgerRowKind.ClaimLine, Group = pending ? LedgerGroup.Pending : LedgerGroup.Claimed, Date = line.From, Amount = paid ? line.PaidAmount!.Value : line.TotalAmount,
             PaceCategory = pricing.CategoryOf(line.ItemCode, line.From), PlanType = line.BookingPlanType ?? person.PlanType,
             Id = line.Id, ClaimId = line.ClaimId, ShiftId = line.ShiftId, BookingId = line.BookingId,
-            Description = string.Create(CultureInfo.InvariantCulture, $"{line.ClaimReference} · {line.ItemCode} · {ClaimPricing.Quantity(line.Hours, line.ShiftId is not null && pricing.IsSleepover(line.ItemCode, line.From))}"),
+            Description = string.Create(CultureInfo.InvariantCulture, $"{line.ClaimReference} · {line.ItemCode} · {ClaimLineQuantity(line, pricing)}"),
             Status = line.ClaimStatus.ToString(), Link = $"/claims/{line.ClaimId}",
         };
     }

@@ -106,6 +106,25 @@ public class ShiftSplitWordingTests : IDisposable
         Assert.EndsWith("· 8 h", Assert.Single(rows, r => !r.Description.Contains(SleepoverCode)).Description);
     }
 
+    [Theory]
+    [InlineData(SleepoverCode, 1, "1 each")]
+    [InlineData(SleepoverCode, 2, "2 each")]
+    [InlineData(SleepoverCode, 1.5, "1.5 each")]
+    [InlineData("PC_Night", 8, "8 h")]
+    public async Task AClaimLineWithNoShift_SaysEachForAnEachItem_AndHoursOtherwise(string itemCode, double quantity, string expected)
+    {
+        var person = _kit.SeedParticipant();
+        _kit.SeedPlan(person, Core(PlanType.PlanManaged, Q(2, 100000m)));
+        var trip = _kit.SeedTrip(Wed, 2, TripStatus.Completed);
+        var (_, line) = _kit.SeedTripClaim(trip, _kit.SeedBooking(trip, person), TripClaimStatus.Submitted, 150m, Wed, itemCode);
+        line.Hours = (decimal)quantity;
+        _kit.Db.SaveChanges();
+
+        var rows = (await _kit.Ledger.ComputeAsync(_kit.TenantId, new[] { person.Id }, Ct))[person.Id].Items.Where(i => i.Kind == LedgerRowKind.ClaimLine).ToList();
+
+        Assert.EndsWith($"{itemCode} · {expected}", Assert.Single(rows).Description);
+    }
+
     [Fact]
     public async Task ASplitShiftsLedgerRows_SayWhatEachPartHolds_AndASleepoverSaysOneNight()
     {
