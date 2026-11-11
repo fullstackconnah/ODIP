@@ -24,13 +24,13 @@ function Detail({ row }: { row: Row }) {
   const [history, setHistory] = useState(false)
   const participantId = row.fields.find(f => f.field === 'ParticipantId')?.old
   // A bare id tells the reader nothing; the participant has its own link below.
-  const shown = row.fields.filter(f => !(f.field.endsWith('Id') && GUID.test(f.old ?? '')))
+  const shown = row.fields.filter(f => !(f.field?.endsWith('Id') && GUID.test(f.old ?? '')))
   return (
     <div id={detailId(row)} className="min-w-0 [overflow-wrap:anywhere] py-2">
       <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-[var(--color-border)]">
         <p className="text-xs font-semibold text-[var(--color-muted-foreground)]">What it held</p>
         {shown.length > 0
-          ? shown.map((f, i) => <FieldDiff key={i} {...f} field={fieldLabel(f.field)} />)
+          ? shown.map((f, i) => <FieldDiff key={i} {...f} field={fieldLabel(f.field ?? '')} />)
           : <p className="text-xs text-[var(--color-muted-foreground)]">No details were kept for this record.</p>}
         {participantId && (
           <Link className="mt-1 flex w-fit items-center text-xs underline pointer-coarse:min-h-[var(--tap-min)]" to={`/participants/${participantId}`}>Open participant</Link>

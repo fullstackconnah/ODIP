@@ -1981,6 +1981,14 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftPatternDto>.Ok(ToPatternDto(pattern, await SourceVersionsAsync(new[] { pattern }, ct))));
     }
 
+    /// <summary>A worker marked No for the participant cannot be a pattern's Regular worker; the sentence naming them, or null. Tenant-scoped by the context's filter, like the user check beside it.</summary>
+    private async Task<string?> MarkedNoRefusalAsync(Guid participantId, Guid staffId, CancellationToken ct)
+    {
+        var no = await _db.StaffParticipantCompatibilities.Include(c => c.User).Include(c => c.Participant)
+            .FirstOrDefaultAsync(c => c.UserId == staffId && c.ParticipantId == participantId && c.Level == CompatibilityLevel.Excluded, ct);
+        return no is null ? null : $"{no.User!.FullName} is marked No for {no.Participant!.FullName}, so they can't be this pattern's Regular worker.";
+    }
+
     /// <summary>Create a weekly-recurring shift pattern. Not roster-checked — generation checks its own candidates via <c>POST /shifts/check</c> if the frontend chooses to.</summary>
     [HttpPost("patterns")]
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
@@ -1994,6 +2002,8 @@ public class RosteringController : ControllerBase
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
+        if (dto.DefaultStaffId.HasValue && await MarkedNoRefusalAsync(dto.ParticipantId, dto.DefaultStaffId.Value, ct) is { } markedNo)
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(markedNo));
         var supportCode = SupportTypeCheck.Tidy(dto.SupportGroupCode);
         var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         if (await SupportTypeCheck.RefusalAsync(_db, supportCode, dto.EffectiveFrom > providerToday ? dto.EffectiveFrom : providerToday, ct) is { } supportRefusal)
@@ -2043,6 +2053,8 @@ public class RosteringController : ControllerBase
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
+        if (dto.DefaultStaffId.HasValue && (dto.DefaultStaffId != pattern.DefaultUserId || dto.ParticipantId != pattern.ParticipantId) && await MarkedNoRefusalAsync(dto.ParticipantId, dto.DefaultStaffId.Value, ct) is { } markedNo)
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(markedNo));
 
         // The support type is billing, not the agreement's schedule, so an agreement pattern takes it here. A PUT that leaves it out keeps the stored one; a pattern's type is judged on its start, or today when it started earlier.
         var oldSupportCode = pattern.SupportGroupCode;

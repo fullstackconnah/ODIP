@@ -89,9 +89,10 @@ function AuditEntryRow({ entry, fieldLabels, valueLabels, valueFormat }: { entry
         {/* Field changes (if any) */}
         {entry.changes.length > 0 && (
           <div className="flex flex-col gap-0.5 mt-1 pl-3 border-l-2 border-[var(--color-border)]">
-            {entry.changes.map((c, i) => (
-              <FieldDiff key={i} {...c} field={fieldLabels?.[c.field] ?? c.field} words={own(valueLabels, c.field)} lines={own(valueFormat, c.field)} />
-            ))}
+            {entry.changes.map(({ field: name, ...c }, i) => {
+              const field = name ?? '' // the server sends null for a change with no property name
+              return <FieldDiff key={i} {...c} field={fieldLabels?.[field] ?? field} words={own(valueLabels, field)} lines={own(valueFormat, field)} />
+            })}
           </div>
         )}
       </div>
