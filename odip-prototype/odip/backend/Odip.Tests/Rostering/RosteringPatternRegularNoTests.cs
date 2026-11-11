@@ -111,4 +111,62 @@ public class RosteringPatternRegularNoTests
         var body = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal((staff, "Mornings only"), ((Guid)body.Data!.DefaultStaffId!, body.Data.Notes));
     }
+
+    private static async Task<Guid> ShownAsync(Odip.Infrastructure.Data.OdipDbContext db, ShiftPattern p, Guid? staff)
+    {
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = p.ParticipantId, UserId = staff, ServiceDate = new DateOnly(2026, 10, 12), StartTime = p.StartTime, EndTime = p.EndTime,
+            EndsNextDay = p.EndsNextDay, Ratio = p.Ratio, NightType = p.NightType, Status = ShiftStatus.Draft, ShiftPatternId = p.Id,
+        };
+        db.Shifts.Add(shift);
+        await db.SaveChangesAsync();
+        return shift.Id;
+    }
+
+    [Fact]
+    public async Task SetRegular_MakingAWorkerMarkedNoTheRegular_Is400_AndLeavesTheRegularAlone()
+    {
+        var (f, monday, staff) = await RigAsync(CompatibilityLevel.Excluded);
+        await using var _ = f;
+        await using var db = NewDb(f.DbName);
+        var shiftId = await ShownAsync(db, monday, staff);
+
+        var result = await Controller(db).SetRegular(monday.Id, new SetRegularDto { ShiftId = shiftId, StaffId = staff }, CancellationToken.None);
+
+        Assert.Equal(await SentenceAsync(f, staff), Said(result));
+        Assert.Null((await db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == monday.Id)).DefaultUserId);
+    }
+
+    [Fact]
+    public async Task SetRegular_MakingABackupWorkerTheRegular_Saves()
+    {
+        var (f, monday, staff) = await RigAsync(CompatibilityLevel.Backup);
+        await using var _ = f;
+        await using var db = NewDb(f.DbName);
+        var shiftId = await ShownAsync(db, monday, staff);
+
+        Assert.IsType<OkObjectResult>((await Controller(db).SetRegular(monday.Id, new SetRegularDto { ShiftId = shiftId, StaffId = staff }, CancellationToken.None)).Result);
+        Assert.Equal(staff, (await db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == monday.Id)).DefaultUserId);
+    }
+
+    [Fact]
+    public async Task UpdatePattern_ChangingOnlyTheParticipantToOneWhoMarkedTheRegularNo_Is400()
+    {
+        var (f, monday, staff) = await RigAsync(level: null);
+        await using var _ = f;
+        await using var db = NewDb(f.DbName);
+        var created = Assert.IsType<CreatedAtActionResult>((await Controller(db).CreatePattern(NewPattern(monday, staff), CancellationToken.None)).Result);
+        var patternId = Assert.IsType<ApiResponse<ShiftPatternDto>>(created.Value).Data!.Id;
+        var other = new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = "Cal", LastName = "Ng", IsActive = true };
+        db.Participants.Add(other);
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility { Id = Guid.NewGuid(), TenantId = TenantA, UserId = staff, ParticipantId = other.Id, Level = CompatibilityLevel.Excluded });
+        await db.SaveChangesAsync();
+        var stored = await db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == patternId);
+
+        var result = await Controller(db).UpdatePattern(patternId, Edit(stored) with { ParticipantId = other.Id }, CancellationToken.None);
+
+        Assert.Equal("Ben Turner is marked No for Cal Ng, so they can't be this pattern's Regular worker.", Said(result));
+        Assert.Equal(f.ParticipantId, (await db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == patternId)).ParticipantId);
+    }
 }

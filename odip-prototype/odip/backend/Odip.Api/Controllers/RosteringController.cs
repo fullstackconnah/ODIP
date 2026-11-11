@@ -2477,6 +2477,8 @@ public class RosteringController : ControllerBase
             return Conflict(ApiResponse<ShiftPatternDto>.Fail("This shift's agreement pattern has ended, so it has no regular to change.", PatternEndedCode));
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
+        if (dto.StaffId.HasValue && dto.StaffId != pattern.DefaultUserId && await MarkedNoRefusalAsync(pattern.ParticipantId, dto.StaffId.Value, ct) is { } markedNo)
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(markedNo));
         // shortcut: a client that omits ExpectedRegularId (a tab opened before this deploy) skips this check and can still send a stale Stop; the token below only catches a change between our load and save. Such tabs are protected after one reload; upgrade by requiring the field once old tabs are gone.
         // REV281B: the regular the coordinator was shown must still be the live one. DefaultUserId is also a concurrency token, so a change between this load and the save is refused at the UPDATE.
         if (dto.ExpectedRegularId is { } seen && (seen == Guid.Empty ? null : seen) != pattern.DefaultUserId)
