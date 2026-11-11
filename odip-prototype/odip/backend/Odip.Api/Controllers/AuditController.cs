@@ -176,7 +176,7 @@ public class AuditController : ControllerBase
         try
         {
             var changes = JsonSerializer.Deserialize<List<AuditChangeDto>>(json, StoredOptions) ?? [];
-            return maskBank ? changes.Select(c => BankFields.Contains(c.Field) ? c with { Old = MaskBank(c.Old), New = MaskBank(c.New) } : c).ToList() : changes;
+            return maskBank ? changes.Select(c => c.Field != null && BankFields.Contains(c.Field, StringComparer.OrdinalIgnoreCase) ? c with { Old = MaskBank(c.Old), New = MaskBank(c.New) } : c).ToList() : changes;
         }
         catch (JsonException)
         {
