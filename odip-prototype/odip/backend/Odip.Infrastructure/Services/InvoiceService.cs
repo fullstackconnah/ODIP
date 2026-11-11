@@ -164,7 +164,7 @@ public class InvoiceService
     /// <summary>
     /// Draws every invoice PDF from an <see cref="Invoice"/>: an issued one, a credit note, a void or credited one (a band, and no payment block, so it
     /// never invites payment), the never-saved preview (no number: "DRAFT – not issued") and, with <paramref name="legacy"/>, the derived invoice of a
-    /// claim submitted before numbering, exactly as it always printed. <paramref name="creditedBy"/> and <paramref name="creditedOn"/> name the credit
+    /// claim submitted before numbering, with the amounts as they always printed and today's column wording ("Hours / qty", "1 each"). <paramref name="creditedBy"/> and <paramref name="creditedOn"/> name the credit
     /// note of a credited invoice. <paramref name="perItemLines"/> are the ids of the lines whose catalogue unit is Each; they print their quantity as "1 each", not as hours.
     /// </summary>
     public static byte[] Render(Invoice inv, bool legacy = false, string? creditedBy = null, DateOnly? creditedOn = null, IReadOnlySet<Guid>? perItemLines = null)
@@ -541,7 +541,7 @@ public class InvoiceService
         return inv.Lines.Where(l => EffectiveCatalogueResolver.NewestVersion(rows.Where(r => r.ItemNumber == l.SupportItemCode && EffectiveCatalogueResolver.IsValidOn(r, l.ServiceFrom)).ToList()).FirstOrDefault()?.Unit == "E").Select(l => l.Id).ToHashSet();
     }
 
-    /// <summary>An issued invoice or credit note's PDF, drawn from its snapshot only; null when the caller's organisation has no such row.</summary>
+    /// <summary>An issued invoice or credit note's PDF; its amounts come from the snapshot only, and per-item ("each") wording reads the catalogue unit on each line's service date; null when the caller's organisation has no such row.</summary>
     public async Task<(byte[] Content, string FileName)?> RenderStoredAsync(Guid invoiceId, CancellationToken ct)
     {
         var invoice = await _db.Invoices.AsNoTracking().Include(i => i.Lines).FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
