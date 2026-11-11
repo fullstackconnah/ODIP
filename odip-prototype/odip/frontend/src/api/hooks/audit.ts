@@ -3,7 +3,7 @@ import { apiClient, apiGet } from '../client'
 import type { PagedResult } from '../types'
 
 export interface AuditChange {
-  field: string
+  field: string | null // the server sends null for a change with no property name
   old: string | null
   new: string | null
 }
