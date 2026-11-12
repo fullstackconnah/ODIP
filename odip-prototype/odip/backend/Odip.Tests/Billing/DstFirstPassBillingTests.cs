@@ -208,4 +208,39 @@ public class DstFirstPassBillingTests
     [Fact]
     public void AHeadcountCutInTheRepeatedHour_OfAShiftThatEndsInTheSecondPass_StaysTheSecondPass() =>
         Assert.Equal(new[] { 70, 20 }, PartMinutes(new TimeOnly(2, 10), new TimeOnly(2, 40), new TimeOnly(2, 20), true, false));
+
+    // A sleepover that ends in the repeated hour: the finish is read as the first pass, so 18:30 to 02:20 is 470 elapsed minutes (under the 8 hours), not 530.
+    private static ShiftBandSplit SleepoverSplit(DateOnly date, TimeOnly start, TimeOnly end, bool startFirstPass, bool endFirstPass) =>
+        ShiftBands.Split(date, start, end, true, new HashSet<DateOnly>(), Sydney, startFirstPass, endFirstPass);
+
+    [Fact]
+    public void ASleepoverThatEndsInTheFirstPassOfTheRepeatedHour_IsTooShortAt470Minutes() =>
+        Assert.False(SleepoverSplit(Sat, new TimeOnly(18, 30), new TimeOnly(2, 20), false, true).SleepoverQualified);
+
+    [Fact]
+    public void ASleepoverThatEndsInTheSecondPass_StillQualifiesAt530Minutes()
+    {
+        var split = SleepoverSplit(Sat, new TimeOnly(18, 30), new TimeOnly(2, 20), false, false);
+
+        Assert.True(split.SleepoverQualified);
+        Assert.Equal(530, split.Parts.Single(p => p.Sleepover).Minutes);
+    }
+
+    [Fact]
+    public void ASleepoverThatEndsInTheFirstPass_CountsItsPartAtTheElapsedMinutes()
+    {
+        var split = SleepoverSplit(Sat, new TimeOnly(18, 0), new TimeOnly(2, 30), false, true);
+
+        Assert.True(split.SleepoverQualified);
+        Assert.Equal(510, split.Parts.Single(p => p.Sleepover).Minutes);
+    }
+
+    [Fact]
+    public void ASleepoverThatStartsInTheFirstPass_CountsItsPartFromTheFirstPass()
+    {
+        var split = SleepoverSplit(Sun, new TimeOnly(2, 30), new TimeOnly(2, 0), true, false);
+
+        Assert.Equal(ShiftBands.ElapsedMinutes(Sun.ToDateTime(new TimeOnly(2, 30)), Sun.AddDays(1).ToDateTime(new TimeOnly(2, 0)), Sydney, true, false), split.Parts.Single(p => p.Sleepover).Minutes);
+        Assert.Equal(1470, split.Parts.Single(p => p.Sleepover).Minutes);
+    }
 }
