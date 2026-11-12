@@ -1,9 +1,11 @@
 import { useRef, type ReactNode, type RefObject } from 'react'
-import type { RosterBoardDto, ShiftDto } from '@/api/types'
+import type { GroupActivityDto, RosterBoardDto, ShiftDto } from '@/api/types'
 import { useWindowFirstScrollUp } from '@/hooks/useWindowFirstScrollUp'
 import { UnfilledLane } from './UnfilledLane'
 import { StaffRow } from './StaffRow'
 import { ParticipantRow } from './ParticipantRow'
+import { ActivityRow } from './ActivityRow'
+import type { ActivityLane } from '../lib/groupActivities'
 import { formatDayHeader, isToday, ROSTER_DAY_COL_MIN, ROSTER_STICKY_COL_WIDTH, rosterDayColumnsTemplate } from '../lib/roster'
 
 export type RosterGridProps = {
@@ -26,6 +28,9 @@ export type RosterGridProps = {
   draggable?: boolean
   /** The staff strip: rendered inside the sticky band, above the day header, so it stays in view through a drag. */
   strip?: ReactNode
+  /** The By activity view: one lane per activity replaces the participant and staff rows; `board` still gives the week's days. */
+  lanes?: ActivityLane[]
+  onOpenActivity?: (activity: GroupActivityDto) => void
 }
 
 /**
@@ -70,6 +75,7 @@ const BODY_FRAME = 'overflow-x-auto overflow-y-hidden rounded-b-[var(--radius-md
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
 const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
 
+const noop = () => {}
 type Scroller = RefObject<HTMLDivElement | null>
 /** Copies one scroller's scrollLeft to the other only when they differ, so the pair never loops. */
 const follow = (from: Scroller, to: Scroller) => {
@@ -112,7 +118,7 @@ const HEADER_BG_TODAY = 'bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--col
  * Never swap this out for an empty state; guidance for a first-time/empty week belongs in a
  * dismissible hint the caller renders above this component.
  */
-export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable, strip, foot }: RosterGridProps) {
+export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable, strip, foot, lanes, onOpenActivity }: RosterGridProps) {
   const { days } = board
 
   const header = (
@@ -135,7 +141,9 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
 
   return (
     <Frames strip={strip} header={header} foot={foot}>
-        {board.groupBy === 'Participant' ? (
+        {lanes ? (
+          lanes.map(lane => <ActivityRow key={lane.key} lane={lane} days={days} canWrite={canWrite} onOpen={onOpenActivity ?? noop} />)
+        ) : board.groupBy === 'Participant' ? (
           board.participantRows.map(row => (
             <ParticipantRow
               key={row.participantId}

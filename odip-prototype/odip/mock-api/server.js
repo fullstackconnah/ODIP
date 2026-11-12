@@ -1880,6 +1880,21 @@ const sampleOverlapFinding = {
 // Plan builder phase D: `weekStart` is read now (the Monday of the week it falls in; the fixture week when it is missing), and the shifts an approval generates are on the board for the week
 // they fall in. The fixture's own two shifts stay in their own week. Each participant with shifts that week has a row (the real board lists every active participant).
 const BOARD_FIXTURE_WEEK = '2026-09-07'
+// Synthetic week for the By activity view: two sessions sharing a name (one lane), one with no staff (ACTIVITY_STAFF_SHORT, 0 of 2), one Draft.
+function groupActivityFixture(days) {
+  const who = participants.slice(0, 2).map((p) => ({ participantId: p.id, participantName: p.fullName, ratio: 'OneToTwo', shiftIds: [], timesDiffer: false, didNotAttend: false }))
+  const staff = (id, name, start, end) => [{ id: `row-${id}`, staffId: `staff-${id}`, staffName: name, startTime: start, endTime: end, endsNextDay: false, findings: [] }]
+  const make = (id, day, title, start, end, status, staffNeeded, staffRows, people, findings = []) => ({
+    id, serviceDate: days[day], startTime: start, endTime: end, endsNextDay: false, title, status, staffNeeded, staffAssigned: staffRows.length, participants: people, staff: staffRows, findings,
+  })
+  return [
+    make('mock-act-1', 0, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who),
+    make('mock-act-2', 2, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who.slice(0, 1)),
+    make('mock-act-3', 1, 'Art group', '13:00:00', '15:30:00', 'Published', 2, [], who, [{ code: 'ACTIVITY_STAFF_SHORT', severity: 'Warning', message: 'Needs 2 staff, has 0.', requiresReason: false }]),
+    make('mock-act-4', 3, 'Swimming', '09:30:00', '11:30:00', 'Draft', 1, [], []),
+  ]
+}
+
 // A shift saved from the slide-over: the fixture shifts are rebuilt per call, so a status and cancellation reason change is kept here and laid over them. The reason is set and cleared with the status, as ApplyStatus does on the server.
 const SHIFT_CANCELLATION_REASONS = ['ParticipantUnwell', 'ParticipantFamily', 'ParticipantTransport', 'ParticipantDidNotAttend', 'ParticipantOther', 'StaffUnavailable', 'ProviderCancelled', 'Weather', 'RosteredInError', 'Other']
 const shiftEdits = {}
@@ -1898,7 +1913,7 @@ function rosterBoard(searchParams) {
   // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
   board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
   board.groupActivitiesEnabled = true // group activities are flag-on in the mock (R2); the flag-flip PR owns the real switch
-  board.groupActivities = []
+  board.groupActivities = monday === BOARD_FIXTURE_WEEK ? groupActivityFixture(days) : [] // other weeks stay empty: the By activity empty state
   board.weekStart = monday
   board.weekStarted = startedWeeks.has(monday)
   board.days = days
@@ -3126,6 +3141,7 @@ const routes = [
   // Shift notes (NOTES-01/02) — same underlying fixtures for the portal's own-shift view and
   // the roster slide-over's read-only coordinator view.
   ['portal/shifts/:id/notes', (id) => shiftNotesByShiftId[id] || []],
+  ['rostering/group-activities/:id', (id) => groupActivityFixture(Array.from({ length: 7 }, (_, i) => planApproval.addDays(BOARD_FIXTURE_WEEK, i))).find((a) => a.id === id) || null],
   ['rostering/shifts/:id/notes', (id) => shiftNotesByShiftId[id] || []],
 
   // Flagged-notes queue (connection map item 4) — GET /rostering/flagged-notes?withoutIncident=&from=&to=
