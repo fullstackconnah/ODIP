@@ -30,7 +30,7 @@ export function LeftOutCallout({ items, heading, footer }: { items: LeftOutItem[
       <ul className="mt-2 flex flex-col gap-1 text-sm">
         {items.map(item => (
           <li key={item.key} className="break-words">
-            {item.lead != null && <>{item.lead} · </>}{item.description} · {noBreakRefs(item.reason)}{item.action != null && <> · {item.action}</>}
+            {item.lead != null && <>{item.lead} · </>}{noBreakRefs(item.description)} · {noBreakRefs(item.reason)}{item.action != null && <> · {item.action}</>}
           </li>
         ))}
       </ul>
