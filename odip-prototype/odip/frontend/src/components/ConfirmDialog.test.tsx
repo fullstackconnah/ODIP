@@ -62,6 +62,14 @@ describe('ConfirmDialog confirmDisabled', () => {
   })
 })
 
+describe('ConfirmDialog initialFocusRef', () => {
+  it('puts initial focus on the passed element', () => {
+    const ref = { current: null as HTMLInputElement | null }
+    render(<ConfirmDialog open initialFocusRef={ref} onCancel={() => {}} onConfirm={() => {}} title="Save?" message={<input type="radio" aria-label="This one" ref={ref} />} />)
+    expect(screen.getByRole('radio', { name: 'This one' })).toHaveFocus()
+  })
+})
+
 describe('ConfirmDialog focusCancel', () => {
   it('puts initial focus on the cancel button when asked, so the safe answer is the default', () => {
     render(<ConfirmDialog open focusCancel onCancel={() => {}} onConfirm={() => {}} title="Discard?" message="Sure?" cancelLabel="Keep editing" confirmLabel="Discard" />)
