@@ -502,10 +502,10 @@ public sealed class BudgetLedgerService
                 : null;
     }
 
-    /// <summary>A claim line's quantity in words: a sleepover shift's nights, a shift-less Each item as "1 each" (as the claim screens and the invoice say it), else hours.</summary>
+    /// <summary>A claim line's quantity in words: a sleepover shift's nights, an Each item that is not a sleepover night (a shift-less one, or a shift's travel kilometres) as "1 each" (as the claim screens and the invoice say it), else hours.</summary>
     private static string ClaimLineQuantity(LineRow line, Pricing pricing) =>
         !pricing.IsSleepover(line.ItemCode, line.From) ? ClaimPricing.Quantity(line.Hours, false)
-        : line.ShiftId is not null ? ClaimPricing.Quantity(line.Hours, true)
+        : line.ShiftId is not null && !line.ItemCode.Contains(ShiftTravelPricer.KmItemMarker, StringComparison.Ordinal) ? ClaimPricing.Quantity(line.Hours, true)
         : string.Create(CultureInfo.InvariantCulture, $"{line.Hours:0.##} each");
 
     private static LedgerItem ClaimLineItemOf(LineRow line, PersonRow person, Pricing pricing)
@@ -558,7 +558,7 @@ public sealed class BudgetLedgerService
                 Group = completed || past ? LedgerGroup.Pending : LedgerGroup.BookedAhead,
                 Date = part.Date, Amount = part.Amount, PaceCategory = part.PaceCategory, PlanType = person.PlanType,
                 Id = shift.Id, ShiftId = shift.Id,
-                Description = string.Create(CultureInfo.InvariantCulture, $"Shift {start:HH:mm}–{end:HH:mm} · {quantity}"),
+                Description = string.Create(CultureInfo.InvariantCulture, $"Shift {start:HH:mm}–{end:HH:mm} · {quantity}"),
                 Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
                 // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
                 // worked out fully (no shift is flagged now that every band is priced; kept for a future caveat) carries the estimator's caveat.
