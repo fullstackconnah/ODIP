@@ -17,7 +17,7 @@ public class InvoiceLineTimesTests
     private static readonly TimeZoneInfo Sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
     private const string Hours = "04_104_0125_6_1";
 
-    private static DateTime Utc(int h, int m, int dayOffset = 0) => TimeZoneInfo.ConvertTimeToUtc(Day.AddDays(dayOffset).ToDateTime(new TimeOnly(h, m)), Sydney);
+    private static DateTime Utc(int h, int m, int dayOffset = 0, DateOnly? on = null) => TimeZoneInfo.ConvertTimeToUtc((on ?? Day).AddDays(dayOffset).ToDateTime(new TimeOnly(h, m)), Sydney);
 
     private static (InvoiceKit Kit, Participant Person) Org()
     {
@@ -26,11 +26,11 @@ public class InvoiceLineTimesTests
         return (kit, kit.Person("Sam", "Lee", PlanType.SelfManaged));
     }
 
-    private static Shift AddShift(InvoiceKit kit, Participant p, int startHour, int endHour, bool endsNextDay = false, SleepoverType night = SleepoverType.None)
+    private static Shift AddShift(InvoiceKit kit, Participant p, int startHour, int endHour, bool endsNextDay = false, SleepoverType night = SleepoverType.None, DateOnly? on = null)
     {
         var shift = new Shift
         {
-            Id = Guid.NewGuid(), TenantId = p.TenantId, ParticipantId = p.Id, ServiceDate = Day, StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0),
+            Id = Guid.NewGuid(), TenantId = p.TenantId, ParticipantId = p.Id, ServiceDate = on ?? Day, StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0),
             EndsNextDay = endsNextDay, Ratio = SupportRatio.OneToOne, NightType = night, Status = ShiftStatus.Completed,
         };
         kit.Db.Shifts.Add(shift);
@@ -38,13 +38,13 @@ public class InvoiceLineTimesTests
         return shift;
     }
 
-    private static void Complete(InvoiceKit kit, Shift shift, (int H, int M) start, (int H, int M) end, bool active = true, int endDayOffset = 0)
+    private static void Complete(InvoiceKit kit, Shift shift, (int H, int M) start, (int H, int M) end, bool active = true, int endDayOffset = 0, DateOnly? on = null)
     {
         kit.Db.ShiftCompletions.Add(new ShiftCompletion
         {
-            Id = Guid.NewGuid(), TenantId = shift.TenantId, ShiftId = shift.Id, ActualStart = Utc(start.H, start.M), ActualEnd = Utc(end.H, end.M, endDayOffset),
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, ShiftId = shift.Id, ActualStart = Utc(start.H, start.M, 0, on), ActualEnd = Utc(end.H, end.M, endDayOffset, on),
             VarianceMinutesStart = start.H * 60 + start.M - (shift.StartTime.Hour * 60 + shift.StartTime.Minute),
-            VarianceMinutesEnd = end.H * 60 + end.M + 1440 * endDayOffset - (shift.EndTime.Hour * 60 + shift.EndTime.Minute + (shift.EndsNextDay ? 1440 : 0)), ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = Utc(start.H, start.M), IsActive = active,
+            VarianceMinutesEnd = end.H * 60 + end.M + 1440 * endDayOffset - (shift.EndTime.Hour * 60 + shift.EndTime.Minute + (shift.EndsNextDay ? 1440 : 0)), ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = Utc(start.H, start.M, 0, on), IsActive = active,
         });
         kit.Db.SaveChanges();
     }
@@ -127,6 +127,24 @@ public class InvoiceLineTimesTests
         var line = Assert.Single((await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), 8.67m))).Lines);
 
         Assert.Equal((new TimeOnly(8, 40), new TimeOnly(17, 20)), Times(line));
+    }
+
+    /// <summary>A shift 22:00 to 06:00 the next day, worked to 06:30 with the extra time approved, billed the given hours; the October date has the clocks go forward at 02:00, the April one back at 03:00.</summary>
+    [Theory]
+    [InlineData(2026, 10, 3, 7.5, 6, 30)] // changeover night, extra time taken: elapsed 7.5 h (wall 8.5)
+    [InlineData(2026, 10, 3, 7.0, 6, 0)]  // changeover night, extra time refused
+    [InlineData(2026, 4, 4, 9.5, 6, 30)]  // clocks go back, extra time taken
+    [InlineData(2026, 4, 4, 9.0, 6, 0)]   // clocks go back, extra time refused
+    public async Task AnOvernightShiftAcrossAClockChange_ShowsTheSpanTheHoursBilledMatch(int y, int mo, int d, double billed, int endHour, int endMinute)
+    {
+        var (kit, p) = Org();
+        var night = new DateOnly(y, mo, d);
+        var shift = AddShift(kit, p, 22, 6, endsNextDay: true, on: night);
+        Complete(kit, shift, (22, 0), (6, 30), endDayOffset: 1, on: night);
+
+        var line = Assert.Single((await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), (decimal)billed))).Lines);
+
+        Assert.Equal((new TimeOnly(22, 0), new TimeOnly(endHour, endMinute)), Times(line));
     }
 
     [Fact]
