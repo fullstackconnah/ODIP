@@ -43,6 +43,7 @@ public class TenantFilterCoverageTests
         ["Tenant"] = "the organisation table itself, written by SuperAdmin only (TenantsController, AdminUsersController); read across organisations on purpose for sign-in and the email-domain checks",
         ["WhatsNewEntry"] = "release notes from Bunya Support, the same for every organisation; written by SuperAdmin only",
         ["WhatsNewUserState"] = "one person's What's new read marks, keyed by user, read and written only for the signed-in user",
+        ["UserUiPreference"] = "one person's saved screen choices, keyed by user, read and written only for the signed-in user",
         ["EarlyAccessRequest"] = "anonymous public submissions with no tenant (see the comment on its mapping)",
         ["EarlyAccessLaterSubmission"] = "a repeat of an anonymous public submission, read only through its sign-up (EarlyAccessRequest)",
         // Legacy.

@@ -131,6 +131,7 @@ public class OdipDbContext : DbContext
 
     /// <summary>When each person last opened What's new. Keyed on the user, NOT tenant-scoped.</summary>
     public DbSet<WhatsNewUserState> WhatsNewUserStates => Set<WhatsNewUserState>();
+    public DbSet<UserUiPreference> UserUiPreferences => Set<UserUiPreference>();
     public DbSet<EarlyAccessLaterSubmission> EarlyAccessLaterSubmissions => Set<EarlyAccessLaterSubmission>();
 
     // Rostering (M4)
@@ -2112,6 +2113,15 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.UserId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Like WhatsNewUserState: keyed on the user, no tenant column, no query filter, gone with the user.
+        modelBuilder.Entity<UserUiPreference>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId).IsUnique();
+            entity.Property(e => e.ItineraryView).HasMaxLength(10);
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 

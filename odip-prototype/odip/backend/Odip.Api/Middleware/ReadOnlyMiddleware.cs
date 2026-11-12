@@ -37,6 +37,7 @@ public class ReadOnlyMiddleware
     private static readonly string[] AuthPrefix = { "api", "v1", "auth" };
     private static readonly string[] MicrosoftAuthPrefix = { "api", "v1", "auth", "microsoft" };
     private static readonly string[] WhatsNewPrefix = { "api", "v1", "whats-new" };
+    private static readonly string[] UiPreferencesPath = { "api", "v1", "me", "ui-preferences" };
     private static readonly string[] ProblemReportsPath = { "api", "v1", "problem-reports" };
     private static readonly string[] ClientErrorsPath = { "api", "v1", "client-errors" };
 
@@ -49,8 +50,10 @@ public class ReadOnlyMiddleware
     /// </summary>
     private static bool IsOwnReadMark(HttpRequest request)
     {
-        if (!HttpMethods.IsPost(request.Method)) return false;
         var segments = (request.Path.Value ?? string.Empty).Trim('/').Split('/');
+        // A saved screen choice (the itinerary view) changes only the caller's own row: exactly PUT api/v1/me/ui-preferences.
+        if (HttpMethods.IsPut(request.Method)) return segments.SequenceEqual(UiPreferencesPath, StringComparer.OrdinalIgnoreCase);
+        if (!HttpMethods.IsPost(request.Method)) return false;
         // Signing out and renewing a Microsoft session change no data, and a ReadOnly user must be able to do both.
         if (segments.Length == 4 && segments.Take(3).SequenceEqual(AuthPrefix, StringComparer.OrdinalIgnoreCase) && string.Equals(segments[3], "logout", StringComparison.OrdinalIgnoreCase)) return true;
         if (segments.Length == 5 && segments.Take(4).SequenceEqual(MicrosoftAuthPrefix, StringComparer.OrdinalIgnoreCase) && string.Equals(segments[4], "refresh", StringComparison.OrdinalIgnoreCase)) return true;
