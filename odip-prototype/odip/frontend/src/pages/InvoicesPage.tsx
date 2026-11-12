@@ -161,7 +161,7 @@ export default function InvoicesPage() {
       key: 'participantName',
       header: 'Participant',
       render: row => (
-        <div className="md:max-w-[7rem] xl:max-w-[14rem] 2xl:max-w-[18rem]">
+        <div className="md:max-w-[8rem] xl:max-w-[14rem] 2xl:max-w-[18rem]">
           <CellText>{row.participantName}</CellText>
           <CellText className={MUTED_LINE}>
             {row.billToName && row.billToName !== row.participantName ? `Bill to ${row.billToName}` : row.payerKind === 'SelfManaged' ? 'Self managed' : 'Plan managed'}
@@ -177,12 +177,12 @@ export default function InvoicesPage() {
         <Link
           to={`/claims/${row.tripClaimId}`}
           title={row.claimReference}
-          className={`block text-[var(--color-primary)] hover:underline md:max-w-[6.5rem] md:truncate xl:max-w-none ${TAP_TRUNCATED_LINK}`}
+          className={`block text-[var(--color-primary)] hover:underline md:max-w-[7rem] md:truncate xl:max-w-none ${TAP_TRUNCATED_LINK}`}
         >
           {row.claimReference || '—'}
         </Link>
       ) : (
-        <div>
+        <div className="md:max-w-[7rem] xl:max-w-none">
           <CellText className="text-[var(--color-muted-foreground)]" title={row.claimReference}>{row.claimReference || '—'}</CellText>
           <span className={`${MUTED_LINE} block`}>Claim deleted</span>
         </div>

@@ -79,6 +79,13 @@ describe('InvoicesPage: the list', () => {
     expect(screen.getByText('TC-9-20260101')).toBeInTheDocument()
   })
 
+  it('caps the reference of a deleted claim like the claim link, so it cannot widen the table at 1024', () => {
+    mockUseInvoiceRegister.mockReturnValue(ready([row({ id: 'a', displayNumber: 'INV-0001', claimReference: 'TC-43002-20261020', tripClaimId: undefined })]))
+    renderPage()
+    expect(screen.getByText('TC-43002-20261020').parentElement).toHaveClass('md:max-w-[7rem]', 'xl:max-w-none')
+    expect(screen.getByText('Claim deleted')).toBeInTheDocument()
+  })
+
   it('mutes and strikes through the total of a voided invoice, and leaves a credited one in full ink', () => {
     mockUseInvoiceRegister.mockReturnValue(ready([
       row({ id: 'v', displayNumber: 'INV-0001', status: 'Voided', total: 111 }),
