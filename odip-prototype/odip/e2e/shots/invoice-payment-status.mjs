@@ -44,15 +44,17 @@ const go = async (page, url, ready) => {
   await page.waitForLoadState('networkidle').catch(() => {})
 }
 
+// The register and claim-detail tables scroll inside their own frame when a row is wider than the page (shape check 11); only those frames may.
+const SCROLL_FRAMES = ['div[class*="overflow-x-auto"]', 'main div.relative[class*="bg-[var(--color-card)]"]']
 // A desktop shot is the whole page; a phone shot is the page's <main>, cropped (fullPage resizes and would drop the touch emulation).
 async function shot(page, vp, name) {
   if (!vp.touch) {
-    const r = await fullPage(page, path.join(OUT_DIR, 'full', `${name}.png`), { touch: false })
+    const r = await fullPage(page, path.join(OUT_DIR, 'full', `${name}.png`), { touch: false, allow: SCROLL_FRAMES })
     checks.push(...r.checks)
     return
   }
   const main = page.locator('main').first()
-  const r = await cropElement(page, main, path.join(OUT_DIR, `${name}.png`), { touch: true, natural: true, pad: 0 })
+  const r = await cropElement(page, main, path.join(OUT_DIR, `${name}.png`), { touch: true, natural: true, pad: 0, hideChrome: true })
   checks.push(checkCropHolds({ ...r, touch: true }))
   checks.push(await layoutCheck(page, main, name))
 }
