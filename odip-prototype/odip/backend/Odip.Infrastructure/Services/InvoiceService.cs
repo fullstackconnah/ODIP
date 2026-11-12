@@ -5,6 +5,7 @@ using Odip.Application.DTOs;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -585,8 +586,10 @@ public class InvoiceService
                 // The claim's refusal of approved extra time is not stored, so read it from the hours billed: stamp the span that length matches (a tie keeps the priced one).
                 double Gap(ClaimSpan s)
                 {
-                    var alone = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, s.Start, s.End, s.EndsNextDay, shift.NightType, ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone))?.Sum(b => b.To - b.From) ?? 0;
-                    return Math.Abs((s.EndLocal - s.StartLocal).TotalHours - alone / 60.0 - (double)billed.GetValueOrDefault(shift.Id));
+                    var zone = ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone);
+                    var alone = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, s.Start, s.End, s.EndsNextDay, shift.NightType, zone)?.Sum(b => b.To - b.From) ?? 0;
+                    // Elapsed, like the hours billed: the wall-clock length is an hour out on a night the clocks change.
+                    return Math.Abs(ShiftBands.ElapsedMinutes(s.StartLocal, s.EndLocal, zone) / 60.0 - alone / 60.0 - (double)billed.GetValueOrDefault(shift.Id));
                 }
                 var window = cw.WithoutExtra is { } without && Gap(without) < Gap(cw.Priced) ? without : cw.Priced;
                 line.ServiceStartTime = window.Start;

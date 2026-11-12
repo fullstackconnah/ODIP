@@ -15,6 +15,9 @@ public sealed record ShiftBandSplit(IReadOnlyList<ShiftBandPart> Parts, bool Sle
 /// </summary>
 public static class ShiftBands
 {
+    /// <summary>Elapsed minutes between two wall-clock readings in the zone, the measure the bands bill by (an hour is added or lost on the nights the clocks change).</summary>
+    public static int ElapsedMinutes(DateTime from, DateTime to, TimeZoneInfo zone) => OccurrencePricer.RealMinutes(from, to, zone);
+
     /// <param name="publicHolidays">The whole-day public holidays that apply where the participant is, any date (the shift can run into the day after its service date).</param>
     /// <param name="zone">The organisation's time zone, where the clocks change.</param>
     public static ShiftBandSplit Split(DateOnly serviceDate, TimeOnly start, TimeOnly end, bool workerMaySleep, IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone)

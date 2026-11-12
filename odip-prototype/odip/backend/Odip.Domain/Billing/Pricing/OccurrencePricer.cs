@@ -244,7 +244,7 @@ internal sealed class OccurrencePricer
     }
 
     /// <summary>Elapsed minutes between two wall-clock readings in the delivery zone: an hour is added or lost on the two nights a year the clocks change.</summary>
-    private static int RealMinutes(DateTime from, DateTime to, TimeZoneInfo zone) =>
+    internal static int RealMinutes(DateTime from, DateTime to, TimeZoneInfo zone) =>
         (int)Math.Round((Instant(to, zone) - Instant(from, zone)).TotalMinutes);
 
     /// <summary>
