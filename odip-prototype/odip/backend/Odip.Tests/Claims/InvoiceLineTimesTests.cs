@@ -43,7 +43,8 @@ public class InvoiceLineTimesTests
         kit.Db.ShiftCompletions.Add(new ShiftCompletion
         {
             Id = Guid.NewGuid(), TenantId = shift.TenantId, ShiftId = shift.Id, ActualStart = Utc(start.H, start.M), ActualEnd = Utc(end.H, end.M, endDayOffset),
-            VarianceMinutesStart = 0, VarianceMinutesEnd = 0, ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = Utc(start.H, start.M), IsActive = active,
+            VarianceMinutesStart = start.H * 60 + start.M - (shift.StartTime.Hour * 60 + shift.StartTime.Minute),
+            VarianceMinutesEnd = end.H * 60 + end.M + 1440 * endDayOffset - (shift.EndTime.Hour * 60 + shift.EndTime.Minute + (shift.EndsNextDay ? 1440 : 0)), ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = Utc(start.H, start.M), IsActive = active,
         });
         kit.Db.SaveChanges();
     }
@@ -77,6 +78,14 @@ public class InvoiceLineTimesTests
         return claim;
     }
 
+    /// <summary>Sets the hours each claim line bills, as a claim priced with or without approved extra time would.</summary>
+    private static TripClaim Billed(InvoiceKit kit, TripClaim claim, decimal hours)
+    {
+        foreach (var l in kit.Db.ClaimLineItems.Where(x => x.TripClaimId == claim.Id)) l.Hours = hours;
+        kit.Db.SaveChanges();
+        return claim;
+    }
+
     private static async Task<Invoice> Issue(InvoiceKit kit, TripClaim claim) =>
         Assert.Single(await kit.Service.IssueForSubmitAsync(claim.Id, Now.UtcDateTime, null, Ct));
 
@@ -89,11 +98,48 @@ public class InvoiceLineTimesTests
         var shift = AddShift(kit, p, 9, 17);
         Complete(kit, shift, (8, 40), (17, 20));
 
-        var invoice = await Issue(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)));
+        var invoice = await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), 8.67m));
 
         var line = Assert.Single(invoice.Lines);
         Assert.Equal(new TimeOnly(8, 40), line.ServiceStartTime);
         Assert.Equal(new TimeOnly(17, 20), line.ServiceEndTime);
+    }
+
+    [Fact]
+    public async Task WhenTheClaimRefusedApprovedExtraTime_TheLineShowsTheRosteredTimesItWasPricedOn()
+    {
+        var (kit, p) = Org();
+        var shift = AddShift(kit, p, 9, 17);
+        Complete(kit, shift, (8, 40), (17, 20));
+
+        var line = Assert.Single((await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), 8m))).Lines);
+
+        Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0)), Times(line));
+    }
+
+    [Fact]
+    public async Task WhenTheClaimTookApprovedExtraTime_TheLineShowsTheWorkedTimes()
+    {
+        var (kit, p) = Org();
+        var shift = AddShift(kit, p, 9, 17);
+        Complete(kit, shift, (8, 40), (17, 20));
+
+        var line = Assert.Single((await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), 8.67m))).Lines);
+
+        Assert.Equal((new TimeOnly(8, 40), new TimeOnly(17, 20)), Times(line));
+    }
+
+    [Fact]
+    public async Task AShiftSplitIntoTwoLinesPricedWithoutExtraTime_GivesBothTheRosteredTimes()
+    {
+        var (kit, p) = Org();
+        var shift = AddShift(kit, p, 9, 17);
+        Complete(kit, shift, (8, 40), (17, 20));
+
+        var invoice = await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0), (shift.Id, Hours, 1)), 4m));
+
+        Assert.Equal(2, invoice.Lines.Count);
+        Assert.All(invoice.Lines, l => Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0)), Times(l)));
     }
 
     [Theory]

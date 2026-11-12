@@ -572,10 +572,14 @@ public class InvoiceService
         if (shifts.Count == 0) return;
         var completions = await ShiftClaimWindow.LoadAsync(_db, shifts.Keys.ToList(), ct);
         var zones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, shifts.Values.Select(s => s.ServiceLocationId), ct);
+        var billed = hours.GroupBy(l => shiftOf[l.ClaimLineItemId!.Value]).ToDictionary(g => g.Key, g => g.Sum(l => l.Hours));
         foreach (var line in hours)
             if (shifts.TryGetValue(shiftOf[line.ClaimLineItemId!.Value], out var shift))
             {
-                var window = ShiftClaimWindow.For(shift, completions.GetValueOrDefault(shift.Id), ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone)).Priced;
+                var cw = ShiftClaimWindow.For(shift, completions.GetValueOrDefault(shift.Id), ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone));
+                // The claim's refusal of approved extra time is not stored, so read it from the hours billed: stamp the span that length matches (a tie keeps the priced one).
+                double Gap(ClaimSpan s) => Math.Abs((s.EndLocal - s.StartLocal).TotalHours - (double)billed[shift.Id]);
+                var window = cw.WithoutExtra is { } without && Gap(without) < Gap(cw.Priced) ? without : cw.Priced;
                 line.ServiceStartTime = window.Start;
                 line.ServiceEndTime = window.End;
             }
