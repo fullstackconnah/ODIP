@@ -94,7 +94,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     page()
-    expect(screen.getByText(/cannot capture, edit, or start/i)).toBeInTheDocument()
+    expect(screen.queryByText(/cannot capture, edit, or start/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /capture enquiry|edit enquiry|start intake|book intake|more actions/i })).not.toBeInTheDocument()
     // The step reads as text, not a button, and no cell says Read-only.
     expect(within(screen.getByRole('row', { name: /Ava Ng/ })).queryByRole('button')).not.toBeInTheDocument()

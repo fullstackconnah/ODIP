@@ -28,6 +28,9 @@ public class ParticipantRoutinesController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<ParticipantRoutineDto>>>> GetForParticipant(
         Guid participantId, [FromQuery] bool includeInactive = false, CancellationToken ct = default)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == participantId, ct))
+            return NotFound(ApiResponse<List<ParticipantRoutineDto>>.Fail("Participant not found"));
+
         var query = _db.ParticipantRoutines.Where(r => r.ParticipantId == participantId);
         if (!includeInactive)
             query = query.Where(r => r.IsActive);

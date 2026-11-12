@@ -103,6 +103,48 @@ public class CrossTenantTaskBodyIdTests
             (stored.TripInstanceId, stored.ParticipantBookingId, stored.AccommodationReservationId, stored.VehicleAssignmentId, stored.StaffAssignmentId));
     }
 
+    // No trip named: the trip is the booking's (or none), but the linked rows must still all sit on one trip.
+    [Theory]
+    [InlineData(true, "reservation", "Reservation not found.")]
+    [InlineData(true, "vehicle assignment", "Vehicle assignment not found.")]
+    [InlineData(true, "staff assignment", "Staff assignment not found.")]
+    [InlineData(false, "vehicle assignment", "Vehicle assignment not found.")]
+    public async Task TaskCreate_NoTrip_RowsOfTwoTrips_Returns400_AndWritesNothing(bool withBooking, string kind, string message)
+    {
+        using var db = Db();
+        var first = PlantLinked(db, A);
+        var second = PlantLinked(db, A);
+        var dto = TaskFor(kind, second, Guid.Empty) with { TripInstanceId = null };
+        dto = withBooking ? dto with { ParticipantBookingId = first.Booking.Id } : dto with { AccommodationReservationId = first.Reservation.Id };
+
+        var result = await new TasksController(db).Create(dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<TaskDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal(message, Assert.Single(body.Errors!));
+        Assert.Empty(await db.BookingTasks.IgnoreQueryFilters().ToListAsync());
+    }
+
+    // No trip named, every row on one trip: saved as before (the booking names the trip; without a booking the task carries no trip).
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TaskCreate_NoTrip_RowsOfOneTrip_StillCreates(bool withBooking)
+    {
+        using var db = Db();
+        var own = PlantLinked(db, A);
+
+        var result = await new TasksController(db).Create(new CreateTaskDto
+        {
+            Title = "Confirm", ParticipantBookingId = withBooking ? own.Booking.Id : null, AccommodationReservationId = own.Reservation.Id,
+            VehicleAssignmentId = own.VehicleAssignment.Id, StaffAssignmentId = own.StaffAssignment.Id,
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var stored = await db.BookingTasks.AsNoTracking().SingleAsync();
+        Assert.Equal(withBooking ? own.Trip.Id : (Guid?)null, stored.TripInstanceId);
+        Assert.Equal((own.Reservation.Id, own.VehicleAssignment.Id, own.StaffAssignment.Id), (stored.AccommodationReservationId, stored.VehicleAssignmentId, stored.StaffAssignmentId));
+    }
+
     // Update takes the same DTO but never writes the links (it keeps the ones the task was created with), so the ids in its body cannot move a task onto another organisation's rows.
     [Fact]
     public async Task TaskUpdate_IgnoresTheLinkIdsInItsBody()
