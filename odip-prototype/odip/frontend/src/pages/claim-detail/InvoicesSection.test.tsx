@@ -174,6 +174,10 @@ describe('InvoicesSection', () => {
     expect(screen.queryByRole('columnheader', { name: 'Payment' })).not.toBeInTheDocument()
     expect(within(r42.querySelector('td[data-label="Status"]') as HTMLElement).getByText('Outstanding')).toBeInTheDocument()
     expect(rowOf('INV-0041').querySelector('td[data-label="Status"] .mt-1')).toBeNull()
+    // The two pills are a flex column with the house pill-stack gap (gap-1), not a line box plus a margin.
+    const stack = within(r42).getByText('Outstanding').closest('[data-status-badge]')!.parentElement!
+    expect(stack).toHaveClass('flex', 'flex-col', 'gap-1')
+    expect(stack.querySelectorAll('[data-status-badge]')).toHaveLength(2)
   })
 
   it('preview: no Payment column, nothing is issued to be paid', async () => {

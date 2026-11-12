@@ -185,11 +185,11 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 minWidth: '7rem',
                 render: (row: InvoiceRow) => row.invoice
                   ? (
-                    <>
+                    <div className="flex flex-col items-start gap-1">
                       <StatusBadge status={row.invoice.status} />
                       {/* From md to below 2xl the Payment column would clip the row actions, so its pill stacks here instead (the phone card keeps its own Payment field). */}
-                      {paymentStacked && row.invoice.paymentStatus && <span className="mt-1 flex">{paymentPill(row)}</span>}
-                    </>
+                      {paymentStacked && row.invoice.paymentStatus && paymentPill(row)}
+                    </div>
                   )
                   : state === 'preview' ? <StatusBadge tone="neutral" label="Not issued" /> : <span className="text-[var(--color-muted-foreground)] max-md:hidden">—</span>,
               },
