@@ -274,8 +274,8 @@ describe('InvoicesPage: the Payment column and filter', () => {
     }
   })
 
-  it('from md to below xl the Payment column is out of the table and the pill stacks under the status; a row with no payment status gets nothing extra', () => {
-    window.matchMedia = ((q: string) => ({ matches: q === '(min-width: 48rem) and (max-width: 79.99rem)', media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia
+  it('from md to below 2xl the Payment column is out of the table and the pill stacks under the status; a row with no payment status gets nothing extra', () => {
+    window.matchMedia = ((q: string) => ({ matches: q === '(min-width: 48rem) and (max-width: 95.99rem)', media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia
     mockUseInvoiceRegister.mockReturnValue(ready([
       row({ id: 'a', displayNumber: 'INV-0001', paymentStatus: 'PartPaid' }),
       row({ id: 'b', displayNumber: 'INV-0002', status: 'Voided', paymentStatus: null }),

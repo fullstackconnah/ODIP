@@ -119,7 +119,7 @@ async function filterChecks(page, vp) {
   }
 }
 
-const VPS = [{ name: '390', width: 390, height: 844, touch: true }, { name: '1024', width: 1024, height: 800, touch: false }, { name: '1280', width: 1280, height: 800, touch: false }, { name: '1440', width: 1440, height: 900, touch: false }]
+const VPS = [{ name: '390', width: 390, height: 844, touch: true }, { name: '1024', width: 1024, height: 800, touch: false }, { name: '1280', width: 1280, height: 800, touch: false }, { name: '1536', width: 1536, height: 900, touch: false }, { name: '1440', width: 1440, height: 900, touch: false }]
 const browser = await chromium.launch({ headless: true })
 for (const vp of VPS) {
   const { context, page } = await openPage(browser, vp)
@@ -127,14 +127,14 @@ for (const vp of VPS) {
 
   // register-mixed: one row of each payment status, a voided invoice, a credit note (the first page of the mock register)
   await go(page, '/invoices', page.getByText('INV-9994'))
-  await shot(page, vp, vp.name === '1280' ? 'register-mixed-1280-admin' : `register-mixed-${vp.name}`)
+  await shot(page, vp, ['1280', '1536'].includes(vp.name) ? `register-mixed-${vp.name}-admin` : `register-mixed-${vp.name}`)
   await pillsFit(page, `register ${vp.name}`)
-  const regStacked = vp.width < 1280 && !phone // xl up keeps its own Payment column; md to below xl stacks it
+  const regStacked = vp.width < 1536 && !phone // 2xl up keeps its own Payment column; md to below 2xl stacks it
   if (!phone) { await stackedFits(page, `register ${vp.name}`, regStacked); await frameFits(page, `register ${vp.name}`) }
   if (phone) await noHScroll(page, 'register-mixed 390')
   else {
     const out = await rowHeight(page, 'INV-9994'), voided = await rowHeight(page, 'INV-9997')
-    // Rows are one height at xl and up; below xl a stacked pill makes its row taller by design (about 58px against 37px).
+    // Rows are one height at 2xl and up; below 2xl a stacked pill makes its row taller by design (about 58px against 37px).
     check(`3 register ${vp.name}: ${regStacked ? 'a stacked Outstanding row is taller than a Voided one' : 'Outstanding and Voided rows are the same height'}`, regStacked ? out > voided + 1 : Math.abs(out - voided) <= 1, { out, voided })
     if (regStacked) { check(`4 register ${vp.name}: no Payment header in the DOM (stacked)`, (await page.locator('th', { hasText: /^Payment$/ }).count()) === 0) } else {
     const th = await page.locator('th', { hasText: /^Payment$/ }).first().evaluate((el) => el.getBoundingClientRect().width)
@@ -143,7 +143,7 @@ for (const vp of VPS) {
     const r = await rem(page)
     check(`4 register ${vp.name}: the widest pill plus both cell paddings fits 7rem, and the Payment column is at least 7rem`, pill.text.trim() === 'Outstanding' && pill.w + 2 * px <= 7 * r + 0.5 && th >= 7 * r - 0.5, { th, pill, px, rem: r })
     }
-    if (vp.name === '1280') { await context.close(); continue }
+    if (vp.name === '1280' || vp.name === '1536') { await context.close(); continue }
   }
   if (phone) {
     // 9: the card of a row with no payment status has no Payment line; one with a status shows it with its pill

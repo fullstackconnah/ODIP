@@ -15,7 +15,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TextField } from '@/components/TextField'
 import { TAP_AREA, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import { useIsMdToXl } from '@/hooks/useIsMdToXl'
+import { useIsMdTo2xl } from '@/hooks/useIsMdTo2xl'
 import { downloadFile } from '@/lib/downloadFile'
 import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -113,7 +113,7 @@ export default function InvoicesPage() {
     }
   }
 
-  const paymentStacked = useIsMdToXl()
+  const paymentStacked = useIsMdTo2xl()
   const paymentPill = (row: InvoiceRegisterRowDto) => row.paymentStatus ? <StatusBadge status={row.paymentStatus} label={INVOICE_PAYMENT_LABELS[row.paymentStatus]} /> : null
   const columns: Column<InvoiceRegisterRowDto>[] = [
     {
@@ -149,7 +149,7 @@ export default function InvoicesPage() {
     },
     ...(showOrganisation ? [{
       key: 'organisationName', header: 'Organisation', mobile: 'meta' as const,
-      render: (row: InvoiceRegisterRowDto) => <div className="md:max-w-[10rem]"><CellText>{row.organisationName}</CellText></div>,
+      render: (row: InvoiceRegisterRowDto) => <div className="md:max-w-[8.5rem] xl:max-w-[10rem]"><CellText>{row.organisationName}</CellText></div>,
     }] : []),
     {
       key: 'issueDate',
@@ -161,7 +161,7 @@ export default function InvoicesPage() {
       key: 'participantName',
       header: 'Participant',
       render: row => (
-        <div className="md:max-w-[8rem] xl:max-w-[14rem] 2xl:max-w-[18rem]">
+        <div className="md:max-w-[7rem] xl:max-w-[14rem] 2xl:max-w-[18rem]">
           <CellText>{row.participantName}</CellText>
           <CellText className={MUTED_LINE}>
             {row.billToName && row.billToName !== row.participantName ? `Bill to ${row.billToName}` : row.payerKind === 'SelfManaged' ? 'Self managed' : 'Plan managed'}
@@ -193,7 +193,7 @@ export default function InvoicesPage() {
       render: row => (
         <>
           <StatusBadge status={row.status} />
-          {/* From md to below xl the Payment column would push Total off screen, so its pill stacks here instead (the phone card keeps its own Payment field). */}
+          {/* From md to below 2xl the Payment column would push Total off screen, so its pill stacks here instead (the phone card keeps its own Payment field). */}
           {paymentStacked && row.paymentStatus && <span className="mt-1 flex">{paymentPill(row)}</span>}
         </>
       ),
