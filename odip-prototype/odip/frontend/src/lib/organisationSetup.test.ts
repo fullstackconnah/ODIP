@@ -1,20 +1,46 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ProviderSettingsDto, SetupStatusDto } from '@/api/types'
-import { isSetupHidden, organisationDetailsRecorded, setSetupHidden, setupCard } from './organisationSetup'
+import { isSetupHidden, isValidAbn, organisationDetailsHint, organisationDetailsRecorded, setSetupHidden, setupCard } from './organisationSetup'
 
-const provider = { organisationName: 'Synthetic Support', address: '1 Example Street', state: 'VIC' } as ProviderSettingsDto
+const provider = { organisationName: 'Synthetic Support', address: '1 Example Street', state: 'VIC', abn: '51824753556', registrationNumber: '' } as ProviderSettingsDto
 const status: SetupStatusDto = { staffCount: 0, participantCount: 0, participantsWithPlanCount: 0, firstPublishedWeekStart: null, hasInvoice: false, employmentHeroAvailable: true }
 const settled = { waiting: false, failed: false }
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks() })
 
+describe('isValidAbn', () => {
+  it.each([['51824753556', true], ['51 824 753 556', true], ['51824753557', false], ['5182475355', false], ['518247535560', false], ['5182475355a', false], ['', false], [undefined, false]])('%s -> %s', (abn, ok) => {
+    expect(isValidAbn(abn)).toBe(ok)
+  })
+})
+
+describe('organisationDetailsHint', () => {
+  it('asks for a blank ABN, asks to check an invalid one, and is silent for a valid one', () => {
+    expect(organisationDetailsHint({ ...provider, abn: ' ' })).toBe('Add your ABN to finish this step.')
+    expect(organisationDetailsHint({ ...provider, abn: '12345' })).toBe('Check your ABN to finish this step.')
+    expect(organisationDetailsHint(provider)).toBeNull()
+    expect(organisationDetailsHint(null)).toBe('Add your ABN to finish this step.')
+  })
+})
+
 describe('organisationDetailsRecorded', () => {
-  it('is true only with a name, an address and a valid state', () => {
+  it('is true only with a name, an address, a valid state and a valid ABN', () => {
     expect(organisationDetailsRecorded(provider)).toBe(true)
     expect(organisationDetailsRecorded({ ...provider, organisationName: ' ' })).toBe(false)
     expect(organisationDetailsRecorded({ ...provider, address: '' })).toBe(false)
     expect(organisationDetailsRecorded({ ...provider, state: 'Qld' })).toBe(false)
     expect(organisationDetailsRecorded(null)).toBe(false)
+  })
+
+  it('needs a valid ABN: blank or invalid is not done, a spaced valid one is', () => {
+    expect(organisationDetailsRecorded({ ...provider, abn: '' })).toBe(false)
+    expect(organisationDetailsRecorded({ ...provider, abn: '51824753557' })).toBe(false)
+    expect(organisationDetailsRecorded({ ...provider, abn: '51 824 753 556' })).toBe(true)
+  })
+
+  it('ignores a blank registration number', () => {
+    expect(organisationDetailsRecorded({ ...provider, registrationNumber: '' })).toBe(true)
+    expect(organisationDetailsRecorded({ ...provider, registrationNumber: 'PR001' })).toBe(true)
   })
 })
 
