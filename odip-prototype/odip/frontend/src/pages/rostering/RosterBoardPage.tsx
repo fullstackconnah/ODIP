@@ -5,7 +5,7 @@ import {
   DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent, type Modifier,
 } from '@dnd-kit/core'
-import { AlertTriangle, BarChart3, CalendarClock, CalendarPlus, Hourglass, Plus, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, CalendarClock, CalendarDays, CalendarPlus, Hourglass, Plus, X } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { useProviderToday } from '@/hooks/useProviderToday'
@@ -23,7 +23,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useAddGroupStaff, useDetachShift } from '@/api/hooks/groupActivities'
-import { ActivityContext, removeFromActivityCopy, type ActivityBoardState } from './lib/groupActivities'
+import { ActivityContext, activityLanes, removeFromActivityCopy, type ActivityBoardState } from './lib/groupActivities'
 import { GroupActivityModal, type ActivityModalTarget } from './components/GroupActivityModal'
 import { AddToActivityDialog } from './components/AddToActivityDialog'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -40,7 +40,7 @@ import {
 import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
 import { blockedOnlyByDoubleBooking } from './lib/rosterGate'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, formatWeekRange, allBoardShifts } from './lib/roster'
-import { useBoardViewMode } from './lib/useBoardViewMode'
+import { useBoardViewMode, type BoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekLabel, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, tripsFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
@@ -97,7 +97,7 @@ export default function RosterBoardPage() {
     setSeenDateParam(dateParam)
     if (dateParam !== null) { setWeekStart(weekStartFromDateParam(dateParam)); setStartNotice(null); setRegularNotice(null) }
   }
-  const [groupBy, setGroupBy] = useBoardViewMode()
+  const [storedView, setGroupBy] = useBoardViewMode()
   // `?participant=<id>` and `?unfilled=1` (plan builder phase D: the links an approval and its confirm dialog give) open the board already filtered to that participant, and to open shifts, through the same
   // local filters the toolbar owns. Read like `date`: they open the filter, a later change of the address moves it, and a missing one never resets what the toolbar chose in between.
   const participantParam = searchParams.get('participant')
@@ -110,6 +110,13 @@ export default function RosterBoardPage() {
     setSeenFilterParams({ participantParam, unfilledParam })
     if (participantParam !== null) setParticipantFilter(participantParam)
     if (unfilledParam !== null) setUnfilledOnly(unfilledParam === '1')
+    // Those filters are not offered in By activity, so a link carrying one leaves that view.
+    if ((participantParam !== null || unfilledParam !== null) && storedView === 'activity') setGroupBy('participant')
+  }
+  const [linkChecked, setLinkChecked] = useState(false)
+  if (!linkChecked) {
+    setLinkChecked(true)
+    if ((participantParam !== null || unfilledParam !== null) && storedView === 'activity') setGroupBy('participant')
   }
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
   // The two panels the status line and the title row open (roster declutter, 2026-11-03): the fill chart (Next 8 weeks) and the agreements waiting for approval.
@@ -153,7 +160,12 @@ export default function RosterBoardPage() {
     }
   })
 
-  const { data: board, isLoading, isError, refetch } = useRosterBoard(weekStart, groupBy)
+  // By activity reads the participant board (its activities, no new endpoint). Until the board says group activities are on, a remembered activity view stays so the toggle keeps its option.
+  const { data: board, isLoading, isError, refetch } = useRosterBoard(weekStart, storedView === 'staff' ? 'staff' : 'participant')
+  const activitySwitchOff = storedView === 'activity' && !!board && board.groupActivitiesEnabled !== true
+  const groupBy: BoardViewMode = activitySwitchOff ? 'participant' : storedView
+  if (activitySwitchOff) setGroupBy('participant')
+  const activityView = groupBy === 'activity'
   // Group activities (SHAPE section 7): everything below renders only while the flag is on, in the Participant view (no cards in the Staff view).
   const groupActivities = useMemo(() => (board?.groupBy === 'Participant' && board.groupActivitiesEnabled === true ? board.groupActivities ?? [] : null), [board])
   const [activityTarget, setActivityTarget] = useState<ActivityModalTarget | null>(null)
@@ -749,7 +761,7 @@ export default function RosterBoardPage() {
     </Button>
   )
 
-  const startCardShown = !isLoading && !loadFailed && !!filteredBoard && unstarted
+  const startCardShown = !isLoading && !loadFailed && !!filteredBoard && unstarted && !activityView
   // The title row's actions (roster declutter, 2026-11-03), right-aligned in this order. The R7 slot (Auto-roster) goes before New: nothing is built for it. Below md only New stays beside the title; the rest ride the toolbar's last row.
   const secondaryActions = (
     <>
@@ -808,7 +820,7 @@ export default function RosterBoardPage() {
     </Button>
   )
   const publishButton = canWrite && weekPublishable > 0 && <Button key="publish-week" size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
-  const selectButton = canWrite && publishable.length >= 2 && <Button ref={focusSelectButton} variant="secondary" size="md" onClick={() => setSelection({ key: toolbarKey, ids: new Set() })}>Select shifts</Button>
+  const selectButton = canWrite && !activityView && publishable.length >= 2 &&<Button ref={focusSelectButton} variant="secondary" size="md" onClick={() => setSelection({ key: toolbarKey, ids: new Set() })}>Select shifts</Button>
   const allChosen = chosen.length === publishable.length
   const selectActions = (
     <>
@@ -842,9 +854,19 @@ export default function RosterBoardPage() {
       {null}
     </Callout>
   ) : null
-  const grid = filteredBoard && (
+  // By activity: one lane per activity name; a week with none shows the empty state instead of the grid.
+  const lanes = activityView && groupActivities ? activityLanes(groupActivities) : undefined
+  const grid = filteredBoard && (lanes?.length === 0 ? (
+    <EmptyState
+      icon={CalendarDays}
+      title="No group activities this week"
+      description={canWrite ? 'Add one with New, then Group activity.' : 'Nothing is planned for this week.'}
+    />
+  ) : (
     <RosterGrid
       board={filteredBoard}
+      lanes={lanes}
+      onOpenActivity={activity => setActivityTarget({ mode: 'edit', id: activity.id })}
       strip={dragOn ? <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} /> : undefined}
       canWrite={canWrite}
       draggable={dragOn}
@@ -859,7 +881,7 @@ export default function RosterBoardPage() {
       onAddStaffShift={handleAddStaffShift}
       foot={publishBar}
     />
-  )
+  ))
 
   const transientShown = !!assignError || !!startNotice || !!regularNotice || !!skippedNotice
 
@@ -882,6 +904,7 @@ export default function RosterBoardPage() {
           onNextWeek={() => moveToWeek(shiftWeek(weekStart, 1))}
           groupBy={groupBy}
           onGroupByChange={setGroupBy}
+          activityOption={board?.groupActivitiesEnabled === true || storedView === 'activity'}
           participantOptions={participantOptions}
           participantFilter={participantFilter}
           onParticipantFilterChange={setParticipantFilter}
@@ -982,7 +1005,7 @@ export default function RosterBoardPage() {
       {/* The grid always renders, even for a week with zero shifts — that empty grid is the
           add-a-shift affordance. Guidance for a first-time/empty week is this dismissible hint
           above the grid, never a replacement for it. */}
-      {!isLoading && !loadFailed && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && !unstarted && (
+      {!isLoading && !loadFailed && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && !unstarted && !activityView && (
         <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface-container-low p-[var(--card-pad)]">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
@@ -1036,7 +1059,7 @@ export default function RosterBoardPage() {
         </>
       )}
 
-      {!isLoading && !loadFailed && grid && !unstarted && (
+      {!isLoading && !loadFailed && grid && (!unstarted || activityView) && (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
         <ActivityContext.Provider value={activityState}>
         <DropStateContext.Provider value={{ disabled: dragsOff || selecting, select: selecting ? { ids: chosenIds, selectable: publishableIds, toggle: toggleChosen } : undefined, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, publish: canWrite ? publishShift : undefined, publishingIds, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
@@ -1075,7 +1098,7 @@ export default function RosterBoardPage() {
         canWrite={canWrite}
         participantOptions={participantOptions}
         staffOptions={staffOptions}
-        groupBy={groupBy}
+        groupBy={groupBy === 'staff' ? 'staff' : 'participant'}
         participantReadiness={participantReadiness}
         participantsNote={participantsNote}
       />

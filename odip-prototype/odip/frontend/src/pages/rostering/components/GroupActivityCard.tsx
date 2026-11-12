@@ -11,8 +11,8 @@ import { findingsSeverityLabel } from './ShiftChip'
 
 export type GroupActivityCardProps = {
   activity: GroupActivityDto
-  /** The participant whose row hosts this card: their times-differ glyph and the menu's "Remove {first name}". */
-  participantId: string
+  /** The participant whose row hosts this card: their times-differ glyph and the menu's "Remove {first name}". Absent in the By activity view, where no row hosts it. */
+  participantId?: string
   canWrite: boolean
   /** Roster drag and drop is on for this row (Participant view, writers, md and up). */
   draggable?: boolean
@@ -39,14 +39,15 @@ function Count({ activity }: { activity: GroupActivityDto }) {
 export function GroupActivityCard({ activity, participantId, canWrite, draggable = false, onOpen }: GroupActivityCardProps) {
   const board = useContext(ActivityContext)
   const { disabled: dragsOff, pending } = useContext(DropStateContext)
-  const target: DropTarget = { kind: 'activity', activity, participantId }
-  const { setNodeRef, isOver, active } = useDroppable({ id: `drop-activity:${activity.id}:${participantId}`, data: target, disabled: !draggable || !canWrite })
+  const hostId = participantId ?? ''
+  const target: DropTarget = { kind: 'activity', activity, participantId: hostId }
+  const { setNodeRef, isOver, active } = useDroppable({ id: `drop-activity:${activity.id}:${hostId}`, data: target, disabled: !draggable || !canWrite })
   const overKind = isOver && active ? dropOutcome(active.data.current as DragCarry, target).kind : null
   const carrying = draggable && Boolean(active)
   const cancelled = activity.status === 'Cancelled'
   const locked = isLockedShift(activity)
   const draft = activity.status === 'Draft'
-  const person = activity.participants.find(p => p.participantId === participantId)
+  const person = activity.participants.find(p => participantId !== undefined && p.participantId === participantId)
   const adding = pending?.targetId === activity.id
   const busy = board?.busyIds.has(activity.id) ?? false
   const short = !cancelled && isStaffShort(activity)

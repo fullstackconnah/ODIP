@@ -14,6 +14,8 @@ export type WeekToolbarProps = {
   onNextWeek: () => void
   groupBy: BoardViewMode
   onGroupByChange: (mode: BoardViewMode) => void
+  /** Offer the By activity option: group activities are on (the page also keeps it while that view is the chosen one). */
+  activityOption?: boolean
   participantOptions: { value: string; label: string }[]
   participantFilter: string
   onParticipantFilterChange: (value: string) => void
@@ -40,6 +42,7 @@ export function WeekToolbar({
   onNextWeek,
   groupBy,
   onGroupByChange,
+  activityOption,
   participantOptions,
   participantFilter,
   onParticipantFilterChange,
@@ -85,12 +88,13 @@ export function WeekToolbar({
 
       <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
         <ToggleGroup
-          className="max-sm:w-full max-sm:[&>button]:flex-1"
-          options={[{ key: 'participant', label: 'By participant' }, { key: 'staff', label: 'By staff' }]}
+          className="max-sm:w-full max-sm:[&>button]:flex-1 max-sm:[&>button]:whitespace-nowrap max-sm:[&>button]:px-2"
+          options={[{ key: 'participant', label: 'By participant' }, { key: 'staff', label: 'By staff' }, ...(activityOption ? [{ key: 'activity', label: 'By activity' }] : [])]}
           value={groupBy}
           onChange={key => onGroupByChange(key as BoardViewMode)}
         />
         {/* As wide as the name chosen (a participant's full name wrapped onto two lines inside a fixed 160px box), within limits. */}
+        {groupBy !== 'activity' && (
         <div className="w-auto min-w-40 max-w-64 max-sm:flex-1 max-sm:max-w-none">
           <Dropdown
             variant="form"
@@ -101,6 +105,7 @@ export function WeekToolbar({
             items={[{ value: '', label: 'All participants' }, ...participantOptions]}
           />
         </div>
+        )}
         {groupBy === 'staff' && (
           <div className="w-36">
             <Dropdown
@@ -113,14 +118,14 @@ export function WeekToolbar({
           </div>
         )}
         {/* Offered in both views (it narrows the staff board to its unfilled lane, and the participant board to the shifts nobody is assigned to). A single on/off filter is a toggle button (aria-pressed), not a one-option radio group — ToggleGroup's role="radiogroup"/role="radio" semantics assume >=2 mutually exclusive options, and its arrow-key roving-tabindex handling would otherwise fire on every arrow key with only one option to rove between (index±1 mod 1 is always 0). */}
-        <Button
+        {groupBy !== 'activity' && <Button
           variant={unfilledOnly ? 'primary' : 'ghost'}
           size="md"
           aria-pressed={unfilledOnly}
           onClick={() => onUnfilledOnlyChange(!unfilledOnly)}
         >
           Unfilled only
-        </Button>
+        </Button>}
         {/* Phone width only: the page hands the actions that do not fit the title row (Next 8 weeks, exceptions) to this last row. */}
         {trailing}
       </div>

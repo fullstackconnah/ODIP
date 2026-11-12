@@ -50,3 +50,18 @@ export function removeFromActivityCopy(kind: 'participant' | 'staff', first: str
     message: kind === 'participant' ? 'Their shift stays on the board as a regular shift.' : `${first} comes off this activity.`,
   }
 }
+
+export type ActivityLane = { key: string; label: string; activities: GroupActivityDto[] }
+
+const sessionOrder = (a: GroupActivityDto, b: GroupActivityDto) => a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id)
+
+/** The By activity view's lanes: one per activity name (the library name, else the title), A to Z; each lane's sessions by date, start time, then id, and its label taken from the earliest. */
+export function activityLanes(activities: readonly GroupActivityDto[]): ActivityLane[] {
+  const byKey = new Map<string, GroupActivityDto[]>()
+  for (const a of [...activities].sort(sessionOrder)) {
+    const key = (a.activityName ?? a.title).trim().toLocaleLowerCase('en-AU')
+    byKey.set(key, [...(byKey.get(key) ?? []), a])
+  }
+  return [...byKey].map(([key, list]) => ({ key, label: (list[0].activityName ?? list[0].title).trim(), activities: list }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'en-AU', { sensitivity: 'base' }))
+}

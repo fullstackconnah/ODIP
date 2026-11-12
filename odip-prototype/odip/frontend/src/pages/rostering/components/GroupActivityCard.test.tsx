@@ -11,6 +11,13 @@ const card = (activity = makeActivity()) =>
   render(<GroupActivityCard activity={activity} participantId="participant-1" canWrite onOpen={noop} />)
 
 describe('GroupActivityCard', () => {
+  it('without a participant (the By activity view) the menu offers Open activity only', async () => {
+    render(<GroupActivityCard activity={makeActivity()} canWrite onOpen={noop} />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Actions for Bowling' }))
+    expect(await screen.findByText('Open activity')).toBeInTheDocument()
+    expect(screen.queryByText(/^Remove .* from activity$/)).not.toBeInTheDocument()
+  })
+
   it('names itself with the title and the staff count', () => {
     card(makeActivity({ staffNeeded: 3, staffAssigned: 3 }))
     expect(screen.getByRole('button', { name: /^Group activity, Bowling, .*3 of 3 staff$/ })).toBeInTheDocument()
