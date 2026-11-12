@@ -32,6 +32,19 @@ public class InvoiceModelTests
         Assert.Equal(DeleteBehavior.SetNull, Assert.Single(line.GetForeignKeys(), f => f.Properties.Single().Name == nameof(InvoiceLine.ClaimLineItemId)).DeleteBehavior);
     }
 
+    // By name, so the test runs (and fails) before the properties exist.
+    [Fact]
+    public void InvoiceLine_HasNullableServiceStartAndEndTimes()
+    {
+        var line = Model().FindEntityType(typeof(InvoiceLine))!;
+        foreach (var name in new[] { "ServiceStartTime", "ServiceEndTime" })
+        {
+            var property = Assert.IsAssignableFrom<Microsoft.EntityFrameworkCore.Metadata.IProperty>(line.FindProperty(name));
+            Assert.Equal(typeof(TimeOnly?), property.ClrType);
+            Assert.True(property.IsNullable);
+        }
+    }
+
     [Fact]
     public void ProviderSettings_NewColumnsDefault()
     {
