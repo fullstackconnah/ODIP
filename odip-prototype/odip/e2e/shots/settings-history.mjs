@@ -45,6 +45,7 @@ const page1 = (entries, total = entries.length) => ({ entries, total, page: 1, p
 // Agreement wording fixtures (synthetic). The stored value is what the stubbed row holds; the history entries carry the same kind of text.
 const WORDING_OVER = 'Enter 2,000 characters or fewer.'
 const CHANGED = 'Settings were changed by someone else. Reload and try again.'
+const OTHER_ADMIN = 'Cancel or change a support by telling us at least 72 hours before it starts.' // the other Admin's wording the 409 stub then serves
 const RESP = ['Cancel or change a support by telling us at least 48 hours before it starts.', 'If you cancel with less notice we may charge up to the agreed amount for that support, as the NDIS price guide allows.', 'We will tell you in writing before any change to our services, our prices or how we deliver your supports, and give you time to decide.', 'You can end this agreement at any time. We ask for 14 days written notice so your supports can move smoothly to another provider.'].join('\n\n')
 const COMP = ['If you have a concern or want to make a complaint, tell any of our staff or contact our manager. You will not be treated differently for raising it.', 'We acknowledge a complaint within 2 business days and aim to resolve it within 21 days, and we will keep you updated.', 'If you are not happy with the outcome you can contact the NDIS Quality and Safeguards Commission on 1800 035 544.'].join('\n\n')
 const LONGER = [RESP, RESP, RESP].join('\n\n')
@@ -63,10 +64,11 @@ async function openPage(browser, vp, { mode = 'list', role = 'Admin', username =
   const page = await context.newPage()
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers(role, username) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role, username) }))
+  let refused = false
   await page.route('**/api/v1/provider-settings', (r) => {
-    if (r.request().method() !== 'PUT') return r.fulfill({ json: envelope(row) })
+    if (r.request().method() !== 'PUT') return r.fulfill({ json: envelope(refused ? { ...row, agreementResponsibilitiesTerms: OTHER_ADMIN } : row) })
     if (put === '400') return r.fulfill({ status: 400, json: { success: false, data: null, message: WORDING_OVER, errors: [WORDING_OVER] } })
-    if (put === '409') return r.fulfill({ status: 409, json: { success: false, data: null, message: CHANGED, errors: [CHANGED] } })
+    if (put === '409') { refused = true; return r.fulfill({ status: 409, json: { success: false, data: null, message: CHANGED, errors: [CHANGED] } }) }
     return r.fulfill({ json: envelope('2026-11-10T01:05:00.0000000Z') })
   })
   await page.route('**/api/v1/audit/ProviderSettings/*', (r) => {
@@ -294,6 +296,9 @@ for (const vp of VPS) {
     })
     await wording('changed elsewhere', { put: '409' }, async (p) => {
       await saveAnd(p, (pg) => pg.getByText(/Someone else changed these settings/).first().waitFor({ state: 'visible', timeout: 30_000 }))
+      await p.getByText(/Changed by someone else./).first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {})
+      const hint = await resp(p).evaluate((el) => el.getAttribute('aria-describedby').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim())
+      check(t('409: the Responsibilities hint leads with "Changed by someone else."'), hint.startsWith('Changed by someone else.'), hint)
       await noHScroll(p, t('409')); await frameShot(p, png('changed-elsewhere-409', 'light'))
     })
     try {
