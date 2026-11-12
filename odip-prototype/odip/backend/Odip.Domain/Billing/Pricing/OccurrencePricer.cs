@@ -229,7 +229,7 @@ internal sealed class OccurrencePricer
         foreach (var piece in PiecesOf(occ))
         {
             if (piece.Sleepover)
-                parts.Add(new ShiftBandPart(DateOnly.FromDateTime(piece.Start), ClaimDayType.Weekday, "Sleepover", RealMinutes(piece.Start, piece.End, occ.Zone), true));
+                parts.Add(new ShiftBandPart(DateOnly.FromDateTime(piece.Start), ClaimDayType.Weekday, "Sleepover", Elapsed(occ, piece.Start, piece.End), true));
             else
                 parts.AddRange(Split(occ, piece.Start, piece.End).Select(s => new ShiftBandPart(DateOnly.FromDateTime(s.Start), s.Span.DayType, s.Span.Band, s.Minutes, false)));
         }
@@ -249,6 +249,10 @@ internal sealed class OccurrencePricer
     /// <summary>Elapsed minutes between two wall-clock readings in the delivery zone: an hour is added or lost on the two nights a year the clocks change.</summary>
     internal static int RealMinutes(DateTime from, DateTime to, TimeZoneInfo zone, bool fromFirstPass = false, bool toFirstPass = false) =>
         (int)Math.Round((Instant(to, zone, toFirstPass) - Instant(from, zone, fromFirstPass)).TotalMinutes);
+
+    /// <summary>Elapsed minutes inside an occurrence. The start edge is first pass only when the occurrence starts there; a shift that ends in the first pass has nothing later than its end, so every repeated wall time in it is first pass too.</summary>
+    private static int Elapsed(Occurrence occ, DateTime from, DateTime to) =>
+        RealMinutes(from, to, occ.Zone, occ.EndFirstPass || (occ.StartFirstPass && from == occ.Start), occ.EndFirstPass);
 
     /// <summary>
     /// The UTC instant of a wall-clock reading. A reading that does not exist (inside the hour the clocks skip going forward) is the instant the clocks jump, the first
@@ -335,7 +339,7 @@ internal sealed class OccurrencePricer
         var midnight = from.Date.AddDays(1);
         var crosses = from < midnight && to > midnight;
         var qualifiesOnTheClock = crosses && (to - from).TotalMinutes >= SleepoverMinutes;
-        var qualifiesElapsed = crosses && RealMinutes(from, to, occ.Zone) >= SleepoverMinutes;
+        var qualifiesElapsed = crosses && Elapsed(occ, from, to) >= SleepoverMinutes;
 
         if (qualifiesOnTheClock != qualifiesElapsed)
         {
@@ -388,7 +392,7 @@ internal sealed class OccurrencePricer
         }
         if (block.OnPublicHoliday == HolidayDecision.Review && TouchesHoliday(occ, piece.Start, piece.End)) flags |= PlannedLineFlags.Review;
 
-        var real = RealMinutes(piece.Start, piece.End, occ.Zone);
+        var real = Elapsed(occ, piece.Start, piece.End);
         occ.Result.Lines.Add(new PlannedLine
         {
             BlockId = block.Id, Kind = PlannedLineKind.Sleepover, ItemCode = choice.Row!.ItemNumber, Unit = "E", Qty = 1m,
@@ -491,7 +495,7 @@ internal sealed class OccurrencePricer
                 {
                     // A part that lies wholly inside the hour the clocks skip takes no time at all: there is nothing in it to claim.
                     // The start edge is first pass only when the occurrence starts there; a shift that ends in the first pass has nothing later than its end, so every repeated wall time in it is first pass too.
-                    var elapsed = RealMinutes(cursor, cut, occ.Zone, occ.EndFirstPass || (occ.StartFirstPass && cursor == occ.Start), occ.EndFirstPass);
+                    var elapsed = Elapsed(occ, cursor, cut);
                     if (elapsed > 0) segments.Add(new Segment(cursor, cut, span, ParticipantsAt(occ, cursor), elapsed, (int)(cut - cursor).TotalMinutes));
                     cursor = cut;
                 }
