@@ -50,6 +50,9 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
         var userIds = staffRows.Select(r => r.UserId).Distinct().ToList();
         var participants = await db.Participants.AsNoTracking().Where(p => participantIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
         var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+        var seriesIds = activities.Where(a => a.SeriesId != null).Select(a => a.SeriesId!.Value).Distinct().ToList();
+        var seriesById = seriesIds.Count == 0 ? [] : await db.GroupActivitySeries.AsNoTracking().Where(s => seriesIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => new GroupActivitySeriesDto(s.Id, s.Interval, s.StartDate, s.EndDate), ct);
         var libraryIds = activities.Where(a => a.ActivityId != null).Select(a => a.ActivityId!.Value).ToList();
         var libraryNames = await db.Activities.AsNoTracking().Where(a => libraryIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id, a => a.ActivityName, ct);
         var patternIds = shifts.Where(s => s.ShiftPatternId != null).Select(s => s.ShiftPatternId!.Value).Distinct().ToList();
@@ -108,6 +111,7 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
                 Title = activity.Title, ActivityId = activity.ActivityId, ActivityName = activity.ActivityId is { } a ? libraryNames.GetValueOrDefault(a) : null,
                 Location = activity.Location, ServiceLocationId = activity.ServiceLocationId, Notes = activity.Notes, MinStaffRequired = activity.MinStaffRequired,
                 Status = activity.Status, StaffNeeded = needed, StaffAssigned = staff.Count, Participants = people, Staff = staff, Findings = findings,
+                Series = activity.SeriesId is { } sid ? seriesById.GetValueOrDefault(sid) : null,
             });
         }
 

@@ -36,13 +36,13 @@ internal sealed class GroupActivityFixture
 
     public OdipDbContext Fresh() => TestDb.ForTenant(DbName, TenantId);
 
-    public GroupActivitiesController Controller(OdipDbContext? db = null, Guid? tenantId = null, string role = "Admin", bool superAdminNoTenant = false, Guid? userId = null)
+    public GroupActivitiesController Controller(OdipDbContext? db = null, Guid? tenantId = null, string role = "Admin", bool superAdminNoTenant = false, Guid? userId = null, TimeProvider? clock = null)
     {
         db ??= Fresh();
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(superAdminNoTenant ? null : tenantId ?? TenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(superAdminNoTenant);
-        var controller = new GroupActivitiesController(db, tenant.Object, new StaffUnavailabilityQuery(db));
+        var controller = new GroupActivitiesController(db, tenant.Object, new StaffUnavailabilityQuery(db), clock: clock);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(Claims(role, userId), "test")) },

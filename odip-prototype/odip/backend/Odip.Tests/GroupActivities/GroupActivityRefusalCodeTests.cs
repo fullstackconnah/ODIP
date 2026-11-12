@@ -14,7 +14,8 @@ public class GroupActivityRefusalCodeTests
     // ShiftClaimLocked; PortalActivityShiftsController.RefuseAttendance (:91) passes those on (GA_SHIFT_NOT_FOUND remapped to GA_PARTICIPANT_NOT_FOUND) and is called
     // with the literal GA_ATTENDANCE_CLOSED (:87).
     private static IEnumerable<string> CodesTheCallersCanPass() =>
-        new[] { "GA_PARTICIPANT_NOT_FOUND", "GA_ATTENDANCE_CLOSED", "GA_SHIFT_LOCKED", ShiftErrorCodes.ShiftClaimLocked }
+        new[] { "GA_PARTICIPANT_NOT_FOUND", "GA_ATTENDANCE_CLOSED", "GA_SHIFT_LOCKED", ShiftErrorCodes.ShiftClaimLocked,
+            "GA_SERIES_INTERVAL", "GA_SERIES_END", "GA_SERIES_RANGE", "GA_SERIES_SCOPE", "GA_SERIES_DATE" }
             .Concat(Enum.GetValues<ShiftStatus>().Select(s => GroupActivitiesController.AttendanceWindowCode(new GroupActivity { Status = s })).OfType<string>());
 
     [Fact]

@@ -684,7 +684,16 @@ public record GroupActivityDto
     public List<GroupActivityStaffDto> Staff { get; init; } = new();
     /// <summary>ACTIVITY_STAFF_SHORT (a warning, never stored) while fewer workers are on than are needed and the activity is not cancelled.</summary>
     public List<RosterFindingDto> Findings { get; init; } = new();
+    /// <summary>The repeat rule when this is one occurrence of a series; null for a one-off.</summary>
+    public GroupActivitySeriesDto? Series { get; init; }
 }
+
+public record GroupActivitySeriesDto(Guid Id, GroupActivityInterval Interval, DateOnly StartDate, DateOnly EndDate);
+
+/// <summary>Which activities an update or cancel reaches: just the opened one, or it and the later ones of its series.</summary>
+public enum GroupActivityScope { Occurrence, Series }
+
+public record GroupActivityScopeDto(GroupActivityScope Scope = GroupActivityScope.Occurrence);
 
 public record GroupActivityParticipantDto
 {
@@ -726,6 +735,10 @@ public record CreateGroupActivityDto
     public Guid? ServiceLocationId { get; init; }
     public string? Notes { get; init; }
     public int? MinStaffRequired { get; init; }
+    /// <summary>Weekly, Fortnightly or Monthly makes a series of Draft activities; null makes one.</summary>
+    public GroupActivityInterval? Repeats { get; init; }
+    /// <summary>The last date of the series (inclusive); required with Repeats, ignored without.</summary>
+    public DateOnly? Until { get; init; }
 }
 
 public record UpdateGroupActivityDto
@@ -742,6 +755,8 @@ public record UpdateGroupActivityDto
     public int? MinStaffRequired { get; init; }
     /// <summary>Draft or Published only; cancel has its own endpoint.</summary>
     public ShiftStatus Status { get; init; }
+    /// <summary>Series also changes the later Draft and Published activities of the opened one's series; absent means Occurrence.</summary>
+    public GroupActivityScope Scope { get; init; }
     [StringLength(2000)]
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
