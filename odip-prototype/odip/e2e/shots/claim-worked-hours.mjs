@@ -79,8 +79,8 @@ for (const vp of VPS) {
 
   // run-extra-only, run-mixed: the shift claim run's preview with only extra time left out, then beside a whole shift
   for (const [state, leftOut, heading, footer, line = extraOnly.description] of [
-    ['run-extra-only', [extraOnly], 'Extra time left out', /The shifts are claimed at their held hours\./],
-    ['run-extra-clock-change', [clockChange], 'Extra time left out', /The shifts are claimed at their held hours\./, clockChange.description],
+    ['run-extra-only', [extraOnly], 'Extra time left out', /The shifts? (is|are) claimed at (its|their) held hours\./],
+    ['run-extra-clock-change', [clockChange], 'Extra time left out', /The shifts? (is|are) claimed at (its|their) held hours\./, clockChange.description],
     ['run-mixed', [wholeShift, extraOnly], '1 shift will be left out', /A shift whose extra time is left out is claimed at its held hours\./],
   ]) {
     try {
