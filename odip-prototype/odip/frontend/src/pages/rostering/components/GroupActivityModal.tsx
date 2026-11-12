@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { CalendarClock, Clock, FileText, UserCheck, Users, X } from 'lucide-react'
-import type { GroupActivityDto, GroupActivityFormDto, ShiftDto, SupportRatio } from '@/api/types'
+import type { GroupActivityDto, GroupActivityFormDto, GroupActivityRepeats, ShiftDto, SupportRatio } from '@/api/types'
 import { SUPPORT_RATIOS } from '@/api/types'
 import {
   useActivities, useAddGroupParticipant, useAttachShifts, useCancelGroupActivity, useCreateActivityFromShift, useCreateGroupActivity, useDetachShift, useGroupActivity, useRemoveGroupStaff,
@@ -11,6 +11,7 @@ import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DiscardChangesDialog } from '@/components/DiscardChangesDialog'
 import { FormField, inputClass } from '@/components/FormField'
+import { SelectField } from '@/components/SelectField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
@@ -23,6 +24,7 @@ import { NO_LENGTH_MESSAGE, hasNoLength } from '../lib/shiftTimes'
 import { RATIO_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { firstName } from '../lib/rosterDrag'
 import { removeFromActivityCopy } from '../lib/groupActivities'
+import { dayLabel, seriesDates, seriesLastDay, seriesSummary } from '../lib/groupActivitySeries'
 import { StaffPickerPage, type StaffPickerProps } from './StaffPicker'
 import { AddButton, HeaderIcon, OverviewRow, PageFrame, PickGroup, PickRow, Skeleton, StepItem } from './GroupActivityParts'
 
@@ -106,6 +108,9 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const dirty = (Object.keys(edits) as (keyof Form)[]).some(changed)
 
   const [tried, setTried] = useState(false)
+  const [repeats, setRepeats] = useState<'' | GroupActivityRepeats>('')   // create only; not part of the Form, so it never counts as an unsaved edit of a saved activity
+  const [until, setUntil] = useState('')
+  const untilId = useId()
   const [minTried, setMinTried] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [writeError, setWriteError] = useState<string | null>(null)
@@ -193,14 +198,20 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
       attended ? `Couldn't undo for ${firstName(p.participantName)}.` : `Couldn't mark ${firstName(p.participantName)} as didn't attend.`)
   }
 
-  const whenErrors = [!values.title.trim() && 'title', noLength && 'end'].filter(Boolean) as string[]
+  const repeating = isNew && !fromShift && repeats !== ''
+  const lastDay = seriesLastDay(values.serviceDate)
+  const untilIssue = !repeating ? undefined
+    : !until ? 'Pick an end date.'
+    : until < values.serviceDate ? "The end date can't be before the activity date."
+    : lastDay && until > lastDay ? `Pick an end date by ${dayLabel(lastDay)}. A series can run up to 400 days.` : undefined
+  const whenErrors = [!values.title.trim() && 'title', noLength && 'end', untilIssue && 'until'].filter(Boolean) as string[]
 
   async function createDraft() {
     setTried(true)
-    if (whenErrors.length) { (whenErrors[0] === 'title' ? titleRef.current : dialogRef.current?.querySelector<HTMLElement>('[data-field="end"]'))?.focus(); return }
+    if (whenErrors.length) { (whenErrors[0] === 'title' ? titleRef.current : dialogRef.current?.querySelector<HTMLElement>(`[data-field="${whenErrors[0]}"]`))?.focus(); return }
     setSaveError(null)
     try {
-      const made = fromShift ? await createFromShift.mutateAsync({ shiftId: fromShift.id, title: values.title.trim() }) : await create.mutateAsync(toDto(values))
+      const made = fromShift ? await createFromShift.mutateAsync({ shiftId: fromShift.id, title: values.title.trim() }) : await create.mutateAsync({ ...toDto(values), repeats: repeating ? repeats : null, ...(repeating && { until }) })
       setSavedId(made.id)
       setEdits({})
       setTried(false)
@@ -332,10 +343,16 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   function whenPage() {
     const showErrors = tried && whenErrors.length > 0
     const creating = isNew
+    const count = repeating && until && !untilIssue ? seriesDates(repeats as GroupActivityRepeats, values.serviceDate, until).length : 0
+    const createLabel = count >= 2 ? `Create ${count} drafts` : 'Create draft'
+    const untilShown = tried && untilIssue
+    const summary = !values.serviceDate ? <p className="text-sm text-[var(--color-muted-foreground)]">Pick a date first.</p>
+      : !until ? <p className="text-sm text-[var(--color-muted-foreground)]">Pick an end date to see how many activities this makes.</p>
+      : !untilIssue ? <p className="text-sm">{seriesSummary(repeats as GroupActivityRepeats, values.serviceDate, until)}</p> : null
     const footer = fieldsDisabled ? closeFooter : creating ? (
       <>
         <Button variant="secondary" onClick={requestClose}>Cancel</Button>
-        <Button onClick={createDraft} disabled={saving} aria-busy={saving || undefined}><span className="whitespace-nowrap">{saving ? 'Creating…' : 'Create draft'}</span></Button>
+        <Button onClick={createDraft} disabled={saving} aria-busy={saving || undefined}><span className="whitespace-nowrap">{saving ? 'Creating…' : createLabel}</span></Button>
       </>
     ) : (
       <>
@@ -367,6 +384,22 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           <FormField label="End" required error={noLength ? NO_LENGTH_MESSAGE : undefined}><input type="time" data-field="end" className="px-1" value={values.endTime} disabled={fieldsDisabled || Boolean(fromShift && isNew)} onChange={e => set({ endTime: e.target.value })} /></FormField>
         </div>
         <FormField label="Ends the next day" layout="checkbox"><input type="checkbox" checked={values.endsNextDay} disabled={fieldsDisabled || Boolean(fromShift && isNew)} onChange={e => set({ endsNextDay: e.target.checked })} /></FormField>
+        {creating && !fromShift && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <SelectField
+                label="Repeats" value={repeats} onChange={e => { setRepeats(e.target.value as '' | GroupActivityRepeats); if (!e.target.value) setUntil('') }}
+                options={[{ value: '', label: 'Does not repeat' }, { value: 'Weekly', label: 'Weekly' }, { value: 'Fortnightly', label: 'Fortnightly' }, { value: 'Monthly', label: 'Monthly' }]}
+              />
+              {repeating && (
+                <FormField label="Until" required descriptionId={untilShown ? untilId : undefined}>
+                  <input type="date" data-field="until" value={until} min={values.serviceDate || undefined} max={lastDay || undefined} aria-invalid={untilShown ? 'true' : undefined} onChange={e => setUntil(e.target.value)} />
+                </FormField>
+              )}
+            </div>
+            {repeating && (untilShown ? <p id={untilId} role="alert" className="text-xs text-[var(--color-destructive)]">{untilIssue}</p> : <div aria-live="polite">{summary}</div>)}
+          </>
+        )}
         {fromShift && isNew ? (
           <div className="rounded-sm border border-border p-2 text-sm">
             <span className="font-medium">{fromShift.participantName}</span>

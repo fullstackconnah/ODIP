@@ -466,3 +466,94 @@ describe('GroupActivityModal from lg (two panes)', () => {
     expect(screen.queryByRole('heading', { name: 'People', level: 2 })).toBeNull()
   })
 })
+
+describe('GroupActivityModal create: repeats', () => {
+  const pickRepeats = (value: string) => userEvent.selectOptions(screen.getByLabelText(/^Repeats/), value)
+  const setDate = (label: RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
+
+  it('repeats: Until shows only once Repeats is chosen, and choosing Does not repeat again hides and clears it', async () => {
+    open(newTarget)
+    await screen.findByLabelText(/Title/)
+    expect(screen.queryByLabelText(/^Until/)).toBeNull()
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2026-09-14')
+    await pickRepeats('')
+    expect(screen.queryByLabelText(/^Until/)).toBeNull()
+    await pickRepeats('Weekly')
+    expect(screen.getByLabelText(/^Until/)).toHaveValue('')
+  })
+
+  it('repeats: create from a shift shows no Repeats', async () => {
+    open(shiftTarget)
+    await screen.findByLabelText(/Title/)
+    expect(screen.queryByLabelText(/^Repeats/)).toBeNull()
+  })
+
+  it('repeats: blank Until after a try shows "Pick an end date." and sends no request', async () => {
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await pickRepeats('Weekly')
+    expect(screen.getByText('Pick an end date to see how many activities this makes.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    expect(await screen.findAllByText('Pick an end date.')).not.toHaveLength(0)
+    expect(screen.getByLabelText(/^Until/)).toHaveAttribute('aria-invalid', 'true')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('repeats: Until past Date+400 shows the range error and sends no request', async () => {
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    setDate(/^Date/, '2026-11-17')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2027-12-23')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    expect(await screen.findByText('Pick an end date by 22 Dec 2027. A series can run up to 400 days.')).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('repeats: an Until before the Date is refused with its own words', async () => {
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2026-08-10')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    expect(await screen.findByText("The end date can't be before the activity date.")).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('repeats: weekly 2026-11-17..2027-03-09 reads "Create 17 drafts" with the summary line, and posts repeats and until', async () => {
+    post.mockResolvedValue(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    serve(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    setDate(/^Date/, '2026-11-17')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2027-03-09')
+    expect(screen.getByText('Every Tuesday until 9 Mar 2027 · 17 activities')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create 17 drafts' }))
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    expect(post.mock.calls[0][1]).toMatchObject({ title: 'Bowling', serviceDate: '2026-11-17', repeats: 'Weekly', until: '2027-03-09' })
+  })
+
+  it('repeats: Does not repeat posts repeats null and no until', async () => {
+    post.mockResolvedValue(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    serve(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    expect(post.mock.calls[0][1]).toMatchObject({ repeats: null })
+    expect(post.mock.calls[0][1]).not.toHaveProperty('until')
+  })
+
+  it('repeats: a failed series create keeps the form and shows the server message', async () => {
+    post.mockRejectedValue({ response: { status: 400, data: { errors: ['Pick an end date on or after the activity date.'], code: 'GA_SERIES_END' } } })
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2026-09-14')
+    await userEvent.click(screen.getByRole('button', { name: 'Create 5 drafts' }))
+    expect(await screen.findByText(/Couldn't save\. Your changes are still here\./)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Title/)).toHaveValue('Bowling')
+  })
+})
