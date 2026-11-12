@@ -117,7 +117,7 @@ try {
     const hint = await hintChecks(page, 'dashboard-abn-missing', false)
     await crop(page, hint.locator('xpath=ancestor::li[1]'), 'dashboard-abn-missing')
     mkdirSync(path.join(OUT_DIR, 'full'), { recursive: true })
-    const full = await fullPage(page, path.join(OUT_DIR, 'full', 'dashboard-abn-missing-390.png'), { touch: true })
+    const full = await fullPage(page, path.join(OUT_DIR, 'full', 'dashboard-abn-missing-390.png'), { touch: true, allow: ['.overflow-x-auto'] })
     checks.push(...full.checks)
     await context.close()
   })
