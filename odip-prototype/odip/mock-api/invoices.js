@@ -42,7 +42,7 @@ const REGISTER = (() => {
   }
   Object.assign(rows[0], { participantName: 'Wolfeschlegelsteinhausenberger-Fotheringham Participant Name', billToName: 'Plan Management Services of the Greater Wolfeschlegelsteinhausenberger Region' })
   Object.assign(rows[1], { id: 'reg-credit', kind: 'CreditNote', displayNumber: 'CN-0007', status: 'Issued', creditsDisplayNumber: 'INV-0012', total: -123456.78, paymentStatus: null })
-  Object.assign(rows[2], { id: 'reg-deleted', status: 'Voided', tripClaimId: undefined })
+  Object.assign(rows[2], { id: 'reg-deleted', status: 'Voided', tripClaimId: undefined, paymentStatus: null })
   Object.assign(rows[3], { id: 'reg-nopdf' })
   return rows
 })()
