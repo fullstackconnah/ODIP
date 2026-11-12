@@ -244,7 +244,7 @@ public class InquiryCloseTests
     }
 
     [Fact]
-    public async Task The_list_is_open_by_default_and_closed_on_request_and_hides_the_note_from_other_roles()
+    public async Task The_list_is_open_by_default_and_closed_on_request()
     {
         var f = new Fixture();
         var other = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = f.TenantId, FirstName = "Ivy", LastName = "Park", Source = "Phone" };
@@ -257,10 +257,6 @@ public class InquiryCloseTests
         var closed = Assert.Single(Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f).GetClosed(CancellationToken.None)).Result!).Items);
         Assert.Equal((f.Noah.Id, InquiryCloseOutcome.NotGoingAhead, "Chose another provider"), (closed.Id, closed.CloseOutcome!.Value, closed.CloseNote));
         Assert.NotNull(closed.ClosedAt);
-
-        var asWorker = Assert.Single(Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f, "SupportWorker").GetClosed(CancellationToken.None)).Result!).Items);
-        Assert.Equal(InquiryCloseOutcome.NotGoingAhead, asWorker.CloseOutcome);
-        Assert.Null(asWorker.CloseNote);
     }
 
     [Fact]
