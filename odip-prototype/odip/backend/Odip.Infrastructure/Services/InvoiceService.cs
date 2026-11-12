@@ -346,11 +346,23 @@ public class InvoiceService
         || invoice.Lines.Any(l => l.ClaimLineItemId is { } id && claimLines.TryGetValue(id, out var line)
             && (line.PaidAmount > 0 || line.Status is ClaimLineItemStatus.Paid or ClaimLineItemStatus.PartiallyPaid));
 
-    public static InvoiceSummaryDto Summary(Invoice i, string? creditedBy, bool paymentRecorded) => new()
+    /// <summary>
+    /// Outstanding, PartPaid or Paid, from the claim and the lines this invoice covers (spec 2026-11-12). Null for a credit note and for a Voided or Credited invoice.
+    /// Invariant: for an Issued invoice with a claim, <see cref="PaymentRecorded"/> is true exactly when this is Paid or PartPaid. The register filter repeats the rule in SQL (ClaimsController.GetInvoiceRegister).
+    /// </summary>
+    public static InvoicePaymentStatus? PaymentStatusOf(Invoice invoice, IReadOnlyDictionary<Guid, ClaimLineItem> claimLines, TripClaimStatus? claimStatus)
+    {
+        if (invoice.Kind != InvoiceKind.Invoice || invoice.Status != InvoiceStatus.Issued) return null;
+        var covered = invoice.Lines.Where(l => l.ClaimLineItemId is { } id && claimLines.ContainsKey(id)).Select(l => claimLines[l.ClaimLineItemId!.Value]).ToList();
+        if (claimStatus == TripClaimStatus.Paid || (covered.Count > 0 && covered.All(l => l.Status == ClaimLineItemStatus.Paid))) return InvoicePaymentStatus.Paid;
+        return claimStatus is { } s && PaymentRecorded(invoice, claimLines, s) ? InvoicePaymentStatus.PartPaid : InvoicePaymentStatus.Outstanding;
+    }
+
+    public static InvoiceSummaryDto Summary(Invoice i, string? creditedBy, bool paymentRecorded, InvoicePaymentStatus? paymentStatus) => new()
     {
         Id = i.Id, Kind = i.Kind, Number = i.Number, DisplayNumber = i.DisplayNumber, Status = i.Status, GroupId = i.ParticipantBookingId ?? i.ParticipantId,
         ParticipantName = i.ParticipantName, BillToName = i.BillToName, PayerKind = i.PayerKind, IssueDate = i.IssueDate, DueDate = i.DueDate, Total = i.Total,
-        CreditsDisplayNumber = i.CreditsDisplayNumber, CreditedByDisplayNumber = creditedBy, PaymentRecorded = paymentRecorded,
+        CreditsDisplayNumber = i.CreditsDisplayNumber, CreditedByDisplayNumber = creditedBy, PaymentRecorded = paymentRecorded, PaymentStatus = paymentStatus,
     };
 
     /// <summary>The claim's Invoices section (D19): its rows (each credit note under the invoice it credits), its payers, its agency count and its state.</summary>
@@ -367,7 +379,8 @@ public class InvoiceService
         var ordered = rows.Where(r => r.Kind == InvoiceKind.Invoice).OrderBy(r => r.Number)
             .SelectMany(r => new[] { r }.Concat(creditNotes[r.Id].OrderBy(c => c.Number)))
             .Select(r => Summary(r, creditNotes[r.Id].Select(c => c.DisplayNumber).FirstOrDefault(),
-                r.Kind == InvoiceKind.Invoice && PaymentRecorded(r, claimLines, claim.Status)))
+                r.Kind == InvoiceKind.Invoice && PaymentRecorded(r, claimLines, claim.Status),
+                r.Kind == InvoiceKind.Invoice ? PaymentStatusOf(r, claimLines, claim.Status) : null))
             .ToList();
 
         return new ClaimInvoicesDto

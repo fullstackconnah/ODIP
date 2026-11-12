@@ -450,6 +450,8 @@ public record InvoiceSummaryDto
     public string? CreditedByDisplayNumber { get; init; }
     /// <summary>A payment is recorded against it (a covered line paid or part paid, or the claim marked paid): it can only be credited, never voided.</summary>
     public bool PaymentRecorded { get; init; }
+    /// <summary>Derived from the claim; null for a credit note, a voided or a credited invoice.</summary>
+    public InvoicePaymentStatus? PaymentStatus { get; init; }
 }
 
 /// <summary>One row of the invoice register (GET invoices). Additive only: PR 2 (the page) reads it. Never the bank details or the void reason.</summary>
@@ -475,6 +477,8 @@ public record InvoiceRegisterRowDto
     public decimal Total { get; init; }
     /// <summary>The seller organisation at issue; the page shows it to a SuperAdmin with no organisation chosen.</summary>
     public string OrganisationName { get; init; } = string.Empty;
+    /// <summary>Derived from the claim; null for a credit note, a voided or a credited invoice.</summary>
+    public InvoicePaymentStatus? PaymentStatus { get; init; }
 }
 
 public record PayerGroupDto

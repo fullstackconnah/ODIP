@@ -1,4 +1,4 @@
-import type { TripClaimStatus, ClaimLineItemStatus, ClaimDayType, ClaimType, GSTCode, PlanType, ClaimKind, InvoiceKind, InvoiceStatus } from './enums'
+import type { TripClaimStatus, ClaimLineItemStatus, ClaimDayType, ClaimType, GSTCode, PlanType, ClaimKind, InvoiceKind, InvoiceStatus, InvoicePaymentStatus } from './enums'
 import type { BudgetStatus } from './funding'
 
 // Shift-completion design spec §1/§2, PR 3 — TripClaim gained a Kind discriminator. Trip-kind
@@ -334,6 +334,8 @@ export interface InvoiceSummaryDto {
   creditedByDisplayNumber?: string
   /** A payment is recorded: it can only be credited, never voided. */
   paymentRecorded: boolean
+  /** Null on a credit note, a voided or a credited invoice. */
+  paymentStatus?: InvoicePaymentStatus | null
 }
 
 export interface PayerGroupDto {
@@ -387,6 +389,8 @@ export interface InvoiceRegisterRowDto {
   /** Signed as the PDF prints it: a credit note is negative. */
   total: number
   organisationName: string
+  /** Null on a credit note, a voided or a credited invoice. */
+  paymentStatus?: InvoicePaymentStatus | null
 }
 
 /** A cancelled shift the Claims screen offers for a short-notice cancellation claim, with what the claim would be worth. */

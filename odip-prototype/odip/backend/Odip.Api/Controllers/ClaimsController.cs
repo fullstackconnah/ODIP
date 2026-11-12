@@ -688,11 +688,13 @@ public class ClaimsController : ControllerBase
     // GET /api/v1/invoices — the register: every invoice and credit note in scope, a deleted claim's too (TripClaimId null). Invoices is tenant-filtered (a SuperAdmin with no organisation chosen sees all).
     [HttpGet("invoices")]
     public async Task<ActionResult<ApiResponse<PagedResult<InvoiceRegisterRowDto>>>> GetInvoiceRegister(
-        [FromQuery] InvoiceKind? kind, [FromQuery] InvoiceStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] InvoiceKind? kind, [FromQuery] InvoiceStatus? status, [FromQuery] InvoicePaymentStatus? paymentStatus, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
         [FromQuery] string? search, [FromQuery] bool deletedClaimOnly = false,
         [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
+        // Enum binding rejects an unknown name with a 400; a bare number binds undefined, so refuse it here.
+        if (paymentStatus is { } given && !Enum.IsDefined(given)) return BadRequest(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Fail("Unknown payment status."));
         var query = _db.Invoices.AsNoTracking();
         if (kind is { } k) query = query.Where(i => i.Kind == k);
         if (status is { } st) query = query.Where(i => i.Status == st);
@@ -703,15 +705,34 @@ public class ClaimsController : ControllerBase
             query = query.Where(i => i.DisplayNumber.ToLower().Contains(term) || i.ParticipantName.ToLower().Contains(term)
                 || i.BillToName.ToLower().Contains(term) || i.ClaimReference.ToLower().Contains(term));
 
+        // The payment rule, once, in the query: the column and the filter read the same value. It repeats InvoiceService.PaymentStatusOf (the tests pin them together).
+        // shortcut: two correlated subqueries per invoice row, run for the page and for the count; fine at today's volumes (InvoiceLines.ClaimLineItemId is indexed), index or cache only if the register slows.
+        var shaped = from i in query
+                     let cs = _db.TripClaims.Where(c => c.Id == i.TripClaimId).Select(c => (TripClaimStatus?)c.Status).FirstOrDefault()
+                     // Scalars, not the covered-line set: EF cannot carry a queryable through a let into the projection.
+                     let covered = _db.ClaimLineItems.Count(l => i.Lines.Any(x => x.ClaimLineItemId == l.Id))
+                     let coveredPaid = _db.ClaimLineItems.Count(l => l.Status == ClaimLineItemStatus.Paid && i.Lines.Any(x => x.ClaimLineItemId == l.Id))
+                     let coveredAnyPay = _db.ClaimLineItems.Count(l => (l.PaidAmount > 0 || l.Status == ClaimLineItemStatus.Paid || l.Status == ClaimLineItemStatus.PartiallyPaid) && i.Lines.Any(x => x.ClaimLineItemId == l.Id))
+                     select new
+                     {
+                         I = i,
+                         Pay = i.Kind != InvoiceKind.Invoice || i.Status != InvoiceStatus.Issued ? null
+                             : cs == TripClaimStatus.Paid || (covered > 0 && covered == coveredPaid) ? (InvoicePaymentStatus?)InvoicePaymentStatus.Paid
+                             : cs == TripClaimStatus.PartiallyPaid || coveredAnyPay > 0 ? (InvoicePaymentStatus?)InvoicePaymentStatus.PartPaid
+                             : (InvoicePaymentStatus?)InvoicePaymentStatus.Outstanding,
+                     };
+        if (paymentStatus is { } ps) shaped = shaped.Where(x => x.Pay == ps);   // any value implies an Issued invoice: the null branch never equals it
+
         // Id last: SQL gives no order among ties, so a row could land on two pages or none.
-        var rows = query.OrderByDescending(i => i.IssueDate).ThenByDescending(i => i.Number).ThenBy(i => i.Id).Select(i => new InvoiceRegisterRowDto
+        var rows = shaped.OrderByDescending(x => x.I.IssueDate).ThenByDescending(x => x.I.Number).ThenBy(x => x.I.Id).Select(x => new InvoiceRegisterRowDto
         {
-            Id = i.Id, Kind = i.Kind, DisplayNumber = i.DisplayNumber, Status = i.Status, IssueDate = i.IssueDate, DueDate = i.DueDate,
-            ParticipantName = i.ParticipantName, BillToName = i.BillToName, PayerKind = i.PayerKind, ClaimReference = i.ClaimReference, TripClaimId = i.TripClaimId,
-            CreditsDisplayNumber = i.CreditsDisplayNumber,
-            CreditedByDisplayNumber = _db.Invoices.Where(c => c.CreditsInvoiceId == i.Id).Select(c => c.DisplayNumber).FirstOrDefault(),
-            Total = i.Kind == InvoiceKind.CreditNote ? -i.Total : i.Total,
-            OrganisationName = i.SellerOrganisationName,
+            Id = x.I.Id, Kind = x.I.Kind, DisplayNumber = x.I.DisplayNumber, Status = x.I.Status, IssueDate = x.I.IssueDate, DueDate = x.I.DueDate,
+            ParticipantName = x.I.ParticipantName, BillToName = x.I.BillToName, PayerKind = x.I.PayerKind, ClaimReference = x.I.ClaimReference, TripClaimId = x.I.TripClaimId,
+            CreditsDisplayNumber = x.I.CreditsDisplayNumber,
+            CreditedByDisplayNumber = _db.Invoices.Where(c => c.CreditsInvoiceId == x.I.Id).Select(c => c.DisplayNumber).FirstOrDefault(),
+            Total = x.I.Kind == InvoiceKind.CreditNote ? -x.I.Total : x.I.Total,
+            OrganisationName = x.I.SellerOrganisationName,
+            PaymentStatus = x.Pay,
         });
         return Ok(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Ok(await PagedResult<InvoiceRegisterRowDto>.CreateAsync(rows, page, pageSize, ct)));
     }
@@ -760,7 +781,7 @@ public class ClaimsController : ControllerBase
         if (credit)
         {
             var note = await _invoiceService.CreditAsync(invoice, now, User, ct);
-            result = InvoiceService.Summary(note, null, false);
+            result = InvoiceService.Summary(note, null, false, null);
             change = $"Credited by {note.DisplayNumber}: {reason}";
         }
         else
@@ -770,7 +791,7 @@ public class ClaimsController : ControllerBase
             invoice.VoidedAt = now;
             invoice.VoidedById = Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var actorId) ? actorId : null;
             invoice.VoidReason = reason;
-            result = InvoiceService.Summary(invoice, null, false);
+            result = InvoiceService.Summary(invoice, null, false, null);
             change = $"Void: {reason}";
         }
 
