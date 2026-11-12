@@ -38,6 +38,7 @@ async function open(browser, { w, h, touch, dark }) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: w, height: h }, hasTouch: touch, isMobile: touch })
   await context.clock.setFixedTime(NOW)
   const page = await context.newPage()
+  await page.addInitScript(() => { try { sessionStorage.setItem('odip.roster.boardView', 'activity') } catch { /* not available */ } })
   page.on('pageerror', (e) => check('no page error', false, String(e.message)))
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login }))
@@ -72,6 +73,7 @@ const toBoard = async (page, dark) => {
 const tokenPx = (page, token) => page.evaluate((t) => { const p = document.createElement('div'); p.style.height = `var(${t})`; document.body.append(p); const h = p.getBoundingClientRect().height; p.remove(); return h }, token)
 const box = (locator) => locator.evaluate((el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom } })
 const lines = (locator) => locator.evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
+const textLines = (locator) => locator.evaluate((el) => { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); const tops = new Set(); for (let n = w.nextNode(); n; n = w.nextNode()) { const r = document.createRange(); r.selectNodeContents(n); for (const q of r.getClientRects()) tops.add(Math.round(q.top)) } return tops.size })
 const near = (a, b, tol = 1) => Math.abs(a - b) <= tol
 const shot = async (page, locator, file, opts = {}) => {
   await locator.scrollIntoViewIfNeeded().catch(() => {})
@@ -79,7 +81,7 @@ const shot = async (page, locator, file, opts = {}) => {
   checks.push(checkCropHolds({ ...crop, touch: opts.touch ?? crop.touch }))
   return crop
 }
-const scene = async (name, fn) => { try { await fn() } catch (e) { check(`${name}: scene ran`, false, String(e.message).split('\n')[0]) } }
+const scene = async (name, fn) => { try { await fn() } catch (e) { check(`${name}: scene ran`, false, String(e.message).split('\n').slice(0, 4).join(' | ').slice(0, 400)) } }
 
 const browser = await chromium.launch({ headless: true })
 
@@ -132,10 +134,10 @@ for (const vp of VIEWPORTS) {
         const untilBottom = Math.max(u.b, s.b)
         check(`${tag} 3 gap Ends-the-next-day to Repeats row = --field-gap-y`, near(repeatsLabel.y - endsLabel.b, gapY, 2), { gap: repeatsLabel.y - endsLabel.b, gapY })
         check(`${tag} 3 gap Repeats row to summary = --field-gap-y`, near(sm.y - untilBottom, gapY, 2), { gap: sm.y - untilBottom, gapY })
-        const btn = dlg.getByRole('button', { name: 'Create 17 drafts' })
+        const btn = dlg.getByRole('button', { name: 'Create 17 drafts' }).last()
         const bb = await box(btn)
         const db = await box(dlg)
-        check(`${tag} 9 "Create 17 drafts" on one line`, (await lines(btn.locator('span').first().or(btn))) <= 1, { h: bb.h })
+        check(`${tag} 9 "Create 17 drafts" on one line`, (await textLines(btn)) <= 1, { h: bb.h })
         check(`${tag} 9 footer has no sideways overflow`, await dlg.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), { right: bb.r, dialogRight: db.r })
         if (vp.touch) check(`${tag} 4 summary at most 2 lines (weekly)`, (await lines(summary)) <= 2, { lines: await lines(summary) })
       }
@@ -187,7 +189,7 @@ for (const vp of VIEWPORTS) {
     await toBoard(page, false)
     const controlH = await tokenPx(page, '--control-h')
     const tapMin = await tokenPx(page, '--tap-min')
-    const dlg = await openOccurrence(page)
+    let dlg = await openOccurrence(page)
     await shot(page, dlg, `a2-occurrence-overview-${tag}.png`, { touch, natural: touch })
     const line = dlg.getByText(/^Repeats every Tuesday until/).first()
     const ln = await lines(line)
@@ -205,10 +207,11 @@ for (const vp of VIEWPORTS) {
     const movedRadio = alert(page).getByRole('radio', { name: /^This and all upcoming/ })
     check(`${tag} 5 date moved: "This and all upcoming" disabled`, await movedRadio.isDisabled(), '')
     await alert(page).getByRole('button', { name: 'Keep editing' }).click()
-    await dlg.getByLabel(/^Date/).fill('2026-09-08')
 
-    // save-scope, then the refusal.
-    await gotoRow(dlg, 'Details').catch(() => {})
+    // save-scope, then the refusal. A reload drops the moved date.
+    await toBoard(page, false)
+    dlg = await openOccurrence(page)
+    await gotoRow(dlg, 'Details')
     await dlg.getByLabel(/Notes/).fill('Bring towels')
     await dlg.getByRole('button', { name: 'Save changes' }).click()
     await alert(page).waitFor({ timeout: 5000 })
@@ -273,7 +276,8 @@ for (const vp of VIEWPORTS) {
       const truncating = [el, ...el.querySelectorAll('*')].some((n) => getComputedStyle(n).textOverflow === 'ellipsis')
       return { lines: Math.round(el.getBoundingClientRect().height / parseFloat(cs.lineHeight)), truncating }
     })
-    check(`${tag} 8 list second line is 1 line with an ellipsis (CellText)`, info.lines === 1 && info.truncating, info)
+    // CellText truncates from md (768px) up and wraps below it, so 390 is checked for at most 3 wrapped lines.
+    check(`${tag} 8 list second line: ${vp.touch ? 'wraps to at most 3 lines below md (CellText)' : '1 line with an ellipsis (CellText)'}`, vp.touch ? info.lines <= 3 : info.lines === 1 && info.truncating, info)
     await page.getByText('Monthly', { exact: true }).first().waitFor({ timeout: 5000 })
     if (!vp.touch) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `a3-list-${tag}.png`))).checks)
     await context.close()
