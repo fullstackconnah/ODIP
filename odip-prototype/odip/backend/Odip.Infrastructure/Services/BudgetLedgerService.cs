@@ -518,7 +518,7 @@ public sealed class BudgetLedgerService
             Kind = LedgerRowKind.ClaimLine, Group = pending ? LedgerGroup.Pending : LedgerGroup.Claimed, Date = line.From, Amount = paid ? line.PaidAmount!.Value : line.TotalAmount,
             PaceCategory = pricing.CategoryOf(line.ItemCode, line.From), PlanType = line.BookingPlanType ?? person.PlanType,
             Id = line.Id, ClaimId = line.ClaimId, ShiftId = line.ShiftId, BookingId = line.BookingId,
-            Description = string.Create(CultureInfo.InvariantCulture, $"{line.ClaimReference} · {line.ItemCode} · {ClaimLineQuantity(line, pricing)}"),
+            Description = string.Create(CultureInfo.InvariantCulture, $"{line.ClaimReference} · {line.ItemCode} ·\u00A0{ClaimLineQuantity(line, pricing)}"),
             Status = line.ClaimStatus.ToString(), Link = $"/claims/{line.ClaimId}",
         };
     }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { DataTable, RowMenu } from './DataTable'
 import type { Column } from './DataTable'
 
@@ -356,5 +356,32 @@ describe('RowMenu: a disabled item keeps its reason', () => {
     expect(button).not.toHaveAttribute('aria-describedby')
     button.click()
     expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('RowMenu: a disabled item with a link does not navigate', () => {
+  const renderMenu = (disabled: boolean) => render(
+    <MemoryRouter initialEntries={['/list']}>
+      <Routes>
+        <Route path="/list" element={<RowMenu name="Pat" items={[{ label: 'Open', icon: <span />, to: '/target', disabled, description: disabled ? 'Not yet' : undefined }]} />} />
+        <Route path="/target" element={<p>Target page</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  it('renders as an aria-disabled button with its reason and stays on the page when clicked', async () => {
+    renderMenu(true)
+    const button = screen.getAllByRole('button', { name: 'Open' })[0]
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).toHaveAccessibleDescription('Not yet')
+    expect(screen.queryByRole('link', { name: 'Open' })).toBeNull()
+    await userEvent.click(button)
+    expect(screen.queryByText('Target page')).toBeNull()
+  })
+
+  it('still navigates when enabled', async () => {
+    renderMenu(false)
+    await userEvent.click(screen.getByRole('link', { name: 'Open' }))
+    expect(screen.getByText('Target page')).toBeInTheDocument()
   })
 })

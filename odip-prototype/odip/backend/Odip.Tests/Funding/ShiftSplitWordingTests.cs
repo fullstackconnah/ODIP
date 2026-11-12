@@ -102,8 +102,8 @@ public class ShiftSplitWordingTests : IDisposable
 
         Assert.Equal("E", Assert.Single(lines, l => l.SupportItemCode == SleepoverCode).Unit);
         Assert.Equal("H", Assert.Single(lines, l => l.SupportItemCode != SleepoverCode).Unit);
-        Assert.EndsWith($"{SleepoverCode} · 1 night", Assert.Single(rows, r => r.Description.Contains(SleepoverCode)).Description);
-        Assert.EndsWith("· 8 h", Assert.Single(rows, r => !r.Description.Contains(SleepoverCode)).Description);
+        Assert.EndsWith($"{SleepoverCode} ·\u00A01 night", Assert.Single(rows, r => r.Description.Contains(SleepoverCode)).Description);
+        Assert.EndsWith("·\u00A08 h", Assert.Single(rows, r => !r.Description.Contains(SleepoverCode)).Description);
     }
 
     [Theory]
@@ -122,7 +122,7 @@ public class ShiftSplitWordingTests : IDisposable
 
         var rows = (await _kit.Ledger.ComputeAsync(_kit.TenantId, new[] { person.Id }, Ct))[person.Id].Items.Where(i => i.Kind == LedgerRowKind.ClaimLine).ToList();
 
-        Assert.EndsWith($"{itemCode} · {expected}", Assert.Single(rows).Description);
+        Assert.EndsWith($"{itemCode} ·\u00A0{expected}", Assert.Single(rows).Description);
     }
 
     [Fact]

@@ -857,11 +857,11 @@ export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string })
   const navigate = useNavigate()
   const reasonId = useId()
   if (items.length === 0) return null
-  const run = (item: RowMenuItem) => (item.to ? navigate(item.to) : item.onSelect?.())
+  const run = (item: RowMenuItem) => (item.to && !item.disabled ? navigate(item.to) : item.onSelect?.())
   return (
     <>
       <RowActions overlay className="max-md:hidden">
-        {items.map((item, index) => item.to ? (
+        {items.map((item, index) => item.to && !item.disabled ? (
           <Button key={item.label} to={item.to} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.ariaLabel ?? item.label} onClick={e => e.stopPropagation()}>{item.icon}</Button>
         ) : (
           // aria-disabled, not disabled: the button stays focusable and its reason is read as the description (a native disabled one is skipped by Tab and has none). Only the icon dims: opacity on the button would dim its focus ring under 3:1.
