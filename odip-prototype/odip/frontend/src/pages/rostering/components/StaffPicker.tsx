@@ -334,10 +334,10 @@ function PickOption({ id, row, active, onPick, onHover }: { id: string; row: Pic
       </span>
       {(row.trip || row.leave || row.notStarted || row.available === 'Preferred' || source) && (
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          {row.available === 'Preferred' && <StatusBadge tone="success" label="Prefers this day" />}
-          {row.trip && <StatusBadge tone="warning" label="On a trip" />}
-          {row.leave && <StatusBadge tone={row.leave === 'Approved' ? 'neutral' : 'warning'} label={row.leave === 'Approved' ? 'On leave' : 'Leave pending'} />}
-          {row.notStarted && <StatusBadge tone="neutral" label="Hasn't started yet" />}
+          {row.available === 'Preferred' && <StatusBadge tone="success" label="Prefers this day" className="shrink-0 whitespace-nowrap" />}
+          {row.trip && <StatusBadge tone="warning" label="On a trip" className="shrink-0 whitespace-nowrap" />}
+          {row.leave && <StatusBadge tone={row.leave === 'Approved' ? 'neutral' : 'warning'} label={row.leave === 'Approved' ? 'On leave' : 'Leave pending'} className="shrink-0 whitespace-nowrap" />}
+          {row.notStarted && <StatusBadge tone="neutral" label="Hasn't started yet" className="shrink-0 whitespace-nowrap" />}
           {source ? <span className="min-w-0 truncate">{moveLine(source)}</span> : row.trip && <span className="min-w-0 truncate">{row.trip}</span>}
         </span>
       )}

@@ -237,6 +237,10 @@ try {
     const tapMin = await probe(page, 'height:var(--tap-min)')
     const rowH = await dlg.getByRole('option', { name: /^Lena Cho/ }).evaluate((e) => e.getBoundingClientRect().height)
     add('8c coarse trip row >= --tap-min', rowH >= tapMin - 0.5, { rowH, tapMin })
+    // Long trip name must not squeeze or wrap the badge: same badge height and same row height as the short-name row.
+    const badgeRow = (n) => dlg.getByRole('option', { name: n }).evaluate((e) => ({ row: e.getBoundingClientRect().height, badge: e.querySelector('[data-status-badge]').getBoundingClientRect().height }))
+    const shortRow = await badgeRow(/^Lena Cho/), longRow = await badgeRow(/^Yara/)
+    add('8d long trip name keeps the badge on one line (badge and row heights match the short-name row within 1 px)', Math.abs(shortRow.badge - longRow.badge) <= 1 && Math.abs(shortRow.row - longRow.row) <= 1, { shortRow, longRow })
     await dlg.evaluate((el) => el.scrollIntoView({ behavior: 'instant', block: 'center' })); await settled(page)
     await dlg.screenshot({ path: path.join(OUT_DIR, 'picker-trip-sheet-at-390.png') })
     await context.close()
