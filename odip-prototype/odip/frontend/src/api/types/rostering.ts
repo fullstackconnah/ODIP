@@ -915,7 +915,14 @@ export interface GroupActivityDto {
   participants: GroupActivityParticipantDto[]
   staff: GroupActivityStaffDto[]
   findings: RosterFindingDto[]
+  /** Set when the activity is one of a recurring series. */
+  series?: GroupActivitySeriesDto | null
 }
+
+export type GroupActivityRepeats = 'Weekly' | 'Fortnightly' | 'Monthly'
+/** Which activities a save or cancel reaches: this one, or this one and every later one in its series. */
+export type GroupActivityScope = 'Occurrence' | 'Series'
+export interface GroupActivitySeriesDto { id: string; interval: GroupActivityRepeats; startDate: string; endDate: string }
 
 /** The body of create (POST) and update (PUT; status Draft or Published). Blank optionals go as null. */
 export interface GroupActivityFormDto {
@@ -929,6 +936,9 @@ export interface GroupActivityFormDto {
   serviceLocationId: string | null
   notes: string | null
   minStaffRequired: number | null
+  /** Create only: repeat weekly, fortnightly or monthly up to `until`. Both null for a one-off. */
+  repeats?: GroupActivityRepeats | null
+  until?: string | null
 }
 
 export interface AddGroupStaffDto {

@@ -1885,17 +1885,22 @@ function groupActivityFixture(days) {
   const who = participants.slice(0, 2).map((p) => ({ participantId: p.id, participantName: p.fullName, ratio: 'OneToTwo', shiftIds: [], timesDiffer: false, didNotAttend: false }))
   const staff = (id, name, start, end) => [{ id: `row-${id}`, staffId: `staff-${id}`, staffName: name, startTime: start, endTime: end, endsNextDay: false, findings: [] }]
   const make = (id, day, title, start, end, status, staffNeeded, staffRows, people, findings = []) => ({
-    id, serviceDate: days[day], startTime: start, endTime: end, endsNextDay: false, title, status, staffNeeded, staffAssigned: staffRows.length, participants: people, staff: staffRows, findings,
+    id, serviceDate: days[day], startTime: start, endTime: end, endsNextDay: false, title, status, staffNeeded, staffAssigned: staffRows.length, participants: people, staff: staffRows, findings, series: null,
   })
   return [
     make('mock-act-1', 0, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who),
     make('mock-act-2', 2, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who.slice(0, 1)),
     make('mock-act-3', 1, 'Art group', '13:00:00', '15:30:00', 'Published', 2, [], who, [{ code: 'ACTIVITY_STAFF_SHORT', severity: 'Warning', message: 'Needs 2 staff, has 0.', requiresReason: false }]),
     make('mock-act-4', 3, 'Swimming', '09:30:00', '11:30:00', 'Draft', 1, [], []),
+    // Two series occurrences for the Repeats line and the scope dialogs. series-weekly's "This and all upcoming" is refused by the PUT and cancel routes below.
+    { ...make('series-weekly', 1, 'Boccia', '14:00:00', '16:00:00', 'Published', 1, staff(2, 'Sam Wilson', '14:00:00', '16:00:00'), []), series: { id: 'series-1', interval: 'Weekly', startDate: '2026-09-08', endDate: '2026-12-15' } },
+    { ...make('series-monthly', 4, 'Craft morning', '10:00:00', '12:00:00', 'Draft', 1, [], []), series: { id: 'series-2', interval: 'Monthly', startDate: '2026-09-11', endDate: '2027-02-12' } },
   ]
 }
 
 // A shift saved from the slide-over: the fixture shifts are rebuilt per call, so a status and cancellation reason change is kept here and laid over them. The reason is set and cleared with the status, as ApplyStatus does on the server.
+const SERIES_REFUSAL = "Tue 8 Dec: This shift has started, finished or been cancelled, so it can't join or leave an activity."
+const groupActivityMock = (id) => groupActivityFixture(Array.from({ length: 7 }, (_, i) => planApproval.addDays(BOARD_FIXTURE_WEEK, i))).find((a) => a.id === id) || null
 const SHIFT_CANCELLATION_REASONS = ['ParticipantUnwell', 'ParticipantFamily', 'ParticipantTransport', 'ParticipantDidNotAttend', 'ParticipantOther', 'StaffUnavailable', 'ProviderCancelled', 'Weather', 'RosteredInError', 'Other']
 const shiftEdits = {}
 function applyShiftEdit(shift, body) {
@@ -3417,6 +3422,13 @@ const postRoutes = [
     st.status = 'PendingReview'
     return buildPortalShiftDetail(base.id)
   }],
+  // POST rostering/group-activities/:id/cancel: { scope: 'Series' } on series-weekly is refused as the server does for a later occurrence that has started.
+  ['rostering/group-activities/:id/cancel', (id, body) => {
+    const a = groupActivityMock(id)
+    if (!a) return respond(404, failEnvelope(null, ['Activity not found.']))
+    if (body?.scope === 'Series' && id === 'series-weekly') return respond(409, failEnvelope(null, [SERIES_REFUSAL], 'GA_SHIFT_LOCKED'))
+    return { ...a, status: 'Cancelled' }
+  }],
   ['rostering/shifts/:id/completion/approve', (id) => {
     // The dashboard captures' row error: somebody reviewed it first.
     if (id === 'shift-dash-409') return respond(409, failEnvelope(null, ['This shift has already been reviewed.'], 'SHIFT_NOT_PENDING_REVIEW'))
@@ -3515,6 +3527,13 @@ const putRoutes = [
   }],
   ...packageRoutesPut,
   // PUT rostering/shifts/:id returns the saved shift with its cancellationReason; a value outside the list is refused as the server does.
+  ['rostering/group-activities/:id', (id, body) => {
+    const a = groupActivityMock(id)
+    if (!a) return respond(404, failEnvelope(null, ['Activity not found.']))
+    if (body.scope === 'Series' && id === 'series-weekly') return respond(409, failEnvelope(null, [SERIES_REFUSAL], 'GA_SHIFT_LOCKED'))
+    const { scope, ...fields } = body
+    return { ...a, ...fields }
+  }],
   ['rostering/shifts/:id', (id, body) => {
     if (body.cancellationReason != null && !SHIFT_CANCELLATION_REASONS.includes(body.cancellationReason)) {
       return respond(400, failEnvelope(null, ['Choose one of the listed cancellation reasons.'], 'SHIFT_CANCELLATION_REASON_INVALID'))

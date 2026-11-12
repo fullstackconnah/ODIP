@@ -20,7 +20,9 @@ describe('group activity writes (PR2): each one refetches the board and the acti
   const cases: [string, () => { mutateAsync: (v: never) => Promise<unknown> }, unknown, () => void][] = [
     ['create', () => useCreateGroupActivity(), form, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities', form)],
     ['update sends the status with the form', () => useUpdateGroupActivity(), { id: 'a1', data: form, status: 'Published' }, () => expect(mockApiPut).toHaveBeenCalledWith('/rostering/group-activities/a1', { ...form, status: 'Published' })],
-    ['cancel', () => useCancelGroupActivity(), 'a1', () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/cancel', {})],
+    ['update with scope Series sends the scope', () => useUpdateGroupActivity(), { id: 'a1', data: form, status: 'Draft', scope: 'Series' }, () => expect(mockApiPut).toHaveBeenCalledWith('/rostering/group-activities/a1', { ...form, status: 'Draft', scope: 'Series' })],
+    ['cancel', () => useCancelGroupActivity(), { id: 'a1' }, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/cancel', {})],
+    ['cancel with scope Series posts the scope', () => useCancelGroupActivity(), { id: 'a1', scope: 'Series' }, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/cancel', { scope: 'Series' })],
     ['detach a shift', () => useDetachShift(), { id: 'a1', shiftId: 's1' }, () => expect(mockApiDelete).toHaveBeenCalledWith('/rostering/group-activities/a1/shifts/s1')],
     ['add a participant', () => useAddGroupParticipant(), { id: 'a1', participantId: 'p1', ratio: 'OneToOne' }, () => expect(mockApiPost).toHaveBeenCalledWith('/rostering/group-activities/a1/participants', { participantId: 'p1', ratio: 'OneToOne' })],
     ['set a ratio', () => useSetGroupRatio(), { id: 'a1', participantId: 'p1', ratio: 'TwoToOne' }, () => expect(mockApiPut).toHaveBeenCalledWith('/rostering/group-activities/a1/participants/p1/ratio', { ratio: 'TwoToOne' })],

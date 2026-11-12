@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut } from '../client'
-import type { AddGroupStaffDto, GroupActivityDto, GroupActivityFormDto, PagedResult, ShiftStatus, SupportRatio } from '../types'
+import type { AddGroupStaffDto, GroupActivityDto, GroupActivityFormDto, GroupActivityScope, PagedResult, ShiftStatus, SupportRatio } from '../types'
 
 const BASE = '/rostering/group-activities'
 
@@ -25,8 +25,8 @@ function useActivityWrite<V, R = unknown>(send: (v: V) => Promise<R>) {
 
 export const useCreateGroupActivity = () => useActivityWrite((data: GroupActivityFormDto) => apiPost<GroupActivityDto>(BASE, data))
 export const useCreateActivityFromShift = () => useActivityWrite(({ shiftId, title }: { shiftId: string; title?: string }) => apiPost<GroupActivityDto>(`${BASE}/from-shift/${shiftId}`, { title }))
-export const useUpdateGroupActivity = () => useActivityWrite(({ id, data, status }: { id: string; data: GroupActivityFormDto; status: ShiftStatus }) => apiPut<GroupActivityDto>(`${BASE}/${id}`, { ...data, status }))
-export const useCancelGroupActivity = () => useActivityWrite((id: string) => apiPost<GroupActivityDto>(`${BASE}/${id}/cancel`, {}))
+export const useUpdateGroupActivity = () => useActivityWrite(({ id, data, status, scope }: { id: string; data: GroupActivityFormDto; status: ShiftStatus; scope?: GroupActivityScope }) => apiPut<GroupActivityDto>(`${BASE}/${id}`, { ...data, status, ...(scope && { scope }) }))
+export const useCancelGroupActivity = () => useActivityWrite(({ id, scope }: { id: string; scope?: GroupActivityScope }) => apiPost<GroupActivityDto>(`${BASE}/${id}/cancel`, scope ? { scope } : {}))
 export const useAttachShifts = () => useActivityWrite(({ id, shiftIds }: { id: string; shiftIds: string[] }) => apiPost<GroupActivityDto>(`${BASE}/${id}/shifts`, { shiftIds }))
 export const useDetachShift = () => useActivityWrite(({ id, shiftId }: { id: string; shiftId: string }) => apiDelete(`${BASE}/${id}/shifts/${shiftId}`))
 export const useAddGroupParticipant = () => useActivityWrite(({ id, participantId, ratio }: { id: string; participantId: string; ratio: SupportRatio }) => apiPost<GroupActivityDto>(`${BASE}/${id}/participants`, { participantId, ratio }))

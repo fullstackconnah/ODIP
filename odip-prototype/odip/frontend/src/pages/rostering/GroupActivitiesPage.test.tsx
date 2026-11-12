@@ -114,4 +114,16 @@ describe('GroupActivitiesPage', () => {
     renderPage()
     expect(screen.getByText('Choose a range of 93 days or fewer.')).toBeInTheDocument()
   })
+  it('list: a series row shows "Weekly · {location}", the interval alone with no location, and a one-off the location only', () => {
+    const series = { id: 's1', interval: 'Weekly', startDate: '2026-08-17', endDate: '2027-03-09' } as const
+    h.list.mockReturnValue(ok([
+      makeActivity({ title: 'Bowling', location: 'Strike Zone', series }),
+      makeActivity({ id: 'activity-2', title: 'Picnic', location: '', series: { ...series, interval: 'Monthly' } }),
+      makeActivity({ id: 'activity-3', title: 'Swim', location: 'Pool' }),
+    ]))
+    renderPage()
+    expect(screen.getByText('Weekly · Strike Zone')).toBeInTheDocument()
+    expect(screen.getByText('Monthly')).toBeInTheDocument()
+    expect(screen.getByText('Pool')).toBeInTheDocument()
+  })
 })
