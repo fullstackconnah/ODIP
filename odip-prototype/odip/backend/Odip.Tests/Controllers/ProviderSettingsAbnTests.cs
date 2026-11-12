@@ -120,15 +120,18 @@ public class ProviderSettingsAbnTests
         Assert.Equal("12 345 678 901", await StoredAbn(db));
     }
 
-    [Fact]
-    public async Task A_stored_ABN_with_odd_spacing_is_left_untouched_when_echoed_unchanged()
+    [Theory]
+    [InlineData(" 12  345 ")]
+    [InlineData("AB	C")]
+    public async Task A_stored_ABN_with_odd_spacing_is_left_untouched_when_echoed_unchanged(string stored)
     {
-        var (db, controller) = Create(" 12  345 ");
+        var (db, controller) = Create(stored);
         using var _ = db;
 
-        await controller.Upsert(Dto(" 12  345 "), CancellationToken.None);
+        var result = await controller.Upsert(Dto(stored), CancellationToken.None);
 
-        Assert.Equal(" 12  345 ", await StoredAbn(db));
+        Assert.IsNotType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(stored, await StoredAbn(db));
     }
 
     [Fact]

@@ -63,10 +63,17 @@ public static class ShiftClaimWindow
         // Elapsed minutes, not wall-clock: a stretch is added when it has length in real time, and it is an hour out across the clock change.
         var before = ShiftBands.ElapsedMinutes(approved.StartLocal, held.StartLocal, zone, approved.StartFirstPass, held.StartFirstPass);
         var after = ShiftBands.ElapsedMinutes(held.EndLocal, approved.EndLocal, zone, held.EndFirstPass, approved.EndFirstPass);
-        if (before > 0) { parts.Add($"{approved.StartLocal:HH:mm}–{held.StartLocal:HH:mm}"); minutes += before; }
-        if (after > 0) { parts.Add($"{held.EndLocal:HH:mm}–{approved.EndLocal:HH:mm}"); minutes += after; }
+        if (before > 0) { parts.Add(Stretch(approved.StartLocal, held.StartLocal, before)); minutes += before; }
+        if (after > 0) { parts.Add(Stretch(held.EndLocal, approved.EndLocal, after)); minutes += after; }
         if (parts.Count == 0) return null;   // no added stretch has length in real time
         return string.Create(CultureInfo.InvariantCulture, $"Extra time {string.Join(", ", parts)} · {minutes:0} min");
+    }
+
+    /// <summary>"02:30–02:30 (clocks went back)": a stretch's printed range, marked when its real minutes differ from the wall-clock minutes between the printed times (modulo a day).</summary>
+    private static string Stretch(DateTime from, DateTime to, int elapsed)
+    {
+        var wall = (int)(((to.TimeOfDay - from.TimeOfDay).TotalMinutes % 1440 + 1440) % 1440);
+        return $"{from:HH:mm}–{to:HH:mm}{(elapsed > wall ? " (clocks went back)" : elapsed < wall ? " (clocks went forward)" : "")}";
     }
 
     /// <summary>

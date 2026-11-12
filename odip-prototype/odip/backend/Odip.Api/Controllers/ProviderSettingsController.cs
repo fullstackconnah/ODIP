@@ -291,10 +291,10 @@ public partial class ProviderSettingsController : ControllerBase
 
     private static string Blank(string? v) => v?.Trim() ?? "";
 
-    /// <summary>The refusal for a typed BSB (6 digits, an optional dash or space after the third), or null; blank clears the field and passes. Expects the trimmed value.</summary>
     /// <summary>Every run of whitespace (tab, non-breaking space, any Unicode space) becomes one ordinary space; outer whitespace goes.</summary>
     internal static string TidyAbn(string abn) => Regex.Replace(abn, @"\s+", " ").Trim();
 
+    /// <summary>The refusal for a typed BSB (6 digits, an optional dash or space after the third), or null; blank clears the field and passes. Expects the trimmed value.</summary>
     internal static string? BsbProblem(string? bsb) =>
         string.IsNullOrEmpty(bsb) || BsbPattern().IsMatch(bsb) ? null : "Enter the BSB as 6 numbers, like 062-000.";
 
