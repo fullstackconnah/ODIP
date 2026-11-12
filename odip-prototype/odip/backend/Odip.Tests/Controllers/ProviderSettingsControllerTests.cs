@@ -445,4 +445,111 @@ public class ProviderSettingsControllerTests
         Assert.Equal((await db.ProviderSettings.SingleAsync()).UpdatedAt, await LoadedUpdatedAtAsync(db));
         Assert.NotEqual(default, await LoadedUpdatedAtAsync(db));
     }
+
+    [Fact]
+    public async Task Agreement_wording_over_2000_characters_is_refused_and_nothing_is_saved()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto(), CancellationToken.None);
+
+        var result = await controller.Upsert(
+            MinimalUpsertDto() with { OrganisationName = "Changed", AgreementComplaintsTerms = new string('x', 2001) }, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Enter 2,000 characters or fewer.", Assert.Single(Assert.IsType<ApiResponse<bool>>(bad.Value).Errors!));
+        var stored = await db.ProviderSettings.SingleAsync();
+        Assert.Equal("Test Org", stored.OrganisationName);   // the other fields of the same PUT were not written either
+        Assert.Null(stored.AgreementComplaintsTerms);
+        Assert.Empty(await AuditRowsAsync(db));
+    }
+
+    [Fact]
+    public async Task Agreement_wording_of_exactly_2000_characters_after_trimming_is_saved()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        var result = await ControllerAs(db).Upsert(
+            MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "  " + new string('x', 2000) + "\r\n " }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(new string('x', 2000), (await db.ProviderSettings.SingleAsync()).AgreementResponsibilitiesTerms);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \r\n  ")]
+    public async Task Agreement_wording_of_spaces_only_is_saved_as_null(string blank)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "Ours", AgreementComplaintsTerms = "Theirs" }, CancellationToken.None);
+
+        await controller.Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = blank, AgreementComplaintsTerms = blank }, CancellationToken.None);
+
+        var stored = await db.ProviderSettings.SingleAsync();
+        Assert.Null(stored.AgreementResponsibilitiesTerms);
+        Assert.Null(stored.AgreementComplaintsTerms);
+    }
+
+    [Fact]
+    public async Task Agreement_wording_crlf_is_saved_as_lf()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        await ControllerAs(db).Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "a\r\nb\rc\n\nd" }, CancellationToken.None);
+
+        Assert.Equal("a\nb\nc\n\nd", (await db.ProviderSettings.SingleAsync()).AgreementResponsibilitiesTerms);
+    }
+
+    [Fact]
+    public async Task Absent_agreement_wording_leaves_the_stored_values()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "Ours", AgreementComplaintsTerms = "Theirs" }, CancellationToken.None);
+
+        await controller.Upsert(MinimalUpsertDto() with { InvoiceFooterNotes = "From another section" }, CancellationToken.None);
+
+        var stored = await db.ProviderSettings.SingleAsync();
+        Assert.Equal("Ours", stored.AgreementResponsibilitiesTerms);
+        Assert.Equal("Theirs", stored.AgreementComplaintsTerms);
+    }
+
+    [Fact]
+    public async Task An_agreement_wording_edit_writes_one_history_row_per_changed_field()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "Old", AgreementComplaintsTerms = "Same" }, CancellationToken.None);
+        Assert.Empty(await AuditRowsAsync(db));   // a brand-new row is not audited
+
+        await controller.Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "New", AgreementComplaintsTerms = "Same" }, CancellationToken.None);
+
+        var row = Assert.Single(await AuditRowsAsync(db));
+        var change = Assert.Single(JsonSerializer.Deserialize<JsonElement>(row.Changes).EnumerateArray().ToList());
+        Assert.Equal("AgreementResponsibilitiesTerms", change.GetProperty("Field").GetString());
+        Assert.Equal("Old", change.GetProperty("Old").GetString());
+        Assert.Equal("New", change.GetProperty("New").GetString());
+    }
+
+    [Fact]
+    public async Task Agreement_wording_is_returned_to_a_coordinator_who_may_read_but_not_write()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        await ControllerAs(db).Upsert(MinimalUpsertDto() with { AgreementResponsibilitiesTerms = "Ours", AgreementComplaintsTerms = "Theirs" }, CancellationToken.None);
+        var coordinator = new ProviderSettingsController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "Coordinator")], "Test")) },
+            },
+        };
+
+        var result = await coordinator.Get(CancellationToken.None);
+
+        var data = Assert.IsType<ApiResponse<ProviderSettingsDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal("Ours", data.AgreementResponsibilitiesTerms);
+        Assert.Equal("Theirs", data.AgreementComplaintsTerms);
+    }
 }
