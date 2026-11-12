@@ -346,7 +346,7 @@ export default function DashboardPage() {
 
       <div className="flex min-w-0 flex-col gap-[var(--section-gap)]">
       {(card === 'steps' || card === 'done') && setup.data && (
-        <SetupSteps status={setup.data} provider={provider.data ?? null} hiddenTrips={visibility.isError || !visibility.data ? undefined : hiddenTrips} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
+        <SetupSteps status={setup.data} provider={provider.isPending || provider.isError ? undefined : provider.data ?? null} hiddenTrips={visibility.isError || !visibility.data ? undefined : hiddenTrips} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
       )}
       {pageClear ? (
         // Same id as the Alerts heading, which it replaces: where focus lands when the last decision turns the page clear (QuickGroup's finish).

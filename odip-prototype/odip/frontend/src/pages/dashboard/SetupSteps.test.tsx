@@ -8,7 +8,7 @@ import { SetupSteps } from './SetupSteps'
 const empty: SetupStatusDto = { staffCount: 0, participantCount: 0, participantsWithPlanCount: 0, firstPublishedWeekStart: null, hasInvoice: false, employmentHeroAvailable: false }
 const provider = (over: Partial<ProviderSettingsDto> = {}) => ({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW', abn: '51 824 753 556', ...over }) as ProviderSettingsDto
 
-function show(status: SetupStatusDto, prov: ProviderSettingsDto | null, role = 'Admin', card: 'steps' | 'done' = 'steps', onHide = () => {}, hiddenTrips?: boolean) {
+function show(status: SetupStatusDto, prov: ProviderSettingsDto | null | undefined, role = 'Admin', card: 'steps' | 'done' = 'steps', onHide = () => {}, hiddenTrips?: boolean) {
   localStorage.setItem('odip_user', JSON.stringify({ role, tenantId: 't1' }))
   return render(
     <MemoryRouter>
@@ -133,5 +133,10 @@ describe('SetupSteps Organisation details status', () => {
     show(empty, provider())
     expect(within(orgRow()).getByText('Details recorded')).toBeInTheDocument()
     expect(screen.queryByText(/your ABN/)).not.toBeInTheDocument()
+  })
+  it('shows no ABN hint while the organisation settings have not loaded', () => {
+    show(empty, undefined)
+    expect(within(orgRow()).getByText('To do')).toBeInTheDocument()
+    expect(screen.queryByText(/ABN to finish this step/)).not.toBeInTheDocument()
   })
 })

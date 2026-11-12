@@ -30,7 +30,7 @@ export default function OrganisationSetupSection() {
       recorded: false, noun: 'workspace visibility settings', retry: () => visibility.refetch(),
     },
     {
-      title: 'Organisation details', purpose: ['Review the legal name, address and ABN used on your documents.', organisationDetailsHint(provider.data)].filter(Boolean).join(' '),
+      title: 'Organisation details', purpose: ['Review the legal name, address and ABN used on your documents.', providerPhase === 'ready' ? organisationDetailsHint(provider.data) : null].filter(Boolean).join(' '),
       destination: 'organisation', action: 'Open organisation profile', phase: providerPhase,
       status: detailsRecorded ? 'Details recorded' : 'To do',
       recorded: detailsRecorded, noun: 'organisation profile', retry: () => provider.refetch(),

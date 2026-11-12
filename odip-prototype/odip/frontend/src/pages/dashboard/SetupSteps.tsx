@@ -12,7 +12,7 @@ type Action = { label: string; to: string }
 type Row = { title: string; status: string; purpose?: string; done: boolean; optional?: boolean; actions: Action[] }
 
 /** The setup steps, in order. Done rows fold to a line with no actions; the first required row not done carries the card's one primary. */
-function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null, canManageIntegrations: boolean, hiddenTrips?: boolean): Row[] {
+function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null | undefined, canManageIntegrations: boolean, hiddenTrips?: boolean): Row[] {
   const { staffCount: staff, participantCount: people, participantsWithPlanCount: plans } = status
   const fromEh = !!provider?.employmentHeroConnected
   const staffActions: Action[] = fromEh
@@ -28,7 +28,7 @@ function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null,
     ...(hiddenTrips === undefined ? [] : [{ title: 'What you run', optional: true, done: hiddenTrips, status: hiddenTrips ? 'Trips and holidays hidden' : 'Trips and holidays shown',
       purpose: 'Choose whether your organisation runs trips and holidays. Turning them off tidies the menu; nothing is deleted.', actions: [{ label: 'Choose what shows', to: '/settings?section=workspace-visibility' }] }]),
     { title: 'Organisation details', done: organisationDetailsRecorded(provider), status: organisationDetailsRecorded(provider) ? 'Details recorded' : 'To do',
-      purpose: ['Check the legal name, address, state and ABN that go on your invoices and claims.', organisationDetailsHint(provider)].filter(Boolean).join(' '), actions: [{ label: 'Review details', to: '/settings?section=setup' }] },
+      purpose: ['Check the legal name, address, state and ABN that go on your invoices and claims.', provider === undefined ? null : organisationDetailsHint(provider)].filter(Boolean).join(' '), actions: [{ label: 'Review details', to: '/settings?section=setup' }] },
     { title: 'Staff', done: staff >= 1,
       status: fromEh ? (staff ? `${staffNoun}, from Employment Hero` : 'Waiting for the first check from Employment Hero') : staff ? `${staffNoun}, not counting Admins` : 'No staff yet',
       purpose: fromEh ? 'Bunya Support checks Employment Hero for staff every 30 minutes.' : 'Import your staff list, or add people one at a time. Each one gets an invite to sign in.',
@@ -47,7 +47,7 @@ function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null,
   ]
 }
 
-export function SetupSteps({ status, provider, hiddenTrips, card, onHide }: { status: SetupStatusDto; provider: ProviderSettingsDto | null; hiddenTrips?: boolean; card: 'steps' | 'done'; onHide: () => void }) {
+export function SetupSteps({ status, provider, hiddenTrips, card, onHide }: { status: SetupStatusDto; provider: ProviderSettingsDto | null | undefined; hiddenTrips?: boolean; card: 'steps' | 'done'; onHide: () => void }) {
   const { canManageIntegrations } = usePermissions()
   const hide = (
     <Button variant="ghost" size="sm" aria-label="Hide setup steps" className="ml-auto" onClick={() => {

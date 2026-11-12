@@ -87,6 +87,20 @@ describe('Organisation setup read-only facts', () => {
     expect(screen.queryByText(/your ABN/)).not.toBeInTheDocument()
   })
 
+  it('shows no ABN hint while the settings are pending or have failed to load', async () => {
+    const hint = /ABN to finish this step/
+    let failProvider!: (e: Error) => void
+    api.get.mockImplementation((url: string) => url === '/provider-settings'
+      ? new Promise((_r, reject) => { failProvider = reject })
+      : url === '/settings/module-visibility' ? Promise.resolve(null) : Promise.resolve(pricing))
+    show()
+    expect(within(row('Organisation details')).getByText('Checking')).toBeInTheDocument()
+    expect(screen.queryByText(hint)).not.toBeInTheDocument()
+    await act(async () => failProvider(new Error('synthetic failure')))
+    expect(await within(row('Organisation details')).findByRole('alert')).toHaveTextContent("Couldn't load this organisation profile")
+    expect(screen.queryByText(hint)).not.toBeInTheDocument()
+  })
+
   it.each([null, { ...pricing, registrationGroupsConfirmed: false }])('keeps registration groups for review without explicit confirmation', async groups => {
     respond(provider, groups)
     show()
