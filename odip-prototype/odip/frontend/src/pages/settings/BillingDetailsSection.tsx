@@ -7,6 +7,7 @@ import { retryingAfterError } from '@/lib/queryPhase'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
 import { labelClass } from '@/components/FormField'
+import { formatRatio } from '@/lib/format'
 import { formGrid, span } from '@/lib/formGrid'
 import { usePermissions } from '@/lib/permissions'
 import { SettingsGroup, SettingsSection, type SectionFrame } from './SettingsSection'
@@ -38,6 +39,29 @@ function prefixProblem(value: string) {
   return undefined
 }
 
+const WORDING_MAX = 2000
+const WORDING_OVER = 'Enter 2,000 characters or fewer.'
+const wordingBlurb = (section: number) => `Printed as section ${section} of the service agreement. Leave blank to print the standard draft wording.`
+
+/** One agreement wording field: no maxLength (a pasted clause is never cut without a word, it is blocked instead), and a count from 1,800 trimmed characters, as the witness statement does. */
+function WordingField({ id, label, hint, value, error, readOnly, onChange }: { id: string; label: string; hint?: string; value: string; error?: string; readOnly: boolean; onChange: (v: string) => void }) {
+  const used = value.trim().length
+  const shown = (n: number) => n.toLocaleString('en-AU')
+  const ratio = formatRatio(shown(used), shown(WORDING_MAX))
+  const countId = `${id}-count`
+  // The screen-reader copy changes only at 1,800, 1,950 and 2,000, so it is not read on every key; over the limit the error speaks.
+  const step = [1800, 1950].filter(n => used >= n).pop()
+  const live = used > WORDING_MAX ? '' : used === WORDING_MAX ? `${ratio}. That's the limit.` : step ? `At least ${formatRatio(shown(step), shown(WORDING_MAX))}` : ''
+  const count = !readOnly && used >= 1800 ? ratio : ''
+  return (
+    <div>
+      <TextAreaField label={label} rows={6} hint={hint} error={error} value={value} readOnly={readOnly} descriptionId={countId} onChange={e => onChange(e.target.value)} />
+      <span id={countId} className={`block text-xs tabular-nums text-[var(--color-on-warning-container)] ${count ? 'mt-1' : ''}`}>{count}</span>
+      <span aria-live="polite" className="sr-only">{readOnly ? '' : live}</span>
+    </div>
+  )
+}
+
 const wholeFrom = (n: number, min: number, max: number) => Number.isInteger(n) && n >= min && n <= max
 
 /** Organisation › Billing details: the bank account on invoices (hidden from Coordinators here; invoices still print it), invoice numbering and payment terms, GST status, and the invoice note. */
@@ -49,6 +73,8 @@ export default function BillingDetailsSection(frame: SectionFrame) {
     accountNumber: row?.accountNumber ?? '',
     gstRegistered: row?.gstRegistered ?? false,
     invoiceFooterNotes: row?.invoiceFooterNotes ?? '',
+    agreementResponsibilitiesTerms: row?.agreementResponsibilitiesTerms ?? '',
+    agreementComplaintsTerms: row?.agreementComplaintsTerms ?? '',
     invoiceNumberPrefix: row?.invoiceNumberPrefix ?? 'INV-',
     creditNotePrefix: row?.creditNotePrefix ?? 'CN-',
     invoiceStartNumber: row?.invoiceStartNumber ?? 1,
@@ -61,6 +87,8 @@ export default function BillingDetailsSection(frame: SectionFrame) {
     creditNotePrefix: prefixProblem(p.form.creditNotePrefix),
     invoiceStartNumber: issued || wholeFrom(p.form.invoiceStartNumber, 1, 99_999_999) ? undefined : 'Enter a whole number from 1 to 99,999,999.',
     paymentTermsDays: wholeFrom(p.form.paymentTermsDays, 0, 365) ? undefined : 'Enter a whole number of days from 0 to 365.',
+    agreementResponsibilitiesTerms: p.form.agreementResponsibilitiesTerms.trim().length > WORDING_MAX ? WORDING_OVER : undefined,
+    agreementComplaintsTerms: p.form.agreementComplaintsTerms.trim().length > WORDING_MAX ? WORDING_OVER : undefined,
   } : {}
   const problems = Object.values(errors).filter(Boolean).length
   // Nothing here can be saved until the profile is complete, so the fields are locked as well as the foot left off.
@@ -119,6 +147,10 @@ export default function BillingDetailsSection(frame: SectionFrame) {
                 readOnly={locked}
                 onChange={e => p.edit({ invoiceFooterNotes: e.target.value })}
               />
+            </SettingsGroup>
+            <SettingsGroup title="Agreement wording">
+              <WordingField id="agreement-responsibilities" label="Responsibilities and cancellation" hint={p.hint('agreementResponsibilitiesTerms', wordingBlurb(6))} value={p.form.agreementResponsibilitiesTerms} error={errors.agreementResponsibilitiesTerms} readOnly={locked} onChange={v => p.edit({ agreementResponsibilitiesTerms: v })} />
+              <WordingField id="agreement-complaints" label="Concerns and complaints" hint={p.hint('agreementComplaintsTerms', wordingBlurb(7))} value={p.form.agreementComplaintsTerms} error={errors.agreementComplaintsTerms} readOnly={locked} onChange={v => p.edit({ agreementComplaintsTerms: v })} />
             </SettingsGroup>
           </>
         )}

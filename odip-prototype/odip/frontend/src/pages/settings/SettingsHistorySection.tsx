@@ -11,6 +11,7 @@ const SETTING_LABELS: Record<string, string> = {
   GSTRegistered: 'Registered for GST', IsPaceProvider: 'PACE provider',
   BankAccountName: 'Bank account name', BSB: 'BSB', AccountNumber: 'Bank account number',
   InvoiceNumberPrefix: 'Invoice prefix', CreditNotePrefix: 'Credit note prefix', InvoiceStartNumber: 'First invoice number', PaymentTermsDays: 'Days to pay',
+  AgreementResponsibilitiesTerms: 'Agreement wording: responsibilities and cancellation', AgreementComplaintsTerms: 'Agreement wording: concerns and complaints',
   ParticipantReadinessMode: 'Participant readiness check', MedicationCompetencyMode: 'Medication competency check', OnboardingItemModes: 'Onboarding checklist',
 }
 
@@ -25,7 +26,9 @@ const itemLine = (item: string) => {
   const [key, mode] = item.split('=')
   return mode ? `${Object.hasOwn(ITEM_LABELS, key) ? ITEM_LABELS[key as keyof typeof ITEM_LABELS] : key}: ${mode}` : item
 }
-const VALUE_FORMAT = { OnboardingItemModes: (value: string) => value.split(/[;,]/).map(item => item.trim()).filter(Boolean).map(itemLine) }
+// Agreement wording is written as typed, so each of its lines reads on its own line here.
+const wordingLines = (value: string) => value.split('\n')
+const VALUE_FORMAT = { OnboardingItemModes: (value: string) => value.split(/[;,]/).map(item => item.trim()).filter(Boolean).map(itemLine), AgreementResponsibilitiesTerms: wordingLines, AgreementComplaintsTerms: wordingLines }
 
 /** Settings → Settings history (Admin): who changed the organisation's provider settings, when, and from what to what. */
 export default function SettingsHistorySection() {

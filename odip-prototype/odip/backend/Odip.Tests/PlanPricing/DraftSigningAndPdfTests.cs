@@ -330,4 +330,106 @@ public class DraftSigningAndPdfTests
         }
         finally { CultureInfo.CurrentCulture = before; }
     }
+
+    // ── Organisation wording for sections 6 and 7 ──
+
+    private const string StandardResponsibilities = "Complete approved responsibilities, cancellation, late-change, provider cancellation, emergency, replacement, variation, review, termination and transition terms. No notice period or fee is agreed here.";
+    private const string StandardComplaints = "Insert approved provider contact, response and escalation pathway; confirm any external reference at use time.";
+
+    private static byte[] PdfWithWording(string? responsibilities, string? complaints) =>
+        ServiceAgreementDraftPdfRenderer.Render(BlockBuilt(), AgreementProvider.From(new Odip.Domain.Entities.ProviderSettings { State = "NSW", AgreementResponsibilitiesTerms = responsibilities, AgreementComplaintsTerms = complaints }));
+
+    [Fact]
+    public void With_no_wording_sections_6_and_7_print_the_standard_draft_text()
+    {
+        var plain = TextOf(ServiceAgreementDraftPdfRenderer.Render(BlockBuilt()));
+        var blank = TextOf(PdfWithWording(null, null));
+
+        Assert.Equal(plain, blank);
+        Assert.Contains(Skeleton(StandardResponsibilities), blank);
+        Assert.Contains(Skeleton(StandardComplaints), blank);
+    }
+
+    [Fact]
+    public void Wording_replaces_only_its_own_section_and_keeps_its_line_breaks_in_order()
+    {
+        var text = TextOf(PdfWithWording("Give 48 hours notice.\nLate changes are charged.", null));
+
+        Assert.Contains(Skeleton("Give 48 hours notice.") + Skeleton("Late changes are charged."), text);
+        Assert.DoesNotContain(Skeleton(StandardResponsibilities), text);
+        Assert.Contains(Skeleton(StandardComplaints), text);          // section 7 still prints the standard text
+        Assert.Contains(Skeleton("8. Signatures — non-operative layout only"), text);
+
+        // Skeleton drops every non-letter, so a line break folded to a space would still pass above: the two lines must also sit on different PDF lines.
+        using var document = PdfDocument.Open(PdfWithWording("Give 48 hours notice.\nLate changes are charged.", null));
+        var words = document.GetPages().SelectMany(page => page.GetWords().Select(word => (page.Number, Y: word.Letters[0].StartBaseLine.Y, word.Text))).ToList();
+        var first = words.Single(w => w.Text == "Give" && words[words.IndexOf(w) + 1].Text == "48");
+        var second = words.Single(w => w.Text == "Late" && words[words.IndexOf(w) + 1].Text == "changes");
+        Assert.True(second.Number > first.Number || (second.Number == first.Number && second.Y < first.Y), "line 2 must start on a lower line than line 1");
+    }
+
+    [Theory]
+    [InlineData("emoji")]
+    [InlineData("longword")]
+    [InlineData("manylines")]
+    public void Wording_of_any_shape_renders_without_throwing(string shape)
+    {
+        var wording = shape switch
+        {
+            "emoji" => string.Concat(Enumerable.Repeat("Call us \U0001F600 any time — éè. ", 40)).Trim(),
+            "longword" => new string('W', 2000),
+            _ => string.Join("\n", Enumerable.Range(1, 120).Select(n => $"Line {n} of the organisation's own wording.")),
+        };
+
+        var pdf = PdfWithWording(wording, wording);
+
+        Assert.True(pdf.Length > 1000);
+        Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
+    }
+
+    // ── The signing document holds the wording ──
+
+    [Fact]
+    public void The_signing_document_holds_the_wording_and_a_different_wording_is_a_different_document()
+    {
+        var draft = BlockBuilt();
+        var standard = ElectronicSigningEvidenceService.BuildDocument(draft);
+        var worded = ElectronicSigningEvidenceService.BuildDocument(draft, "Give 48 hours notice.", null);
+
+        var root = JsonDocument.Parse(worded).RootElement;
+        Assert.Equal("Give 48 hours notice.", root.GetProperty("ResponsibilitiesTerms").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("ComplaintsTerms").ValueKind);
+        Assert.NotEqual(standard, worded);
+        Assert.NotEqual(worded, ElectronicSigningEvidenceService.BuildDocument(draft, "Give 72 hours notice.", null));
+    }
+
+    [Fact]
+    public void Wording_matches_only_the_wording_the_document_was_made_with()
+    {
+        var worded = ElectronicSigningEvidenceService.BuildDocument(BlockBuilt(), "Give 48 hours notice.", "Call us.");
+
+        Assert.True(ElectronicSigningEvidenceService.WordingMatches(worded, "Give 48 hours notice.", "Call us."));
+        Assert.False(ElectronicSigningEvidenceService.WordingMatches(worded, "Give 72 hours notice.", "Call us."));
+        Assert.False(ElectronicSigningEvidenceService.WordingMatches(worded, "Give 48 hours notice.", null));      // cleared since
+        Assert.False(ElectronicSigningEvidenceService.WordingMatches(worded, null, null));
+    }
+
+    [Fact]
+    public void A_document_with_no_wording_matches_only_the_standard_text()
+    {
+        var standard = ElectronicSigningEvidenceService.BuildDocument(BlockBuilt());
+
+        Assert.True(ElectronicSigningEvidenceService.WordingMatches(standard, null, null));
+        Assert.False(ElectronicSigningEvidenceService.WordingMatches(standard, "Give 48 hours notice.", null));      // wording added since
+        Assert.False(ElectronicSigningEvidenceService.WordingMatches(standard, null, "Call us."));
+    }
+
+    [Fact]
+    public void A_document_made_before_the_wording_existed_has_neither_property_and_is_treated_as_standard()
+    {
+        const string legacy = "{\"Id\":\"00000000-0000-0000-0000-000000000001\",\"Version\":1}";
+
+        Assert.True(ElectronicSigningEvidenceService.WordingMatches(legacy, null, null));
+        Assert.False(ElectronicSigningEvidenceService.WordingMatches(legacy, "Give 48 hours notice.", null));
+    }
 }

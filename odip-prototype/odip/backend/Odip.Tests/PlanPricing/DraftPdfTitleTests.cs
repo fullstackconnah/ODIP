@@ -153,6 +153,22 @@ public class DraftPdfTitleTests
         Assert.Contains(Skeleton("Service agreement") + Skeleton("Prepared 06 Oct 2026") + Skeleton("Participant"), text);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]      // no signed-in tenant: the emailed-link PDF, and a SuperAdmin with no view-as organisation
+    public async Task Section_wording_is_read_by_the_drafts_own_tenant_and_another_organisations_is_never_printed(bool noSignedInTenant)
+    {
+        var own = Provider("Oassist"); own.AgreementResponsibilitiesTerms = "Our own cancellation wording.";
+        var other = Provider("Other Organisation"); other.AgreementResponsibilitiesTerms = "Their cancellation wording."; other.AgreementComplaintsTerms = "Their complaints wording.";
+
+        var text = TextOf(await PdfAsync(own, other, superAdmin: noSignedInTenant));
+
+        Assert.Contains(Skeleton("Our own cancellation wording."), text);
+        Assert.DoesNotContain(Skeleton("Their cancellation wording."), text);
+        Assert.DoesNotContain(Skeleton("Their complaints wording."), text);
+        Assert.Contains(Skeleton("Insert approved provider contact"), text);       // its own section 7 has no wording, so it prints the standard text
+    }
+
     // ── The day it was prepared ───────────────────────────────────────────────────
 
     [Theory]

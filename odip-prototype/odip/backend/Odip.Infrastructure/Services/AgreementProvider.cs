@@ -7,11 +7,11 @@ namespace Odip.Infrastructure.Services;
 /// out, never replaced by a placeholder), and its registered address, which the title prints on a line of its own, and the time zone the PDF's dates are written in. Read from the organisation's <see cref="ProviderSettings"/>; the zone is the one the rest of the
 /// app uses for the provider, from the settings' saved time zone, else its state's default (Sydney when there are none).
 /// </summary>
-public sealed record AgreementProvider(string? Name, string? Abn, string? RegistrationNumber, string? Address, TimeZoneInfo Zone)
+public sealed record AgreementProvider(string? Name, string? Abn, string? RegistrationNumber, string? Address, TimeZoneInfo Zone, string? ResponsibilitiesTerms = null, string? ComplaintsTerms = null)
 {
     /// <summary>The provider of <paramref name="settings"/>, or of no settings at all: no name, no ABN, no number, and the app's fallback zone.</summary>
     public static AgreementProvider From(ProviderSettings? settings) =>
-        new(Set(settings?.OrganisationName), Set(settings?.ABN), Set(settings?.RegistrationNumber), Set(settings?.Address), ProviderTimeZoneResolver.For(settings?.TimeZoneId, settings?.State).Zone);
+        new(Set(settings?.OrganisationName), Set(settings?.ABN), Set(settings?.RegistrationNumber), Set(settings?.Address), ProviderTimeZoneResolver.For(settings?.TimeZoneId, settings?.State).Zone, Set(settings?.AgreementResponsibilitiesTerms), Set(settings?.AgreementComplaintsTerms));
 
     /// <summary>"Oassist · ABN 12 345 678 901 · NDIS registration 4-ABC-123" with whichever of the three is set; null when none is.</summary>
     public string? Line

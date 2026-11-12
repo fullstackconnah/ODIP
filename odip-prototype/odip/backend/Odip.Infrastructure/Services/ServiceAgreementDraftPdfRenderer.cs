@@ -70,8 +70,8 @@ public static class ServiceAgreementDraftPdfRenderer
                 Section(column, "3. Proposed fees, travel and other costs", "Catalogue values are development snapshots, not agreed prices. Complete approved rate, pricing source/version, GST, travel, non-face-to-face work, transport, expenses, limits, approval, receipts and refund details before any use.");
                 Section(column, "4. Funding and payment", "Funding route, plan manager, invoice, claim and payment process remain placeholders. This draft cannot trigger invoice or claim transitions.");
                 Section(column, "5. Communication, privacy and records", "Complete accessible-format, interpreter/support-person, information sharing, access/correction, retention and withdrawal details under approved policy.");
-                Section(column, "6. Responsibilities, cancellation and service changes", "Complete approved responsibilities, cancellation, late-change, provider cancellation, emergency, replacement, variation, review, termination and transition terms. No notice period or fee is agreed here.");
-                Section(column, "7. Concerns and complaints", "Insert approved provider contact, response and escalation pathway; confirm any external reference at use time.");
+                Section(column, "6. Responsibilities, cancellation and service changes", provider.ResponsibilitiesTerms ?? "Complete approved responsibilities, cancellation, late-change, provider cancellation, emergency, replacement, variation, review, termination and transition terms. No notice period or fee is agreed here.", provider.ResponsibilitiesTerms is not null);
+                Section(column, "7. Concerns and complaints", provider.ComplaintsTerms ?? "Insert approved provider contact, response and escalation pathway; confirm any external reference at use time.", provider.ComplaintsTerms is not null);
                 Section(column, "8. Signatures — non-operative layout only", "A signature block is a future layout placeholder. This revision rejects signing and evidence approval; it does not establish identity, authority, informed consent or acceptance.");
             });
             page.Footer().AlignCenter().Text(text => { text.Span("Page "); text.CurrentPageNumber(); });
@@ -185,12 +185,16 @@ public static class ServiceAgreementDraftPdfRenderer
     }
 
     // A section stays in one piece, so a numbered heading is never left at the foot of a page with its text on the next.
-    private static void Section(ColumnDescriptor column, string heading, string body) =>
-        column.Item().PaddingTop(8).ShowEntire().Column(section =>
+    // The organisation's own wording can run to a page or more, which ShowEntire cannot place: it asks for room to start instead, and may split.
+    private static void Section(ColumnDescriptor column, string heading, string body, bool organisationText = false)
+    {
+        var item = column.Item().PaddingTop(8);
+        (organisationText ? item.EnsureSpace(60) : item.ShowEntire()).Column(section =>
         {
             section.Item().Text(heading).SemiBold();
             section.Item().Text(body);
         });
+    }
 
     private static void Field(ColumnDescriptor column, string label, string value) => column.Item().PaddingTop(4).Row(row => { row.ConstantItem(150).Text(label).SemiBold(); row.RelativeItem().Text(value); });
 }
