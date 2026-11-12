@@ -280,7 +280,7 @@ public partial class GroupActivitiesController : ControllerBase
     /// <summary>The checks E2 and E4 share, in one order; returns the tidied title, location and notes.</summary>
     private async Task<(string Title, string? Location, string? Notes)> ValidateFieldsAsync(
         Guid tenantId, string? title, DateOnly _, TimeOnly start, TimeOnly end, bool endsNextDay, string? location, string? notes, int? minStaff, Guid? activityId, Guid? placeId,
-        Guid? placeAlreadyOnActivity, CancellationToken ct)
+        Guid? placeAlreadyOnActivity, Guid? libraryActivityAlreadyOnActivity, CancellationToken ct)
     {
         var tidyTitle = title?.Trim() ?? string.Empty;
         if (tidyTitle.Length == 0 || tidyTitle.Length > TitleMax) throw Deny("GA_TITLE");
@@ -290,7 +290,8 @@ public partial class GroupActivitiesController : ControllerBase
         var tidyNotes = Tidy(notes);
         if (tidyNotes is { Length: > NotesMax }) throw Deny("GA_TOO_LONG", "Notes can be up to 2000 characters.");
         if (minStaff is < 0 or > MinStaffMax) throw Deny("GA_MIN_STAFF");
-        if (activityId is { } libraryId && !await _db.Activities.AsNoTracking().AnyAsync(a => a.Id == libraryId && a.TenantId == tenantId, ct)) throw Deny("GA_ACTIVITY_LIB");
+        if (activityId is { } libraryId
+            && !await _db.Activities.AsNoTracking().AnyAsync(a => a.Id == libraryId && a.TenantId == tenantId && (a.IsActive || libraryId == libraryActivityAlreadyOnActivity), ct)) throw Deny("GA_ACTIVITY_LIB");
         if (placeId is { } place && place != placeAlreadyOnActivity
             && !await _db.ServiceLocations.AsNoTracking().AnyAsync(l => l.Id == place && l.TenantId == tenantId && l.IsActive, ct)) throw Deny("GA_LOCATION");
         return (tidyTitle, tidyLocation, tidyNotes);
@@ -305,7 +306,7 @@ public partial class GroupActivitiesController : ControllerBase
         WriteAsync(None, async (tenantId, token) =>
         {
             var (title, location, notes) = await ValidateFieldsAsync(tenantId, dto.Title, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay, dto.Location, dto.Notes,
-                dto.MinStaffRequired, dto.ActivityId, dto.ServiceLocationId, null, token);
+                dto.MinStaffRequired, dto.ActivityId, dto.ServiceLocationId, null, null, token);
             GroupActivity NewRow(DateOnly day, Guid? seriesId) => new()
             {
                 Id = Guid.NewGuid(), TenantId = tenantId, ServiceDate = day, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
@@ -352,10 +353,10 @@ public partial class GroupActivitiesController : ControllerBase
     // ── E4 update ───────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Which field groups of an update to write. The opened activity takes all of them; another occurrence of a Series update takes only the groups the request changed on the opened one.</summary>
-    private readonly record struct Touch(bool Start, bool End, bool EndsNextDay, bool Title, bool Activity, bool Place, bool Notes, bool MinStaff)
+    private readonly record struct Touch(bool Start, bool End, bool EndsNextDay, bool Title, bool Activity, bool Location, bool PlaceId, bool Notes, bool MinStaff)
     {
-        public static readonly Touch All = new(true, true, true, true, true, true, true, true);
-        public bool Any => Start || End || EndsNextDay || Title || Activity || Place || Notes || MinStaff;
+        public static readonly Touch All = new(true, true, true, true, true, true, true, true, true);
+        public bool Any => Start || End || EndsNextDay || Title || Activity || Location || PlaceId || Notes || MinStaff;
     }
 
     [HttpPut("{id:guid}")]
@@ -364,7 +365,7 @@ public partial class GroupActivitiesController : ControllerBase
         {
             var activity = await LoadActivityAsync(id, tenantId, forChange: true, token);
             var (title, location, notes) = await ValidateFieldsAsync(tenantId, dto.Title, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay, dto.Location, dto.Notes,
-                dto.MinStaffRequired, dto.ActivityId, dto.ServiceLocationId, activity.ServiceLocationId, token);
+                dto.MinStaffRequired, dto.ActivityId, dto.ServiceLocationId, activity.ServiceLocationId, activity.ActivityId, token);
             if (dto.Status is not (ShiftStatus.Draft or ShiftStatus.Published)) throw Deny("GA_STATUS");
             // Any value but Series (an integer outside the enum too) acts as Occurrence; Series on a one-off acts as Occurrence.
             var series = dto.Scope == GroupActivityScope.Series && activity.SeriesId is not null;
@@ -375,7 +376,7 @@ public partial class GroupActivitiesController : ControllerBase
             var touch = new Touch(
                 dto.StartTime != activity.StartTime, dto.EndTime != activity.EndTime, dto.EndsNextDay != activity.EndsNextDay,
                 title != activity.Title, dto.ActivityId != activity.ActivityId,
-                location != activity.Location || dto.ServiceLocationId != activity.ServiceLocationId,
+                location != activity.Location, dto.ServiceLocationId != activity.ServiceLocationId,
                 notes != activity.Notes, dto.MinStaffRequired != activity.MinStaffRequired);
 
             var publishing = activity.Status == ShiftStatus.Draft && dto.Status == ShiftStatus.Published;
@@ -427,7 +428,8 @@ public partial class GroupActivitiesController : ControllerBase
         if (touch.End) activity.EndTime = dto.EndTime;
         if (touch.EndsNextDay) activity.EndsNextDay = dto.EndsNextDay;
         if (touch.Title) activity.Title = tidy.Title;
-        if (touch.Place) (activity.Location, activity.ServiceLocationId) = (tidy.Location, dto.ServiceLocationId);
+        if (touch.Location) activity.Location = tidy.Location;
+        if (touch.PlaceId) activity.ServiceLocationId = dto.ServiceLocationId;
         if (touch.Notes) activity.Notes = tidy.Notes;
         if (touch.MinStaff) activity.MinStaffRequired = dto.MinStaffRequired;
         if (touch.Activity) activity.ActivityId = dto.ActivityId;
