@@ -524,7 +524,9 @@ export default function CompletionReviewPage() {
           Couldn't load shift completions. Check your connection and try again.
         </Callout>
       ) : rows.length === 0 ? (
-        <EmptyState icon={ClipboardCheck} title="No completions match these filters" description="Try a different status, staff member or date range." />
+        statusFilter === 'PendingReview' && !staffFilter && !fromFilter && !toFilter
+          ? <EmptyState icon={ClipboardCheck} title="Nothing waiting for review" description="Shifts show here once a worker finishes them." />
+          : <EmptyState icon={ClipboardCheck} title="No completions match these filters" description="Try a different status, staff member or date range." />
       ) : (
         <>
           <DataTable

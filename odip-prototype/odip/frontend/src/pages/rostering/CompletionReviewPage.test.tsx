@@ -156,9 +156,10 @@ describe('CompletionReviewPage', () => {
     expect(screen.getByText(/\+5 min/)).toBeInTheDocument()
   })
 
-  it('shows an empty state when no rows match the filters', () => {
+  it('shows the filtered empty state when a date filter leaves no rows', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-09-01' } })
 
     expect(screen.getByText(/no completions match these filters/i)).toBeInTheDocument()
   })
@@ -827,5 +828,13 @@ describe('CompletionReviewPage tidy (m1112)', () => {
     expect(screen.getByText(/^Rostered:/)).toHaveClass('text-[var(--color-muted-foreground)]')
     const actual = screen.getByText(/^Actual:/).parentElement as HTMLElement
     expect(actual.querySelector('.font-medium')).not.toBeNull()
+  })
+
+  it('says nothing is waiting, not that filters matched nothing, when the queue is empty on the default filters', () => {
+    renderPage()
+
+    expect(screen.getByText('Nothing waiting for review')).toBeInTheDocument()
+    expect(screen.getByText('Shifts show here once a worker finishes them.')).toBeInTheDocument()
+    expect(screen.queryByText(/no completions match these filters/i)).not.toBeInTheDocument()
   })
 })
