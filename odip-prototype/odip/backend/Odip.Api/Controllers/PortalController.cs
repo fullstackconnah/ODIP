@@ -1589,6 +1589,8 @@ public class PortalController : ControllerBase
 
         // Two answers at once both read Pending above: only the one that flips the row from Pending wins.
         // EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the check above stands alone there.
+        // The flip commits only with the saves below: a 409 or an error rolls it back, so the retry is not told it already answered.
+        await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
         if (_db.Database.IsRelational()
             && await _db.IncidentWitnesses.Where(w => w.Id == id && w.WitnessStatus == WitnessStatus.Pending)
                 .ExecuteUpdateAsync(u => u.SetProperty(w => w.WitnessStatus, response), ct) != 1)
@@ -1613,6 +1615,7 @@ public class PortalController : ControllerBase
                 return Conflict(ApiResponse<PortalWitnessRequestDto>.Fail("This incident changed while you were answering. Please send your answer again."));
             }
         }
+        if (tx != null) await tx.CommitAsync(ct);
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToIncidentWitnessRequestDto(witness)));
     }
