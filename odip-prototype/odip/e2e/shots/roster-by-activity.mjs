@@ -64,22 +64,24 @@ try {
       const lane = day?.parentElement?.previousElementSibling
       const body = document.querySelector('[data-activity-day]')?.parentElement
       const header = [...document.querySelectorAll('[data-roster-day], [data-day]')]
-      return { laneW: lane?.getBoundingClientRect().width ?? 0, laneH: lane?.getBoundingClientRect().height ?? 0, cells: [...(body?.children ?? [])].map((c) => c.getBoundingClientRect().left), header: header.map((h) => h.getBoundingClientRect().left) }
+      const probe = document.createElement('div'); probe.style.width = 'var(--roster-sticky-col)'; lane?.appendChild(probe); const stickyCol = probe.getBoundingClientRect().width; probe.remove()
+      return { stickyCol, laneW: lane?.getBoundingClientRect().width ?? 0, laneH: lane?.getBoundingClientRect().height ?? 0, cells: [...(body?.children ?? [])].map((c) => c.getBoundingClientRect().left), header: header.map((h) => h.getBoundingClientRect().left) }
     })
-    const stickyCol = await cssPx(page, '--roster-sticky-col')
+    const stickyCol = geo.stickyCol
     const rowH = await cssPx(page, '--row-h')
     check(`${tag}: lane first cell equals --roster-sticky-col (${stickyCol}px)`, Math.abs(geo.laneW - stickyCol) <= 1, `lane ${geo.laneW}`)
     check(`${tag}: lane height at least --row-h (${rowH}px)`, geo.laneH >= rowH - 1, `lane ${geo.laneH}`)
     if (geo.header.length === geo.cells.length) check(`${tag}: lane day cells line up with the header`, geo.cells.every((x, i) => Math.abs(x - geo.header[i]) <= 1), JSON.stringify({ cells: geo.cells, header: geo.header }))
 
     // 5, 6: card open area and menu trigger
-    const open1 = await bowling.evaluate((b) => b.getBoundingClientRect().height)
-    check(`${tag}: card open area height equals --control-h`, Math.abs(open1 - controlH) <= 1, `card ${open1}`)
+    const open1 = await bowling.evaluate((b) => parseFloat(getComputedStyle(b.parentElement).gridTemplateRows.split(' ')[1]))
+    check(`${tag}: card open row (second grid row) equals --control-h`, Math.abs(open1 - controlH) <= 1, `card ${open1}`)
     const menu = page.getByRole('button', { name: /actions|menu|more/i }).first()
     if (await menu.count()) {
       const mb = await menu.boundingBox()
       const smH = await cssPx(page, '--control-h-sm')
-      check(`${tag}: card menu trigger is --control-h-sm square (${smH}px)`, !!mb && Math.abs(mb.height - smH) <= 1 && Math.abs(mb.width - smH) <= 1, JSON.stringify(mb))
+      const tapMin = await cssPx(page, '--tap-min')
+      check(`${tag}: card menu trigger is --control-h-sm (${smH}px) on a fine pointer, at least --tap-min (${tapMin}px) on a coarse one`, !!mb && (touch ? mb.height >= tapMin - 1 && mb.width >= tapMin - 1 : Math.abs(mb.height - smH) <= 1 && Math.abs(mb.width - smH) <= 1), JSON.stringify(mb))
     }
 
     // 9: today's cell tint (only when the run's date falls in the fixture week: reported either way)

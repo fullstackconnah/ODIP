@@ -76,6 +76,19 @@ describe('RosterBoardPage: By activity view', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
+  it('gives focus back to the block that opened the panel', async () => {
+    const user = userEvent.setup()
+    sessionStorage.setItem('odip.roster.boardView', 'activity')
+    renderPage()
+    const block = await screen.findByRole('button', { name: /^Group activity, Bowling/ })
+    block.focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /^Group activity, Bowling/ })).toHaveFocus()
+  })
+
   it('an empty week shows the empty state in place of the grid, with the writer copy', async () => {
     sessionStorage.setItem('odip.roster.boardView', 'activity')
     load(boardWith({ groupActivities: [] }))

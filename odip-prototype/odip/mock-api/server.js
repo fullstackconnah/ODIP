@@ -3141,6 +3141,7 @@ const routes = [
   // Shift notes (NOTES-01/02) — same underlying fixtures for the portal's own-shift view and
   // the roster slide-over's read-only coordinator view.
   ['portal/shifts/:id/notes', (id) => shiftNotesByShiftId[id] || []],
+  ['rostering/group-activities/:id', (id) => groupActivityFixture(Array.from({ length: 7 }, (_, i) => planApproval.addDays(BOARD_FIXTURE_WEEK, i))).find((a) => a.id === id) || null],
   ['rostering/shifts/:id/notes', (id) => shiftNotesByShiftId[id] || []],
 
   // Flagged-notes queue (connection map item 4) — GET /rostering/flagged-notes?withoutIncident=&from=&to=
