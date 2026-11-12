@@ -23,6 +23,6 @@ public static class ShiftAloneBreaks
 
     /// <summary>The spans a shift's claim leaves out, or null when it has none to leave.</summary>
     public static IReadOnlyList<(int From, int To)>? SpansOf(
-        Dictionary<Guid, List<(DateTime From, DateTime To)>> byShift, Guid shiftId, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SleepoverType nightType, TimeZoneInfo zone) =>
-        byShift.TryGetValue(shiftId, out var breaks) ? ShiftBreakRules.UnclaimedSpans(serviceDate, start, end, endsNextDay, nightType, breaks, zone) : null;
+        Dictionary<Guid, List<(DateTime From, DateTime To)>> byShift, Guid shiftId, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SleepoverType nightType, TimeZoneInfo zone, bool startFirstPass = false, bool endFirstPass = false) =>
+        byShift.TryGetValue(shiftId, out var breaks) ? ShiftBreakRules.UnclaimedSpans(serviceDate, start, end, endsNextDay, nightType, breaks, zone, startFirstPass, endFirstPass) : null;
 }

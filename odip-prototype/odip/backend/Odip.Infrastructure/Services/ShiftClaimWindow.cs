@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
@@ -7,8 +8,11 @@ using Odip.Infrastructure.Integrations;
 
 namespace Odip.Infrastructure.Services;
 
-/// <summary>A stretch of provider-local wall-clock time on a shift's service date, in the form the shift price estimator takes.</summary>
-public sealed record ClaimSpan(DateTime StartLocal, DateTime EndLocal)
+/// <summary>
+/// A stretch of provider-local wall-clock time on a shift's service date, in the form the shift price estimator takes. <see cref="StartFirstPass"/> / <see cref="EndFirstPass"/> say a worked edge fell in the
+/// first pass of the hour the clocks repeat (a wall time alone cannot); only <see cref="ShiftClaimWindow"/> sets them, from the stored instant.
+/// </summary>
+public sealed record ClaimSpan(DateTime StartLocal, DateTime EndLocal, bool StartFirstPass = false, bool EndFirstPass = false)
 {
     public TimeOnly Start => TimeOnly.FromDateTime(StartLocal);
     public TimeOnly End => TimeOnly.FromDateTime(EndLocal);
@@ -46,16 +50,22 @@ public static class ShiftClaimWindow
         if (c.ExtraTime != ExtraTimeDecision.Approved || !ShiftTimeRules.HasExtraTime(c.VarianceMinutesStart, c.VarianceMinutesEnd)) return new(held);
         var approved = Express(s, c, EmploymentHeroTimesheets.PaidWindow(s, c, zone, ExtraTimeDecision.Approved), zone);
         if (approved is null) return new(held, null, null, "The extra time runs outside the shift's own date, which a shift claim cannot price");
-        return approved == held ? new(held) : new(approved, held, ExtraTextOf(held, approved));
+        if (approved == held) return new(held);
+        var text = ExtraTextOf(held, approved, zone);
+        return text is null ? new(held) : new(approved, held, text);
     }
 
     /// <summary>"Extra time 08:40–09:00, 17:00–17:20 · 40 min": the minutes the approved window adds to the held one.</summary>
-    private static string ExtraTextOf(ClaimSpan held, ClaimSpan approved)
+    private static string? ExtraTextOf(ClaimSpan held, ClaimSpan approved, TimeZoneInfo zone)
     {
         var parts = new List<string>();
-        var minutes = 0.0;
-        if (approved.StartLocal < held.StartLocal) { parts.Add($"{approved.StartLocal:HH:mm}–{held.StartLocal:HH:mm}"); minutes += (held.StartLocal - approved.StartLocal).TotalMinutes; }
-        if (approved.EndLocal > held.EndLocal) { parts.Add($"{held.EndLocal:HH:mm}–{approved.EndLocal:HH:mm}"); minutes += (approved.EndLocal - held.EndLocal).TotalMinutes; }
+        var minutes = 0;
+        // Elapsed minutes, not wall-clock: a stretch is added when it has length in real time, and it is an hour out across the clock change.
+        var before = ShiftBands.ElapsedMinutes(approved.StartLocal, held.StartLocal, zone, approved.StartFirstPass, held.StartFirstPass);
+        var after = ShiftBands.ElapsedMinutes(held.EndLocal, approved.EndLocal, zone, held.EndFirstPass, approved.EndFirstPass);
+        if (before > 0) { parts.Add($"{approved.StartLocal:HH:mm}–{held.StartLocal:HH:mm}"); minutes += before; }
+        if (after > 0) { parts.Add($"{held.EndLocal:HH:mm}–{approved.EndLocal:HH:mm}"); minutes += after; }
+        if (parts.Count == 0) return null;   // no added stretch has length in real time
         return string.Create(CultureInfo.InvariantCulture, $"Extra time {string.Join(", ", parts)} · {minutes:0} min");
     }
 
@@ -66,12 +76,18 @@ public static class ShiftClaimWindow
     private static ClaimSpan? Express(Shift s, ShiftCompletion c, (DateTime Start, DateTime End, bool Held) paid, TimeZoneInfo zone)
     {
         var rostered = Rostered(s);
-        var start = paid.Start != c.ActualStart ? rostered.StartLocal : LocalMinute(paid.Start, zone);
-        var end = paid.End != (c.ActualEnd ?? c.ActualStart) ? rostered.EndLocal : LocalMinute(paid.End, zone);
+        var workedStart = paid.Start == c.ActualStart;
+        var workedEnd = paid.End == (c.ActualEnd ?? c.ActualStart);
+        var start = workedStart ? LocalMinute(paid.Start, zone) : rostered.StartLocal;
+        var end = workedEnd ? LocalMinute(paid.End, zone) : rostered.EndLocal;
         var service = s.ServiceDate.ToDateTime(TimeOnly.MinValue);
         if (start.Date != service || end <= start || end.Date > service.AddDays(1)) return null;
-        return end.Date > start.Date && end.TimeOfDay > start.TimeOfDay ? null : new ClaimSpan(start, end);
+        return end.Date > start.Date && end.TimeOfDay > start.TimeOfDay ? null : new ClaimSpan(start, end, workedStart && FirstPass(start, paid.Start, zone), workedEnd && FirstPass(end, paid.End, zone));
     }
+
+    /// <summary>True when the stored instant is the first pass of an ambiguous wall time: the later reading of that wall time is after it.</summary>
+    private static bool FirstPass(DateTime wall, DateTime utc, TimeZoneInfo zone) =>
+        zone.IsAmbiguousTime(wall) && ProviderLocalTime.LocalToUtc(wall, zone) > new DateTime(utc.Ticks - utc.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Utc);
 
     private static DateTime LocalMinute(DateTime utc, TimeZoneInfo zone)
     {

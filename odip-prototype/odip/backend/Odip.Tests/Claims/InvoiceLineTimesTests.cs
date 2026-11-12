@@ -147,6 +147,25 @@ public class InvoiceLineTimesTests
         Assert.Equal((new TimeOnly(22, 0), new TimeOnly(endHour, endMinute)), Times(line));
     }
 
+    /// <summary>Rostered 22:00 to 01:55 on the night the clocks go back, worked to 15:30Z (02:30 AEDT, the first pass of the repeated hour) with the extra time approved: 4.5 h billed, so the line shows the worked finish.</summary>
+    [Fact]
+    public async Task AFinishInTheFirstPassOfTheRepeatedHour_ShowsTheWorkedTimesTheHoursBilledMatch()
+    {
+        var (kit, p) = Org();
+        var shift = AddShift(kit, p, 22, 1, endsNextDay: true, on: new DateOnly(2027, 4, 3));
+        shift.EndTime = new TimeOnly(1, 55);
+        kit.Db.ShiftCompletions.Add(new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, ShiftId = shift.Id, ActualStart = new DateTime(2027, 4, 3, 11, 0, 0, DateTimeKind.Utc), ActualEnd = new DateTime(2027, 4, 3, 15, 30, 0, DateTimeKind.Utc),
+            VarianceMinutesStart = 0, VarianceMinutesEnd = 35, ExtraTime = ExtraTimeDecision.Approved, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = new DateTime(2027, 4, 3, 11, 0, 0, DateTimeKind.Utc), IsActive = true,
+        });
+        kit.Db.SaveChanges();
+
+        var line = Assert.Single((await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), 4.5m))).Lines);
+
+        Assert.Equal((new TimeOnly(22, 0), new TimeOnly(2, 30)), Times(line));
+    }
+
     [Fact]
     public async Task AShiftSplitIntoTwoLinesPricedWithoutExtraTime_GivesBothTheRosteredTimes()
     {
