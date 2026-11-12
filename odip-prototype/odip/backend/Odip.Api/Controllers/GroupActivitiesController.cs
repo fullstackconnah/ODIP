@@ -351,10 +351,10 @@ public partial class GroupActivitiesController : ControllerBase
     // ── E4 update ───────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Which field groups of an update to write. The opened activity takes all of them; another occurrence of a Series update takes only the groups the request changed on the opened one.</summary>
-    private readonly record struct Touch(bool Times, bool Title, bool Activity, bool Place, bool Notes, bool MinStaff)
+    private readonly record struct Touch(bool Start, bool End, bool EndsNextDay, bool Title, bool Activity, bool Place, bool Notes, bool MinStaff)
     {
-        public static readonly Touch All = new(true, true, true, true, true, true);
-        public bool Any => Times || Title || Activity || Place || Notes || MinStaff;
+        public static readonly Touch All = new(true, true, true, true, true, true, true, true);
+        public bool Any => Start || End || EndsNextDay || Title || Activity || Place || Notes || MinStaff;
     }
 
     [HttpPut("{id:guid}")]
@@ -372,7 +372,7 @@ public partial class GroupActivitiesController : ControllerBase
 
             // What the request changes, read off the opened activity before it is written (the others only take these groups).
             var touch = new Touch(
-                dto.StartTime != activity.StartTime || dto.EndTime != activity.EndTime || dto.EndsNextDay != activity.EndsNextDay,
+                dto.StartTime != activity.StartTime, dto.EndTime != activity.EndTime, dto.EndsNextDay != activity.EndsNextDay,
                 title != activity.Title, dto.ActivityId != activity.ActivityId,
                 location != activity.Location || dto.ServiceLocationId != activity.ServiceLocationId,
                 notes != activity.Notes, dto.MinStaffRequired != activity.MinStaffRequired);
@@ -420,9 +420,11 @@ public partial class GroupActivitiesController : ControllerBase
         if (attached.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
 
         var (oldStart, oldEnd, oldEndsNextDay) = (activity.StartTime, activity.EndTime, activity.EndsNextDay);
-        var timesChanged = touch.Times && (dto.StartTime != oldStart || dto.EndTime != oldEnd || dto.EndsNextDay != oldEndsNextDay);
+        var timesChanged = (touch.Start && dto.StartTime != oldStart) || (touch.End && dto.EndTime != oldEnd) || (touch.EndsNextDay && dto.EndsNextDay != oldEndsNextDay);
         activity.ServiceDate = newDate;
-        if (touch.Times) (activity.StartTime, activity.EndTime, activity.EndsNextDay) = (dto.StartTime, dto.EndTime, dto.EndsNextDay);
+        if (touch.Start) activity.StartTime = dto.StartTime;
+        if (touch.End) activity.EndTime = dto.EndTime;
+        if (touch.EndsNextDay) activity.EndsNextDay = dto.EndsNextDay;
         if (touch.Title) activity.Title = tidy.Title;
         if (touch.Place) (activity.Location, activity.ServiceLocationId) = (tidy.Location, dto.ServiceLocationId);
         if (touch.Notes) activity.Notes = tidy.Notes;
