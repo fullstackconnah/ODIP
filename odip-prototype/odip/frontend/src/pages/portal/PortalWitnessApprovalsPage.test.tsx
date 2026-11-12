@@ -219,6 +219,15 @@ describe('PortalWitnessApprovalsPage', () => {
       expect(mockApproveIncidentMutateAsync).toHaveBeenCalledWith({ id: 'witness-1', statementText: 'I saw it happen.' })
     })
 
+    it('caps the witness statement at the 4,000 characters the server stores', async () => {
+      const user = userEvent.setup()
+      mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /approve/i }))
+      expect(within(screen.getByRole('alertdialog')).getByLabelText(/witness statement/i)).toHaveAttribute('maxlength', '4000')
+    })
+
     it('approves an incident witness request with no statement (leaves it undefined)', async () => {
       const user = userEvent.setup()
       mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })

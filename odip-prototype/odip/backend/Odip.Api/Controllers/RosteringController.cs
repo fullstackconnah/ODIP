@@ -2204,6 +2204,25 @@ public class RosteringController : ControllerBase
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
+        Guid rowId;
+        try { rowId = await WriteCompatibilityAsync(dto, ct); }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Two first writes for one pair raced and the other won. Drop the losing insert and what was staged with it,
+            // then redo the write: the row exists now, so it updates it, with previousLevel read from it.
+            _db.ChangeTracker.Clear();
+            rowId = await WriteCompatibilityAsync(dto, ct);
+        }
+
+        var loaded = await _db.StaffParticipantCompatibilities
+            .Include(c => c.User).Include(c => c.Participant)
+            .FirstAsync(c => c.Id == rowId, ct);
+        return Ok(ApiResponse<CompatibilityRowDto>.Ok(ToCompatibilityDto(loaded)));
+    }
+
+    /// <summary>Finds or creates the (staff, participant) row, applies the dto, syncs the preferred link and places it in its tier, then saves.</summary>
+    private async Task<Guid> WriteCompatibilityAsync(UpsertCompatibilityDto dto, CancellationToken ct)
+    {
         var row = await _db.StaffParticipantCompatibilities
             .FirstOrDefaultAsync(c => c.UserId == dto.StaffId && c.ParticipantId == dto.ParticipantId, ct);
         // Absence of a row means Allowed (the entity's documented sparse default) — same value
@@ -2236,11 +2255,7 @@ public class RosteringController : ControllerBase
         await _compatLink.PlaceAsync(row, previousLevel, dto.Rank, ct);
 
         await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
-
-        var loaded = await _db.StaffParticipantCompatibilities
-            .Include(c => c.User).Include(c => c.Participant)
-            .FirstAsync(c => c.Id == row.Id, ct);
-        return Ok(ApiResponse<CompatibilityRowDto>.Ok(ToCompatibilityDto(loaded)));
+        return row.Id;
     }
 
     // ══════════════════════════════════════════════════════════════

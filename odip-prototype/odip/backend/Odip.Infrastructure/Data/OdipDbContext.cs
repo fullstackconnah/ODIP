@@ -797,7 +797,7 @@ public class OdipDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.WitnessName).HasMaxLength(300).IsRequired();
-            e.Property(x => x.StatementText).HasMaxLength(4000);
+            e.Property(x => x.StatementText).HasMaxLength(IncidentWitness.StatementMaxLength);
 
             // Cascade: same as IncidentInjury — a witness row has no meaning once its parent
             // incident is gone.
