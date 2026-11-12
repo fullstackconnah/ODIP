@@ -1893,7 +1893,7 @@ function groupActivityFixture(days) {
     make('mock-act-3', 1, 'Art group', '13:00:00', '15:30:00', 'Published', 2, [], who, [{ code: 'ACTIVITY_STAFF_SHORT', severity: 'Warning', message: 'Needs 2 staff, has 0.', requiresReason: false }]),
     make('mock-act-4', 3, 'Swimming', '09:30:00', '11:30:00', 'Draft', 1, [], []),
     // Two series occurrences for the Repeats line and the scope dialogs. series-weekly's "This and all upcoming" is refused by the PUT and cancel routes below.
-    { ...make('series-weekly', 1, 'Boccia', '14:00:00', '16:00:00', 'Published', 1, staff(2, 'Sam Wilson', '14:00:00', '16:00:00'), who.slice(0, 1)), series: { id: 'series-1', interval: 'Weekly', startDate: '2026-09-08', endDate: '2026-12-15' } },
+    { ...make('series-weekly', 1, 'Boccia', '14:00:00', '16:00:00', 'Published', 1, staff(2, 'Sam Wilson', '14:00:00', '16:00:00'), []), series: { id: 'series-1', interval: 'Weekly', startDate: '2026-09-08', endDate: '2026-12-15' } },
     { ...make('series-monthly', 4, 'Craft morning', '10:00:00', '12:00:00', 'Draft', 1, [], []), series: { id: 'series-2', interval: 'Monthly', startDate: '2026-09-11', endDate: '2027-02-12' } },
   ]
 }
