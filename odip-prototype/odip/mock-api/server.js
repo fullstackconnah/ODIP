@@ -1880,6 +1880,21 @@ const sampleOverlapFinding = {
 // Plan builder phase D: `weekStart` is read now (the Monday of the week it falls in; the fixture week when it is missing), and the shifts an approval generates are on the board for the week
 // they fall in. The fixture's own two shifts stay in their own week. Each participant with shifts that week has a row (the real board lists every active participant).
 const BOARD_FIXTURE_WEEK = '2026-09-07'
+// Synthetic week for the By activity view: two sessions sharing a name (one lane), one short of staff, one Draft.
+function groupActivityFixture(days) {
+  const who = participants.slice(0, 2).map((p) => ({ participantId: p.id, participantName: p.fullName, ratio: 'OneToTwo', shiftIds: [], timesDiffer: false, didNotAttend: false }))
+  const staff = (id, name, start, end) => [{ id: `row-${id}`, staffId: `staff-${id}`, staffName: name, startTime: start, endTime: end, endsNextDay: false, findings: [] }]
+  const make = (id, day, title, start, end, status, staffNeeded, staffRows, people) => ({
+    id, serviceDate: days[day], startTime: start, endTime: end, endsNextDay: false, title, status, staffNeeded, staffAssigned: staffRows.length, participants: people, staff: staffRows, findings: [],
+  })
+  return [
+    make('mock-act-1', 0, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who),
+    make('mock-act-2', 2, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who.slice(0, 1)),
+    make('mock-act-3', 1, 'Art group', '13:00:00', '15:30:00', 'Published', 2, staff(2, 'Sam Patel', '13:00:00', '15:30:00'), who),
+    make('mock-act-4', 3, 'Swimming', '09:30:00', '11:30:00', 'Draft', 1, [], []),
+  ]
+}
+
 function rosterBoard(searchParams) {
   const asked = searchParams && searchParams.get('weekStart')
   const monday = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? planApproval.addDays(asked, -((planApproval.weekday(asked) + 6) % 7)) : BOARD_FIXTURE_WEEK
@@ -1889,7 +1904,7 @@ function rosterBoard(searchParams) {
   // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
   board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
   board.groupActivitiesEnabled = true // group activities are flag-on in the mock (R2); the flag-flip PR owns the real switch
-  board.groupActivities = []
+  board.groupActivities = monday === BOARD_FIXTURE_WEEK ? groupActivityFixture(days) : [] // other weeks stay empty: the By activity empty state
   board.weekStart = monday
   board.weekStarted = startedWeeks.has(monday)
   board.days = days
