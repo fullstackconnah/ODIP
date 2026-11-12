@@ -709,13 +709,16 @@ public class ClaimsController : ControllerBase
         // shortcut: two correlated subqueries per invoice row, run for the page and for the count; fine at today's volumes (InvoiceLines.ClaimLineItemId is indexed), index or cache only if the register slows.
         var shaped = from i in query
                      let cs = _db.TripClaims.Where(c => c.Id == i.TripClaimId).Select(c => (TripClaimStatus?)c.Status).FirstOrDefault()
-                     let cov = _db.ClaimLineItems.Where(l => i.Lines.Any(x => x.ClaimLineItemId == l.Id))
+                     // Scalars, not the covered-line set: EF cannot carry a queryable through a let into the projection.
+                     let covered = _db.ClaimLineItems.Count(l => i.Lines.Any(x => x.ClaimLineItemId == l.Id))
+                     let coveredPaid = _db.ClaimLineItems.Count(l => l.Status == ClaimLineItemStatus.Paid && i.Lines.Any(x => x.ClaimLineItemId == l.Id))
+                     let coveredAnyPay = _db.ClaimLineItems.Count(l => (l.PaidAmount > 0 || l.Status == ClaimLineItemStatus.Paid || l.Status == ClaimLineItemStatus.PartiallyPaid) && i.Lines.Any(x => x.ClaimLineItemId == l.Id))
                      select new
                      {
                          I = i,
                          Pay = i.Kind != InvoiceKind.Invoice || i.Status != InvoiceStatus.Issued ? null
-                             : cs == TripClaimStatus.Paid || (cov.Any() && cov.All(l => l.Status == ClaimLineItemStatus.Paid)) ? (InvoicePaymentStatus?)InvoicePaymentStatus.Paid
-                             : cs == TripClaimStatus.PartiallyPaid || cov.Any(l => l.PaidAmount > 0 || l.Status == ClaimLineItemStatus.Paid || l.Status == ClaimLineItemStatus.PartiallyPaid) ? (InvoicePaymentStatus?)InvoicePaymentStatus.PartPaid
+                             : cs == TripClaimStatus.Paid || (covered > 0 && covered == coveredPaid) ? (InvoicePaymentStatus?)InvoicePaymentStatus.Paid
+                             : cs == TripClaimStatus.PartiallyPaid || coveredAnyPay > 0 ? (InvoicePaymentStatus?)InvoicePaymentStatus.PartPaid
                              : (InvoicePaymentStatus?)InvoicePaymentStatus.Outstanding,
                      };
         if (paymentStatus is { } ps) shaped = shaped.Where(x => x.Pay == ps);   // any value implies an Issued invoice: the null branch never equals it
