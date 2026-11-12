@@ -366,4 +366,96 @@ public class GroupActivitySeriesTests
         Assert.Equal(2, rows.Count(r => r.Title == "Theirs"));
         Assert.All(rows.Where(r => r.Title == "Theirs"), r => Assert.Equal(ShiftStatus.Draft, r.Status));
     }
+
+    // ── place and library activity: a series edit copies only what the request changed ─────────────
+
+    private static Guid SeedPlace(GroupActivityFixture fx, bool active)
+    {
+        var p = new ServiceLocation { Id = Guid.NewGuid(), TenantId = fx.TenantId, Name = "Hall", IsActive = active };
+        fx.Seed.ServiceLocations.Add(p);
+        fx.Seed.SaveChanges();
+        return p.Id;
+    }
+
+    private static Guid SeedLibraryActivity(GroupActivityFixture fx, bool active)
+    {
+        var a = new Activity { Id = Guid.NewGuid(), TenantId = fx.TenantId, ActivityName = "Bowls", IsActive = active };
+        fx.Seed.Activities.Add(a);
+        fx.Seed.SaveChanges();
+        return a.Id;
+    }
+
+    private static async Task Hold(GroupActivityFixture fx, Guid id, string? location, Guid? place = null, Guid? activityId = null)
+    {
+        var row = await fx.Seed.GroupActivities.SingleAsync(a => a.Id == id);
+        (row.Location, row.ServiceLocationId, row.ActivityId) = (location, place, activityId);
+        await fx.Seed.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task SeriesEdit_LocationTextOnly_KeepsEachOccurrencesPlace()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await FourWeeks(fx);
+        var (inactiveP, activeQ) = (SeedPlace(fx, false), SeedPlace(fx, true));
+        await Hold(fx, rows[0].Id, "Old", inactiveP);   // the place was made inactive after it was set
+        await Hold(fx, rows[1].Id, "Old", activeQ);
+        var opened = (await Rows(fx))[0];
+
+        GroupActivityFixture.Body(await fx.Controller(clock: Early).Update(opened.Id, Req(opened, GroupActivityScope.Series, location: "New hall"), default), 200);
+
+        var after = await Rows(fx);
+        Assert.All(after, r => Assert.Equal("New hall", r.Location));
+        Assert.Equal(inactiveP, after[0].ServiceLocationId);
+        Assert.Equal(activeQ, after[1].ServiceLocationId);
+    }
+
+    [Fact]
+    public async Task SeriesEdit_PlaceChanged_CopiesPlaceNotText()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await FourWeeks(fx);
+        var (p, r) = (SeedPlace(fx, true), SeedPlace(fx, true));
+        await Hold(fx, rows[0].Id, "A", p);
+        await Hold(fx, rows[1].Id, "B", p);
+        var opened = (await Rows(fx))[0];
+        var dto = Req(opened, GroupActivityScope.Series) with { ServiceLocationId = r };
+
+        GroupActivityFixture.Body(await fx.Controller(clock: Early).Update(opened.Id, dto, default), 200);
+
+        var after = await Rows(fx);
+        Assert.All(after, x => Assert.Equal(r, x.ServiceLocationId));
+        Assert.Equal("A", after[0].Location);
+        Assert.Equal("B", after[1].Location);
+    }
+
+    [Fact]
+    public async Task Edit_ChangeToInactiveLibraryActivity_Refused()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await FourWeeks(fx);
+        var dto = Req(rows[0], GroupActivityScope.Occurrence) with { ActivityId = SeedLibraryActivity(fx, false) };
+
+        Assert.Equal("GA_ACTIVITY_LIB", GroupActivityFixture.Error(await fx.Controller(clock: Early).Update(rows[0].Id, dto, default), 400));
+    }
+
+    [Fact]
+    public async Task Edit_KeepInactiveLibraryActivity_Allowed()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await FourWeeks(fx);
+        await Hold(fx, rows[0].Id, null, null, SeedLibraryActivity(fx, false));
+        var opened = (await Rows(fx))[0];
+
+        GroupActivityFixture.Body(await fx.Controller(clock: Early).Update(opened.Id, Req(opened, GroupActivityScope.Occurrence, title: "Mini golf"), default), 200);
+    }
+
+    [Fact]
+    public async Task Create_InactiveLibraryActivity_Refused()
+    {
+        var fx = new GroupActivityFixture();
+        var dto = Repeating(null, null) with { ActivityId = SeedLibraryActivity(fx, false) };
+
+        Assert.Equal("GA_ACTIVITY_LIB", GroupActivityFixture.Error(await fx.Controller().Create(dto, default), 400));
+    }
 }
