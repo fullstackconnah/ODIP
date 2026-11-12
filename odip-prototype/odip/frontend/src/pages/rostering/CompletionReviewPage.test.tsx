@@ -861,4 +861,41 @@ describe('CompletionReviewPage tidy (m1112)', () => {
     expect(screen.getByText("Jack O'Sullivan").closest('td')).toHaveClass('max-md:-order-1', 'max-md:text-[13px]')
     expect(screen.getByText('08/09/2026').closest('td')).toHaveClass('max-md:-order-1', 'max-md:text-[13px]')
   })
+
+  it('puts the blank-reason error on the Reason field, clears it on typing, and sends the same trimmed body with no length limit', async () => {
+    const user = userEvent.setup()
+    showRow()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
+    const dialog = within(screen.getByRole('alertdialog'))
+    const reason = dialog.getByRole('textbox', { name: /^Reason/ })
+    expect(reason).not.toHaveAttribute('maxlength')
+
+    await user.type(reason, '   ')
+    await user.click(dialog.getByRole('button', { name: /^return$/i }))
+    expect(mockReturnMutateAsync).not.toHaveBeenCalled()
+    expect(reason).toHaveAttribute('aria-invalid', 'true')
+    expect(dialog.getAllByRole('alert')).toHaveLength(1)
+    expect(dialog.getByRole('alert')).toHaveTextContent('A return reason is required.')
+
+    await user.type(reason, '  Times look off.  ')
+    expect(dialog.queryByRole('alert')).not.toBeInTheDocument()
+    await user.click(dialog.getByRole('button', { name: /^return$/i }))
+    expect(mockReturnMutateAsync).toHaveBeenCalledWith({ shiftId: 'shift-1', data: { reason: 'Times look off.' } })
+  })
+
+  it('keeps a failed Return request in its own line, apart from the Reason field', async () => {
+    const user = userEvent.setup()
+    showRow()
+    mockReturnMutateAsync.mockRejectedValue(new Error('boom'))
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
+    const dialog = within(screen.getByRole('alertdialog'))
+    const reason = dialog.getByRole('textbox', { name: /^Reason/ })
+    await user.type(reason, 'Fix the times.')
+    await user.click(dialog.getByRole('button', { name: /^return$/i }))
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent(/please try again|boom/i)
+    expect(reason).not.toHaveAttribute('aria-invalid', 'true')
+  })
 })

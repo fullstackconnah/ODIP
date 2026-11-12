@@ -12,6 +12,7 @@ import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
 import { TextField } from '@/components/TextField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import {
   useCompletions, useCompletion, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useStaff,
@@ -299,6 +300,7 @@ export default function CompletionReviewPage() {
   const [approveTarget, setApproveTarget] = useState<CompletionQueueItemDto | null>(null)
   const [returnTarget, setReturnTarget] = useState<CompletionQueueItemDto | null>(null)
   const [returnReason, setReturnReason] = useState('')
+  const [reasonError, setReasonError] = useState<string | undefined>(undefined)   // the reason field's own error; a failed request stays in actionError
   const [actionError, setActionError] = useState<string | null>(null)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [travelEditing, setTravelEditing] = useState(false)
@@ -341,6 +343,7 @@ export default function CompletionReviewPage() {
   function closeReturn() {
     setReturnTarget(null)
     setReturnReason('')
+    setReasonError(undefined)
     setActionError(null)
   }
 
@@ -377,7 +380,7 @@ export default function CompletionReviewPage() {
     if (!returnTarget) return
     const reason = returnReason.trim()
     if (!reason) {
-      setActionError('A return reason is required.')
+      setReasonError('A return reason is required.')
       return
     }
     setActionError(null)
@@ -621,18 +624,15 @@ export default function CompletionReviewPage() {
             {detailError && <DetailFailed />}
             {detail && returnTarget && <WorkerAnswers c={detail} breaks={{ first: firstName(returnTarget.participantName), staffFirst: firstName(returnTarget.staffName) }} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
-            <label className="block text-sm text-[var(--color-foreground)]">
-              Reason (required)
-              <textarea
-                value={returnReason}
-                onChange={e => setReturnReason(e.target.value)}
-                rows={2}
-                className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
-                aria-required="true"
-                aria-describedby="return-reason-hint"
-              />
-            </label>
-            <p id="return-reason-hint" className="text-xs text-[var(--color-muted-foreground)]">The worker enters the shift details again, travel included.</p>
+            <TextAreaField
+              label="Reason"
+              required
+              rows={2}
+              value={returnReason}
+              onChange={e => { setReturnReason(e.target.value); setReasonError(undefined) }}
+              hint="The worker enters the shift details again, travel included."
+              error={reasonError}
+            />
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
         }
