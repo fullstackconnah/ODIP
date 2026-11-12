@@ -84,6 +84,9 @@ public class InvoiceLine : ITenantEntity
     public decimal UnitPrice { get; set; }
     public decimal LineTotal { get; set; }
     public GSTCode GSTCode { get; set; }
+    /// <summary>The shift's claim window at issue, provider local (finish earlier than start for an overnight shift). Both set or both null; null for per-item, trip, manual lines and invoices issued before the columns existed.</summary>
+    public TimeOnly? ServiceStartTime { get; set; }
+    public TimeOnly? ServiceEndTime { get; set; }
 }
 
 /// <summary>The next number of each kind for one organisation. Taken with one atomic upsert inside the issuing transaction, so a rolled-back issue gives its number back.</summary>

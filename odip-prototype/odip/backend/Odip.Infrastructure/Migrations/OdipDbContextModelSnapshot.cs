@@ -1955,8 +1955,14 @@ namespace Odip.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<TimeOnly?>("ServiceEndTime")
+                        .HasColumnType("time without time zone");
+
                     b.Property<DateOnly>("ServiceFrom")
                         .HasColumnType("date");
+
+                    b.Property<TimeOnly?>("ServiceStartTime")
+                        .HasColumnType("time without time zone");
 
                     b.Property<DateOnly>("ServiceTo")
                         .HasColumnType("date");

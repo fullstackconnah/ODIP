@@ -142,7 +142,34 @@ public class InvoiceRenderTests
         Assert.Contains(Skeleton("ABN: 12345678901"), text);   // the lines around it are untouched
     }
 
-private static Invoice FixedInvoice(string serviceReference) => new()
+    [Fact]
+    public void ALineWithTimes_PrintsThemUnderItsDate()
+    {
+        var invoice = FixedInvoice("Trip: Coastal weekend");
+        invoice.Lines = [
+            new InvoiceLine { SupportItemCode = "04_104_0125_6_1", ServiceFrom = new DateOnly(2026, 10, 3), ServiceTo = new DateOnly(2026, 10, 3), Hours = 6m, UnitPrice = 50m, LineTotal = 300m, ServiceStartTime = new TimeOnly(9, 0), ServiceEndTime = new TimeOnly(15, 0) },
+            new InvoiceLine { SupportItemCode = "04_104_0125_6_1", ServiceFrom = new DateOnly(2026, 10, 4), ServiceTo = new DateOnly(2026, 10, 4), Hours = 9m, UnitPrice = 50m, LineTotal = 450m, ServiceStartTime = new TimeOnly(22, 0), ServiceEndTime = new TimeOnly(7, 0) },
+        ];
+
+        var raw = RawTextOf(InvoiceService.Render(invoice));
+
+        Assert.Contains("03/10/2026", raw);
+        Assert.Contains("9:00 am – 3:00 pm", raw);
+        Assert.Contains("10:00 pm – 7:00 am", raw);
+    }
+
+    [Fact]
+    public void ALineWithoutTimes_PrintsTheSameDateCellAsBefore()
+    {
+        var pdf = InvoiceService.Render(FixedInvoice("Trip: Coastal weekend"));
+        var raw = RawTextOf(pdf);
+
+        Assert.Contains(Skeleton("03/10/2026"), TextOf(pdf));   // the range wraps in its cell, so raw extraction interleaves it; the golden test above pins the exact text
+        Assert.Contains("04/10/2026", raw);
+        Assert.DoesNotMatch(new System.Text.RegularExpressions.Regex(@"\d{1,2}:\d{2}\s*(am|pm)"), raw);
+    }
+
+    private static Invoice FixedInvoice(string serviceReference) => new()
     {
         Kind = InvoiceKind.Invoice, Status = InvoiceStatus.Issued, DisplayNumber = "INV-1", IssueDate = new DateOnly(2026, 10, 23), DueDate = new DateOnly(2026, 11, 6),
         BillToName = "Sam Lee", ParticipantName = "Sam Lee", ServiceReference = serviceReference, SellerOrganisationName = "Test Provider", SellerAbn = "12345678901",
