@@ -15,6 +15,7 @@ namespace Odip.Tests.Services;
 public class ParticipantDocumentComposerTests
 {
     private static readonly DateOnly Today = new(2026, 10, 31);
+    private static readonly DateTime Now = new(2026, 10, 31, 9, 30, 0);
 
     private static Participant BuildParticipant(ServiceStreams serviceStreams = ServiceStreams.None)
     {
@@ -103,7 +104,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeIntakeForm_IncludesIntakeAndSharedSections_ExcludesProfileOnlySections()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id), Now);
 
         Assert.Contains(model.Sections, s => s.Heading == "Participant Details");
         Assert.Contains(model.Sections, s => s.Heading == "Support Needs & Mobility");
@@ -115,7 +116,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeIntakeForm_IncludesReceptiveSkillsAndEquipmentRequirements()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id), Now);
         var fields = model.Sections.SelectMany(s => s.Fields).ToList();
 
         Assert.Contains(fields, f => f.Label == "Receptive Skills" && f.Value == "Understands short sentences");
@@ -126,7 +127,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeIntakeForm_MobilityAidWalker_IsIncluded_ButMobilityNotes_IsNot()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id), Now);
 
         var mobilitySection = model.Sections.Single(s => s.Heading == "Support Needs & Mobility");
         Assert.Contains(mobilitySection.Fields, f => f.Label == "Walker");
@@ -137,7 +138,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeParticipantProfile_IncludesProfileAndSharedSections()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         Assert.Contains(model.Sections, s => s.Heading == "Participant Details");
         Assert.Contains(model.Sections, s => s.Heading == "Key Identifiers");
@@ -150,7 +151,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeParticipantProfile_MobilityAidWalker_IsExcluded_IntakeOnlyField()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var mobilitySection = model.Sections.Single(s => s.Heading == "Support Needs & Mobility");
         Assert.DoesNotContain(mobilitySection.Fields, f => f.Label == "Walker");
@@ -161,11 +162,11 @@ public class ParticipantDocumentComposerTests
     public void CommunityAccessSection_AbsentWhenStreamNotSet_PresentWhenSet()
     {
         var withoutStream = BuildParticipant(ServiceStreams.None);
-        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id));
+        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id), Now);
         Assert.DoesNotContain(withoutModel.Sections, s => s.Heading == "Community Access");
 
         var withStream = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id));
+        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id), Now);
         var caSection = Assert.Single(withModel.Sections, s => s.Heading == "Community Access");
         Assert.Contains(caSection.Fields, f => f.Label == "Signs I Am Happy and Settled" && f.Value == "Smiling and humming");
     }
@@ -174,7 +175,7 @@ public class ParticipantDocumentComposerTests
     public void CommunityAccessSection_NeverAppearsOnIntakeForm_EvenWithStreamSet()
     {
         var participant = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id), Now);
 
         Assert.DoesNotContain(model.Sections, s => s.Heading == "Community Access");
     }
@@ -183,7 +184,7 @@ public class ParticipantDocumentComposerTests
     public void HealthConditionsTable_OnlyIncludesRowsWithHasTrue()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var medical = model.Sections.Single(s => s.Heading == "Medical");
         var table = medical.Tables.Single(t => t.Heading == "Health Conditions");
@@ -196,12 +197,12 @@ public class ParticipantDocumentComposerTests
     public void AdlAssessmentsTable_IncludesHowToHelpColumn_OnlyWhenCommunityAccessStreamSet()
     {
         var withoutStream = BuildParticipant(ServiceStreams.None);
-        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id));
+        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id), Now);
         var withoutAdl = withoutModel.Sections.Single(s => s.Heading == "Daily Living").Tables.Single(t => t.Heading == "ADL Assessments");
         Assert.DoesNotContain("How To Help", withoutAdl.Columns);
 
         var withStream = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id));
+        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id), Now);
         var withAdl = withModel.Sections.Single(s => s.Heading == "Daily Living").Tables.Single(t => t.Heading == "ADL Assessments");
         Assert.Contains("How To Help", withAdl.Columns);
     }
@@ -210,7 +211,7 @@ public class ParticipantDocumentComposerTests
     public void AdlAssessmentsTable_MaterializesEveryAdlType_FixedOrder()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var table = model.Sections.Single(s => s.Heading == "Daily Living").Tables.Single(t => t.Heading == "ADL Assessments");
         Assert.Equal(Enum.GetValues<AdlType>().Length, table.Rows.Count);
@@ -222,7 +223,7 @@ public class ParticipantDocumentComposerTests
     public void ChecklistItemsTable_OnlyIncludesAnsweredRows()
     {
         var participant = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var caSection = model.Sections.Single(s => s.Heading == "Community Access");
         var table = caSection.Tables.Single(t => t.Heading == "Checklist Items");
@@ -236,11 +237,11 @@ public class ParticipantDocumentComposerTests
     public void CommunityAccessRiskTable_AbsentWhenStreamNotSet_PresentWhenSet()
     {
         var withoutStream = BuildParticipant(ServiceStreams.None);
-        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id));
+        var withoutModel = ParticipantDocumentComposer.ComposeParticipantProfile(withoutStream, BuildRiskEntries(withoutStream.Id), Now);
         Assert.DoesNotContain(withoutModel.Sections, s => s.Heading == "Community Access");
 
         var withStream = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id));
+        var withModel = ParticipantDocumentComposer.ComposeParticipantProfile(withStream, BuildRiskEntries(withStream.Id), Now);
         var caSection = withModel.Sections.Single(s => s.Heading == "Community Access");
         var table = caSection.Tables.Single(t => t.Heading == "Community Access Risk Assessment");
         Assert.Single(table.Rows);
@@ -253,7 +254,7 @@ public class ParticipantDocumentComposerTests
     public void CommunityAccessRiskTable_NeverAppearsOnIntakeForm_EvenWithStreamSet()
     {
         var participant = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id), Now);
 
         Assert.DoesNotContain(model.Sections, s => s.Heading == "Community Access");
     }
@@ -262,7 +263,7 @@ public class ParticipantDocumentComposerTests
     public void CommunityAccessRiskTable_OnlyIncludesRatedRows()
     {
         var participant = BuildParticipant(ServiceStreams.CommunityAccessDailyLiving);
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var caSection = model.Sections.Single(s => s.Heading == "Community Access");
         var table = caSection.Tables.Single(t => t.Heading == "Community Access Risk Assessment");
@@ -274,7 +275,7 @@ public class ParticipantDocumentComposerTests
     public void RiskEntriesTable_OnlyIncludesActiveRows()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var table = model.Sections.Single(s => s.Heading == "Risks & Hazards").Tables.Single(t => t.Heading == "Risk Entries");
         Assert.Single(table.Rows);
@@ -286,7 +287,7 @@ public class ParticipantDocumentComposerTests
     {
         var participant = BuildParticipant();
         participant.MedicalSummary = null;
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var medical = model.Sections.Single(s => s.Heading == "Medical");
         var field = medical.Fields.Single(f => f.Label == "Medical Summary");
@@ -297,7 +298,7 @@ public class ParticipantDocumentComposerTests
     public void FlagsEnumField_RendersCommaJoinedSetValues()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var model = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
 
         var medical = model.Sections.Single(s => s.Heading == "Medical");
         var field = medical.Fields.Single(f => f.Label == "HIDPA Support Categories");
@@ -310,12 +311,12 @@ public class ParticipantDocumentComposerTests
     {
         var participant = BuildParticipant();
 
-        var intake = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var intake = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id), Now);
         var intakeContacts = intake.Sections.Single(s => s.Heading == "Contacts").Tables.Single(t => t.Heading == "Contacts");
         Assert.Single(intakeContacts.Rows);
         Assert.Equal("Nora Kin", intakeContacts.Rows[0][1]);
 
-        var profile = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id));
+        var profile = ParticipantDocumentComposer.ComposeParticipantProfile(participant, BuildRiskEntries(participant.Id), Now);
         var profileContacts = profile.Sections.Single(s => s.Heading == "Contacts").Tables.Single(t => t.Heading == "Contacts");
         Assert.Single(profileContacts.Rows);
     }
@@ -343,7 +344,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeClientOverview_RendersFixedFieldList()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today, Now);
 
         var section = Assert.Single(model.Sections);
         Assert.Equal("Client Support Needs Summary", section.Heading);
@@ -363,7 +364,7 @@ public class ParticipantDocumentComposerTests
         var participant = BuildParticipant();
         var trip = BuildTrip("Coastal Explorers");
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip, Today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip, Today, Now);
 
         Assert.Equal("Spring Coastal Trip", model.TripName);
         Assert.Equal("12 Oct 2026", model.TripDate);
@@ -376,7 +377,7 @@ public class ParticipantDocumentComposerTests
     {
         var participant = BuildParticipant();
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip: null, Today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip: null, Today, Now);
 
         Assert.Equal("—", model.TripName);
         Assert.Equal("—", model.TripDate);
@@ -393,7 +394,7 @@ public class ParticipantDocumentComposerTests
             Description = "Retired practice", IsActive = false,
         });
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today, Now);
 
         var section = Assert.Single(model.Sections);
         Assert.Empty(section.Tables);
@@ -414,7 +415,7 @@ public class ParticipantDocumentComposerTests
             Description = "Retired practice", IsActive = false,
         });
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today, Now);
 
         var section = Assert.Single(model.Sections);
         var table = Assert.Single(section.Tables);
@@ -435,7 +436,7 @@ public class ParticipantDocumentComposerTests
             AuthorisationDate = new DateOnly(2020, 1, 1), AuthorisationEndDate = new DateOnly(2020, 6, 30),
         });
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today, Now);
 
         Assert.Equal("01 Jan 2020 (ended 30 Jun 2020)", Assert.Single(Assert.Single(Assert.Single(model.Sections).Tables).Rows)[3]);
     }
@@ -448,7 +449,7 @@ public class ParticipantDocumentComposerTests
             Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.Seclusion, Description = "d", AuthorisedBy = "Dr Lee", IsActive = true,
             AuthorisationDate = start, AuthorisationEndDate = end,
         });
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), today);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), today, Now);
         return Assert.Single(Assert.Single(Assert.Single(model.Sections).Tables).Rows)[3];
     }
 

@@ -92,15 +92,6 @@ describe('the Intake column', () => {
     expect(screen.queryByRole('button', { name: 'Start intake for Noah Fitzgerald' })).not.toBeInTheDocument() // Book intake leads until a visit is booked
   })
 
-  it('offers no booking to a read-only viewer: line 1 is text, not a button', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
-    page()
-
-    expect(screen.queryByRole('button', { name: /^Book intake/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /intake visit for Priya Nair/ })).not.toBeInTheDocument()
-    expect(screen.getAllByText(/ · Sam$/).length).toBe(4)
-  })
-
   it('opens the panel from Book intake and gives focus back to the row on close', async () => {
     const user = userEvent.setup()
     page()

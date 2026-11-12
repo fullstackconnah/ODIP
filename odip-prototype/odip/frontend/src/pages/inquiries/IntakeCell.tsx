@@ -6,7 +6,7 @@ import { DEFAULT_DURATION, FALLBACK_ZONE, inviteLine, isPastVisit, unbroken, vis
 import { TONE } from '@/lib/tone'
 import { fullName } from '@/lib/inquiryDetails'
 
-type IntakeCellProps = { row: ParticipantInquiryDto; canManage: boolean; onOpen: (row: ParticipantInquiryDto) => void; now?: Date }
+type IntakeCellProps = { row: ParticipantInquiryDto; onOpen: (row: ParticipantInquiryDto) => void; now?: Date }
 
 /**
  * The enquiry table's Intake cell (SHAPE.md section 1):
@@ -15,7 +15,7 @@ type IntakeCellProps = { row: ParticipantInquiryDto; canManage: boolean; onOpen:
  * - muted "Not booked" when there is no booking; a dash for a direct intake (no enquiry).
  * Each control carries `data-intake-control` (the enquiry id; the visit button here, else the row's Next step button): the page focuses it after the panel closes, a cancel, or a dismissed notice.
  */
-export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeCellProps) {
+export function IntakeCell({ row, onOpen, now = new Date() }: IntakeCellProps) {
   const name = fullName(row.firstName, row.lastName)
   if (row.isDirectIntake) return <span>—</span>
   // Booking it is the row's Next step (or its menu), not a button here.
@@ -31,18 +31,16 @@ export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeC
     // Two lines (SHAPE section 1): line 1 is the visit alone; the reply badge leads line 2, beside what the invite did. The badge used to sit
     // beside line 1 and dropped to a line of its own whenever line 1 was long (the 18rem cap), so rows differed.
     <div className="max-w-[18rem]">
-      {canManage ? (
-        <button
-          type="button"
-          data-intake-control={row.id}
-          // Starts with the visible words (Label in Name); a hidden span would leave a stray space before the comma.
-          aria-label={`${label}, intake visit for ${name}`}
-          onClick={() => onOpen(row)}
-          className={`${TAP_AREA} max-md:min-h-11 rounded-sm text-left font-medium hover:text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${ink}`}
-        >
-          {text}
-        </button>
-      ) : <span className={ink}>{text}</span>}
+      <button
+        type="button"
+        data-intake-control={row.id}
+        // Starts with the visible words (Label in Name); a hidden span would leave a stray space before the comma.
+        aria-label={`${label}, intake visit for ${name}`}
+        onClick={() => onOpen(row)}
+        className={`${TAP_AREA} max-md:min-h-11 rounded-sm text-left font-medium hover:text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${ink}`}
+      >
+        {text}
+      </button>
       <div data-intake-line2 className={`mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] ${line2?.failed ? TONE.danger.ink : 'text-[var(--color-muted-foreground)]'}`}>
         {past ? <StatusBadge tone="neutral" label="Past" />
           : row.intakeConfirmedAt ? <StatusBadge tone="success" label="Confirmed" />

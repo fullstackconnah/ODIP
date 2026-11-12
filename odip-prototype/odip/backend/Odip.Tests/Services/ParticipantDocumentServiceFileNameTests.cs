@@ -18,6 +18,7 @@ namespace Odip.Tests.Services;
 /// </summary>
 public class ParticipantDocumentServiceFileNameTests
 {
+    private static readonly DateTime Stamp = new(2026, 11, 13, 9, 30, 0);
     /// <summary>Letters, digits, space, hyphen only — genuinely header-safe: excludes quotes, commas, CR, LF, and non-ASCII.</summary>
     private static readonly Regex HeaderSafeFileName = new("^[A-Za-z0-9 -]+\\.pdf$");
 
@@ -29,7 +30,7 @@ public class ParticipantDocumentServiceFileNameTests
         // parameter; café/emoji stand in for arbitrary unicode.
         var unsafeName = "O'Brien, \"Test\"\r\ncafé 😀";
 
-        var fileName = ParticipantDocumentService.BuildFileName(unsafeName, "Intake-Form");
+        var fileName = ParticipantDocumentService.BuildFileName(unsafeName, "Intake-Form", Stamp);
 
         Assert.Matches(HeaderSafeFileName, fileName);
         Assert.DoesNotContain("'", fileName);
@@ -47,7 +48,7 @@ public class ParticipantDocumentServiceFileNameTests
         // "-Intake-Form-20260901.pdf" (leading hyphen, empty name segment).
         var entirelyUnicodeName = "日本語名前";
 
-        var fileName = ParticipantDocumentService.BuildFileName(entirelyUnicodeName, "Intake-Form");
+        var fileName = ParticipantDocumentService.BuildFileName(entirelyUnicodeName, "Intake-Form", Stamp);
 
         Assert.Matches(HeaderSafeFileName, fileName);
         Assert.False(fileName.StartsWith('-'), $"Expected a non-empty fallback name segment, got a leading hyphen in '{fileName}'.");
@@ -57,7 +58,7 @@ public class ParticipantDocumentServiceFileNameTests
     [Fact]
     public void BuildFileName_PreservesSafeCharacters_IncludingHyphensAndSpaces()
     {
-        var fileName = ParticipantDocumentService.BuildFileName("Sophie-Anne Brown", "Participant-Profile");
+        var fileName = ParticipantDocumentService.BuildFileName("Sophie-Anne Brown", "Participant-Profile", Stamp);
 
         Assert.Matches(HeaderSafeFileName, fileName);
         Assert.StartsWith("Sophie-Anne Brown-Participant-Profile-", fileName);

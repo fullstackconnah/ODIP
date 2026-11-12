@@ -17,10 +17,12 @@ namespace Odip.Infrastructure.Services;
 public class ParticipantDocumentService
 {
     private readonly OdipDbContext _db;
+    private readonly TimeProvider _clock;
 
-    public ParticipantDocumentService(OdipDbContext db)
+    public ParticipantDocumentService(OdipDbContext db, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
@@ -31,7 +33,7 @@ public class ParticipantDocumentService
         if (model == null) return null;
 
         var bytes = ParticipantDocumentRenderer.Render(model);
-        return (bytes, BuildFileName(model.ParticipantFullName, "Intake-Form"));
+        return (bytes, BuildFileName(model.ParticipantFullName, "Intake-Form", model.GeneratedAt));
     }
 
     /// <summary>Returns null when no participant with <paramref name="participantId"/> exists (or isn't visible to the current tenant).</summary>
@@ -41,7 +43,7 @@ public class ParticipantDocumentService
         if (model == null) return null;
 
         var bytes = ParticipantDocumentRenderer.Render(model);
-        return (bytes, BuildFileName(model.ParticipantFullName, "Participant-Profile"));
+        return (bytes, BuildFileName(model.ParticipantFullName, "Participant-Profile", model.GeneratedAt));
     }
 
     /// <summary>
@@ -63,7 +65,7 @@ public class ParticipantDocumentService
         if (participant == null) return null;
 
         var riskEntries = await LoadRiskEntriesAsync(participantId, ct);
-        return ParticipantDocumentComposer.ComposeIntakeForm(participant, riskEntries, maskIdNumbers);
+        return ParticipantDocumentComposer.ComposeIntakeForm(participant, riskEntries, await LocalNowAsync(participant.TenantId, ct), maskIdNumbers);
     }
 
     /// <summary>See <see cref="ComposeIntakeFormAsync"/>'s doc comment — same reasoning, Participant Profile variant.</summary>
@@ -73,7 +75,7 @@ public class ParticipantDocumentService
         if (participant == null) return null;
 
         var riskEntries = await LoadRiskEntriesAsync(participantId, ct);
-        return ParticipantDocumentComposer.ComposeParticipantProfile(participant, riskEntries, maskIdNumbers);
+        return ParticipantDocumentComposer.ComposeParticipantProfile(participant, riskEntries, await LocalNowAsync(participant.TenantId, ct), maskIdNumbers);
     }
 
     /// <summary>PF-10.6: returns null when no participant with <paramref name="participantId"/> exists (or isn't visible to the current tenant).</summary>
@@ -83,13 +85,13 @@ public class ParticipantDocumentService
         if (model == null) return null;
 
         var bytes = ParticipantDocumentRenderer.Render(model);
-        return (bytes, BuildFileName(model.ParticipantFullName, "Client-Overview"));
+        return (bytes, BuildFileName(model.ParticipantFullName, "Client-Overview", model.GeneratedAt));
     }
 
     /// <summary>
     /// PF-10.6 — same "load+compose extracted for direct testability" reasoning as
     /// <see cref="ComposeIntakeFormAsync"/>'s doc comment. <paramref name="tripId"/> is optional:
-    /// when omitted (Participant-detail-page surface) or when it doesn't resolve to a visible
+    /// when omitted (Participant-detail-page surface) or when the participant has no booking on a visible
     /// <see cref="TripInstance"/>, the composer is called with a null trip and renders a blank
     /// (not omitted) TRIP/DATE/GROUP header — never a 404, since the participant itself still
     /// resolved.
@@ -99,16 +101,21 @@ public class ParticipantDocumentService
         var participant = await LoadParticipantAsync(participantId, ct);
         if (participant == null) return null;
 
+        // Only a trip the participant is booked on: any other trip id renders the blank header.
         TripInstance? trip = tripId.HasValue
             ? await _db.TripInstances
                 .Include(t => t.DefaultActivityGroup)
-                .FirstOrDefaultAsync(t => t.Id == tripId.Value, ct)
+                .FirstOrDefaultAsync(t => t.Id == tripId.Value && t.Bookings.Any(b => b.ParticipantId == participantId), ct)
             : null;
 
         // "Ended" is judged on the organisation's own today, like the register.
-        var today = await ProviderTimeZoneResolver.TodayAsync(_db, participant.TenantId, TimeProvider.System, ct);
-        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip, today, maskIdNumbers);
+        var now = await LocalNowAsync(participant.TenantId, ct);
+        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip, DateOnly.FromDateTime(now), now, maskIdNumbers);
     }
+
+    /// <summary>The instant now, as wall-clock time in the organisation's zone: what the PDF header and file name print.</summary>
+    private async Task<DateTime> LocalNowAsync(Guid tenantId, CancellationToken ct) =>
+        TimeZoneInfo.ConvertTimeFromUtc(_clock.GetUtcNow().UtcDateTime, (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone);
 
     private async Task<Participant?> LoadParticipantAsync(Guid participantId, CancellationToken ct) =>
         await _db.Participants
@@ -138,10 +145,10 @@ public class ParticipantDocumentService
     /// entirely non-ASCII name) — guards against emitting a malformed filename with an
     /// empty/leading-hyphen name segment.
     /// </summary>
-    public static string BuildFileName(string participantFullName, string docType)
+    public static string BuildFileName(string participantFullName, string docType, DateTime generatedAt)
     {
         var sanitized = Regex.Replace(participantFullName, "[^A-Za-z0-9 -]", "").Trim();
         if (sanitized.Length == 0) sanitized = "Participant";
-        return $"{sanitized}-{docType}-{DateTime.UtcNow:yyyyMMdd}.pdf";
+        return $"{sanitized}-{docType}-{generatedAt:yyyyMMdd}.pdf";
     }
 }

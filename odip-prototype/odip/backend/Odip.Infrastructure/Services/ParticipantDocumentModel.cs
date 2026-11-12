@@ -22,7 +22,7 @@ public sealed record ParticipantDocumentModel(
     string Title,
     string ParticipantFullName,
     string? NdisNumber,
-    DateTime GeneratedAtUtc,
+    DateTime GeneratedAt, // the organisation's local time, printed as-is
     IReadOnlyList<ParticipantDocumentSection> Sections,
     string? TripName = null,
     string? TripDate = null,
