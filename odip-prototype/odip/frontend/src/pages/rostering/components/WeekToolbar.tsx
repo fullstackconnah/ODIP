@@ -88,7 +88,7 @@ export function WeekToolbar({
 
       <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
         <ToggleGroup
-          className="max-sm:w-full max-sm:[&>button]:flex-1"
+          className="max-sm:w-full max-sm:[&>button]:flex-1 max-sm:[&>button]:whitespace-nowrap max-sm:[&>button]:px-2"
           options={[{ key: 'participant', label: 'By participant' }, { key: 'staff', label: 'By staff' }, ...(activityOption ? [{ key: 'activity', label: 'By activity' }] : [])]}
           value={groupBy}
           onChange={key => onGroupByChange(key as BoardViewMode)}
