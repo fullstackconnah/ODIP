@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Keyb
 import { createPortal } from 'react-dom'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Search } from 'lucide-react'
-import type { ShiftDto, StaffAvailableDayDto, StaffLeaveDto, StaffListDto } from '@/api/types'
+import type { ShiftDto, StaffAvailableDayDto, StaffLeaveDto, StaffListDto, StaffTripDto } from '@/api/types'
 import { inputClass } from '@/components/FormField'
 import { SlideOver } from '@/components/SlideOver'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
@@ -20,6 +20,8 @@ export type StaffPickerProps = {
   /** Every shift on the RAW board: overlaps and hours never follow a filter. */
   shifts: ShiftDto[]
   leave: StaffLeaveDto[]
+  /** The week's trip assignments (the "On a trip that day" group). */
+  trips?: StaffTripDto[]
   availableDays?: StaffAvailableDayDto[]
   hours: Map<string, number>
   /** Below md: the house SlideOver instead of the panel anchored to the chip. */
@@ -30,11 +32,13 @@ export type StaffPickerProps = {
 }
 
 const NONE: StaffAvailableDayDto[] = []
+const NO_TRIPS: StaffTripDto[] = []
 
 const GROUPS = [
   { key: 'available', label: 'Available that day' },
   { key: 'free', label: 'Free at this time' },
   { key: 'move', label: 'On another shift at this time' },
+  { key: 'trip', label: 'On a trip that day' },
   { key: 'leave', label: 'On leave that day' },
   { key: 'notStarted', label: "Hasn't started yet" },
 ] as const
@@ -226,10 +230,10 @@ const OPTION = 'flex min-h-[var(--control-h)] cursor-pointer px-3 py-1.5'
 const optionFill = (active: boolean) => (active ? 'bg-[var(--color-surface-container-low)]' : 'hover:bg-[var(--color-surface-container-low)]')
 
 /** The search, the Published line and the grouped listbox. */
-function PickerBody({ target, staff, staffLoading, shifts, leave, availableDays = NONE, hours, onPick, inputRef }: BodyProps) {
+function PickerBody({ target, staff, staffLoading, shifts, leave, availableDays = NONE, trips = NO_TRIPS, hours, onPick, inputRef }: BodyProps) {
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
-  const groups = useMemo(() => pickerGroups(target, staff, shifts, leave, hours, availableDays), [target, staff, shifts, leave, availableDays, hours])
+  const groups = useMemo(() => pickerGroups(target, staff, shifts, leave, hours, availableDays, trips), [target, staff, shifts, leave, availableDays, trips, hours])
   // The search matches any part of the full name, ignoring case, in every group. An empty group draws no label.
   const shown = GROUPS.map(g => ({ ...g, rows: groups[g.key].filter(r => !q || r.person.fullName.toLowerCase().includes(q)) })).filter(g => g.rows.length > 0)
   const options = shown.flatMap(g => g.rows)
@@ -328,12 +332,13 @@ function PickOption({ id, row, active, onPick, onHover }: { id: string; row: Pic
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={person.fullName}>{person.fullName}</span>
         <span className={`shrink-0 text-xs tabular-nums ${over ? TONE.warning.ink : 'text-muted-foreground'}`}>{formatHoursMeter(row.hours, weeklyHours)}</span>
       </span>
-      {(row.leave || row.notStarted || row.available === 'Preferred' || source) && (
+      {(row.trip || row.leave || row.notStarted || row.available === 'Preferred' || source) && (
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           {row.available === 'Preferred' && <StatusBadge tone="success" label="Prefers this day" />}
+          {row.trip && <StatusBadge tone="warning" label="On a trip" />}
           {row.leave && <StatusBadge tone={row.leave === 'Approved' ? 'neutral' : 'warning'} label={row.leave === 'Approved' ? 'On leave' : 'Leave pending'} />}
           {row.notStarted && <StatusBadge tone="neutral" label="Hasn't started yet" />}
-          {source && <span className="min-w-0 truncate">{moveLine(source)}</span>}
+          {source ? <span className="min-w-0 truncate">{moveLine(source)}</span> : row.trip && <span className="min-w-0 truncate">{row.trip}</span>}
         </span>
       )}
       {source?.status === 'Published' && <span className={`text-xs ${TONE.info.ink}`}>Published: tells {firstName(person.fullName)}</span>}

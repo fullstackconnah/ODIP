@@ -62,6 +62,15 @@ describe('StaffPicker: who is offered, and how (the brief, section 4)', () => {
     expect(within(leave).getByText('Leave pending')).toBeInTheDocument()
   })
 
+  it('lists a person on a trip that day under "On a trip that day", with the trip name and badge', () => {
+    renderPicker({ trips: [{ staffId: 'kim', tripInstanceId: 't-1', tripName: 'Coast Walk', from: '2026-08-17', to: '2026-08-19' }] })
+    expect(groupLabels()).toContain('On a trip that day')
+    const group = screen.getAllByRole('group').find(g => document.getElementById(g.getAttribute('aria-labelledby') ?? '')?.textContent === 'On a trip that day')!
+    expect(optionNames(group)).toEqual([expect.stringContaining('Kim Lee')])
+    expect(within(group).getByText('On a trip')).toBeInTheDocument()
+    expect(within(group).getByText('Coast Walk')).toBeInTheDocument()
+  })
+
   it("prints the hours as '12 / 38 h', past 38 in the warning ink, with the expired flag before the name", () => {
     renderPicker()
     expect(screen.getByText('40 / 38 h').className).toContain(TONE.warning.ink)

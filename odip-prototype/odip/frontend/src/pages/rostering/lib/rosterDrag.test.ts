@@ -1,10 +1,10 @@
 import { afterEach, describe, it, expect } from 'vitest'
 import { makeActivity, makeShift, makeStaffRow, makeUnfilledShift } from '../test-fixtures'
-import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
+import type { ShiftDto, StaffLeaveDto, StaffListDto, StaffTripDto } from '@/api/types'
 import {
   assignedSentence, carriedLine, dropOutcome, joinedSentence, keepInWindow, movedSentence, publishedSentence, publishWeekLabel, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
   staffWeekHours, swappedSentence, type DragCarry, type DropTarget,
-  hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapOptionName, type PickRow,
+  hoursText, leaveFromStaffRows, tripsFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapOptionName, type PickRow,
 } from './rosterDrag'
 
 const sam: DragCarry = { staffId: 'staff-2', staffName: 'Sam Wilson' }
@@ -331,6 +331,55 @@ describe('pickerGroups', () => {
     const overnight = makeUnfilledShift({ id: 'night', serviceDate: '2026-08-16', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true })
     const groups = pickerGroups(overnight, [person('kim', 'Kim Lee')], [], [{ staffId: 'kim', from: '2026-08-17', to: '2026-08-17', status: 'Approved' }], none)
     expect(groups.leave.map(r => [r.key, r.leave])).toEqual([['kim', 'Approved']])
+  })
+
+  describe('trip group', () => {
+    const trip = (o: Partial<StaffTripDto> = {}): StaffTripDto => ({ staffId: 'kim', tripInstanceId: 't-1', tripName: 'Coast Walk', from: '2026-08-17', to: '2026-08-19', ...o })
+
+    it('puts a person on a trip that day in the Trip group, never in Available or Free', () => {
+      const days = [{ staffId: 'kim', date: '2026-08-18', preferred: true }]
+      const groups = pickerGroups(target, [person('kim', 'Kim Lee')], [], [], none, days, [trip()])
+      expect(groups.trip.map(r => [r.key, r.trip])).toEqual([['kim', 'Coast Walk']])
+      expect([...groups.available, ...groups.free, ...groups.leave]).toEqual([])
+    })
+
+    it('leaves a person whose trip is on other days in Free', () => {
+      const groups = pickerGroups(target, [person('kim', 'Kim Lee')], [], [], none, [], [trip({ from: '2026-08-19', to: '2026-08-20' })])
+      expect(keys(groups.free)).toEqual(['kim'])
+      expect(groups.trip).toEqual([])
+    })
+
+    it('catches an overnight shift that runs into the trip day', () => {
+      const night = makeUnfilledShift({ id: 'night', serviceDate: '2026-08-16', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true })
+      const groups = pickerGroups(night, [person('kim', 'Kim Lee')], [], [], none, [], [trip({ from: '2026-08-17', to: '2026-08-17' })])
+      expect(keys(groups.trip)).toEqual(['kim'])
+    })
+
+    it('keeps a trip plus an overlapping shift in Move, with the trip noted', () => {
+      const groups = pickerGroups(target, [person('kim', 'Kim Lee')], [on('kim-tue', 'kim')], [], none, [], [trip()])
+      expect(groups.move.map(r => [r.key, r.trip])).toEqual([['kim:kim-tue', 'Coast Walk']])
+      expect(groups.trip).toEqual([])
+    })
+
+    it("orders the precedence: Hasn't started, Move, Trip, Leave, Available, Free", () => {
+      const staff = [
+        person('late', 'Late Starter', { employmentStartDate: '2026-09-01' }), person('mover', 'Mo Ver'), person('kim', 'Kim Lee'),
+        person('lea', 'Lea Ve'), person('avi', 'Avi Lable'), person('fran', 'Fran Free'),
+      ]
+      const trips = [trip({ staffId: 'late' }), trip({ staffId: 'mover' }), trip({ staffId: 'kim' }), trip({ staffId: 'lea' })]
+      const leave: StaffLeaveDto[] = [{ staffId: 'lea', from: '2026-08-18', to: '2026-08-18', status: 'Approved' }]
+      const days = [{ staffId: 'avi', date: '2026-08-18', preferred: false }]
+      const g = pickerGroups(target, staff, [on('m', 'mover')], leave, none, days, trips)
+      expect([keys(g.notStarted), keys(g.move), keys(g.trip), keys(g.leave), keys(g.available), keys(g.free)])
+        .toEqual([['late'], ['mover:m'], ['kim', 'lea'], [], ['avi'], ['fran']])
+    })
+
+    it('names the trip in the option name and builds trips from staff rows', () => {
+      const kim = person('kim', 'Kim Lee')
+      expect(pickOptionName({ key: 'kim', person: kim, hours: 0, leave: null, trip: 'Coast Walk' }, 38)).toContain('on a trip: Coast Walk')
+      const row = makeStaffRow({ staffId: 'kim', tripBars: [{ tripInstanceId: 't-1', tripName: 'Coast Walk', startDate: '2026-08-17', endDate: '2026-08-19' }] as never })
+      expect(tripsFromStaffRows([row])).toEqual([trip()])
+    })
   })
 
   it('leaves out the other worker of a staggered 2:1 (same participant and day, overlapping times)', () => {
