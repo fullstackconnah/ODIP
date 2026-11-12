@@ -10,5 +10,8 @@ public record HoursByWorkerRowDto(Guid WorkerId, string WorkerName, int Approved
 /// <summary>One Monday-to-Sunday week. <see cref="PartWeek"/> is true when the range cuts the week, so the counts cover only the days inside it. <see cref="FillRatePercent"/> is null when nothing needed filling.</summary>
 public record ShiftFulfilmentWeekDto(DateOnly WeekStart, int Shifts, int Filled, int Unstaffed, int Cancelled, int? FillRatePercent, bool PartWeek);
 
+/// <summary>One row of Cancellations by reason. A null Reason is the cancelled shifts with no reason recorded.</summary>
+public record CancellationReasonCountDto(ShiftCancellationReason? Reason, int Cancelled);
+
 /// <summary>Approved leave overlapping the range. <see cref="From"/> and <see cref="To"/> are the leave's own dates; <see cref="DaysInRange"/> counts only the calendar days inside the range.</summary>
 public record LeaveTakenRowDto(Guid LeaveId, Guid WorkerId, string WorkerName, LeaveType Type, DateOnly From, DateOnly To, int DaysInRange);

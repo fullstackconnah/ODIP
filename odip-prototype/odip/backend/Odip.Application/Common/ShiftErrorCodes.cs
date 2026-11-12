@@ -83,4 +83,5 @@ public static class ShiftErrorCodes
     public const string ShiftClientTimeBeforeStart = "SHIFT_CLIENT_TIME_BEFORE_START";
     public const string ShiftBreakIdConflict = "SHIFT_BREAK_ID_CONFLICT";
     public const string ShiftNoteIdConflict = "SHIFT_NOTE_ID_CONFLICT";
+    public const string ShiftCancellationReasonInvalid = "SHIFT_CANCELLATION_REASON_INVALID";
 }

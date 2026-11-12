@@ -380,6 +380,13 @@ export type OvernightSupportType = typeof OVERNIGHT_SUPPORT_TYPES[number]
 export const SHIFT_STATUSES = ['Draft', 'Published', 'Completed', 'Cancelled', 'InProgress', 'PendingReview'] as const
 export type ShiftStatus = typeof SHIFT_STATUSES[number]
 
+/** Why a shift was cancelled (the server's ShiftCancellationReason, in its order). The labels are in lib/shiftCancellationReasons.ts. */
+export const SHIFT_CANCELLATION_REASON_VALUES = [
+  'ParticipantUnwell', 'ParticipantFamily', 'ParticipantTransport', 'ParticipantDidNotAttend', 'ParticipantOther',
+  'StaffUnavailable', 'ProviderCancelled', 'Weather', 'RosteredInError', 'Other',
+] as const
+export type ShiftCancellationReason = typeof SHIFT_CANCELLATION_REASON_VALUES[number]
+
 // Subset of SHIFT_STATUSES a coordinator can actually set via PUT /shifts/{id} —
 // RosteringController.UpdateShift's fromAllowed/toAllowed gate only ever allows a
 // Draft/Published/Cancelled source AND target; InProgress/PendingReview/Completed are

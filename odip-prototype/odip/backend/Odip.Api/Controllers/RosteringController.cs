@@ -271,7 +271,7 @@ public class RosteringController : ControllerBase
                 Id = shift.Id, ParticipantId = shift.ParticipantId, ParticipantName = participant?.FullName ?? string.Empty,
                 StaffId = shift.UserId, StaffName = staff?.FullName,
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
-                DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
+                DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status, CancellationReason = shift.CancellationReason,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
                 GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
@@ -742,6 +742,8 @@ public class RosteringController : ControllerBase
         // A PUT that leaves the location out keeps the stored one; null or blank clears it.
         var location = TidyLocation(dto.Location);
         if (dto.HasLocation && location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
+        // The JSON converter refuses an unknown name but binds a bare number, so a value outside the enum is refused here, before anything is saved.
+        if (dto.CancellationReason is { } reason && !Enum.IsDefined(reason)) return BadRequest(ApiResponse<ShiftDto>.Fail("Choose one of the listed cancellation reasons.", ShiftErrorCodes.ShiftCancellationReasonInvalid));
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
         // Ruling 2: what the activity owns (who, which participant, ratio, day and times) cannot change here; notes, location and cancelling still save.
@@ -860,7 +862,7 @@ public class RosteringController : ControllerBase
         // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
         shift.Notes = dto.Notes;
         // The cancel time is the notice a short-notice cancellation claim measures. Only a shift that was Published had been promised to anyone; a Draft cancel stays null, and an edit of a cancelled shift keeps its time.
-        ApplyStatus(shift, dto.Status, _clock.GetUtcNow().UtcDateTime);
+        ApplyStatus(shift, dto.Status, _clock.GetUtcNow().UtcDateTime, dto.CancellationReason);
         if (dto.HasLocation) shift.Location = location;
         if (dto.HasServiceLocationId) shift.ServiceLocationId = dto.ServiceLocationId;
         shift.SupportGroupCode = supportCode;
@@ -1297,7 +1299,7 @@ public class RosteringController : ControllerBase
         var shrunk = await UpdateShiftLockedAsync(shift.Id, new UpdateShiftDto
         {
             ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = split.CutAt, Ratio = shift.Ratio, NightType = shift.NightType,
-            Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status,
+            Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status, CancellationReason = shift.CancellationReason,
         }, ct);
         if (shrunk.Result is not OkObjectResult) return await UndoAsync(AssignRefusalMessage(shrunk.Result));
 
@@ -2577,7 +2579,7 @@ public class RosteringController : ControllerBase
             Id = shift.Id, ParticipantId = shift.ParticipantId, ParticipantName = participant?.FullName ?? string.Empty,
             StaffId = shift.UserId, StaffName = staff?.FullName,
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
-            DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
+            DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status, CancellationReason = shift.CancellationReason,
             ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
             GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
@@ -2683,12 +2685,14 @@ public class RosteringController : ControllerBase
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
     /// <summary>Sets a shift's status and keeps the cancel-notice clock: only a shift that was Published had been promised to anyone, so only it gets a CancelledAt, and leaving Cancelled clears it. The shift PUT and the group attendance mark both use it.</summary>
-    internal static void ApplyStatus(Shift shift, ShiftStatus next, DateTime utcNow)
+    internal static void ApplyStatus(Shift shift, ShiftStatus next, DateTime utcNow, ShiftCancellationReason? reason = null)
     {
         var previous = shift.Status;
         shift.Status = next;
         if (next != ShiftStatus.Cancelled) shift.CancelledAt = null;
         else if (previous == ShiftStatus.Published) shift.CancelledAt = utcNow;
+        // The reason lives and dies with the cancellation: stored on a cancel, kept when an already cancelled shift is saved without one, cleared on any other status.
+        shift.CancellationReason = next != ShiftStatus.Cancelled ? null : reason ?? (previous == ShiftStatus.Cancelled ? shift.CancellationReason : null);
     }
 
     internal const string AttendanceClosedMessage = "Attendance is final once every staff shift is approved.";

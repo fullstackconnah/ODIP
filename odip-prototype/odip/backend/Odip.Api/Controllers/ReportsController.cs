@@ -154,6 +154,24 @@ public class ReportsController : ControllerBase
         return Ok(ApiResponse<List<ShiftFulfilmentWeekDto>>.Ok(rows));
     }
 
+    /// <summary>Cancelled staff shifts in the range grouped by reason, on the same predicate as the fulfilment report's Cancelled column so the two totals agree. Enum order, no reason last, reasons with no shifts left out.</summary>
+    [HttpGet("cancellations-by-reason")]
+    public async Task<ActionResult<ApiResponse<List<CancellationReasonCountDto>>>> CancellationsByReason([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        if (TenantId is not { } tid) return Refuse<CancellationReasonCountDto>(ChooseOrganisation);
+        if (RangeRefused(from, to)) return Refuse<CancellationReasonCountDto>(RangeMessage);
+        var (f, t) = (from!.Value, to!.Value);
+
+        var rows = (await _db.Shifts.AsNoTracking()
+                .Where(s => s.TenantId == tid && s.GroupActivityId == null && s.Status == ShiftStatus.Cancelled && s.ServiceDate >= f && s.ServiceDate <= t)
+                .GroupBy(s => s.CancellationReason)
+                .Select(g => new CancellationReasonCountDto(g.Key, g.Count()))
+                .ToListAsync(ct))
+            .OrderBy(r => r.Reason is null).ThenBy(r => r.Reason)
+            .ToList();
+        return Ok(ApiResponse<List<CancellationReasonCountDto>>.Ok(rows));
+    }
+
     [HttpGet("leave-taken")]
     public async Task<ActionResult<ApiResponse<List<LeaveTakenRowDto>>>> LeaveTaken([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {

@@ -1,10 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Download } from 'lucide-react'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { useHoursByWorkerReport, useLeaveTakenReport, useShiftFulfilmentReport } from '@/api/hooks'
+import { useCancellationsByReasonReport, useHoursByWorkerReport, useLeaveTakenReport, useShiftFulfilmentReport } from '@/api/hooks'
 import { LEAVE_TYPE_LABELS } from '@/api/types/leave'
-import type { HoursByWorkerRowDto, LeaveTakenRowDto, ShiftFulfilmentWeekDto } from '@/api/types/reports'
+import type { CancellationReasonCountDto, HoursByWorkerRowDto, LeaveTakenRowDto, ShiftFulfilmentWeekDto } from '@/api/types/reports'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -14,6 +14,7 @@ import { RetryCallout } from '@/components/PageState'
 import { useShowAll } from '@/components/ShowAllButton'
 import { TextField } from '@/components/TextField'
 import { csvFileName, downloadCsv, toCsv, type CsvValue } from '@/lib/csv'
+import { shiftCancellationReasonLabel } from '@/lib/shiftCancellationReasons'
 import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { TONE } from '@/lib/tone'
@@ -31,10 +32,10 @@ const byText = (a: string, b: string) => a.localeCompare(b, 'en-AU')
 const hours = (n: number) => n.toFixed(2)
 
 /** The rows in the order the table shows them, so a CSV follows the screen. Same comparator rule as DataTable's own sort. */
-function sortedRows<T>(rows: T[], columns: Column<T>[], sort: SortState): T[] {
-  const col = columns.find(c => c.key === sort.key)
+function sortedRows<T>(rows: T[], columns: Column<T>[], sort: SortState | null): T[] {
+  const col = columns.find(c => c.key === sort?.key)
   if (!col?.sortFn) return rows
-  return [...rows].sort((a, b) => (sort.direction === 'desc' ? -1 : 1) * col.sortFn!(a, b))
+  return [...rows].sort((a, b) => (sort!.direction === 'desc' ? -1 : 1) * col.sortFn!(a, b))
 }
 
 const HOURS_COLUMNS: Column<HoursByWorkerRowDto>[] = [
@@ -69,6 +70,14 @@ const FULFILMENT_COLUMNS: Column<ShiftFulfilmentWeekDto>[] = [
   },
 ]
 
+/** A row's key: the no-reason row has a null reason, which cannot key a table row. */
+type CancellationRow = CancellationReasonCountDto & { key: string }
+
+const CANCELLATION_COLUMNS: Column<CancellationRow>[] = [
+  { key: 'reason', header: 'Reason', sortable: true, mobile: 'primary', sortFn: (a, b) => byText(shiftCancellationReasonLabel(a.reason), shiftCancellationReasonLabel(b.reason)), render: r => shiftCancellationReasonLabel(r.reason) },
+  { key: 'cancelled', header: 'Cancelled shifts', sortable: true, align: 'right', sortFn: (a, b) => a.cancelled - b.cancelled, render: r => <span className={NUMBER}>{r.cancelled}</span> },
+]
+
 const LEAVE_COLUMNS: Column<LeaveTakenRowDto>[] = [
   { key: 'workerName', header: 'Worker', sortable: true, mobile: 'primary', sortFn: (a, b) => byText(a.workerName, b.workerName) || byText(a.from, b.from) },
   { key: 'type', header: 'Type', mobile: 'meta', render: r => LEAVE_TYPE_LABELS[r.type] },
@@ -91,11 +100,13 @@ type SectionProps<T extends object> = {
   noun: string
   loadingText: string
   emptyText: string
-  query: UseQueryResult<T[]>
+  query: UseQueryResult<unknown[]>
+  /** The table rows when they are the query's rows reshaped (a row key added); otherwise the query data is used as it comes. */
+  rows?: T[]
   rangeValid: boolean
   columns: Column<T>[]
   keyField: keyof T & string
-  sort?: SortState
+  sort?: SortState | null
   onSortChange?: (sort: SortState | null) => void
   downloadName: string
   csvFailed: boolean
@@ -104,9 +115,9 @@ type SectionProps<T extends object> = {
 
 /** The shell of one report: header strip with its Download CSV, a description, then the table or the one state strip that stands in for it. */
 function ReportSection<T extends object>({
-  id, title, description, noun, loadingText, emptyText, query, rangeValid, columns, keyField, sort, onSortChange, downloadName, csvFailed, onDownload,
+  id, title, description, noun, loadingText, emptyText, query, rows: shaped, rangeValid, columns, keyField, sort, onSortChange, downloadName, csvFailed, onDownload,
 }: SectionProps<T>) {
-  const rows = query.data ?? []
+  const rows = shaped ?? (query.data ?? []) as T[]
   const tableRef = useRef<HTMLDivElement>(null)
   const showAll = useShowAll(rows.length, tableRef, 'tbody tr')
   const hasData = query.data !== undefined
@@ -188,9 +199,12 @@ export default function ReportsPage() {
 
   const hoursQuery = useHoursByWorkerReport(range, enabled)
   const fulfilmentQuery = useShiftFulfilmentReport(range, enabled)
+  const cancellationsQuery = useCancellationsByReasonReport(range, enabled)
   const leaveQuery = useLeaveTakenReport(range, enabled)
+  const cancellationRows = useMemo<CancellationRow[]>(() => (cancellationsQuery.data ?? []).map(r => ({ ...r, key: r.reason ?? 'NotRecorded' })), [cancellationsQuery.data])
 
   const [hoursSort, setHoursSort] = useState(HOURS_SORT)
+  const [cancellationSort, setCancellationSort] = useState<SortState | null>(null)
   const [leaveSort, setLeaveSort] = useState(LEAVE_SORT)
   const [csvFailed, setCsvFailed] = useState<{ report: string; range: string } | null>(null)
   const failedFor = (report: string) => csvFailed?.report === report && csvFailed.range === rangeKey
@@ -211,7 +225,7 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <AnnouncementRegion message={csvFailed ? CSV_FAILED : ''} />
-      <PageHeader title="Reports" subtitle="Hours, shift fulfilment and leave for the dates you pick, each ready to download as a CSV.">
+      <PageHeader title="Reports" subtitle="Hours, shift fulfilment, cancellations and leave for the dates you pick, each ready to download as a CSV.">
         <div className="flex flex-wrap items-start gap-2 max-md:grid max-md:w-full max-md:grid-cols-2">
           <TextField className={ERROR_UNDER_FIELD} label="From" type="date" value={from} max={to || undefined} error={fromError} onChange={e => setDate('from', e.target.value)} />
           <TextField className={ERROR_UNDER_FIELD} label="To" type="date" value={to} min={from || undefined} error={toError} onChange={e => setDate('to', e.target.value)} />
@@ -260,6 +274,28 @@ export default function ReportsPage() {
               'shift-fulfilment-by-week',
               ['Week starting', 'Shifts', 'Filled', 'Unstaffed', 'Cancelled', 'Fill rate (%)', 'part_week'],
               (fulfilmentQuery.data ?? []).map(r => [r.weekStart, r.shifts, r.filled, r.unstaffed, r.cancelled, r.fillRatePercent, r.partWeek]),
+            )}
+          />
+          <ReportSection
+            id="cancellations-by-reason"
+            title="Cancellations by reason"
+            description="Cancelled shifts in this range, counted by the reason chosen when each was cancelled. Shifts cancelled without a reason show as Not recorded."
+            noun="cancellations by reason"
+            loadingText="Loading cancellations…"
+            emptyText="No cancelled shifts in this range. Try a wider date range."
+            query={cancellationsQuery}
+            rows={cancellationRows}
+            rangeValid={rangeValid}
+            columns={CANCELLATION_COLUMNS}
+            keyField="key"
+            sort={cancellationSort}
+            onSortChange={setCancellationSort}
+            downloadName="cancellations by reason"
+            csvFailed={failedFor('cancellations-by-reason')}
+            onDownload={() => download(
+              'cancellations-by-reason',
+              ['Reason', 'Cancelled shifts'],
+              sortedRows(cancellationRows, CANCELLATION_COLUMNS, cancellationSort).map(r => [shiftCancellationReasonLabel(r.reason), r.cancelled]),
             )}
           />
           <ReportSection

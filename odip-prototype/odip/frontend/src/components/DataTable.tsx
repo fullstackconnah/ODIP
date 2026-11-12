@@ -104,7 +104,8 @@ export type DataTableProps<T> = {
   defaultSort?: SortState
   /** Renders only the first N rows after sorting (the "Show all" collapse). Selection and counts still use every row. */
   limit?: number
-  sort?: SortState
+  /** Controlled sort. `null` is controlled with no sort active: rows stay in the order given. */
+  sort?: SortState | null
   onSortChange?: (sort: SortState | null) => void
   onRowClick?: (row: T) => void
   rowClassName?: (row: T) => string
