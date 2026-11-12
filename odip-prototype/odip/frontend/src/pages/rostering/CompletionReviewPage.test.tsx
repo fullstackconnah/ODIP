@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CompletionReviewPage from './CompletionReviewPage'
 import type { CompletionQueueItemDto, ShiftCompletionDto, PagedResult, StaffListDto } from '@/api/types'
 import { emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
+import { TONE } from '@/lib/tone'
 
 const {
   mockUseCompletions, mockUseCompletion, mockUseStaff,
@@ -799,5 +800,32 @@ describe('CompletionReviewPage tidy (m1112)', () => {
     expect(within(dialog).getByText("Couldn't load what the worker entered. Close this and open it again.")).toBeInTheDocument()
     expect(within(dialog).queryByText('Loading what the worker entered...')).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: /^approve$/i })).toBeEnabled()
+  })
+
+  it('reads the start and finish variance separately; a normal row is neutral, an outlier keeps the warning tone', () => {
+    showRow({ varianceMinutesStart: -3, varianceMinutesEnd: 12, isOutlierVariance: false })
+    const { unmount } = renderPage()
+    const pill = screen.getByText('Start -3 min · Finish +12 min')
+    expect(pill).toHaveAttribute('data-status-badge')
+    expect(pill).toHaveClass(...TONE.neutral.solid.split(' '))
+    unmount()
+
+    showRow({ varianceMinutesStart: 0, varianceMinutesEnd: 20, isOutlierVariance: true })
+    const second = renderPage()
+    const outlier = screen.getByText('Start on time · Finish +20 min')
+    expect(outlier).toHaveClass(...TONE.warning.solid.split(' '))
+    second.unmount()
+
+    showRow({ varianceMinutesStart: 0, varianceMinutesEnd: 0 })
+    renderPage()
+    expect(screen.getByText('On time')).toHaveAttribute('data-status-badge')
+  })
+
+  it('mutes the whole Rostered line and gives the Actual value the weight', () => {
+    showRow()
+    renderPage()
+    expect(screen.getByText(/^Rostered:/)).toHaveClass('text-[var(--color-muted-foreground)]')
+    const actual = screen.getByText(/^Actual:/).parentElement as HTMLElement
+    expect(actual.querySelector('.font-medium')).not.toBeNull()
   })
 })

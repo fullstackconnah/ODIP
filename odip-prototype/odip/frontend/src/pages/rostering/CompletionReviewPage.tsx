@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { Callout } from '@/components/Callout'
+import { StatusBadge } from '@/components/StatusBadge'
 import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
@@ -44,10 +45,11 @@ const STATUS_FILTER_ITEMS: { value: ShiftStatus; label: string }[] = [
   { value: 'Published', label: 'Returned / not submitted' },
 ]
 
-function varianceBadgeClass(isOutlier: boolean): string {
-  return isOutlier
-    ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
-    : 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+/** Start and finish read apart so "-2 / +5" can't be taken as one range; both on time reads as one word. */
+function varianceLabel(start: number, finish: number): string {
+  if (start === 0 && finish === 0) return formatVarianceMinutes(0)
+  const side = (m: number) => (m === 0 ? 'on time' : formatVarianceMinutes(m))
+  return `Start ${side(start)} · Finish ${side(finish)}`
 }
 
 const EXTRA_TIME_LABEL: Record<ExtraTimeDecision, string> = { Pending: 'Extra time to decide', Approved: 'Extra time paid', Declined: 'Extra time not paid' }
@@ -85,13 +87,14 @@ function rosteredVsActual(row: CompletionQueueItemDto) {
   const timeFmt = { timeStyle: 'short' as const }
   return (
     <div className="text-xs space-y-0.5 whitespace-nowrap">
-      <div>
-        <span className="text-[var(--color-muted-foreground)]">Rostered:</span>{' '}
-        {formatWithTimeZone(row.rosteredStart, row.timeZoneId, timeFmt)}–{formatWithTimeZone(row.rosteredEnd, row.timeZoneId, timeFmt)}
+      <div className="text-[var(--color-muted-foreground)]">
+        Rostered: {formatWithTimeZone(row.rosteredStart, row.timeZoneId, timeFmt)}–{formatWithTimeZone(row.rosteredEnd, row.timeZoneId, timeFmt)}
       </div>
       <div>
         <span className="text-[var(--color-muted-foreground)]">Actual:</span>{' '}
-        {formatWithTimeZone(row.actualStart, row.timeZoneId, timeFmt)}–{row.actualEnd ? formatWithTimeZone(row.actualEnd, row.timeZoneId, timeFmt) : '—'}
+        <span className="font-medium text-[var(--color-foreground)]">
+          {formatWithTimeZone(row.actualStart, row.timeZoneId, timeFmt)}–{row.actualEnd ? formatWithTimeZone(row.actualEnd, row.timeZoneId, timeFmt) : '—'}
+        </span>
       </div>
     </div>
   )
@@ -409,9 +412,7 @@ export default function CompletionReviewPage() {
           {row.missingDetails.length > 0 && (
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Needs details</span>
           )}
-          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
-            {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
-          </span>
+          <StatusBadge tone={row.isOutlierVariance ? 'warning' : 'neutral'} label={varianceLabel(row.varianceMinutesStart, row.varianceMinutesEnd)} />
           {row.offRoster && (
             // Words, not colour alone: the start or a set finish is more than 5 minutes off the roster, whatever the outlier setting says.
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Off roster</span>
