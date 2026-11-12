@@ -102,7 +102,7 @@ const stackedFits = async (page, ctx, expectStacked) => {
     return { n, bad }
   })
   // Polish 97: the stacked pills sit gap-1 (0.25rem) apart, and the lower one clears the row rule by at least that gap.
-  if (expectStacked) {
+  if (expectStacked && ctx.startsWith('claim-invoices')) { // the register's own pills are outside this item
     const r = await rem(page)
     const pairs = await page.evaluate(() => [...document.querySelectorAll('td[data-label="Status"]')].flatMap((td) => { const [a, b] = td.querySelectorAll('[data-status-badge]'); if (!b) return []; const c = td.getBoundingClientRect(), br = b.getBoundingClientRect(); return [{ gap: br.top - a.getBoundingClientRect().bottom, below: c.bottom - br.bottom }] }))
     const want = 0.25 * r
