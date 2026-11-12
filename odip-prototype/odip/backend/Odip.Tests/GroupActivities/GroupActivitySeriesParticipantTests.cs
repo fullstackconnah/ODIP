@@ -447,7 +447,7 @@ public class GroupActivitySeriesParticipantTests
     }
 
     [Fact]
-    public async Task Attach_LockedPatternShift_NotAttached()
+    public async Task Attach_CancelledPatternShift_NotAttached()
     {
         var fx = new GroupActivityFixture();
         var rows = await Weeks(fx);
@@ -457,6 +457,41 @@ public class GroupActivitySeriesParticipantTests
         var shifts = await ShiftsOf(fx, p);
         Assert.Equal(2, shifts.Count);
         Assert.Null(shifts.Single(s => s.Id == cancelled.Id).GroupActivityId);
+    }
+
+    [Fact]
+    public async Task Attach_LockedPatternShift_NotAttachedNorRetimed()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await Weeks(fx);
+        var p = fx.AddParticipant();
+        var locked = PatternShift(fx, p, Block(fx, p, 11, 15), rows[0].ServiceDate, ShiftStatus.PendingReview);
+        var refused = await Add(fx, rows[0].Id, p, GroupActivityScope.Series);
+        Assert.Equal("GA_PARTICIPANT_SHIFT_STARTED", GroupActivityFixture.Error(refused, 409));
+        var shift = Assert.Single(await ShiftsOf(fx, p));
+        Assert.Equal((locked.Id, null, new TimeOnly(11, 0), new TimeOnly(15, 0)), (shift.Id, shift.GroupActivityId, shift.StartTime, shift.EndTime));
+    }
+
+    [Fact]
+    public async Task Attach_OtherTenantsLeftBehindShiftWithoutPattern_NeverUsed()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await Weeks(fx);
+        var p = fx.AddParticipant();
+        var other = Guid.NewGuid();
+        var theirs = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = other, ParticipantId = p.Id, ServiceDate = rows[0].ServiceDate, StartTime = new TimeOnly(11, 0), EndTime = new TimeOnly(15, 0),
+            Ratio = SupportRatio.OneToOne, Status = ShiftStatus.Draft, ShiftPatternId = null, SupportGroupCode = CatalogueGroups.GroupActivitiesGroupCode,
+        };
+        fx.Seed.Shifts.Add(theirs);
+        fx.Seed.SaveChanges();
+        GroupActivityFixture.Body(await Add(fx, rows[0].Id, p, null, db: fx.Seed, role: "SuperAdmin"), 200);
+        var shifts = await ShiftsOf(fx, p);
+        Assert.Equal(2, shifts.Count);
+        var kept = shifts.Single(s => s.Id == theirs.Id);
+        Assert.Equal((other, null, new TimeOnly(11, 0), new TimeOnly(15, 0)), (kept.TenantId, kept.GroupActivityId, kept.StartTime, kept.EndTime));
+        Assert.Equal((fx.TenantId, rows[0].Id), (shifts.Single(s => s.Id != theirs.Id).TenantId, shifts.Single(s => s.Id != theirs.Id).GroupActivityId!.Value));
     }
 
     [Theory]
