@@ -35,6 +35,7 @@ public static class AuditedEntities
         typeof(GroupActivity),
         typeof(GroupActivityStaff),
         typeof(GroupActivitySeries),
+        typeof(GroupActivitySeriesParticipant),
 
         // ShiftPattern is the origination point for a recurring staff/participant pairing:
         // every Shift the pattern later expands into inherits DefaultUserId from it, so who
