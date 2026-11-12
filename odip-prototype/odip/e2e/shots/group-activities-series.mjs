@@ -166,6 +166,7 @@ for (const vp of VIEWPORTS) {
         const [s, u] = await Promise.all([box(dlg.getByLabel(/^Repeats/)), box(dlg.getByLabel(/^Until/))])
         check(`${tag} 2 Repeats top = Until top with the range error showing`, near(s.y, u.y), { repeats: s.y, until: u.y })
         check(`${tag} 10 Until range error at most 2 lines`, (await lines(rangeErr)) <= 2, { lines: await lines(rangeErr) })
+        await dlg.getByLabel(/^Until/).evaluate((el) => el.scrollIntoView({ block: 'center' })) // the natural-size crop resets the scroll
         checks.push(await layoutCheck(page, dlg, `create dialog ${tag}`))
       }
       await context.close()
