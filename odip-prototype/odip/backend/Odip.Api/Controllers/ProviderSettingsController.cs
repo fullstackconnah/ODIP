@@ -136,7 +136,9 @@ public partial class ProviderSettingsController : ControllerBase
         }
 
         // Only a changed ABN is checked: every settings section echoes the whole row, so a stored value that predates the rule still saves. Blank and length are the DTO's.
-        if (dto.ABN != s.ABN && !Regex.IsMatch(dto.ABN, @"^[0-9 ]+\z"))
+        // A pasted ABN can carry a tab or non-breaking space the screen accepts, so it is tidied first; an unchanged echo is left exactly as stored.
+        var abn = dto.ABN == s.ABN ? dto.ABN : TidyAbn(dto.ABN);
+        if (abn != s.ABN && !Regex.IsMatch(abn, @"^[0-9 ]+\z"))
             return BadRequest(ApiResponse<bool>.Fail("Enter the ABN as numbers only, like 12 345 678 901."));
 
         // Bank details print on every invoice. Checked on the trimmed value and only when changed, like the ABN, so an odd stored value still re-saves; blank clears.
@@ -175,7 +177,7 @@ public partial class ProviderSettingsController : ControllerBase
 
         // Money and identity fields: one field-change row each, only when the value moves (the row is never audited whole). Bank values are never copied, only that they changed.
         AuditIfChanged(s, nameof(ProviderSettings.RegistrationNumber), s.RegistrationNumber, dto.RegistrationNumber);
-        AuditIfChanged(s, nameof(ProviderSettings.ABN), s.ABN, dto.ABN);
+        AuditIfChanged(s, nameof(ProviderSettings.ABN), s.ABN, abn);
         AuditIfChanged(s, nameof(ProviderSettings.State), s.State, state);
         AuditIfChanged(s, nameof(ProviderSettings.GSTRegistered), s.GSTRegistered.ToString(), dto.GSTRegistered.ToString());
         AuditIfChanged(s, nameof(ProviderSettings.IsPaceProvider), s.IsPaceProvider.ToString(), dto.IsPaceProvider.ToString());
@@ -183,7 +185,7 @@ public partial class ProviderSettingsController : ControllerBase
         AuditIfChanged(s, nameof(ProviderSettings.BSB), s.BSB, bsb, mask: true);
         AuditIfChanged(s, nameof(ProviderSettings.AccountNumber), s.AccountNumber, accountNumber, mask: true);
 
-        s.RegistrationNumber = dto.RegistrationNumber; s.ABN = dto.ABN;
+        s.RegistrationNumber = dto.RegistrationNumber; s.ABN = abn;
         s.OrganisationName = dto.OrganisationName; s.Address = dto.Address;
         s.GSTRegistered = dto.GSTRegistered; s.IsPaceProvider = dto.IsPaceProvider;
         s.BankAccountName = dto.BankAccountName; s.BSB = bsb;
@@ -290,6 +292,9 @@ public partial class ProviderSettingsController : ControllerBase
     private static string Blank(string? v) => v?.Trim() ?? "";
 
     /// <summary>The refusal for a typed BSB (6 digits, an optional dash or space after the third), or null; blank clears the field and passes. Expects the trimmed value.</summary>
+    /// <summary>Every run of whitespace (tab, non-breaking space, any Unicode space) becomes one ordinary space; outer whitespace goes.</summary>
+    internal static string TidyAbn(string abn) => Regex.Replace(abn, @"\s+", " ").Trim();
+
     internal static string? BsbProblem(string? bsb) =>
         string.IsNullOrEmpty(bsb) || BsbPattern().IsMatch(bsb) ? null : "Enter the BSB as 6 numbers, like 062-000.";
 

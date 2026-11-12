@@ -2,8 +2,10 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -41,8 +43,8 @@ public class ProviderSettingsAbnTests
     [InlineData("ABC")]
     [InlineData("12-345-678-901")]
     [InlineData("=1+1")]
+    [InlineData("ABN 12 345 678 901")]
     [InlineData("12 345 678 90a")]
-    [InlineData("12\n345")]
     public async Task A_changed_ABN_with_other_characters_is_400_and_nothing_is_written(string abn)
     {
         var (db, controller) = Create("12345678901");
@@ -99,5 +101,50 @@ public class ProviderSettingsAbnTests
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal("ABC", await StoredAbn(db));
+    }
+
+    [Theory]
+    [InlineData("12\t345\t678\t901")]
+    [InlineData("12\u00A0345\u00A0678\u00A0901")]
+    [InlineData(" 12 345 678 901 ")]
+    [InlineData("12  345 678 901")]
+    [InlineData("12\n345\r\n678 901")]
+    public async Task A_pasted_ABN_with_odd_whitespace_is_saved_with_single_ordinary_spaces(string abn)
+    {
+        var (db, controller) = Create("98765432109");
+        using var _ = db;
+
+        var result = await controller.Upsert(Dto(abn), CancellationToken.None);
+
+        Assert.IsNotType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("12 345 678 901", await StoredAbn(db));
+    }
+
+    [Fact]
+    public async Task A_stored_ABN_with_odd_spacing_is_left_untouched_when_echoed_unchanged()
+    {
+        var (db, controller) = Create(" 12  345 ");
+        using var _ = db;
+
+        await controller.Upsert(Dto(" 12  345 "), CancellationToken.None);
+
+        Assert.Equal(" 12  345 ", await StoredAbn(db));
+    }
+
+    [Fact]
+    public async Task A_new_tenant_setup_saves_the_pasted_ABN_tidied()
+    {
+        var superAdmin = new Mock<ICurrentTenant>();
+        superAdmin.Setup(t => t.TenantId).Returns((Guid?)null);
+        superAdmin.Setup(t => t.IsSuperAdmin).Returns(true);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)).Options;
+        using var db = new OdipDbContext(options, superAdmin.Object);
+        var controller = new TenantsController(db, new Mock<IFirebaseUserService>().Object);
+
+        await controller.CreateWithSetup(new CreateTenantWithSetupDto("Brightside Care", "brightside.example.com",
+            new TenantSetupProviderDto { State = "VIC", ABN = "12\u00A0345\t678 901 " }, null), CancellationToken.None);
+
+        Assert.Equal("12 345 678 901", (await db.ProviderSettings.IgnoreQueryFilters().SingleAsync()).ABN);
     }
 }
