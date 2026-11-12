@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2, AlertTriangle, ChevronRight } from 'lucide-react'
-import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel } from '@/api/types'
+import type { ShiftDto, UpdateShiftDto, RosterFindingDto, ShiftCancellationReason, SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES, COORDINATOR_SETTABLE_SHIFT_STATUSES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
@@ -34,6 +34,7 @@ import { SupportTypeField } from './SupportTypeField'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
+import { SHIFT_CANCELLATION_REASONS } from '@/lib/shiftCancellationReasons'
 import { blockedOnlyByDoubleBooking, getRosterGate } from '../lib/rosterGate'
 import { canDeleteShift, firstName, isLockedShift, lockedWords } from '../lib/rosterDrag'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
@@ -139,6 +140,9 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Draft (the backend's UpdateShiftDto.Status defaults to Draft when the field is omitted).
   // Create always defaults to Draft — the backend hardcodes it there regardless of this value.
   const [status, setStatus] = useState<ShiftStatus>(existing?.status ?? 'Draft')
+  // Why the shift is cancelled. Needed only for a new cancel: a shift already cancelled (every one from before reasons existed has none) can still be saved without.
+  const [cancellationReason, setCancellationReason] = useState<ShiftCancellationReason | null>(existing?.cancellationReason ?? null)
+  const [reasonError, setReasonError] = useState<string>()
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [location, setLocation] = useState(existing?.location ?? '')
   const [serviceLocationId, setServiceLocationId] = useState(existing?.serviceLocationId ?? '')
@@ -371,7 +375,14 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     }
     setReasonRequired(false)
 
-    const payload: CreateShiftDto = {
+    if (status === 'Cancelled' && !cancellationReason && existing?.status !== 'Cancelled') {
+      setReasonError('Choose a cancellation reason.')
+      // The field can sit below the fold on a short screen: focus scrolls it into view for the person who pressed Save.
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
+      return
+    }
+
+    const payload: UpdateShiftDto = {
       participantId,
       staffId,
       serviceDate,
@@ -383,6 +394,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       // On edit the type goes only when this panel changed it: a panel opened before a pattern change moved the shift to a new type must not put the old one back with a notes edit.
       ...(!isEdit || supportGroupCode !== openedSupportGroupCode ? { supportGroupCode: supportGroupCode || null } : {}),
       status,
+      // Edit always says it, so a shift taken out of Cancelled sends none; the server keeps the stored reason when a cancelled shift sends null.
+      ...(isEdit ? { cancellationReason: status === 'Cancelled' ? cancellationReason : null } : {}),
       notes: notes.trim() || null,
       location: location.trim() || null,
       serviceLocationId: serviceLocationId || null,
@@ -590,9 +603,23 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <Dropdown
               variant="form"
               value={status}
-              onChange={v => setStatus(v as ShiftStatus)}
+              onChange={v => { setStatus(v as ShiftStatus); if (v !== 'Cancelled') setReasonError(undefined) }}
               disabled={!canWrite || statusLocked}
               items={statusItems}
+            />
+          </FormField>
+        )}
+
+        {isEdit && status === 'Cancelled' && (canWrite || !!cancellationReason) && (
+          <FormField label="Cancellation reason" required={existing?.status !== 'Cancelled'} error={reasonError}>
+            <Dropdown
+              variant="form"
+              label="Choose a reason"
+              value={cancellationReason ?? ''}
+              onChange={v => { setCancellationReason(v as ShiftCancellationReason); setReasonError(undefined) }}
+              disabled={!canWrite}
+              aria-invalid={reasonError ? 'true' : undefined}
+              items={SHIFT_CANCELLATION_REASONS}
             />
           </FormField>
         )}

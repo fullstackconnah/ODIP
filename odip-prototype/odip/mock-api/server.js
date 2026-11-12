@@ -1895,11 +1895,20 @@ function groupActivityFixture(days) {
   ]
 }
 
+// A shift saved from the slide-over: the fixture shifts are rebuilt per call, so a status and cancellation reason change is kept here and laid over them. The reason is set and cleared with the status, as ApplyStatus does on the server.
+const SHIFT_CANCELLATION_REASONS = ['ParticipantUnwell', 'ParticipantFamily', 'ParticipantTransport', 'ParticipantDidNotAttend', 'ParticipantOther', 'StaffUnavailable', 'ProviderCancelled', 'Weather', 'RosteredInError', 'Other']
+const shiftEdits = {}
+function applyShiftEdit(shift, body) {
+  const status = body.status ?? shift.status
+  const cancellationReason = status !== 'Cancelled' ? null : (body.cancellationReason ?? (shift.status === 'Cancelled' ? shift.cancellationReason ?? null : null))
+  return { ...shift, ...body, status, cancellationReason }
+}
 function rosterBoard(searchParams) {
   const asked = searchParams && searchParams.get('weekStart')
   const monday = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? planApproval.addDays(asked, -((planApproval.weekday(asked) + 6) % 7)) : BOARD_FIXTURE_WEEK
   const days = Array.from({ length: 7 }, (_, i) => planApproval.addDays(monday, i))
   const board = rosterBoardFixture()
+  for (const row of board.participantRows) row.shifts = row.shifts.map((sh) => (shiftEdits[sh.id] ? applyShiftEdit(sh, shiftEdits[sh.id]) : sh))
   if (monday !== BOARD_FIXTURE_WEEK) { board.participantRows = []; board.exceptions = [] }
   // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
   board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
@@ -1936,8 +1945,15 @@ function rosterBoardFixture() {
           staffId: 's-0003', staffName: "Jack O'Sullivan", serviceDate: '2026-09-08',
           startTime: '08:00:00', endTime: '17:00:00', endsNextDay: false, durationHours: 8,
           ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null,
-          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false,
-        }],
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false, cancellationReason: null,
+        }, ...[
+          { id: 'board-shift-0003', serviceDate: '2026-09-09', cancellationReason: 'ParticipantTransport' },
+          { id: 'board-shift-0004', serviceDate: '2026-09-10', cancellationReason: null },
+        ].map((c) => ({
+          id: c.id, participantId: 'p-0001', participantName: 'Liam Okafor', staffId: null, staffName: null, serviceDate: c.serviceDate,
+          startTime: '09:00:00', endTime: '12:00:00', endsNextDay: false, durationHours: 3, ratio: 'OneToOne', nightType: 'None', status: 'Cancelled', shiftPatternId: null,
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: false, cancellationReason: c.cancellationReason,
+        }))],
         tripBars: [], scheduledHours: 8, daysWithoutCover: 6,
       },
       {
@@ -1948,7 +1964,7 @@ function rosterBoardFixture() {
           staffId: 's-0004', staffName: 'Mei Zhang', serviceDate: '2026-09-08',
           startTime: '19:00:00', endTime: '07:00:00', endsNextDay: true, durationHours: 12,
           ratio: 'OneToOne', nightType: 'ActiveNight', status: 'Published', shiftPatternId: null,
-          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: true,
+          notes: null, overrideReason: null, findings: [], assigneeOnApprovedLeave: true, cancellationReason: null,
         }],
         tripBars: [], scheduledHours: 12, daysWithoutCover: 6,
       },
@@ -3488,6 +3504,19 @@ const putRoutes = [
     return i
   }],
   ...packageRoutesPut,
+  // PUT rostering/shifts/:id returns the saved shift with its cancellationReason; a value outside the list is refused as the server does.
+  ['rostering/shifts/:id', (id, body) => {
+    if (body.cancellationReason != null && !SHIFT_CANCELLATION_REASONS.includes(body.cancellationReason)) {
+      return respond(400, failEnvelope(null, ['Choose one of the listed cancellation reasons.'], 'SHIFT_CANCELLATION_REASON_INVALID'))
+    }
+    const planned = rosterShifts.find((x) => x.id === id)
+    const shift = planned || allFixtureShifts().find((x) => x.id === id) || rosterBoardFixture().participantRows.flatMap((row) => row.shifts).find((x) => x.id === id)
+    if (!shift) return respond(404, failEnvelope(null, ['Shift not found.']))
+    const saved = applyShiftEdit(shift, body)
+    if (planned) Object.assign(planned, saved)
+    else shiftEdits[id] = { status: saved.status, cancellationReason: saved.cancellationReason }
+    return saved
+  }],
   // The upsert never deletes: a row set back to Allowed stays, as on the server.
   ['rostering/compatibility', (body) => {
     const staffRow = staff.find((x) => x.id === body.staffId)

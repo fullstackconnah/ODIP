@@ -88,6 +88,7 @@ public record ShiftDto
     public SupportRatio Ratio { get; init; }
     public SleepoverType NightType { get; init; }
     public ShiftStatus Status { get; init; }
+    public ShiftCancellationReason? CancellationReason { get; init; }
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
     /// <summary>Where the shift happens, as a coordinator typed it for this shift; null when none.</summary>
@@ -424,6 +425,9 @@ public record CreateShiftDto
 public record UpdateShiftDto : CreateShiftDto
 {
     public ShiftStatus Status { get; init; } = ShiftStatus.Draft;
+
+    /// <summary>Why the shift is cancelled; read only when <see cref="Status"/> is Cancelled. Left out on an already cancelled shift keeps the stored reason; a value outside the enum is a 400.</summary>
+    public ShiftCancellationReason? CancellationReason { get; init; }
 
     /// <summary>
     /// The chip's Publish (roster-draft-publish): who the board showed on the shift. When named and the shift's worker is someone else now, the update is refused (409) so a stale chip

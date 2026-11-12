@@ -49,6 +49,7 @@ public class ReportsControllerTests
     {
         "hours" => Unpack(await c.HoursByWorker(from, to, CancellationToken.None)),
         "fulfilment" => Unpack(await c.ShiftFulfilment(from, to, CancellationToken.None)),
+        "cancellations" => Unpack(await c.CancellationsByReason(from, to, CancellationToken.None)),
         "leave" => Unpack(await c.LeaveTaken(from, to, CancellationToken.None)),
         _ => throw new ArgumentOutOfRangeException(nameof(endpoint)),
     };
@@ -328,6 +329,85 @@ public class ReportsControllerTests
         Assert.DoesNotContain(typeof(LeaveTakenRowDto).GetProperties(), p => p.Name is "Reason" or "DecisionNote");
     }
 
+    // ---------- cancellations by reason ----------
+
+    private static Shift AddCancelled(OdipDbContext db, DateOnly date, ShiftCancellationReason? reason, Guid? tenant = null, ShiftStatus status = ShiftStatus.Cancelled)
+    {
+        var s = AddShift(db, date, status, null, tenant);
+        s.CancellationReason = reason;
+        return s;
+    }
+
+    [Fact]
+    public async Task CancellationsByReason_SumsToTheFulfilmentCancelledTotal_ForTheSameRange()
+    {
+        using var db = TestDb.Create();
+        AddCancelled(db, From, ShiftCancellationReason.Weather);
+        AddCancelled(db, From.AddDays(1), ShiftCancellationReason.Weather);
+        AddCancelled(db, From.AddDays(9), ShiftCancellationReason.ParticipantUnwell);
+        AddCancelled(db, From.AddDays(2), null);
+        AddCancelled(db, From.AddDays(3), null);
+        AddCancelled(db, From, ShiftCancellationReason.Other).CancelledAt = null;   // a Draft that was cancelled has status Cancelled and counts, as it does in fulfilment
+        var group = AddCancelled(db, From, ShiftCancellationReason.StaffUnavailable);
+        group.GroupActivityId = Guid.NewGuid();                                    // a group line: out of both reports
+        AddCancelled(db, From.AddDays(-30), ShiftCancellationReason.Weather);       // out of range: out of both
+        AddCancelled(db, From, ShiftCancellationReason.Weather, status: ShiftStatus.Published);   // not cancelled: out of both
+        await db.SaveChangesAsync();
+
+        var byReason = Rows<CancellationReasonCountDto>(await Call(Controller(db), "cancellations", From, To));
+        var fulfilmentCancelled = Rows<ShiftFulfilmentWeekDto>(await Call(Controller(db), "fulfilment", From, To)).Sum(w => w.Cancelled);
+
+        Assert.Equal(fulfilmentCancelled, byReason.Sum(r => r.Cancelled));
+        Assert.Equal(6, fulfilmentCancelled);
+    }
+
+    [Fact]
+    public async Task CancellationsByReason_RowsInEnumOrder_NullLast_ZeroCountReasonsAbsent()
+    {
+        using var db = TestDb.Create();
+        AddCancelled(db, From, null);
+        AddCancelled(db, From, ShiftCancellationReason.Other);
+        AddCancelled(db, From, ShiftCancellationReason.Weather);
+        AddCancelled(db, From, ShiftCancellationReason.Weather);
+        AddCancelled(db, From, ShiftCancellationReason.ParticipantUnwell);
+        await db.SaveChangesAsync();
+
+        var rows = Rows<CancellationReasonCountDto>(await Call(Controller(db), "cancellations", From, To));
+
+        Assert.Equal([(ShiftCancellationReason.ParticipantUnwell, 1), (ShiftCancellationReason.Weather, 2), (ShiftCancellationReason.Other, 1), (null, 1)],
+            rows.Select(r => (r.Reason, r.Cancelled)));
+    }
+
+    [Fact]
+    public async Task CancellationsByReason_NoCancelledShifts_IsAnEmptyList()
+    {
+        using var db = TestDb.Create();
+        AddShift(db, From, ShiftStatus.Published, Guid.NewGuid());
+        await db.SaveChangesAsync();
+
+        Assert.Empty(Rows<CancellationReasonCountDto>(await Call(Controller(db), "cancellations", From, To)));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CancellationsByReason_LeavesOutAnotherTenantsShifts(bool filterOn)
+    {
+        var name = Guid.NewGuid().ToString();
+        using (var seed = TestDb.Create(name))
+        {
+            AddCancelled(seed, From, ShiftCancellationReason.Weather, TenantA);
+            AddCancelled(seed, From, ShiftCancellationReason.Weather, TenantB);
+            AddCancelled(seed, From, null, TenantB);
+            await seed.SaveChangesAsync();
+        }
+
+        using var db = filterOn ? TestDb.ForTenant(name, TenantA) : TestDb.Create(name);
+        var rows = Rows<CancellationReasonCountDto>(await Call(Controller(db), "cancellations", From, To));
+
+        Assert.Equal((ShiftCancellationReason.Weather, 1), (Assert.Single(rows).Reason, rows[0].Cancelled));
+    }
+
     // ---------- seams: tenant, organisation, range, roles ----------
 
     /// <summary>Tenant B has rows in the same dates for every report; a tenant-A caller sees only tenant A's. With <paramref name="filterOn"/> the context's own tenant filter does it;
@@ -369,6 +449,7 @@ public class ReportsControllerTests
     [Theory]
     [InlineData("hours")]
     [InlineData("fulfilment")]
+    [InlineData("cancellations")]
     [InlineData("leave")]
     public async Task SuperAdminNotViewingAs_Returns400ChooseOrganisation(string endpoint)
     {
@@ -380,6 +461,7 @@ public class ReportsControllerTests
     [Theory]
     [InlineData("hours")]
     [InlineData("fulfilment")]
+    [InlineData("cancellations")]
     [InlineData("leave")]
     public async Task Range_366DaysAccepted_367Refused_ReversedOrMissingRefused(string endpoint)
     {
@@ -400,6 +482,7 @@ public class ReportsControllerTests
     [Theory]
     [InlineData(nameof(ReportsController.HoursByWorker))]
     [InlineData(nameof(ReportsController.ShiftFulfilment))]
+    [InlineData(nameof(ReportsController.CancellationsByReason))]
     [InlineData(nameof(ReportsController.LeaveTaken))]
     public void Roles_MatchCompletions_AndNothingIsAnonymous(string action)
     {
