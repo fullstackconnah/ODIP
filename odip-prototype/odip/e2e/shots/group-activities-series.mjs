@@ -333,7 +333,8 @@ for (const vp of VIEWPORTS) {
           check(`${tag} B5 ${name} row has no sideways overflow`, over <= 0 && rb.r <= (await box(dlg)).r, { over })
         }
         await page.keyboard.press('Escape').catch(() => {})
-        checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `b-people-${tag}.png`))).checks)
+        // the board week strip behind the dialog scrolls sideways by design (untouched)
+        checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `b-people-${tag}.png`), { allow: ["div.overflow-x-auto"] })).checks)
       }
       await context.close()
     })
