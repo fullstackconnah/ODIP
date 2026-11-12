@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import { asRole, installDashboardDefaults, renderPage } from './dashboard/dashboardTestKit'
+import { mockUseDashboard } from './dashboard/dashboardHookMocks'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
 vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (await import('./dashboard/dashboardHookMocks')).mockUseDecisionGroups }))
@@ -42,5 +43,28 @@ describe('dashboard platform entry', () => {
     sessionStorage.setItem('odip_viewing_tenant', 'synthetic-tenant')
     renderPage()
     expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument()
+  })
+
+  it('asks an unscoped superadmin to choose an organisation instead of requesting the summary', () => {
+    sessionStorage.removeItem('odip_viewing_tenant')
+    asRole('SuperAdmin')
+    mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: false, isError: false, isFetching: false, fetchStatus: 'idle', errorUpdateCount: 0 })
+    const { container } = renderPage()
+    expect(mockUseDashboard).toHaveBeenCalledWith(false)
+    expect(screen.getByText('Choose an organisation to see its dashboard.')).toBeInTheDocument()
+    expect(container.querySelector('.animate-spin')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('requests the summary for an admin and for a superadmin viewing an organisation', () => {
+    asRole('Admin')
+    renderPage().unmount()
+    expect(mockUseDashboard).toHaveBeenLastCalledWith(true)
+    asRole('SuperAdmin')
+    sessionStorage.setItem('odip_viewing_tenant', 'synthetic-tenant')
+    renderPage()
+    expect(mockUseDashboard).toHaveBeenLastCalledWith(true)
+    sessionStorage.removeItem('odip_viewing_tenant')
+    expect(screen.queryByText('Choose an organisation to see its dashboard.')).toBeNull()
   })
 })

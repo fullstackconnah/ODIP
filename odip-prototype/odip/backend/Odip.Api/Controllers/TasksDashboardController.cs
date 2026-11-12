@@ -595,11 +595,14 @@ public class DashboardController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
+    private readonly ICurrentTenant? _tenant;
 
-    public DashboardController(OdipDbContext db, TimeProvider? clock = null)
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in GetSummary.
+    public DashboardController(OdipDbContext db, TimeProvider? clock = null, ICurrentTenant? tenant = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
+        _tenant = tenant;
     }
 
     public const string ChooseOrganisation = "Choose an organisation to view as first: setup steps belong to one organisation.";
@@ -626,9 +629,15 @@ public class DashboardController : ControllerBase
             EmploymentHeroAvailable: keys.IsConfigured)));
     }
 
+    public const string ChooseOrganisationForSummary = "Choose an organisation to view as first: the dashboard counts belong to one organisation.";
+
     [HttpGet("summary")]
     public async Task<ActionResult<ApiResponse<DashboardSummaryDto>>> GetSummary(CancellationToken ct)
     {
+        // An unscoped SuperAdmin bypasses every tenant filter: the counts would add up every organisation (a SuperAdmin viewing as one is IsSuperAdmin false).
+        if (_tenant is { IsSuperAdmin: true })
+            return BadRequest(ApiResponse<DashboardSummaryDto>.Fail(ChooseOrganisationForSummary));
+
         // "Today" is the provider's calendar date, not the UTC date (which is still yesterday until 10:00 or 11:00 in Sydney), so an
         // overdue task or a trip that started yesterday is judged from the provider's midnight.
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);

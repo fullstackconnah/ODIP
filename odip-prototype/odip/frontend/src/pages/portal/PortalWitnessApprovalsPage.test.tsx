@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import PortalWitnessApprovalsPage from './PortalWitnessApprovalsPage'
@@ -226,6 +226,36 @@ describe('PortalWitnessApprovalsPage', () => {
 
       await user.click(screen.getByRole('button', { name: /approve/i }))
       expect(within(screen.getByRole('alertdialog')).getByLabelText(/witness statement/i)).toHaveAttribute('maxlength', '4000')
+    })
+
+    describe('statement length hint', () => {
+      async function statementField(length: number) {
+        mockUsePendingWitnessRequests.mockReturnValue({ data: [makeIncidentRequest()], isLoading: false })
+        renderPage()
+        await userEvent.setup().click(screen.getByRole('button', { name: /approve/i }))
+        const field = within(screen.getByRole('alertdialog')).getByLabelText(/witness statement/i)
+        fireEvent.change(field, { target: { value: 'a'.repeat(length) } })
+        return field
+      }
+      const hintOf = (field: HTMLElement) => document.getElementById(field.getAttribute('aria-describedby')!)!
+
+      it('shows nothing at 3,599 characters', async () => {
+        const field = await statementField(3599)
+        expect(hintOf(field)).toHaveTextContent('')
+      })
+
+      it('shows the count from 3,600 characters, tied to the field and announced politely', async () => {
+        const field = await statementField(3612)
+        expect(hintOf(field)).toHaveTextContent('3,612 / 4,000')
+        expect(hintOf(field)).toHaveAttribute('aria-live', 'polite')
+      })
+
+      it('names the limit at 4,000 and leaves the field valid and the buttons enabled', async () => {
+        const field = await statementField(4000)
+        expect(hintOf(field)).toHaveTextContent("4,000 / 4,000. That's the limit, so check the end of your statement.")
+        expect(field).not.toHaveAttribute('aria-invalid')
+        expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^approve$/i })).toBeEnabled()
+      })
     })
 
     it('approves an incident witness request with no statement (leaves it undefined)', async () => {
