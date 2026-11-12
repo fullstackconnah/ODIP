@@ -26,6 +26,12 @@ const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
 const cssPx = (page, expr) => page.evaluate((e) => { const el = document.createElement('div'); el.style.height = `var(${e})`; document.body.appendChild(el); const v = el.getBoundingClientRect().height; el.remove(); return v }, expr)
 
+// Per option: the box, the label's text rects (one rect = one line) and whether the text sits inside the box.
+const toggleProbe = (g) => [...g.querySelectorAll('[role=radio]')].map((b) => {
+  const r = b.getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(b)
+  const rects = [...range.getClientRects()]; const t = range.getBoundingClientRect()
+  return { text: b.textContent, h: r.height, top: Math.round(r.top), w: Math.round(r.width * 10) / 10, textW: Math.round(t.width * 10) / 10, lines: rects.length, inside: t.left >= r.left - 0.5 && t.right <= r.right + 0.5 && b.scrollWidth <= b.clientWidth }
+})
 async function open(browser, W, H, touch) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: W, height: H }, hasTouch: touch, isMobile: touch, colorScheme: 'light', reducedMotion: 'reduce' })
   const page = await context.newPage()
@@ -52,18 +58,20 @@ try {
     await page.waitForTimeout(400)
 
     // 1 toggle: three options, height --control-h, one line, no clipped label
-    const toggle = await page.getByRole('radiogroup').first().evaluate((g) => [...g.querySelectorAll('[role=radio]')].map((b) => ({ h: b.getBoundingClientRect().height, top: Math.round(b.getBoundingClientRect().top), fits: b.scrollWidth <= b.clientWidth, text: b.textContent })))
+    const toggle = await page.getByRole('radiogroup').first().evaluate(toggleProbe)
+    if (touch) console.log('TOGGLE-390', JSON.stringify(toggle))
     const controlH = await cssPx(page, '--control-h')
     check(`${tag}: three view options`, toggle.length === 3 && toggle[2].text === 'By activity', JSON.stringify(toggle.map((t) => t.text)))
     check(`${tag}: toggle height equals --control-h (${controlH}px)`, toggle.every((t) => Math.abs(t.h - controlH) <= 1), JSON.stringify(toggle.map((t) => t.h)))
-    check(`${tag}: toggle on one line, labels not clipped`, new Set(toggle.map((t) => t.top)).size === 1 && toggle.every((t) => t.fits))
+    check(`${tag}: toggle on one line, labels not clipped`, new Set(toggle.map((t) => t.top)).size === 1 && toggle.every((t) => t.lines === 1 && t.inside), JSON.stringify(toggle))
 
     // 3, 4, 8: lane first cell, lane height, day cell alignment with the header
     const geo = await page.evaluate(() => {
       const day = document.querySelector('[data-activity-day]')
       const lane = day?.parentElement?.previousElementSibling
       const body = document.querySelector('[data-activity-day]')?.parentElement
-      const header = [...document.querySelectorAll('[data-roster-day], [data-day]')]
+      const strip = [...document.querySelectorAll('div[style*="grid-column"]')].find((e) => !e.querySelector('[data-activity-day]') && e.children.length === 7)
+      const header = [...(strip?.children ?? [])]
       const probe = document.createElement('div'); probe.style.width = 'var(--roster-sticky-col, 195px)'; lane?.appendChild(probe); const stickyCol = probe.getBoundingClientRect().width; probe.remove()
       return { stickyCol, laneW: lane?.getBoundingClientRect().width ?? 0, laneH: lane?.getBoundingClientRect().height ?? 0, cells: [...(body?.children ?? [])].map((c) => c.getBoundingClientRect().left), header: header.map((h) => h.getBoundingClientRect().left) }
     })
@@ -71,7 +79,8 @@ try {
     const rowH = await cssPx(page, '--row-h')
     check(`${tag}: lane first cell equals --roster-sticky-col, 195px below 1500 (${stickyCol}px)`, Math.abs(geo.laneW - stickyCol) <= 1, `lane ${geo.laneW}`)
     check(`${tag}: lane height at least --row-h (${rowH}px)`, geo.laneH >= rowH - 1, `lane ${geo.laneH}`)
-    if (geo.header.length === geo.cells.length) check(`${tag}: lane day cells line up with the header`, geo.cells.every((x, i) => Math.abs(x - geo.header[i]) <= 1), JSON.stringify({ cells: geo.cells, header: geo.header }))
+    check(`${tag}: header day cells found (7)`, geo.header.length === 7 && geo.cells.length === 7, `${geo.header.length}/${geo.cells.length}`)
+    if (geo.header.length === geo.cells.length) check(`${tag}: lane day cells line up with the header`, geo.cells.every((x, i) => Math.abs(x - geo.header[i]) <= 1), JSON.stringify({ cells: geo.cells.map(Math.round), header: geo.header.map(Math.round) }))
 
     // 5, 6: card open area and menu trigger
     const open1 = await bowling.evaluate((b) => parseFloat(getComputedStyle(b.parentElement).gridTemplateRows.split(' ')[1]))
@@ -96,9 +105,18 @@ try {
     }
 
     if (W === 1440) {
-      // short of staff (Art group needs 2, has 1) and draft (Swimming) are in the same capture, named for the checklist
+      // no staff (Art group: needs 2, has 0, the server's ACTIVITY_STAFF_SHORT) and Draft (Swimming): the card is asserted, then captured whole and cropped
+      const stateCard = (name) => page.getByRole('button', { name: new RegExp('^Group activity, ' + name) }).first().locator('xpath=..')
+      const art = stateCard('Art group'); await art.scrollIntoViewIfNeeded()
+      const pill = art.locator('[data-activity-count] .rounded-full')
+      check('activity-1440-no-staff: warning pill reads "0 of 2 staff"', (await pill.count()) === 1 && /0 of 2 staff/.test(await pill.innerText()), (await art.count()) + ' card(s); ' + (await art.first().innerText()).replace(/\s+/g, ' '))
       await page.screenshot({ path: path.join(OUT_DIR, 'full', 'activity-1440-no-staff.png') })
+      await cropElement(page, art, path.join(OUT_DIR, 'crops', 'activity-1440-no-staff.png'), { pad: 16, touch: false })
+      const swim = stateCard('Swimming'); await swim.scrollIntoViewIfNeeded()
+      const title = await swim.locator('[data-activity-title]').innerText()
+      check('activity-1440-draft: card title starts with the word Draft', /^Draft/.test(title), JSON.stringify(title))
       await page.screenshot({ path: path.join(OUT_DIR, 'full', 'activity-1440-draft.png') })
+      await cropElement(page, swim, path.join(OUT_DIR, 'crops', 'activity-1440-draft.png'), { pad: 16, touch: false })
       // 11 keyboard: Enter opens the panel, focus returns to the card on close
       await bowling.focus()
       await page.keyboard.press('Enter')
@@ -124,8 +142,9 @@ try {
     const full = await fullPage(page, path.join(OUT_DIR, 'full', `${tag}.png`), { touch, allow: ALLOW })
     checks.push(...full.checks)
     if (touch) {
-      const toggle = await page.getByRole('radiogroup').first().evaluate((g) => [...g.querySelectorAll('[role=radio]')].map((b) => ({ top: Math.round(b.getBoundingClientRect().top), fits: b.scrollWidth <= b.clientWidth })))
-      check('toolbar-390-touch-three-options: one line, no clipped label', toggle.length === 3 && new Set(toggle.map((t) => t.top)).size === 1 && toggle.every((t) => t.fits), JSON.stringify(toggle))
+      const toggle = await page.getByRole('radiogroup').first().evaluate(toggleProbe)
+      console.log('TOGGLE-390-EMPTY', JSON.stringify(toggle))
+      check('toolbar-390-touch-three-options: one row, each label one line, no clip', toggle.length === 3 && new Set(toggle.map((t) => t.top)).size === 1 && toggle.every((t) => t.lines === 1 && t.inside), JSON.stringify(toggle))
       await cropElement(page, page.getByRole('radiogroup').first(), path.join(OUT_DIR, 'crops', 'toolbar-390-touch-three-options.png'), { pad: 16, touch: true })
     }
     await context.close()

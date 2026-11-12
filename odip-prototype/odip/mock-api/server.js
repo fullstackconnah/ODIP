@@ -1880,17 +1880,17 @@ const sampleOverlapFinding = {
 // Plan builder phase D: `weekStart` is read now (the Monday of the week it falls in; the fixture week when it is missing), and the shifts an approval generates are on the board for the week
 // they fall in. The fixture's own two shifts stay in their own week. Each participant with shifts that week has a row (the real board lists every active participant).
 const BOARD_FIXTURE_WEEK = '2026-09-07'
-// Synthetic week for the By activity view: two sessions sharing a name (one lane), one short of staff, one Draft.
+// Synthetic week for the By activity view: two sessions sharing a name (one lane), one with no staff (ACTIVITY_STAFF_SHORT, 0 of 2), one Draft.
 function groupActivityFixture(days) {
   const who = participants.slice(0, 2).map((p) => ({ participantId: p.id, participantName: p.fullName, ratio: 'OneToTwo', shiftIds: [], timesDiffer: false, didNotAttend: false }))
   const staff = (id, name, start, end) => [{ id: `row-${id}`, staffId: `staff-${id}`, staffName: name, startTime: start, endTime: end, endsNextDay: false, findings: [] }]
-  const make = (id, day, title, start, end, status, staffNeeded, staffRows, people) => ({
-    id, serviceDate: days[day], startTime: start, endTime: end, endsNextDay: false, title, status, staffNeeded, staffAssigned: staffRows.length, participants: people, staff: staffRows, findings: [],
+  const make = (id, day, title, start, end, status, staffNeeded, staffRows, people, findings = []) => ({
+    id, serviceDate: days[day], startTime: start, endTime: end, endsNextDay: false, title, status, staffNeeded, staffAssigned: staffRows.length, participants: people, staff: staffRows, findings,
   })
   return [
     make('mock-act-1', 0, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who),
     make('mock-act-2', 2, 'Bowling', '10:00:00', '13:00:00', 'Published', 1, staff(1, 'Alex Rivera', '10:00:00', '13:00:00'), who.slice(0, 1)),
-    make('mock-act-3', 1, 'Art group', '13:00:00', '15:30:00', 'Published', 2, staff(2, 'Sam Patel', '13:00:00', '15:30:00'), who),
+    make('mock-act-3', 1, 'Art group', '13:00:00', '15:30:00', 'Published', 2, [], who, [{ code: 'ACTIVITY_STAFF_SHORT', severity: 'Warning', message: 'Needs 2 staff, has 0.', requiresReason: false }]),
     make('mock-act-4', 3, 'Swimming', '09:30:00', '11:30:00', 'Draft', 1, [], []),
   ]
 }
