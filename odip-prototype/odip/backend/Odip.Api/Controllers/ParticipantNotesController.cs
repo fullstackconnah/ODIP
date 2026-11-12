@@ -33,6 +33,9 @@ public class ParticipantNotesController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<ParticipantNoteDto>>>> GetForParticipant(
         Guid participantId, [FromQuery] bool includeArchived = false, CancellationToken ct = default)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == participantId, ct))
+            return NotFound(ApiResponse<List<ParticipantNoteDto>>.Fail("Participant not found"));
+
         // PD-5 item 5d: bounded read-time reconciliation safety net — see
         // SafetyNoteSyncService.ReconcileForParticipantAsync's doc for why this can't turn this
         // endpoint into an N+1 or a write-on-every-read.

@@ -356,7 +356,6 @@ function useInquiriesScreen() {
           Could not load enquiries. Please try again.
         </Callout>
       )}
-      {!canManageParticipantLifecycle && <p role="status" className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <Callout tone="error">{error}</Callout>}
       {truncated?.isTruncated && (
         <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">Showing the latest {inquiries.length} of {truncated.totalCount} closed enquiries. Search looks through these only.</p>

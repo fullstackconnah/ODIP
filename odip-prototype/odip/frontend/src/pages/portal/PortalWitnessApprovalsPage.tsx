@@ -16,10 +16,10 @@ import { formatRatio } from '@/lib/format'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 
-/** An INSTANT (a dose given), in the zone it was recorded in. */
 /** The server's limit on a witness statement (#827). */
 const STATEMENT_MAX = 4000
 
+/** An INSTANT (a dose given), in the zone it was recorded in. */
 function formatDateTime(value: string | null, timeZone: string | null) {
   return formatWithTimeZone(value, timeZone, { dateStyle: 'medium', timeStyle: 'short' }, undefined)
 }

@@ -121,7 +121,7 @@ public class ParticipantInquiriesController : ControllerBase
 
     /// <summary>
     /// One enquiry with its pending contacts, for the enquiry form (new and edit). The contacts are third parties' details held before any relationship, so only
-    /// the roles that edit enquiries read them; GET /inquiries, open to every role, never carries them (spec 2026-10-16, D3).
+    /// the roles that edit enquiries read them; GET /inquiries, open to Admin, Coordinator and SuperAdmin, never carries them (spec 2026-10-16, D3).
     /// </summary>
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]

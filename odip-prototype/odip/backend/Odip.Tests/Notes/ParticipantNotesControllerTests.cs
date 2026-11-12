@@ -113,6 +113,18 @@ public class ParticipantNotesControllerTests
     // ── Archive filter ───────────────────────────────────────────────────
 
     [Fact]
+    public async Task GetForParticipant_ParticipantMissing_ReturnsNotFound_AndWritesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantNotesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.GetForParticipant(Guid.NewGuid(), false, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Empty(await db.ParticipantNotes.ToListAsync());
+    }
+
+    [Fact]
     public async Task GetForParticipant_DefaultExcludesArchived()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

@@ -47,19 +47,33 @@ public class TasksController : ControllerBase
 
     /// <summary>
     /// The ids a new task links to must be the caller's: the trip is read through the tenant-filtered TripInstances, and the booking, reservation, vehicle assignment and staff assignment (which
-    /// have no query filter of their own) through their trip. When a trip is named, each linked row must also sit on that trip. Returns the message for the first one that is not, or null. Update never writes these links, so only Create needs it.
+    /// have no query filter of their own) through their trip. All the linked rows must also sit on one trip: the named one, else the first row's. Returns the message for the first one that is not, or null. Update never writes these links, so only Create needs it.
     /// </summary>
     private async Task<string?> LinkedRowErrorAsync(CreateTaskDto dto, CancellationToken ct)
     {
         if (dto.TripInstanceId is { } tripId && !await _db.TripInstances.AnyAsync(t => t.Id == tripId, ct)) return "Trip not found.";
-        if (dto.ParticipantBookingId is { } bookingId
-            && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && (dto.TripInstanceId == null || b.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
-        if (dto.AccommodationReservationId is { } reservationId
-            && !await _db.AccommodationReservations.AnyAsync(r => r.Id == reservationId && (dto.TripInstanceId == null || r.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)) return "Reservation not found.";
-        if (dto.VehicleAssignmentId is { } vehicleAssignmentId
-            && !await _db.VehicleAssignments.AnyAsync(a => a.Id == vehicleAssignmentId && (dto.TripInstanceId == null || a.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Vehicle assignment not found.";
-        if (dto.StaffAssignmentId is { } staffAssignmentId
-            && !await _db.StaffAssignments.AnyAsync(a => a.Id == staffAssignmentId && (dto.TripInstanceId == null || a.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Staff assignment not found.";
+        // One trip for the whole task: the named one, else the first linked row's. Every later row must sit on it, so rows of two trips are refused even when no trip is sent.
+        var taskTrip = dto.TripInstanceId;
+        if (dto.ParticipantBookingId is { } bookingId)
+        {
+            taskTrip = await _db.ParticipantBookings.Where(b => b.Id == bookingId && (taskTrip == null || b.TripInstanceId == taskTrip) && _db.TripInstances.Any(t => t.Id == b.TripInstanceId)).Select(b => (Guid?)b.TripInstanceId).FirstOrDefaultAsync(ct);
+            if (taskTrip is null) return "Booking not found.";
+        }
+        if (dto.AccommodationReservationId is { } reservationId)
+        {
+            taskTrip = await _db.AccommodationReservations.Where(r => r.Id == reservationId && (taskTrip == null || r.TripInstanceId == taskTrip) && _db.TripInstances.Any(t => t.Id == r.TripInstanceId)).Select(r => (Guid?)r.TripInstanceId).FirstOrDefaultAsync(ct);
+            if (taskTrip is null) return "Reservation not found.";
+        }
+        if (dto.VehicleAssignmentId is { } vehicleAssignmentId)
+        {
+            taskTrip = await _db.VehicleAssignments.Where(a => a.Id == vehicleAssignmentId && (taskTrip == null || a.TripInstanceId == taskTrip) && _db.TripInstances.Any(t => t.Id == a.TripInstanceId)).Select(a => (Guid?)a.TripInstanceId).FirstOrDefaultAsync(ct);
+            if (taskTrip is null) return "Vehicle assignment not found.";
+        }
+        if (dto.StaffAssignmentId is { } staffAssignmentId)
+        {
+            taskTrip = await _db.StaffAssignments.Where(a => a.Id == staffAssignmentId && (taskTrip == null || a.TripInstanceId == taskTrip) && _db.TripInstances.Any(t => t.Id == a.TripInstanceId)).Select(a => (Guid?)a.TripInstanceId).FirstOrDefaultAsync(ct);
+            if (taskTrip is null) return "Staff assignment not found.";
+        }
         return null;
     }
 
