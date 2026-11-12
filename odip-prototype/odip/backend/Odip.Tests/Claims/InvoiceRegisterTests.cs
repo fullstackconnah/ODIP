@@ -2,11 +2,13 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Claims.InvoiceKit;
 
@@ -40,9 +42,29 @@ public class InvoiceRegisterTests
         return Create(database: db);
     }
 
-    private static Task<ActionResult<ApiResponse<PagedResult<InvoiceRegisterRowDto>>>> List(InvoiceKit kit, string role = "Admin", InvoiceKind? kind = null, InvoiceStatus? status = null,
+    private static Task<ActionResult<ApiResponse<PagedResult<InvoiceRegisterRowDto>>>> List(InvoiceKit kit, string role = "Admin", InvoiceKind? kind = null, InvoiceStatus? status = null, InvoicePaymentStatus? paymentStatus = null,
         DateOnly? from = null, DateOnly? to = null, string? search = null, bool deletedClaimOnly = false, int page = 1, int pageSize = 50) =>
-        kit.Controller(role).GetInvoiceRegister(kind, status, from, to, search, deletedClaimOnly, page, pageSize, Ct);
+        kit.Controller(role).GetInvoiceRegister(kind, status, paymentStatus, from, to, search, deletedClaimOnly, page, pageSize, Ct);
+
+    /// <summary>A claim (status <paramref name="claim"/>) with one line per given status, and one Issued invoice per entry covering exactly that line. Returns the invoices in order.</summary>
+    private static (InvoiceKit Kit, List<Invoice> Invoices) SeedPay(Guid tenant, TripClaimStatus claim, params (ClaimLineItemStatus Status, decimal Paid)[] lines)
+    {
+        var c = new TripClaim { TenantId = tenant, Id = Guid.NewGuid(), Status = claim, ClaimReference = "TC-PAY" };
+        var items = lines.Select(l => new ClaimLineItem { TenantId = tenant, Id = Guid.NewGuid(), TripClaimId = c.Id, Status = l.Status, PaidAmount = l.Paid }).ToList();
+        var invoices = items.Select(l =>
+        {
+            var inv = Row(tenant, claimId: c.Id);
+            inv.Lines = [new InvoiceLine { Id = Guid.NewGuid(), TenantId = tenant, InvoiceId = inv.Id, ClaimLineItemId = l.Id }];
+            return inv;
+        }).ToList();
+        var db = Guid.NewGuid().ToString();
+        var seed = Create(database: db);
+        seed.Db.TripClaims.Add(c);
+        seed.Db.ClaimLineItems.AddRange(items);
+        seed.Db.Invoices.AddRange(invoices);
+        seed.Db.SaveChanges();
+        return (Create(database: db), invoices);
+    }
 
     private static List<string> Numbers(ActionResult<ApiResponse<PagedResult<InvoiceRegisterRowDto>>> r) => DataOf(r).Items.Select(i => i.DisplayNumber).ToList();
 
@@ -131,6 +153,76 @@ public class InvoiceRegisterTests
         Assert.Equal(["INV-0004"], third.Items.Select(i => i.DisplayNumber));
         var clamped = DataOf(await List(kit, page: 0, pageSize: 100_000));
         Assert.Equal((1, 200), (clamped.Page, clamped.PageSize));
+    }
+
+    private static readonly (ClaimLineItemStatus, decimal)[] OnePerState = [(ClaimLineItemStatus.Submitted, 0m), (ClaimLineItemStatus.PartiallyPaid, 5m), (ClaimLineItemStatus.Paid, 10m)];
+
+    [Theory]
+    [InlineData(InvoicePaymentStatus.Outstanding)]
+    [InlineData(InvoicePaymentStatus.PartPaid)]
+    [InlineData(InvoicePaymentStatus.Paid)]
+    public async Task PaymentFilter_ReturnsWhatThePureFunctionLabels(InvoicePaymentStatus wanted)
+    {
+        var (kit, invoices) = SeedPay(TenantA, TripClaimStatus.Submitted, OnePerState);
+        var voided = Row(TenantA, number: 901, status: InvoiceStatus.Voided);
+        var credited = Row(TenantA, number: 902, status: InvoiceStatus.Credited);
+        var note = Row(TenantA, number: 903, kind: InvoiceKind.CreditNote);
+        kit.Db.Invoices.AddRange(voided, credited, note);
+        kit.Db.SaveChanges();
+
+        var claimLines = kit.Db.ClaimLineItems.ToDictionary(l => l.Id);
+        var expected = kit.Db.Invoices.Include(i => i.Lines).ToList().Where(i => InvoiceService.PaymentStatusOf(i, claimLines, TripClaimStatus.Submitted) == wanted).Select(i => i.DisplayNumber).Order().ToList();
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, Numbers(await List(kit, paymentStatus: wanted)).Order());
+
+        var all = DataOf(await List(kit)).Items;
+        Assert.Equal(InvoicePaymentStatus.Outstanding, all.Single(r => r.DisplayNumber == invoices[0].DisplayNumber).PaymentStatus);
+        Assert.Equal(InvoicePaymentStatus.Paid, all.Single(r => r.DisplayNumber == invoices[2].DisplayNumber).PaymentStatus);
+        Assert.All(all.Where(r => r.DisplayNumber.EndsWith("0901") || r.DisplayNumber.EndsWith("0902") || r.DisplayNumber.EndsWith("0903")), r => Assert.Null(r.PaymentStatus));
+    }
+
+    [Fact]
+    public async Task PaymentFilter_PagesOnTheFilteredSet()
+    {
+        var (kit, _) = SeedPay(TenantA, TripClaimStatus.Submitted, [.. Enumerable.Repeat((ClaimLineItemStatus.Submitted, 0m), 5), .. Enumerable.Repeat((ClaimLineItemStatus.Paid, 10m), 3)]);
+        var first = DataOf(await List(kit, paymentStatus: InvoicePaymentStatus.Paid, pageSize: 2));
+        var second = DataOf(await List(kit, paymentStatus: InvoicePaymentStatus.Paid, page: 2, pageSize: 2));
+        Assert.Equal(3, first.TotalCount);
+        Assert.Equal(2, first.Items.Count());
+        Assert.Single(second.Items);
+    }
+
+    [Fact]
+    public async Task PaymentFilter_NeverReturnsAnotherOrganisationsInvoices()
+    {
+        var db = Guid.NewGuid().ToString();
+        var seed = Create(database: db);
+        foreach (var tenant in new[] { TenantA, TenantB })
+        {
+            var c = new TripClaim { TenantId = tenant, Id = Guid.NewGuid(), Status = TripClaimStatus.Paid, ClaimReference = "TC-PAY" };
+            var inv = Row(tenant, claimId: c.Id, org: tenant == TenantA ? "Org" : "Other Org");
+            inv.Lines = [new InvoiceLine { Id = Guid.NewGuid(), TenantId = tenant, InvoiceId = inv.Id }];
+            seed.Db.AddRange(c, inv);
+        }
+        seed.Db.SaveChanges();
+        var rows = DataOf(await List(Create(database: db), paymentStatus: InvoicePaymentStatus.Paid)).Items;
+        Assert.Equal(["Org"], rows.Select(r => r.OrganisationName));
+    }
+
+    [Fact]
+    public async Task AnUndefinedPaymentStatusNumber_IsA400()
+    {
+        var result = await List(Seed(Row(TenantA)), paymentStatus: (InvoicePaymentStatus)99);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public void ThePaymentStatusParameter_IsTheEnum_OnAnApiControllerClass()
+    {
+        var p = typeof(ClaimsController).GetMethod(nameof(ClaimsController.GetInvoiceRegister))!.GetParameters().Single(x => x.Name == "paymentStatus");
+        Assert.Equal(typeof(InvoicePaymentStatus?), p.ParameterType);
+        Assert.NotNull(p.GetCustomAttribute<FromQueryAttribute>());
+        Assert.NotNull(typeof(ClaimsController).GetCustomAttribute<ApiControllerAttribute>());
     }
 
     [Fact]

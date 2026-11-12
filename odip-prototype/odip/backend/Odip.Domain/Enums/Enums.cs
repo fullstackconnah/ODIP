@@ -1239,3 +1239,11 @@ public enum InvoiceStatus
     Voided = 1,
     Credited = 2,
 }
+
+/// <summary>Derived from the claim, never stored.</summary>
+public enum InvoicePaymentStatus
+{
+    Outstanding = 0,
+    PartPaid = 1,
+    Paid = 2,
+}
