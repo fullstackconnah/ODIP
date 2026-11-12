@@ -152,6 +152,16 @@ public record TripBarDto
     public bool IsDriver { get; init; }
     /// <summary>Staff the trip still needs (0 when covered, unset or past fixing); the board marks the bar when above 0.</summary>
     public int StaffShort { get; init; }
+    /// <summary>Trip days inside the bar and the board week that have a start or finish time; a day with no time is absent.</summary>
+    public List<TripBarDayDto> Days { get; init; } = new();
+}
+
+/// <summary>One trip day's itinerary start and finish (not a worker's own hours).</summary>
+public record TripBarDayDto
+{
+    public DateOnly Date { get; init; }
+    public TimeOnly? Start { get; init; }
+    public TimeOnly? Finish { get; init; }
 }
 
 /// <summary>
@@ -261,6 +271,16 @@ public record StaffLeaveDto
     public LeaveStatus Status { get; init; }
 }
 
+/// <summary>A staff member's trip assignment overlapping the week, for the staff picker's "On a trip that day" group. Whole days, both ends inclusive.</summary>
+public record StaffTripDto
+{
+    public Guid StaffId { get; init; }
+    public Guid TripInstanceId { get; init; }
+    public string TripName { get; init; } = string.Empty;
+    public DateOnly From { get; init; }
+    public DateOnly To { get; init; }
+}
+
 /// <summary>A whole day the person marked Available or Preferred, with no leave or unavailability: the staff picker's "Available that day".</summary>
 public record StaffAvailableDayDto
 {
@@ -348,6 +368,8 @@ public record RosterBoardDto
     public List<PendingAgreementDto>? PendingAgreements { get; init; }
     /// <summary>Participant mode only: the week's approved and pending leave of every active staff member, for the staff picker. Null in staff mode.</summary>
     public List<StaffLeaveDto>? StaffLeave { get; init; }
+    /// <summary>Participant mode only: the week's trip assignments of every active staff member, for the staff picker. Null in staff mode.</summary>
+    public List<StaffTripDto>? StaffTrips { get; init; }
     /// <summary>Both modes: the days of the week (and the day after, for an overnight Sunday shift) each active staff member marked Available or Preferred and is not away. Empty, never null.</summary>
     public List<StaffAvailableDayDto> StaffAvailableDays { get; init; } = new();
     public List<RosterExceptionDto> Exceptions { get; init; } = new();
