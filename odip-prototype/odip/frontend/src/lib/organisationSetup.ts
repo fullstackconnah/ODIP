@@ -6,9 +6,9 @@ const STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
 
 const ABN_WEIGHTS = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
 
-/** 11 digits once spaces are removed, and the standard ABN checksum (first digit less 1, weighted sum divisible by 89). */
+/** 11 digits once whitespace (a space, tab or non-breaking space from a pasted ABN) is removed, and the standard ABN checksum (first digit less 1, weighted sum divisible by 89). */
 export function isValidAbn(abn?: string | null): boolean {
-  const digits = (abn ?? '').replace(/ /g, '')
+  const digits = (abn ?? '').replace(/\s/g, '')
   if (!/^[0-9]{11}$/.test(digits)) return false
   const sum = ABN_WEIGHTS.reduce((total, weight, i) => total + weight * (Number(digits[i]) - (i === 0 ? 1 : 0)), 0)
   return sum % 89 === 0
