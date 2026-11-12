@@ -114,3 +114,11 @@ describe('SetupSteps', () => {
     expect(screen.getByText('Optional')).toBeInTheDocument()
   })
 })
+
+describe('SetupSteps Organisation details status', () => {
+  it('reads "To do" until the details are recorded, never "Not recorded"', () => {
+    show(empty, null)
+    expect(within(screen.getAllByRole('listitem').find(li => within(li).queryByText('Organisation details'))!).getByText('To do')).toBeInTheDocument()
+    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+  })
+})
