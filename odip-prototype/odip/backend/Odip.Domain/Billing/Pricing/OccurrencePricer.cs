@@ -91,6 +91,9 @@ internal sealed class OccurrencePricer
         public required DateTime Start { get; init; }
         public required DateTime End { get; init; }
         public required bool IgnoreHolidays { get; init; }
+        /// <summary>The occurrence starts or ends in the first pass of the hour the clocks repeat (a worked time; a rostered wall time cannot say which pass).</summary>
+        public bool StartFirstPass { get; init; }
+        public bool EndFirstPass { get; init; }
         public required List<(DateTime At, int Participants)> Headcount { get; init; }
         public OccurrenceResult Result { get; } = new();
         /// <summary>Every line of the occurrence needs a person (a worker who may sleep in a window that is not a sleepover).</summary>
@@ -184,7 +187,7 @@ internal sealed class OccurrencePricer
         return occ.Result;
     }
 
-    private Occurrence NewOccurrence(PlanBlock block, DateOnly date, bool ignoreHolidays)
+    private Occurrence NewOccurrence(PlanBlock block, DateOnly date, bool ignoreHolidays, bool startFirstPass = false, bool endFirstPass = false)
     {
         var state = block.Location.State.Trim().ToUpperInvariant();
         var start = date.ToDateTime(block.Start);
@@ -194,7 +197,7 @@ internal sealed class OccurrencePricer
             .Select(c => (At: start.AddMinutes(block.OffsetFromStart(c.From)), c.ParticipantsPresent))
             .OrderBy(c => c.At)
             .ToList();
-        return new Occurrence { Block = block, Date = date, State = state, Zone = ZoneOf(state), Start = start, End = end, IgnoreHolidays = ignoreHolidays, Headcount = headcount };
+        return new Occurrence { Block = block, Date = date, State = state, Zone = ZoneOf(state), Start = start, End = end, IgnoreHolidays = ignoreHolidays, Headcount = headcount, StartFirstPass = startFirstPass, EndFirstPass = endFirstPass };
     }
 
     /// <summary>The occurrence cut into the sleepover window and the hourly supports around it (the whole occurrence when it has no sleepover).</summary>
@@ -219,9 +222,9 @@ internal sealed class OccurrencePricer
     /// Only the split of one occurrence, for the shift claim (<see cref="ShiftBands"/>): the sleepover rule and the band boundaries of <see cref="Price"/>, in elapsed minutes, with none of its
     /// money, holiday review or crossing policy. A sleepover window is one part with the sleepover flag; every other piece is cut at the bands.
     /// </summary>
-    internal List<ShiftBandPart> Parts(PlanBlock block, DateOnly date)
+    internal List<ShiftBandPart> Parts(PlanBlock block, DateOnly date, bool startFirstPass = false, bool endFirstPass = false)
     {
-        var occ = NewOccurrence(block, date, ignoreHolidays: false);
+        var occ = NewOccurrence(block, date, ignoreHolidays: false, startFirstPass, endFirstPass);
         var parts = new List<ShiftBandPart>();
         foreach (var piece in PiecesOf(occ))
         {
@@ -244,19 +247,19 @@ internal sealed class OccurrencePricer
     }
 
     /// <summary>Elapsed minutes between two wall-clock readings in the delivery zone: an hour is added or lost on the two nights a year the clocks change.</summary>
-    internal static int RealMinutes(DateTime from, DateTime to, TimeZoneInfo zone) =>
-        (int)Math.Round((Instant(to, zone) - Instant(from, zone)).TotalMinutes);
+    internal static int RealMinutes(DateTime from, DateTime to, TimeZoneInfo zone, bool fromFirstPass = false, bool toFirstPass = false) =>
+        (int)Math.Round((Instant(to, zone, toFirstPass) - Instant(from, zone, fromFirstPass)).TotalMinutes);
 
     /// <summary>
     /// The UTC instant of a wall-clock reading. A reading that does not exist (inside the hour the clocks skip going forward) is the instant the clocks jump, the first
     /// moment that exists after it, so every boundary falls on one line that only moves forward. <see cref="ProviderLocalTime.LocalToUtc"/> pushes such a reading an hour
     /// on, which puts 02:30 after 03:00 and gives the support between the two a negative length.
     /// </summary>
-    private static DateTime Instant(DateTime wall, TimeZoneInfo zone)
+    private static DateTime Instant(DateTime wall, TimeZoneInfo zone, bool firstPass = false)
     {
         var local = DateTime.SpecifyKind(wall, DateTimeKind.Unspecified);
         while (zone.IsInvalidTime(local)) local = local.AddMinutes(1);
-        return ProviderLocalTime.LocalToUtc(local, zone);
+        return ProviderLocalTime.LocalToUtc(local, zone, firstPass);
     }
 
     private IReadOnlyList<DaySpan> Spans(DateOnly date, string state, bool ignoreHolidays)
@@ -487,7 +490,8 @@ internal sealed class OccurrencePricer
                 foreach (var cut in cuts)
                 {
                     // A part that lies wholly inside the hour the clocks skip takes no time at all: there is nothing in it to claim.
-                    var elapsed = RealMinutes(cursor, cut, occ.Zone);
+                    // Only the occurrence's own edges can be a worked first-pass time; a band, midnight or headcount cut never is.
+                    var elapsed = RealMinutes(cursor, cut, occ.Zone, occ.StartFirstPass && cursor == occ.Start, occ.EndFirstPass && cut == occ.End);
                     if (elapsed > 0) segments.Add(new Segment(cursor, cut, span, ParticipantsAt(occ, cursor), elapsed, (int)(cut - cursor).TotalMinutes));
                     cursor = cut;
                 }

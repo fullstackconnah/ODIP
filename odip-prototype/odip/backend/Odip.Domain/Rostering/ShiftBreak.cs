@@ -149,12 +149,12 @@ public static class ShiftBreakRules
     /// </summary>
     /// <param name="aloneBreaks">The shift's breaks with <see cref="ShiftBreak.WithParticipant"/> false, from its ACTIVE completion; a running break ends at the actual end.</param>
     public static IReadOnlyList<(int From, int To)> UnclaimedSpans(
-        DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SleepoverType nightType, IEnumerable<(DateTime From, DateTime To)> aloneBreaks, TimeZoneInfo zone)
+        DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SleepoverType nightType, IEnumerable<(DateTime From, DateTime To)> aloneBreaks, TimeZoneInfo zone, bool startFirstPass = false, bool endFirstPass = false)
     {
         if (nightType == SleepoverType.Sleepover) return Array.Empty<(int, int)>();
 
-        var startUtc = ProviderLocalTime.LocalToUtc(serviceDate.ToDateTime(start), zone);
-        var endUtc = ProviderLocalTime.LocalToUtc(serviceDate.AddDays(endsNextDay ? 1 : 0).ToDateTime(end), zone);
+        var startUtc = ProviderLocalTime.LocalToUtc(serviceDate.ToDateTime(start), zone, startFirstPass);
+        var endUtc = ProviderLocalTime.LocalToUtc(serviceDate.AddDays(endsNextDay ? 1 : 0).ToDateTime(end), zone, endFirstPass);
         var rostered = WholeMinutes(endUtc - startUtc);
         return aloneBreaks
             .Select(b => (From: Math.Max(0, WholeMinutes(b.From - startUtc)), To: Math.Min(rostered, WholeMinutes(b.To - startUtc))))

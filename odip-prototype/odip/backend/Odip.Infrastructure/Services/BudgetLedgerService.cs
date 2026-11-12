@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Catalogue;
 using PlanBlock = Odip.Domain.Billing.Pricing.PlanBlock;
+using ShiftBands = Odip.Domain.Billing.Pricing.ShiftBands;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -536,10 +537,12 @@ public sealed class BudgetLedgerService
             ? ShiftClaimWindow.For(new Shift { ServiceDate = shift.ServiceDate, StartTime = shift.Start, EndTime = shift.End, EndsNextDay = shift.EndsNextDay, NightType = shift.NightType }, completion, pricing.ZoneOf(shift)).Priced
             : null;
         var (start, end, endsNextDay) = window is null ? (shift.Start, shift.End, shift.EndsNextDay) : (window.Start, window.End, window.EndsNextDay);
-        var hours = Shift.HoursBetween(start, end, endsNextDay);
-        var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, start, end, endsNextDay, shift.NightType, pricing.ZoneOf(shift));
+        var (startFirst, endFirst) = (window?.StartFirstPass ?? false, window?.EndFirstPass ?? false);
+        // Elapsed, like the amount: on a night the clocks change the wall-clock length is an hour out.
+        var hours = ShiftBands.ElapsedMinutes(window?.StartLocal ?? shift.ServiceDate.ToDateTime(shift.Start), window?.EndLocal ?? shift.ServiceDate.AddDays(shift.EndsNextDay ? 1 : 0).ToDateTime(shift.End), pricing.ZoneOf(shift), startFirst, endFirst) / 60m;
+        var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, start, end, endsNextDay, shift.NightType, pricing.ZoneOf(shift), startFirst, endFirst);
         var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, start, end, endsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.ZoneOf(shift), unclaimed,
-            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId), shift.Status == ShiftStatus.Completed ? headcount.Of(shift.GroupActivityId, pricing.ZoneOf(shift)) : 0), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId), shift.Status == ShiftStatus.Completed ? headcount.Of(shift.GroupActivityId, pricing.ZoneOf(shift)) : 0), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null, startFirst, endFirst);
         // The travel counts in the shift's pool like the claim lines it becomes; its caveat is for the claim, not a ledger note, so the note below is the estimator's own.
         var counted = outcome.IsPriced ? ShiftTravelPricer.Apply(outcome, travel, shift.ServiceDate, state, travelPolicy.KmRate, pricing.ShiftRows(shift.SupportGroupCode).Concat(pricing.PersonalCare).ToList(), travelPolicy.TravelRows) : outcome;
 

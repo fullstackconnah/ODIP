@@ -62,13 +62,15 @@ public static class ProviderLocalTime
     /// inside a spring-forward gap (which does not exist on the wall clock) is skewed one hour later into
     /// the first valid instant rather than throwing — same rule as
     /// <see cref="ShiftVarianceCalculator.ResolveRosteredTimesUtc"/>. A local time that occurs twice (the
-    /// repeated hour when daylight saving ends) resolves to standard time, the .NET default.
+    /// repeated hour when daylight saving ends) resolves to standard time, the .NET default, unless <paramref name="firstPass"/> is set: then it is the earlier instant (daylight time).
     /// </summary>
-    public static DateTime LocalToUtc(DateTime localWallClock, TimeZoneInfo zone)
+    public static DateTime LocalToUtc(DateTime localWallClock, TimeZoneInfo zone, bool firstPass = false)
     {
         var unspecified = DateTime.SpecifyKind(localWallClock, DateTimeKind.Unspecified);
         if (zone.IsInvalidTime(unspecified)) unspecified = unspecified.AddHours(1);
-        return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeToUtc(unspecified, zone), DateTimeKind.Utc);
+        var utc = DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeToUtc(unspecified, zone), DateTimeKind.Utc);
+        // The default read is the later pass, so the earlier instant is the wall time less the larger offset.
+        return firstPass && zone.IsAmbiguousTime(unspecified) ? DateTime.SpecifyKind(unspecified - zone.GetAmbiguousTimeOffsets(unspecified).Max(), DateTimeKind.Utc) : utc;
     }
 
     /// <summary>
