@@ -47,11 +47,11 @@ export function FieldDiff({ field, old: oldVal, new: newVal, words, lines }: Fie
           {field}
         </span>
         <div className="flex flex-wrap items-start gap-x-2 gap-y-0.5 @[35rem]:flex-nowrap">
-          <div className="line-through text-[var(--color-muted-foreground)] opacity-70">
+          <div className="min-w-0 [overflow-wrap:anywhere] line-through text-[var(--color-muted-foreground)] opacity-70">
             <DiffValue value={oldVal} words={words} lines={lines} />
           </div>
           <span className="text-[var(--color-muted-foreground)]">→</span>
-          <div className="font-medium text-[var(--color-foreground)]">
+          <div className="min-w-0 [overflow-wrap:anywhere] font-medium text-[var(--color-foreground)]">
             <DiffValue value={newVal} words={words} lines={lines} />
           </div>
         </div>

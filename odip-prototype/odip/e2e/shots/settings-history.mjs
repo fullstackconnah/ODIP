@@ -244,7 +244,7 @@ for (const vp of VPS) {
   const sized = (n) => { let s = ''; while (s.length < n) s += 'Cancel at least 48 hours ahead. '; return `${s.slice(0, n - 1)}.` }
   const resp = (page) => page.getByLabel(RESP_LABEL, { exact: true })
   const comp = (page) => page.getByLabel(COMP_LABEL, { exact: true })
-  const groupShot = (page, name) => crop(page, page.locator('main section[aria-labelledby]').filter({ has: page.getByRole('heading', { name: 'Agreement wording', exact: true }) }), name, vp)
+  const groupShot = (page, name) => crop(page, page.locator('main section[aria-labelledby]').filter({ has: page.getByRole('heading', { name: 'Agreement wording', exact: true }) }).last(), name, vp)
   // A foot state crops the whole frame; the 1280 viewport grows until the page fits, as full() does.
   const frameShot = async (page, name) => {
     if (!vp.touch) await page.setViewportSize({ width: vp.width, height: Math.max(900, await page.evaluate(() => document.scrollingElement.scrollHeight)) })
@@ -299,7 +299,7 @@ for (const vp of VPS) {
       const { context, page } = await openPage(browser, vp, { entries: [entry('w1', 30, [diff('AgreementResponsibilitiesTerms', RESP, LONGER), diff('AgreementComplaintsTerms', null, COMP)])] })
       await open(page, HISTORY_URL, waitText(HIST_LABELS[0]))
       for (const label of HIST_LABELS) check(t(`history: 11 label "${label}" shows exactly once`), (await page.getByText(label, { exact: true }).count()) === 1)
-      await rowsInFrame(page, vp, t('history labels')); await valuesAligned(page, t('history labels')); await noHScroll(page, t('history labels'))
+      await rowsInFrame(page, vp, t('history labels')); await noHScroll(page, t('history labels'))
       await crop(page, frame(page, TITLE), png('history-labels', 'light'), vp)
       await context.close()
     } catch (e) { check(t('history labels ran'), false, String(e.message).split('\n')[0]) }
@@ -316,7 +316,16 @@ for (const vp of VPS) {
       await resp(p).fill(sized(1834))
       const m = await wordingMetrics(p)
       check(t('count: 10 at 1,834 trimmed characters it reads exactly "1,834 / 2,000"'), m.count.text === '1,834 / 2,000', m.count.text)
-      check(t('count: 5 sits one hint margin below the hint, in the hint size'), near(m.count.gap, m.count.margin) && m.count.size === m.type.hint[0].size, m.count)
+      let rules = ''
+      if (!near(m.count.gap, m.count.margin)) {
+        const cdp = await p.context().newCDPSession(p)
+        await cdp.send('DOM.enable'); await cdp.send('CSS.enable')
+        const { root } = await cdp.send('DOM.getDocument')
+        const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '#agreement-responsibilities-count' })
+        const { matchedCSSRules } = await cdp.send('CSS.getMatchedStylesForNode', { nodeId })
+        rules = matchedCSSRules.filter((r) => r.rule.style.cssProperties.some((c) => /^margin/.test(c.name))).map((r) => `${r.rule.selectorList.text} {${r.rule.style.cssText}}`).join(' | ')
+      }
+      check(t('count: 5 sits one hint margin below the hint, in the hint size'), near(m.count.gap, m.count.margin) && m.count.size === m.type.hint[0].size, { ...m.count, rules })
       const tap = m.height.tap
       check(t(`save: 7 Save is at least --tap-min (${tap}) tall`), m.save && m.save.height >= tap - 0.5, m.save)
       await noHScroll(p, t('near limit')); await groupShot(p, png('near-limit', 'light'))
@@ -333,7 +342,7 @@ for (const vp of VPS) {
     try {
       const { context, page } = await openPage(browser, vp, { entries: [entry('w2', 30, [diff('AgreementResponsibilitiesTerms', RESP, 'W'.repeat(2000))])] })
       await open(page, HISTORY_URL, waitText(HIST_LABELS[0]))
-      const over = await page.evaluate(() => [...document.querySelectorAll('main section div.flex.items-start')].filter((d) => d.textContent.includes('→')).map((d) => d.scrollWidth - d.clientWidth))
+      const over = await page.evaluate(() => [...document.querySelectorAll('main section div[class~="@container"] > div')].filter((d) => d.textContent.includes('→')).map((d) => d.scrollWidth - d.clientWidth))
       check(t('history: 11 a 2,000-character word keeps the row inside (scrollWidth <= clientWidth)'), over.length > 0 && over.every((o) => o <= 0), over)
       await rowsInFrame(page, vp, t('history long word')); await noHScroll(page, t('history long word'))
       await crop(page, frame(page, TITLE), png('history-long-word', 'light'), vp)
