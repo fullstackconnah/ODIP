@@ -359,6 +359,13 @@ public class DraftSigningAndPdfTests
         Assert.DoesNotContain(Skeleton(StandardResponsibilities), text);
         Assert.Contains(Skeleton(StandardComplaints), text);          // section 7 still prints the standard text
         Assert.Contains(Skeleton("8. Signatures — non-operative layout only"), text);
+
+        // Skeleton drops every non-letter, so a line break folded to a space would still pass above: the two lines must also sit on different PDF lines.
+        using var document = PdfDocument.Open(PdfWithWording("Give 48 hours notice.\nLate changes are charged.", null));
+        var words = document.GetPages().SelectMany(page => page.GetWords().Select(word => (page.Number, Y: word.Letters[0].StartBaseLine.Y, word.Text))).ToList();
+        var first = words.Single(w => w.Text == "Give" && words[words.IndexOf(w) + 1].Text == "48");
+        var second = words.Single(w => w.Text == "Late" && words[words.IndexOf(w) + 1].Text == "changes");
+        Assert.True(second.Number > first.Number || (second.Number == first.Number && second.Y < first.Y), "line 2 must start on a lower line than line 1");
     }
 
     [Theory]
