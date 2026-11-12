@@ -109,7 +109,8 @@ try {
       const stateCard = (name) => page.getByRole('button', { name: new RegExp('^Group activity, ' + name) }).first().locator('xpath=..')
       const art = stateCard('Art group'); await art.scrollIntoViewIfNeeded()
       const pill = art.locator('[data-activity-count] .rounded-full')
-      check('activity-1440-no-staff: warning pill reads "0 of 2 staff"', (await pill.count()) === 1 && /0 of 2 staff/.test(await pill.innerText()), (await art.count()) + ' card(s); ' + (await art.first().innerText()).replace(/\s+/g, ' '))
+      // The 1440 day column is under the card's 180px container breakpoint, so the pill shows "0/2" (the words stay in the DOM and the accessible name); the words and the short form are both asserted.
+      check('activity-1440-no-staff: warning pill holds "0 of 2 staff" (shown as 0/2 in a narrow column)', (await pill.count()) === 1 && /0 of 2 staff/.test(await pill.textContent()) && /^0\/2$|^0 of 2 staff$/.test((await pill.innerText()).trim()), (await pill.count()) + ' pill; ' + (await art.first().innerText()).replace(/\s+/g, ' '))
       await page.screenshot({ path: path.join(OUT_DIR, 'full', 'activity-1440-no-staff.png') })
       await cropElement(page, art, path.join(OUT_DIR, 'crops', 'activity-1440-no-staff.png'), { pad: 16, touch: false })
       const swim = stateCard('Swimming'); await swim.scrollIntoViewIfNeeded()
