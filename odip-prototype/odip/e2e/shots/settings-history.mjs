@@ -66,7 +66,7 @@ async function openPage(browser, vp, { mode = 'list', role = 'Admin', username =
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role, username) }))
   let refused = false
   await page.route('**/api/v1/provider-settings', (r) => {
-    if (r.request().method() !== 'PUT') return r.fulfill({ json: envelope(refused ? { ...row, agreementResponsibilitiesTerms: OTHER_ADMIN } : row) })
+    if (r.request().method() !== 'PUT') return r.fulfill({ json: envelope(refused ? { ...row, agreementResponsibilitiesTerms: OTHER_ADMIN, updatedAt: '2026-11-10T01:10:00.0000000Z' } : row) })
     if (put === '400') return r.fulfill({ status: 400, json: { success: false, data: null, message: WORDING_OVER, errors: [WORDING_OVER] } })
     if (put === '409') { refused = true; return r.fulfill({ status: 409, json: { success: false, data: null, message: CHANGED, errors: [CHANGED] } }) }
     return r.fulfill({ json: envelope('2026-11-10T01:05:00.0000000Z') })
@@ -296,7 +296,7 @@ for (const vp of VPS) {
     })
     await wording('changed elsewhere', { put: '409' }, async (p) => {
       await saveAnd(p, (pg) => pg.getByText(/Someone else changed these settings/).first().waitFor({ state: 'visible', timeout: 30_000 }))
-      await p.getByText(/Changed by someone else./).first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {})
+      await p.getByText(/^Changed by someone else/).first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {})
       const hint = await resp(p).evaluate((el) => el.getAttribute('aria-describedby').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim())
       check(t('409: the Responsibilities hint leads with "Changed by someone else."'), hint.startsWith('Changed by someone else.'), hint)
       await noHScroll(p, t('409')); await frameShot(p, png('changed-elsewhere-409', 'light'))
