@@ -917,7 +917,11 @@ export interface GroupActivityDto {
   findings: RosterFindingDto[]
   /** Set when the activity is one of a recurring series. */
   series?: GroupActivitySeriesDto | null
+  /** Advisory agreement warnings, one per participant who has one. Absent or empty means none. */
+  participantFindings?: GroupActivityParticipantFindingDto[]
 }
+
+export interface GroupActivityParticipantFindingDto { participantId: string; code: 'ACTIVITY_AGREEMENT_NO_BLOCK' | 'ACTIVITY_AGREEMENT_TIME' | (string & {}) }
 
 export type GroupActivityRepeats = 'Weekly' | 'Fortnightly' | 'Monthly'
 /** Which activities a save or cancel reaches: this one, or this one and every later one in its series. */

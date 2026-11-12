@@ -664,3 +664,156 @@ describe('GroupActivityModal series occurrence', () => {
     expect(await screen.findByText(`Nothing was changed. ${message}`)).toBeInTheDocument()
   })
 })
+
+describe('GroupActivityModal series participants (PR B)', () => {
+  const series = { id: 'series-1', interval: 'Weekly', startDate: '2026-08-17', endDate: '2027-03-09' } as unknown as ReturnType<typeof makeActivity>['series']
+  const mia = makeActivity().participants[0]
+  const noahRow = { ...mia, participantId: 'participant-2', participantName: 'Noah Park', shiftIds: ['shift-2'] }
+  const occurrence = (over: Partial<ReturnType<typeof makeActivity>> = {}) => makeActivity({ series, ...over })
+  const people = [{ id: 'participant-2', fullName: 'Noah Park' }]
+  const dialog = () => screen.findByRole('alertdialog')
+  const pickNoah = async () => {
+    await goTo('People')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add participant' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Noah Park' }))
+  }
+  const URL_ADD = '/rostering/group-activities/activity-1/participants'
+  const row = (id: string) => document.querySelector<HTMLElement>(`[data-participant-row="${id}"]`) as HTMLElement
+
+  it('add: a series occurrence asks which activities; Back saves nothing and keeps the pick list', async () => {
+    serve(occurrence())
+    open(editTarget, { participants: people })
+    await pickNoah()
+    const d = await dialog()
+    expect(within(d).getByText('Add Noah to which activities?')).toBeInTheDocument()
+    expect(within(d).getByText(/ only$/)).toBeInTheDocument()
+    expect(within(d).getByText(/^Every one from .* to 9 Mar 2027 that isn't cancelled\. They join the series\.$/)).toBeInTheDocument()
+    expect(within(d).getByRole('radio', { name: /^This activity/ })).toBeChecked()
+    await userEvent.click(within(d).getByRole('button', { name: 'Back' }))
+    expect(post).not.toHaveBeenCalled()
+    expect(await screen.findByRole('heading', { name: 'Add participant' })).toBeInTheDocument()
+  })
+
+  it('add: "This and all upcoming" sends scope Series; "This activity" sends no scope', async () => {
+    serve(occurrence())
+    post.mockResolvedValue(occurrence())
+    open(editTarget, { participants: people })
+    await pickNoah()
+    await userEvent.click(within(await dialog()).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Add Noah' }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith(URL_ADD, { participantId: 'participant-2', ratio: 'OneToOne', scope: 'Series' }))
+    post.mockClear()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add participant' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Noah Park' }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Add Noah' }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith(URL_ADD, { participantId: 'participant-2', ratio: 'OneToOne' }))
+  })
+
+  it('add: a one-off asks nothing and sends no scope', async () => {
+    serve(makeActivity())
+    post.mockResolvedValue(makeActivity())
+    open(editTarget, { participants: people })
+    await pickNoah()
+    await waitFor(() => expect(post).toHaveBeenCalledWith(URL_ADD, { participantId: 'participant-2', ratio: 'OneToOne' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('add: a refused Series add shows "Nothing was changed. ..." under the not-added heading', async () => {
+    serve(occurrence())
+    const message = 'Tue 8 Dec: Something is in the way.'
+    post.mockRejectedValue({ response: { status: 409, data: { errors: [message] } } })
+    open(editTarget, { participants: people })
+    await pickNoah()
+    await userEvent.click(within(await dialog()).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Add Noah' }))
+    expect(await screen.findByText(`Nothing was changed. ${message}`)).toBeInTheDocument()
+    expect(screen.getByText("Noah wasn't added.")).toBeInTheDocument()
+  })
+
+  it('add: a refused one-off add keeps the plain message', async () => {
+    serve(makeActivity())
+    post.mockRejectedValue({ response: { status: 409, data: { errors: ['Already here.'] } } })
+    open(editTarget, { participants: people })
+    await pickNoah()
+    expect(await screen.findByText('Already here.')).toBeInTheDocument()
+  })
+
+  it('remove: a participant of an occurrence gets the scope choice; staff and one-offs do not', async () => {
+    serve(occurrence())
+    open(editTarget)
+    await goTo('People')
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Mia Chen from Bowling' }))
+    const d = await dialog()
+    expect(within(d).getByText(/ only$/)).toBeInTheDocument()
+    expect(within(d).getByText(/^Every one from .* to 9 Mar 2027\. They leave the series\.$/)).toBeInTheDocument()
+    expect(within(d).getByText('Their shift stays on the board as a regular shift.')).toBeInTheDocument()
+    await userEvent.click(within(d).getByRole('button', { name: 'Keep' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back to overview' }))
+    await goTo('Staff')
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Alex Rivera from Bowling' }))
+    expect(within(await dialog()).queryByRole('radio')).toBeNull()
+  })
+
+  it('remove: a one-off has no choice and the detach call is unchanged', async () => {
+    serve(makeActivity())
+    del.mockResolvedValue(undefined)
+    open(editTarget)
+    await goTo('People')
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Mia Chen from Bowling' }))
+    expect(within(await dialog()).queryByRole('radio')).toBeNull()
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/rostering/group-activities/activity-1/shifts/shift-1'))
+  })
+
+  it('remove: "This and all upcoming" sends scope=Series on the detach', async () => {
+    serve(occurrence())
+    del.mockResolvedValue(undefined)
+    open(editTarget)
+    await goTo('People')
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Mia Chen from Bowling' }))
+    await userEvent.click(within(await dialog()).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/rostering/group-activities/activity-1/shifts/shift-1?scope=Series'))
+  })
+
+  it('remove: a refused Series remove shows "Nothing was changed. ..." on the row', async () => {
+    serve(occurrence())
+    const message = 'Tue 8 Dec: This shift has started.'
+    del.mockRejectedValue({ response: { status: 409, data: { errors: [message] } } })
+    open(editTarget)
+    await goTo('People')
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Mia Chen from Bowling' }))
+    await userEvent.click(within(await dialog()).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText(`Nothing was changed. ${message}`)).toBeInTheDocument()
+  })
+
+  it('warning: a finding replaces the "Times differ" line on its row only, and the overview counts them', async () => {
+    const differ = { ...noahRow, timesDiffer: true, agreementStartTime: '09:00:00', agreementEndTime: '12:00:00' }
+    serve(occurrence({ participants: [{ ...mia, timesDiffer: true }, differ], participantFindings: [{ participantId: 'participant-1', code: 'ACTIVITY_AGREEMENT_NO_BLOCK' }] }))
+    open(editTarget)
+    expect(await overviewRow('People')).toHaveTextContent('1 not in agreement')
+    await goTo('People')
+    await screen.findByText('Mia Chen')
+    expect(within(row('participant-1')).getByText('Not in agreement')).toBeInTheDocument()
+    expect(within(row('participant-1')).getByText("Mia's agreement has no group activity on Mondays. They can still come. To clear this, add a Monday group activity to the agreement.")).toBeInTheDocument()
+    expect(within(row('participant-1')).queryByText(/Times differ/)).toBeNull()
+    expect(within(row('participant-2')).getByText(/Times differ/)).toBeInTheDocument()
+    expect(within(row('participant-2')).queryByText('Not in agreement')).toBeNull()
+  })
+
+  it('warning: a time finding says Outside agreed time', async () => {
+    serve(occurrence({ participants: [mia, noahRow], participantFindings: [{ participantId: 'participant-2', code: 'ACTIVITY_AGREEMENT_TIME' }] }))
+    open(editTarget)
+    await goTo('People')
+    await screen.findByText('Noah Park')
+    expect(within(row('participant-2')).getByText('Outside agreed time')).toBeInTheDocument()
+    expect(within(row('participant-2')).getByText("This activity runs outside the Monday group activity time in Noah's agreement. They can still come. To clear this, change the agreed time or this activity's time.")).toBeInTheDocument()
+  })
+
+  it('warning: no findings, no pill', async () => {
+    serve(occurrence({ participants: [mia, noahRow] }))
+    open(editTarget)
+    expect(await overviewRow('People')).not.toHaveTextContent('not in agreement')
+  })
+})
