@@ -490,8 +490,8 @@ internal sealed class OccurrencePricer
                 foreach (var cut in cuts)
                 {
                     // A part that lies wholly inside the hour the clocks skip takes no time at all: there is nothing in it to claim.
-                    // Only the occurrence's own edges can be a worked first-pass time; a band, midnight or headcount cut never is.
-                    var elapsed = RealMinutes(cursor, cut, occ.Zone, occ.StartFirstPass && cursor == occ.Start, occ.EndFirstPass && cut == occ.End);
+                    // The start edge is first pass only when the occurrence starts there; a shift that ends in the first pass has nothing later than its end, so every repeated wall time in it is first pass too.
+                    var elapsed = RealMinutes(cursor, cut, occ.Zone, occ.EndFirstPass || (occ.StartFirstPass && cursor == occ.Start), occ.EndFirstPass);
                     if (elapsed > 0) segments.Add(new Segment(cursor, cut, span, ParticipantsAt(occ, cursor), elapsed, (int)(cut - cursor).TotalMinutes));
                     cursor = cut;
                 }
