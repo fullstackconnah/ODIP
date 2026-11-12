@@ -1,3 +1,4 @@
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -178,5 +179,68 @@ public class DstFirstPassBillingTests
         var window = ShiftClaimWindow.For(shift, completion, Sydney);
 
         Assert.Equal("Extra time 01:30–03:30 (clocks went forward) · 60 min", window.ExtraText);
+    }
+
+    // N1 (PR 851 deep review): a headcount cut inside the repeated hour. Billed minutes per part, at a block with a change at 02:10 (the engine reads each cut as the second pass unless the shift ends in the first).
+    private static List<int> PartMinutes(TimeOnly start, TimeOnly end, TimeOnly cutAt, bool startFirstPass, bool endFirstPass)
+    {
+        var block = new PlanBlock
+        {
+            Id = "b", Days = new[] { Sun.DayOfWeek }, Start = start, End = end, Workers = 1, ParticipantsPresent = 4, Location = new PlanLocation { State = "NSW" },
+            HeadcountChanges = new[] { new PlanHeadcountChange { From = cutAt, ParticipantsPresent = 3 } },
+        };
+        var pricer = new OccurrencePricer(new PlanPricingPolicy(), new PlanCatalogue(Array.Empty<SupportCatalogueItem>()), new HolidayCalendar(Array.Empty<HolidayEntry>()), _ => Sydney);
+        var minutes = pricer.Parts(block, Sun, startFirstPass, endFirstPass).Select(p => p.Minutes).ToList();
+
+        Assert.Equal(ShiftBands.ElapsedMinutes(Sun.ToDateTime(start), Sun.ToDateTime(end), Sydney, startFirstPass, endFirstPass), minutes.Sum());
+        return minutes;
+    }
+
+    [Fact]
+    public void AHeadcountCutInTheRepeatedHour_OfAShiftThatEndsInTheFirstPass_BillsTheElapsedTime() =>
+        Assert.Equal(new[] { 130, 20 }, PartMinutes(new TimeOnly(0, 0), new TimeOnly(2, 30), new TimeOnly(2, 10), false, true));
+
+    [Fact]
+    public void AHeadcountCutBetweenAFirstPassStartAndFinish_BillsTheElapsedTime() =>
+        Assert.Equal(new[] { 20, 20 }, PartMinutes(new TimeOnly(2, 10), new TimeOnly(2, 50), new TimeOnly(2, 30), true, true));
+
+    // Found, not changed: a cut in the repeated hour of a shift that starts in the first pass and ends in the second cannot say which pass it lies in; it stays the second, and the total is still the 90 elapsed minutes.
+    [Fact]
+    public void AHeadcountCutInTheRepeatedHour_OfAShiftThatEndsInTheSecondPass_StaysTheSecondPass() =>
+        Assert.Equal(new[] { 70, 20 }, PartMinutes(new TimeOnly(2, 10), new TimeOnly(2, 40), new TimeOnly(2, 20), true, false));
+
+    // A sleepover that ends in the repeated hour: the finish is read as the first pass, so 18:30 to 02:20 is 470 elapsed minutes (under the 8 hours), not 530.
+    private static ShiftBandSplit SleepoverSplit(DateOnly date, TimeOnly start, TimeOnly end, bool startFirstPass, bool endFirstPass) =>
+        ShiftBands.Split(date, start, end, true, new HashSet<DateOnly>(), Sydney, startFirstPass, endFirstPass);
+
+    [Fact]
+    public void ASleepoverThatEndsInTheFirstPassOfTheRepeatedHour_IsTooShortAt470Minutes() =>
+        Assert.False(SleepoverSplit(Sat, new TimeOnly(18, 30), new TimeOnly(2, 20), false, true).SleepoverQualified);
+
+    [Fact]
+    public void ASleepoverThatEndsInTheSecondPass_StillQualifiesAt530Minutes()
+    {
+        var split = SleepoverSplit(Sat, new TimeOnly(18, 30), new TimeOnly(2, 20), false, false);
+
+        Assert.True(split.SleepoverQualified);
+        Assert.Equal(530, split.Parts.Single(p => p.Sleepover).Minutes);
+    }
+
+    [Fact]
+    public void ASleepoverThatEndsInTheFirstPass_CountsItsPartAtTheElapsedMinutes()
+    {
+        var split = SleepoverSplit(Sat, new TimeOnly(18, 0), new TimeOnly(2, 30), false, true);
+
+        Assert.True(split.SleepoverQualified);
+        Assert.Equal(510, split.Parts.Single(p => p.Sleepover).Minutes);
+    }
+
+    [Fact]
+    public void ASleepoverThatStartsInTheFirstPass_CountsItsPartFromTheFirstPass()
+    {
+        var split = SleepoverSplit(Sun, new TimeOnly(2, 30), new TimeOnly(2, 0), true, false);
+
+        Assert.Equal(ShiftBands.ElapsedMinutes(Sun.ToDateTime(new TimeOnly(2, 30)), Sun.AddDays(1).ToDateTime(new TimeOnly(2, 0)), Sydney, true, false), split.Parts.Single(p => p.Sleepover).Minutes);
+        Assert.Equal(1470, split.Parts.Single(p => p.Sleepover).Minutes);
     }
 }
