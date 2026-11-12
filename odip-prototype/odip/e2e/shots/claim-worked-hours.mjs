@@ -68,6 +68,7 @@ const crop = async (page, locator, name, vp, pad = 0) => {
 const reason = 'The extra time would take Core for 1 Jul 2026–30 Jun 2027 over its budget (hard limit). The shift is claimed without it; add the extra time as a manual claim if the budget allows.'
 const extraOnly = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's11', serviceDate: '2026-11-03', description: 'Extra time 08:40–09:00, 17:00–17:20 · 40 min', reason, extraTimeOnly: true }
 const clockChange = { ...extraOnly, shiftId: 's12', serviceDate: '2026-04-05', description: 'Extra time 02:30–02:30 (clocks went back) · 60 min' }
+const twoRanges = { ...extraOnly, shiftId: 's13', serviceDate: '2026-04-05', description: 'Extra time 08:40–09:00, 17:00–17:20 (clocks went back) · 100 min' }
 const wholeShift = { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's9', serviceDate: '2026-11-02', description: 'Shift 22:00–06:00 · 8 h', reason: 'Sam Lee: it is a sleepover.' }
 const run = (leftOut) => ({ from: '2026-10-26', to: '2026-11-08', claimsMade: 0, shiftCount: 2, hours: 17.33, totalAmount: 866, participants: [{ participantId: 'p1', participantName: 'Sam Lee', shiftCount: 2, hours: 17.33, totalAmount: 866 }], leftOut, flagged: [], skipped: [] })
 
@@ -78,9 +79,10 @@ for (const vp of VPS) {
   const tag = vp.touch ? `${vp.name}-touch` : vp.name
 
   // run-extra-only, run-mixed: the shift claim run's preview with only extra time left out, then beside a whole shift
-  for (const [state, leftOut, heading, footer, line = extraOnly.description] of [
+  for (const [state, leftOut, heading, footer, line = extraOnly.description, ranges = 0] of [
     ['run-extra-only', [extraOnly], 'Extra time left out', /The shifts? (is|are) claimed at (its|their) held hours\./],
-    ['run-extra-clock-change', [clockChange], 'Extra time left out', /The shifts? (is|are) claimed at (its|their) held hours\./, clockChange.description],
+    ['run-extra-clock-change', [clockChange], 'Extra time left out', /The shifts? (is|are) claimed at (its|their) held hours\./, clockChange.description, 1],
+    ['run-extra-two-ranges', [twoRanges], 'Extra time left out', /The shifts? (is|are) claimed at (its|their) held hours./, twoRanges.description, 2],
     ['run-mixed', [wholeShift, extraOnly], '1 shift will be left out', /A shift whose extra time is left out is claimed at its held hours\./],
   ]) {
     try {
@@ -97,6 +99,14 @@ for (const vp of VPS) {
       check(t(`${state}: the extra time line reads "${line}"`), await dialog.getByText(line).isVisible())
       await fontAtLeast(dialog.getByText(footer), 13, t(`${state} footer`))
       await noHScroll(page, t(state))
+      if (ranges) {
+        const el = dialog.getByText(line)
+        const m = await el.evaluate((e) => ({ rects: [...e.querySelectorAll('.whitespace-nowrap')].map((n) => n.getClientRects().length), text: e.innerText.replace(/\s+/g, ' ').trim() }))
+        check(t(`${state}: ${ranges} nowrap range span(s), each on one line`), m.rects.length === ranges && m.rects.every((n) => n === 1), m.rects)
+        check(t(`${state}: the left-out line holds the exact description`), m.text.includes(line), m.text)
+        const over = await dialog.evaluate((e) => e.scrollWidth - e.clientWidth)
+        check(t(`${state}: no horizontal scroll in the dialog`), over <= 0, over)
+      }
       if (vp.touch) await tapTargets(dialog, t(state))
       await crop(page, dialog, `${state}-${tag}.png`, vp)
       await context.close()

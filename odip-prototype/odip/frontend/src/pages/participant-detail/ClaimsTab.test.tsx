@@ -236,9 +236,10 @@ describe('ClaimsTab — shifts a claim leaves out (L3-02)', () => {
     await previewWith({ leftOut: [sleepover, group] })
 
     expect(screen.getByText('2 shifts will be left out of this claim')).toBeInTheDocument()
-    expect(screen.getByText(/Shift 22:00–06:00 · 8 h/)).toBeInTheDocument()
+    // noBreakRefs wraps the time range in a nowrap span, so match the joined text, not one text node.
+    expect(document.body).toHaveTextContent('Shift 22:00–06:00 · 8 h')
     expect(screen.getByText(/It is a sleepover, which shift claims do not price yet\./)).toBeInTheDocument()
-    expect(screen.getByText(/Shift 09:00–15:00 · 6 h/)).toBeInTheDocument()
+    expect(document.body).toHaveTextContent('Shift 09:00–15:00 · 6 h')
     expect(screen.getByText(/It is a 1:3 group shift, which shift claims do not price yet\./)).toBeInTheDocument()
     expect(screen.getByText(/stay completed and unclaimed/)).toBeInTheDocument()
   })
