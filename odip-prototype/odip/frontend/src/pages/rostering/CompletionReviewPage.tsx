@@ -7,10 +7,12 @@ import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { Callout } from '@/components/Callout'
+import { StatusBadge } from '@/components/StatusBadge'
 import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
 import { TextField } from '@/components/TextField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import {
   useCompletions, useCompletion, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useStaff,
@@ -27,7 +29,6 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { Modal } from '@/components/Modal'
 import { formatDuration } from '@/lib/planBlocks'
 import { firstNameOf as firstName } from '@/lib/greeting'
-import { TONE } from '@/lib/tone'
 import { NumberField } from '@/components/NumberField'
 import { apiErrorCode } from '@/lib/shiftPackageErrors'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
@@ -44,10 +45,11 @@ const STATUS_FILTER_ITEMS: { value: ShiftStatus; label: string }[] = [
   { value: 'Published', label: 'Returned / not submitted' },
 ]
 
-function varianceBadgeClass(isOutlier: boolean): string {
-  return isOutlier
-    ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
-    : 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+/** Start and finish read apart so "-2 / +5" can't be taken as one range; both on time reads as one word. */
+function varianceLabel(start: number, finish: number): string {
+  if (start === 0 && finish === 0) return formatVarianceMinutes(0)
+  const side = (m: number) => (m === 0 ? 'on time' : formatVarianceMinutes(m))
+  return `Start ${side(start)} · Finish ${side(finish)}`
 }
 
 const EXTRA_TIME_LABEL: Record<ExtraTimeDecision, string> = { Pending: 'Extra time to decide', Approved: 'Extra time paid', Declined: 'Extra time not paid' }
@@ -77,17 +79,22 @@ function ExtraTimeChoiceGroup({ row, value, onChange, disabled, saving }: {
   )
 }
 
+function DetailFailed() {
+  return <p role="status" className="text-xs text-[var(--color-destructive)]">Couldn't load what the worker entered. Close this and open it again.</p>
+}
+
 function rosteredVsActual(row: CompletionQueueItemDto) {
   const timeFmt = { timeStyle: 'short' as const }
   return (
     <div className="text-xs space-y-0.5 whitespace-nowrap">
-      <div>
-        <span className="text-[var(--color-muted-foreground)]">Rostered:</span>{' '}
-        {formatWithTimeZone(row.rosteredStart, row.timeZoneId, timeFmt)}–{formatWithTimeZone(row.rosteredEnd, row.timeZoneId, timeFmt)}
+      <div className="text-[var(--color-muted-foreground)]">
+        Rostered: {formatWithTimeZone(row.rosteredStart, row.timeZoneId, timeFmt)}–{formatWithTimeZone(row.rosteredEnd, row.timeZoneId, timeFmt)}
       </div>
       <div>
         <span className="text-[var(--color-muted-foreground)]">Actual:</span>{' '}
-        {formatWithTimeZone(row.actualStart, row.timeZoneId, timeFmt)}–{row.actualEnd ? formatWithTimeZone(row.actualEnd, row.timeZoneId, timeFmt) : '—'}
+        <span className="font-medium text-[var(--color-foreground)]">
+          {formatWithTimeZone(row.actualStart, row.timeZoneId, timeFmt)}–{row.actualEnd ? formatWithTimeZone(row.actualEnd, row.timeZoneId, timeFmt) : '—'}
+        </span>
       </div>
     </div>
   )
@@ -248,7 +255,7 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
     <div className="space-y-1">
       {c.sentFromOffline && (
         <div>
-          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Sent from offline</span>
+          <StatusBadge tone="neutral" label="Sent from offline" />
           {c.submittedAt && <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">Reached Bunya Support {t(c.submittedAt)}</span>}
         </div>
       )}
@@ -292,6 +299,7 @@ export default function CompletionReviewPage() {
   const [approveTarget, setApproveTarget] = useState<CompletionQueueItemDto | null>(null)
   const [returnTarget, setReturnTarget] = useState<CompletionQueueItemDto | null>(null)
   const [returnReason, setReturnReason] = useState('')
+  const [reasonError, setReasonError] = useState<string | undefined>(undefined)   // the reason field's own error; a failed request stays in actionError
   const [actionError, setActionError] = useState<string | null>(null)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [travelEditing, setTravelEditing] = useState(false)
@@ -305,7 +313,7 @@ export default function CompletionReviewPage() {
   const failedResults = (batchResults ?? []).filter(r => !r.approved && r.code !== C.detailsMissing)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
-  const { data: detail } = useCompletion(detailShiftId)
+  const { data: detail, isLoading: detailLoading, isError: detailError } = useCompletion(detailShiftId)
 
   const { data: pricing } = usePlanPricingSettings(canReviewCompletions)
   const approveCompletion = useApproveCompletion()
@@ -334,6 +342,7 @@ export default function CompletionReviewPage() {
   function closeReturn() {
     setReturnTarget(null)
     setReturnReason('')
+    setReasonError(undefined)
     setActionError(null)
   }
 
@@ -370,7 +379,7 @@ export default function CompletionReviewPage() {
     if (!returnTarget) return
     const reason = returnReason.trim()
     if (!reason) {
-      setActionError('A return reason is required.')
+      setReasonError('A return reason is required.')
       return
     }
     setActionError(null)
@@ -395,32 +404,30 @@ export default function CompletionReviewPage() {
   }
 
   const columns: Column<CompletionQueueItemDto>[] = [
-    { key: 'participantName', header: 'Participant', render: row => row.participantName },
-    { key: 'staffName', header: 'Staff', render: row => row.staffName },
-    { key: 'serviceDate', header: 'Date', render: row => formatDateAu(row.serviceDate) },
+    { key: 'participantName', header: 'Participant', mobile: 'primary', render: row => row.participantName },
+    { key: 'staffName', header: 'Staff', mobile: 'meta', render: row => row.staffName },
+    { key: 'serviceDate', header: 'Date', mobile: 'meta', render: row => formatDateAu(row.serviceDate) },
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
       key: 'variance', header: 'Variance', className: 'md:min-w-[16rem]', render: row => (
         <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
           {row.missingDetails.length > 0 && (
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Needs details</span>
+            <StatusBadge tone="warning" label="Needs details" />
           )}
-          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
-            {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
-          </span>
+          <StatusBadge tone={row.isOutlierVariance ? 'warning' : 'neutral'} label={varianceLabel(row.varianceMinutesStart, row.varianceMinutesEnd)} />
           {row.offRoster && (
             // Words, not colour alone: the start or a set finish is more than 5 minutes off the roster, whatever the outlier setting says.
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Off roster</span>
+            <StatusBadge tone="warning" label="Off roster" />
           )}
           {row.timesAdjusted && (
             // An adjustment is not a compliance warning, so it takes the info tone (SHAPE §7).
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.info.solid}`}>Times adjusted by the worker</span>
+            <StatusBadge tone="info" label="Times adjusted by the worker" />
           )}
           {row.returnCount > 0 && (
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Returned {plural(row.returnCount, 'time')}</span>
+            <StatusBadge tone="neutral" label={`Returned ${plural(row.returnCount, 'time')}`} />
           )}
           {row.extraTime && (
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>{EXTRA_TIME_LABEL[row.extraTime]}</span>
+            <StatusBadge tone="neutral" label={EXTRA_TIME_LABEL[row.extraTime]} />
           )}
           <IncidentIndicator shiftId={row.shiftId} />
           {row.missingDetails.length > 0 && (
@@ -472,19 +479,21 @@ export default function CompletionReviewPage() {
       )}
 
       {batchResults && (
-        <div role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)]/40 p-3 text-sm space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <p>
-              {batchResults.filter(r => r.approved).length} approved
-              {leftOut.length > 0 && `, ${leftOut.length} left out: details missing`}
-              {failedResults.length > 0 && `, ${failedResults.length} failed`}.
-            </p>
-            <Button variant="ghost" size="sm" onClick={() => setBatchResults(null)}>Dismiss</Button>
-          </div>
-          {failedResults.map(r => (
-            <p key={r.shiftId} className="text-xs text-[var(--color-destructive)]">{r.shiftId}: {r.message ?? r.code ?? 'Could not approve.'}</p>
-          ))}
-        </div>
+        <Callout tone={leftOut.length + failedResults.length > 0 ? 'warning' : 'success'} polite actions={<Button variant="ghost" size="sm" onClick={() => setBatchResults(null)}>Dismiss</Button>}>
+          <p>
+            {batchResults.filter(r => r.approved).length} approved
+            {leftOut.length > 0 && `, ${leftOut.length} left out: details missing`}
+            {failedResults.length > 0 && `, ${failedResults.length} failed`}.
+          </p>
+          {failedResults.map(r => {
+            const row = rows.find(x => x.shiftId === r.shiftId)   // a row that has left the queue can't be named, so it reads "One shift"
+            return (
+              <p key={r.shiftId} className="text-xs mt-1">
+                {row ? `${row.participantName} with ${row.staffName} on ${formatServiceDate(row.serviceDate)}` : 'One shift'}: {r.message ?? r.code ?? 'Could not approve.'}
+              </p>
+            )
+          })}
+        </Callout>
       )}
 
       <GroupStaffReviewSection canReview={canReviewCompletions} />
@@ -519,7 +528,9 @@ export default function CompletionReviewPage() {
           Couldn't load shift completions. Check your connection and try again.
         </Callout>
       ) : rows.length === 0 ? (
-        <EmptyState icon={ClipboardCheck} title="No completions match these filters" description="Try a different status, staff member or date range." />
+        statusFilter === 'PendingReview' && !staffFilter && !fromFilter && !toFilter
+          ? <EmptyState icon={ClipboardCheck} title="Nothing waiting for review" description="Shifts show here once a worker finishes them." />
+          : <EmptyState icon={ClipboardCheck} title="No completions match these filters" description="Try a different status, staff member or date range." />
       ) : (
         <>
           <DataTable
@@ -539,7 +550,7 @@ export default function CompletionReviewPage() {
         open={approveTarget !== null}
         onCancel={closeApprove}
         onConfirm={handleApproveConfirm}
-        title="Approve completion"
+        title="Approve shift"
         confirmLabel="Approve"
         loading={approveCompletion.isPending}
         confirmDisabled={travelEditing || setBreakKind.isPending}
@@ -547,6 +558,10 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${unbroken(formatServiceDate(approveTarget.serviceDate))} for ${approveTarget.staffName}?` : ''}</p>
+            {approveTarget && rosteredVsActual(approveTarget)}
+            <p className="text-xs text-[var(--color-muted-foreground)]">Approving sends this shift's hours to Employment Hero and makes it ready to bill.</p>
+            {detailLoading && <p role="status" className="text-xs text-[var(--color-muted-foreground)]">Loading what the worker entered...</p>}
+            {detailError && <DetailFailed />}
             {detail && approveTarget && (
               <WorkerAnswers c={detail} canEditTravel={pricing?.claimProviderTravel === true} onTravelOpenChange={setTravelEditing}
                 breaks={{ first: firstName(approveTarget.participantName), staffFirst: firstName(approveTarget.staffName), pendingKind: setBreakKind.isPending, onChange: changeKind }} />
@@ -598,27 +613,25 @@ export default function CompletionReviewPage() {
         open={returnTarget !== null}
         onCancel={closeReturn}
         onConfirm={handleReturnConfirm}
-        title="Return completion"
+        title="Return shift"
         variant="danger"
         confirmLabel="Return"
         loading={returnCompletion.isPending}
         message={
           <div className="space-y-3">
             <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${unbroken(formatServiceDate(returnTarget.serviceDate))} to ${returnTarget.staffName} for correction?` : ''}</p>
+            {detailError && <DetailFailed />}
             {detail && returnTarget && <WorkerAnswers c={detail} breaks={{ first: firstName(returnTarget.participantName), staffFirst: firstName(returnTarget.staffName) }} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
-            <label className="block text-sm text-[var(--color-foreground)]">
-              Reason (required)
-              <textarea
-                value={returnReason}
-                onChange={e => setReturnReason(e.target.value)}
-                rows={2}
-                className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
-                aria-required="true"
-                aria-describedby="return-reason-hint"
-              />
-            </label>
-            <p id="return-reason-hint" className="text-xs text-[var(--color-muted-foreground)]">The worker enters the shift details again, travel included.</p>
+            <TextAreaField
+              label="Reason"
+              required
+              rows={2}
+              value={returnReason}
+              onChange={e => { setReturnReason(e.target.value); setReasonError(undefined) }}
+              hint="The worker enters the shift details again, travel included."
+              error={reasonError}
+            />
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
         }
