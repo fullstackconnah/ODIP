@@ -7090,6 +7090,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<int?>("CancellationReason")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("timestamp without time zone");
 

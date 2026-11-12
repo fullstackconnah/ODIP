@@ -16,6 +16,21 @@ public enum ShiftStatus
     PendingReview = 5,   // NEW — worker has tapped Finish, awaiting office review
 }
 
+/// <summary>Why a shift was cancelled, kept for the office and the Cancellations by reason report. Saved as a plain number, so the numbers are fixed: never reorder or reuse one. Not the NDIA claim code (that is chosen at claim time).</summary>
+public enum ShiftCancellationReason
+{
+    ParticipantUnwell = 0,
+    ParticipantFamily = 1,
+    ParticipantTransport = 2,
+    ParticipantDidNotAttend = 3,
+    ParticipantOther = 4,
+    StaffUnavailable = 5,
+    ProviderCancelled = 6,
+    Weather = 7,
+    RosteredInError = 8,
+    Other = 9,
+}
+
 /// <summary>
 /// A staff-participant pairing preference. Preferred, Backup and Emergency are ordered tiers (see
 /// <see cref="StaffParticipantCompatibility.Rank"/>); Excluded is the hard "No". The absence of a
@@ -117,6 +132,8 @@ public class Shift : ITenantEntity
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     /// <summary>When a Published shift was cancelled (UTC). Null for a Draft cancel and for shifts cancelled before this was kept; the short-notice cancellation claim reads it.</summary>
     public DateTime? CancelledAt { get; set; }
+    /// <summary>Why the shift was cancelled. Null on a shift that is not cancelled, and on one cancelled without a reason (including every row from before this existed). Set and cleared only in RosteringController.ApplyStatus.</summary>
+    public ShiftCancellationReason? CancellationReason { get; set; }
 
     /// <summary>Length of the shift in hours, accounting for <see cref="EndsNextDay"/>.</summary>
     public decimal DurationHours => HoursBetween(StartTime, EndTime, EndsNextDay);

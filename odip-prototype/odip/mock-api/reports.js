@@ -1,6 +1,6 @@
-// Reports page for the mock API: hours by worker, shift fulfilment by week and leave taken, all synthetic. Mirrors ReportsController: a missing, reversed or over-366-day range is a 400.
+// Reports page for the mock API: hours by worker, shift fulfilment by week, cancellations by reason and leave taken, all synthetic. Mirrors ReportsController: a missing, reversed or over-366-day range is a 400.
 //
-// Captures switch state with POST /mock/reports/state: { mode: 'default' | 'empty' }, { fail: 'hours-by-worker' | 'shift-fulfilment' | 'leave-taken' | null } refuses that report with a 500.
+// Captures switch state with POST /mock/reports/state: { mode: 'default' | 'empty' }, { fail: 'hours-by-worker' | 'shift-fulfilment' | 'cancellations-by-reason' | 'leave-taken' | null } refuses that report with a 500.
 
 const DAY = 86400000
 const RANGE_MESSAGE = 'Pick a range of 366 days or less.'
@@ -55,6 +55,11 @@ function create({ respond, failEnvelope }) {
         }
         return rows
       })],
+      // Enum order, a null (Not recorded) row last, as the server lists them. The 35 and 33 character labels are the longest the page must hold.
+      ['reports/cancellations-by-reason', (params) => guard('cancellations-by-reason', params, () => [
+        ['ParticipantUnwell', 7], ['ParticipantFamily', 2], ['ParticipantTransport', 4], ['ParticipantDidNotAttend', 3], ['ParticipantOther', 1],
+        ['StaffUnavailable', 5], ['ProviderCancelled', 1], ['Weather', 2], ['RosteredInError', 1], ['Other', 3], [null, 6],
+      ].map(([reason, cancelled]) => ({ reason, cancelled })))],
       ['reports/leave-taken', (params) => guard('leave-taken', params, (from, to) => LEAVE
         .filter(([, , f, t]) => day(f) <= to && day(t) >= from)
         .map(([workerName, type, f, t], i) => ({
