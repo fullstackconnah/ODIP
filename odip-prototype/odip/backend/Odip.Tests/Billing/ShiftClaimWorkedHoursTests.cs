@@ -284,7 +284,7 @@ public class ShiftClaimWorkedHoursTests
 
         var items = (await kit.Ledger.ComputeAsync(kit.TenantId, new[] { person.Id }, Ct))[person.Id].Items;
 
-        Assert.Contains(items, i => i.ShiftId == approved.Id && i.Description.StartsWith("Shift 08:40–17:20 · 8.67 h"));
-        Assert.Contains(items, i => i.ShiftId != approved.Id && i.Description.StartsWith("Shift 09:00–17:00 · 8 h"));
+        Assert.Contains(items, i => i.ShiftId == approved.Id && i.Description.StartsWith("Shift 08:40–17:20 · 8.67 h"));
+        Assert.Contains(items, i => i.ShiftId != approved.Id && i.Description.StartsWith("Shift 09:00–17:00 · 8 h"));
     }
 }

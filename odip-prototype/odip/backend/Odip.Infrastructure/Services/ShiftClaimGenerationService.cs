@@ -478,7 +478,7 @@ public partial class ShiftClaimGenerationService
 
     /// <summary>The shift as the budget ledger describes it ("Shift 22:00–06:00 · 8 h"), so the same shift reads the same on every screen.</summary>
     private static string Describe(Shift shift) =>
-        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Shift {shift.StartTime:HH:mm}–{shift.EndTime:HH:mm} · {shift.DurationHours:0.##} h");
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Shift {shift.StartTime:HH:mm}–{shift.EndTime:HH:mm} · {shift.DurationHours:0.##} h");
 
     /// <summary>
     /// The refusal when shifts were found but none could be claimed: how many were left out and why, grouped by reason. "No completed, unclaimed shifts found" would be untrue here

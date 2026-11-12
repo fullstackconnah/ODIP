@@ -234,7 +234,9 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> Check([FromBody] CheckVehicleAssignmentDto dto, CancellationToken ct)
     {
-        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+        // As Create: an unscoped SuperAdmin sees every organisation, so the vehicle must belong to the trip's own. A trip that is not found has no organisation to match (the check then has nothing to check against).
+        var tripTenantId = await _db.TripInstances.Where(t => t.Id == dto.TripInstanceId).Select(t => (Guid?)t.TenantId).FirstOrDefaultAsync(ct);
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId && (tripTenantId == null || v.TenantId == tripTenantId), ct))
             return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail("Vehicle not found."));
 
         var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, dto.ExcludeAssignmentId ?? Guid.Empty, ct);
@@ -300,10 +302,10 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<VehicleAssignmentDto>>> Update(Guid id, [FromBody] UpdateVehicleAssignmentDto dto, CancellationToken ct)
     {
-        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().Include(x => x.TripInstance).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
-        var tripTenantId = await _db.TripInstances.Where(t => t.Id == a.TripInstanceId).Select(t => t.TenantId).FirstAsync(ct);
+        var tripTenantId = a.TripInstance.TenantId;
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == dto.VehicleId, ct);
         if (vehicle == null || vehicle.TenantId != tripTenantId)
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));

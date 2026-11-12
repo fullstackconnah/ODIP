@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
+using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -54,6 +55,17 @@ public class CrossTenantStaffVehicleTests
         return availability;
     }
 
+    // A driver who passes every other check, so a refusal can only be the organisation match (an ineligible one would reach the 422 gate first).
+    private static User EligibleDriver(OdipDbContext db, Guid tenantId)
+    {
+        var driver = User(db, tenantId);
+        driver.IsDriverEligible = true;
+        db.SaveChanges();
+        return driver;
+    }
+
+    private static string RefusalOf<T>(IActionResult? result) => Assert.IsType<ApiResponse<T>>(Assert.IsType<BadRequestObjectResult>(result).Value).Errors!.Single();
+
     // ── vehicle-assignments ────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -79,6 +91,18 @@ public class CrossTenantStaffVehicleTests
         var result = await new VehicleAssignmentsController(db).Check(new CheckVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = foreignVehicle.Id }, CancellationToken.None);
 
         Assert.IsNotType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task VehicleAssignmentCheck_UnscopedSuperAdmin_VehicleOfAnotherTenant_IsRefusedAsTheSaveIs()
+    {
+        using var db = Db(isSuperAdmin: true);
+        var trip = Trip(db, A);
+        var foreignVehicle = Vehicle(db, B);
+
+        var result = await new VehicleAssignmentsController(db).Check(new CheckVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = foreignVehicle.Id }, CancellationToken.None);
+
+        Assert.Equal("Vehicle not found.", RefusalOf<List<RosterFindingDto>>(result.Result));
     }
 
     [Fact]
@@ -147,14 +171,14 @@ public class CrossTenantStaffVehicleTests
         var trip = Trip(db, A);
         var ownVehicle = Vehicle(db, A);
         var foreignVehicle = Vehicle(db, B);
-        var foreignDriver = User(db, B);
+        var foreignDriver = EligibleDriver(db, B);
         var controller = new VehicleAssignmentsController(db);
 
         var withVehicle = await controller.Create(new CreateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = foreignVehicle.Id }, CancellationToken.None);
         var withDriver = await controller.Create(new CreateVehicleAssignmentDto { TripInstanceId = trip.Id, VehicleId = ownVehicle.Id, DriverStaffId = foreignDriver.Id }, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(withVehicle.Result);
-        Assert.IsType<BadRequestObjectResult>(withDriver.Result);
+        Assert.Equal("Vehicle not found.", RefusalOf<VehicleAssignmentDto>(withVehicle.Result));
+        Assert.Equal("Driver not found.", RefusalOf<VehicleAssignmentDto>(withDriver.Result));
         Assert.Empty(await db.VehicleAssignments.ToListAsync());
     }
 
@@ -164,7 +188,7 @@ public class CrossTenantStaffVehicleTests
         using var db = Db(isSuperAdmin: true);
         var own = PlantVehicleAssignment(db, A, out var ownVehicle, out _);
         var foreignVehicle = Vehicle(db, B);
-        var foreignDriver = User(db, B);
+        var foreignDriver = EligibleDriver(db, B);
         var controller = new VehicleAssignmentsController(db);
 
         var withVehicle = await controller.Update(own.Id,
@@ -172,8 +196,8 @@ public class CrossTenantStaffVehicleTests
         var withDriver = await controller.Update(own.Id,
             new UpdateVehicleAssignmentDto { TripInstanceId = own.TripInstanceId, VehicleId = ownVehicle.Id, DriverStaffId = foreignDriver.Id, Status = VehicleAssignmentStatus.Requested }, CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(withVehicle.Result);
-        Assert.IsType<BadRequestObjectResult>(withDriver.Result);
+        Assert.Equal("Vehicle not found.", RefusalOf<VehicleAssignmentDto>(withVehicle.Result));
+        Assert.Equal("Driver not found.", RefusalOf<VehicleAssignmentDto>(withDriver.Result));
         var stored = await db.VehicleAssignments.AsNoTracking().SingleAsync(a => a.Id == own.Id);
         Assert.Equal((ownVehicle.Id, (Guid?)null), (stored.VehicleId, stored.DriverUserId));
     }

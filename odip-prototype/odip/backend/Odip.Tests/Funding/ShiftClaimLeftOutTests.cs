@@ -65,7 +65,7 @@ public class ShiftClaimLeftOutTests
             new[] { "No catalogue sleepover item covers this date.", "It is a 1:3 group shift, which shift claims do not price yet." },
             preview.LeftOut.Select(l => l.Reason));
         Assert.Equal(new[] { new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 3) }, preview.LeftOut.Select(l => l.ServiceDate));
-        Assert.Equal(new[] { "Shift 22:00–06:00 · 8 h", "Shift 09:00–15:00 · 6 h" }, preview.LeftOut.Select(l => l.Description));
+        Assert.Equal(new[] { "Shift 22:00–06:00 · 8 h", "Shift 09:00–15:00 · 6 h" }, preview.LeftOut.Select(l => l.Description));
     }
 
     [Fact]

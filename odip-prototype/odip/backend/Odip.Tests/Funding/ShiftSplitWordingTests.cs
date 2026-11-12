@@ -22,7 +22,7 @@ public class ShiftSplitWordingTests : IDisposable
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
     private static readonly DateOnly Wed = new(2026, 10, 7), Thu = new(2026, 10, 8);
-    private const string SleepoverCode = "01_010_0107_1_1";
+    private const string SleepoverCode = "01_010_0107_1_1", TravelKmCode = "01_799_0107_1_1";
 
     private readonly LedgerKit _kit = Arrange(LedgerKit.Create());
 
@@ -35,6 +35,7 @@ public class ShiftSplitWordingTests : IDisposable
         if (kit.Db.SupportCatalogueItems.Any(i => i.ItemNumber == SleepoverCode)) return kit;
         Row(kit, "GRP_PERSONAL_CARE", "PC_Night", ClaimDayType.WeekdayNight, 60m, "H");
         Row(kit, "GRP_SLEEPOVER", SleepoverCode, ClaimDayType.Weekday, 150m, "E");
+        Row(kit, "GRP_PROVIDER_TRAVEL", TravelKmCode, ClaimDayType.Weekday, 1m, "E");
         return kit;
     }
 
@@ -126,6 +127,19 @@ public class ShiftSplitWordingTests : IDisposable
     }
 
     [Fact]
+    public async Task AShiftsTravelKilometreLine_IsAnEachItemWithAShift_AndSaysEachNotNights()
+    {
+        var person = _kit.SeedParticipant();
+        _kit.SeedPlan(person, Core(PlanType.PlanManaged, Q(2, 100000m)));
+        var shift = _kit.SeedShift(person, Wed, ShiftStatus.Completed, 9, 17);
+        _kit.SeedShiftClaim(person, TripClaimStatus.Submitted, 8m, shift, TravelKmCode);
+
+        var rows = (await _kit.Ledger.ComputeAsync(_kit.TenantId, new[] { person.Id }, Ct))[person.Id].Items.Where(i => i.Kind == LedgerRowKind.ClaimLine).ToList();
+
+        Assert.EndsWith($"{TravelKmCode} · 8 each", Assert.Single(rows).Description);
+    }
+
+    [Fact]
     public async Task ASplitShiftsLedgerRows_SayWhatEachPartHolds_AndASleepoverSaysOneNight()
     {
         var person = _kit.SeedParticipant();
@@ -137,8 +151,8 @@ public class ShiftSplitWordingTests : IDisposable
 
         var items = (await _kit.Ledger.ComputeAsync(_kit.TenantId, new[] { person.Id }, Ct))[person.Id].Items;
 
-        Assert.Equal(new[] { "Shift 18:00–02:00 · 6 h", "Shift 18:00–02:00 · 2 h" }, items.Where(i => i.ShiftId == split.Id).Select(i => i.Description));
-        Assert.Equal("Shift 22:00–08:00 · 1 night", Assert.Single(items, i => i.ShiftId == night.Id).Description);
+        Assert.Equal(new[] { "Shift 18:00–02:00 · 6 h", "Shift 18:00–02:00 · 2 h" }, items.Where(i => i.ShiftId == split.Id).Select(i => i.Description));
+        Assert.Equal("Shift 22:00–08:00 · 1 night", Assert.Single(items, i => i.ShiftId == night.Id).Description);
     }
 
     [Fact]
