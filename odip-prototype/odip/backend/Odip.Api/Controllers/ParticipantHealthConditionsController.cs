@@ -57,8 +57,9 @@ public class ParticipantHealthConditionsController : ControllerBase
             _db.ParticipantHealthConditions.Add(row);
         }
 
-        ParticipantGridRules.ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
-        await _db.SaveChangesAsync(ct);
+        row = await ParticipantGridRules.SaveGridAnswerAsync(_db, row, "IX_ParticipantHealthConditions_ParticipantId_ConditionType",
+            r => ParticipantGridRules.ApplyAnswer(r, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes),
+            t => _db.ParticipantHealthConditions.FirstAsync(c => c.ParticipantId == participantId && c.ConditionType == type, t), ct);
 
         return Ok(ApiResponse<ParticipantHealthConditionDto>.Ok(ToDto(row)));
     }

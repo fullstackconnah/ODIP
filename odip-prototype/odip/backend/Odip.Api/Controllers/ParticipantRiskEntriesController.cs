@@ -35,6 +35,9 @@ public class ParticipantRiskEntriesController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<ParticipantRiskEntryDto>>>> GetForParticipant(
         Guid participantId, [FromQuery] bool includeInactive = false, CancellationToken ct = default)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == participantId, ct))
+            return NotFound(ApiResponse<List<ParticipantRiskEntryDto>>.Fail("Participant not found"));
+
         var query = _db.ParticipantRiskEntries.Where(r => r.ParticipantId == participantId);
         if (!includeInactive)
             query = query.Where(r => r.IsActive);
