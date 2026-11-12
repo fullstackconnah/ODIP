@@ -572,13 +572,22 @@ public class InvoiceService
         if (shifts.Count == 0) return;
         var completions = await ShiftClaimWindow.LoadAsync(_db, shifts.Keys.ToList(), ct);
         var zones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, shifts.Values.Select(s => s.ServiceLocationId), ct);
-        var billed = hours.GroupBy(l => shiftOf[l.ClaimLineItemId!.Value]).ToDictionary(g => g.Key, g => g.Sum(l => l.Hours));
+        // Provider travel is billed in hours too but is not time on the shift, so it stays out of the total the spans are compared with.
+        var travel = claim.LineItems.Where(l => l.ClaimType == ClaimType.ProviderTravel).Select(l => l.Id).ToHashSet();
+        var billed = hours.Where(l => !travel.Contains(l.ClaimLineItemId!.Value)).GroupBy(l => shiftOf[l.ClaimLineItemId!.Value]).ToDictionary(g => g.Key, g => g.Sum(l => l.Hours));
+        var windows = shifts.Values.ToDictionary(s => s.Id, s => ShiftClaimWindow.For(s, completions.GetValueOrDefault(s.Id), ProviderTimeZoneResolver.ZoneOf(s, zones, orgZone)));
+        // The breaks taken alone are out of the billed hours, so they come out of each span too; read once, and only when some shift has a choice of span.
+        var aloneBreaks = windows.Values.Any(w => w.WithoutExtra != null) ? await ShiftAloneBreaks.LoadAsync(_db, windows.Where(w => w.Value.WithoutExtra != null).Select(w => w.Key).ToList(), ct) : new();
         foreach (var line in hours)
             if (shifts.TryGetValue(shiftOf[line.ClaimLineItemId!.Value], out var shift))
             {
-                var cw = ShiftClaimWindow.For(shift, completions.GetValueOrDefault(shift.Id), ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone));
+                var cw = windows[shift.Id];
                 // The claim's refusal of approved extra time is not stored, so read it from the hours billed: stamp the span that length matches (a tie keeps the priced one).
-                double Gap(ClaimSpan s) => Math.Abs((s.EndLocal - s.StartLocal).TotalHours - (double)billed[shift.Id]);
+                double Gap(ClaimSpan s)
+                {
+                    var alone = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, s.Start, s.End, s.EndsNextDay, shift.NightType, ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone))?.Sum(b => b.To - b.From) ?? 0;
+                    return Math.Abs((s.EndLocal - s.StartLocal).TotalHours - alone / 60.0 - (double)billed.GetValueOrDefault(shift.Id));
+                }
                 var window = cw.WithoutExtra is { } without && Gap(without) < Gap(cw.Priced) ? without : cw.Priced;
                 line.ServiceStartTime = window.Start;
                 line.ServiceEndTime = window.End;

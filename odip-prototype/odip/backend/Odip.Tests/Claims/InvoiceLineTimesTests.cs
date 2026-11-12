@@ -142,6 +142,48 @@ public class InvoiceLineTimesTests
         Assert.All(invoice.Lines, l => Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0)), Times(l)));
     }
 
+    [Fact]
+    public async Task AProviderTravelLineOfTheShift_IsNotCountedAsBilledHours_ButStillGetsTheShiftTimes()
+    {
+        var (kit, p) = Org();
+        var shift = AddShift(kit, p, 9, 17);
+        Complete(kit, shift, (8, 40), (17, 20));
+        var claim = Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0), (shift.Id, "04_799_0125_6_1", 1));
+        var lines = kit.Db.ClaimLineItems.Where(x => x.TripClaimId == claim.Id).OrderBy(x => x.ShiftPart).ToList();
+        lines[0].Hours = 8m;
+        lines[1].Hours = 0.5m;
+        lines[1].ClaimType = ClaimType.ProviderTravel;
+        kit.Db.SaveChanges();
+
+        var invoice = await Issue(kit, claim);
+
+        Assert.Equal(2, invoice.Lines.Count);
+        Assert.All(invoice.Lines, l => Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0)), Times(l)));
+    }
+
+    private static void AloneBreak(InvoiceKit kit, Shift shift) =>
+        kit.Db.ShiftBreaks.Add(new ShiftBreak
+        {
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, ShiftCompletionId = kit.Db.ShiftCompletions.Single(c => c.ShiftId == shift.Id).Id, CreatedByUserId = Guid.NewGuid(),
+            StartedAt = Utc(12, 0), EndedAt = Utc(12, 30),
+        });
+
+    [Theory]
+    [InlineData(8.17, 8, 40, 17, 20)]
+    [InlineData(7.5, 9, 0, 17, 0)]
+    public async Task AnAloneBreakInsideTheShift_IsLeftOutOfBothSpans_SoTheClaimedWindowIsStillRead(double billed, int sh, int sm, int eh, int em)
+    {
+        var (kit, p) = Org();
+        var shift = AddShift(kit, p, 9, 17);
+        Complete(kit, shift, (8, 40), (17, 20));
+        AloneBreak(kit, shift);
+        kit.Db.SaveChanges();
+
+        var line = Assert.Single((await Issue(kit, Billed(kit, Claim(kit, p, ClaimKind.Shift, (shift.Id, Hours, 0)), (decimal)billed))).Lines);
+
+        Assert.Equal((new TimeOnly(sh, sm), new TimeOnly(eh, em)), Times(line));
+    }
+
     [Theory]
     [InlineData(false)]   // no completion at all
     [InlineData(true)]    // a completion that was deactivated (its times must not be used)
