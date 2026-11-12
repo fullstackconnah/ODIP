@@ -5888,6 +5888,30 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.UserUiPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ItineraryView")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserUiPreferences");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.Vehicle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8831,6 +8855,15 @@ namespace Odip.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.UserUiPreference", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.Vehicle", b =>

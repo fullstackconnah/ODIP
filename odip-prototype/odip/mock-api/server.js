@@ -3173,6 +3173,8 @@ const routes = [
   ['admin/early-access', () => paged(earlyAccessSignups)],
   ['notifications/inbox', () => inAppInboxView()],
   ['whats-new', () => whatsNewFeed()],
+  // The signed-in person's saved screen choices (the itinerary view); the PUT below echoes into this object.
+  ['me/ui-preferences', () => ({ ...uiPreferences })],
   ['admin/whats-new', () => whatsNewRows.map((r) => ({ ...r }))],
 ]
 
@@ -3505,7 +3507,14 @@ const postRoutes = [
 // always empty here — this mock has no roster data to check for a conflict against).
 // PUT /staff-availability/:id deliberately has no entry here — it falls through to the generic
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
+// The one person the mock signs in as; reset by restarting the server, like the rest of the in-memory state.
+const uiPreferences = { itineraryView: null }
 const putRoutes = [
+  ['me/ui-preferences', (body) => {
+    if (body?.itineraryView !== 'days' && body?.itineraryView !== 'list') return respond(400, failEnvelope(null, ["itineraryView must be 'days' or 'list'."]))
+    uiPreferences.itineraryView = body.itineraryView
+    return { ...uiPreferences }
+  }],
   ['settings', (body) => Object.assign(appSettings, body)],
   // IC7: the Admin review. The reviewer and the date are the server's, as on the real endpoint.
   ['incidents/:id/review', (id, body) => {
