@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Download, Loader2, ReceiptText } from 'lucide-react'
 import { useInvoiceRegister } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
-import type { InvoiceRegisterRowDto } from '@/api/types'
+import { INVOICE_PAYMENT_LABELS, type InvoiceRegisterRowDto } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { CheckboxField } from '@/components/CheckboxField'
 import { CellText, DataTable, type Column } from '@/components/DataTable'
@@ -29,6 +29,7 @@ const FILTER_PILL = 'bg-[var(--color-input)] border border-[var(--color-border)]
 
 const KIND_ITEMS: DropdownItem[] = [{ value: 'Invoice', label: 'Invoices' }, { value: 'CreditNote', label: 'Credit notes' }]
 const STATUS_ITEMS: DropdownItem[] = [{ value: 'Issued', label: 'Issued' }, { value: 'Voided', label: 'Voided' }, { value: 'Credited', label: 'Credited' }]
+const PAYMENT_ITEMS: DropdownItem[] = [{ value: 'Outstanding', label: INVOICE_PAYMENT_LABELS.Outstanding }, { value: 'PartPaid', label: INVOICE_PAYMENT_LABELS.PartPaid }, { value: 'Paid', label: INVOICE_PAYMENT_LABELS.Paid }]
 
 /** The words after the count: the Type filter narrows what is counted. */
 function subtitleFor(total: number, kind: string, allOrganisations: boolean): string {
@@ -48,11 +49,12 @@ export default function InvoicesPage() {
   const search = param('search')
   const kind = param('kind')
   const status = param('status')
+  const paymentStatus = param('paymentStatus')
   const from = param('from')
   const to = param('to')
   const deletedOnly = param('deletedClaimOnly') === 'true'
   const page = Math.max(1, Number(param('page')) || 1)
-  const hasFilters = !!(search || kind || status || from || to || deletedOnly)
+  const hasFilters = !!(search || kind || status || paymentStatus || from || to || deletedOnly)
 
   // The failure line belongs to the rows it was shown under, so any filter or page change drops it.
   const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null)
@@ -74,6 +76,7 @@ export default function InvoicesPage() {
   if (term) queryParams.search = term
   if (kind) queryParams.kind = kind
   if (status) queryParams.status = status
+  if (paymentStatus) queryParams.paymentStatus = paymentStatus
   if (from) queryParams.from = from
   if (to) queryParams.to = to
   if (deletedOnly) queryParams.deletedClaimOnly = 'true'
@@ -184,6 +187,15 @@ export default function InvoicesPage() {
     },
     { key: 'status', header: 'Status', mobile: 'status', render: row => <StatusBadge status={row.status} /> },
     {
+      // Blank for a credit note, a voided or a credited invoice (no payment applies); the column leaves when no row on the page has one. minWidth holds the widest pill, as the claim detail Status column does.
+      key: 'paymentStatus',
+      header: 'Payment',
+      minWidth: '7rem',
+      hideWhenEmpty: true,
+      className: 'max-md:empty:hidden',
+      render: row => row.paymentStatus ? <StatusBadge status={row.paymentStatus} label={INVOICE_PAYMENT_LABELS[row.paymentStatus]} /> : null,
+    },
+    {
       key: 'total',
       header: 'Total',
       align: 'right',
@@ -197,11 +209,13 @@ export default function InvoicesPage() {
     },
   ]
 
+  // Voided and credited invoices and credit notes carry no payment status, so a payment filter beside them can only come back empty.
+  const paymentFilterNeverMatches = !!paymentStatus && (status === 'Voided' || status === 'Credited' || kind === 'CreditNote')
   const failed = isError || retryingAfterError(query)
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <AnnouncementRegion message={downloadError?.message ?? ''} />
-      <PageHeader title="Invoices" count={!failed && rows.length > 0 ? subtitleFor(totalCount, kind, showOrganisation) : undefined}>
+      <PageHeader title="Invoices" count={!failed && rows.length > 0 ? subtitleFor(totalCount, kind || (paymentStatus ? 'Invoice' : ''), showOrganisation) : undefined}>
         {filtersDrawn && (
           <div className="flex w-full flex-wrap items-end gap-2 pointer-coarse:gap-y-3">
             <div ref={searchBox} className="max-md:w-full md:w-80">
@@ -213,9 +227,10 @@ export default function InvoicesPage() {
                 className="w-full"
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 pointer-coarse:gap-y-3">
               <Dropdown variant="pill" value={kind} onChange={value => setFilters({ kind: value })} label="All Types" items={KIND_ITEMS} colorClass={FILTER_PILL} />
               <Dropdown variant="pill" value={status} onChange={value => setFilters({ status: value })} label="All Statuses" items={STATUS_ITEMS} colorClass={FILTER_PILL} />
+              <Dropdown variant="pill" value={paymentStatus} onChange={value => setFilters({ paymentStatus: value })} label="All Payments" items={PAYMENT_ITEMS} colorClass={FILTER_PILL} />
             </div>
             <div className="flex flex-wrap gap-2">
               <TextField label="Issued from" type="date" value={from} max={to || undefined} onChange={e => setFilters({ from: e.target.value })} />
@@ -231,7 +246,9 @@ export default function InvoicesPage() {
           <EmptyState
             icon={ReceiptText}
             title="No invoices match these filters"
-            description="Try a different search, type, status or date range, or clear the filters to see every invoice and credit note."
+            description={paymentFilterNeverMatches
+              ? 'Voided and credited invoices and credit notes have no payment status. Change the status or type filter, or clear the filters.'
+              : 'Try a different search, type, status, payment or date range, or clear the filters to see every invoice and credit note.'}
             action={{ label: 'Clear filters', onClick: clearFilters }}
           />
         ) : (

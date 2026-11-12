@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { Download } from 'lucide-react'
 import { useClaimInvoices } from '@/api/hooks'
-import type { InvoiceSummaryDto, PayerGroupDto, TripClaimDetailDto } from '@/api/types'
+import { INVOICE_PAYMENT_LABELS, type InvoiceSummaryDto, type PayerGroupDto, type TripClaimDetailDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { DataTable, CellText } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -183,6 +183,16 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 render: (row: InvoiceRow) => row.invoice
                   ? <StatusBadge status={row.invoice.status} />
                   : state === 'preview' ? <StatusBadge tone="neutral" label="Not issued" /> : <span className="text-[var(--color-muted-foreground)] max-md:hidden">—</span>,
+              },
+              {
+                key: 'payment',
+                pin: unpinned,
+                header: 'Payment',
+                // Derived from the claim's payments; blank on a credit note, a voided or a credited invoice, and the column is out of the preview and legacy states.
+                minWidth: '7rem',
+                hidden: state !== 'issued',
+                className: 'max-md:empty:hidden',
+                render: (row: InvoiceRow) => row.invoice?.paymentStatus ? <StatusBadge status={row.invoice.paymentStatus} label={INVOICE_PAYMENT_LABELS[row.invoice.paymentStatus]} /> : null,
               },
               {
                 key: 'issueDate',

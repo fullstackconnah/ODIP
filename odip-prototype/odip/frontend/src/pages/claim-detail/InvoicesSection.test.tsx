@@ -136,6 +136,36 @@ describe('InvoicesSection', () => {
     expect(screen.getByText('5 issued')).toBeInTheDocument()
   })
 
+  it('issued: a Payment column after Status, a pill per issued invoice, blank for a credited invoice and a credit note', async () => {
+    serveInvoices({
+      ...issued,
+      invoices: [
+        row({ id: 'inv-41', number: 41, displayNumber: 'INV-0041', status: 'Credited', paymentStatus: null }),
+        row({ id: 'cn-7', kind: 'CreditNote', number: 7, displayNumber: 'CN-0007', dueDate: undefined, paymentStatus: null }),
+        row({ id: 'inv-42', paymentStatus: 'Outstanding' }),
+        row({ id: 'inv-43', number: 43, displayNumber: 'INV-0043', ...self, paymentRecorded: true, paymentStatus: 'PartPaid' }),
+        row({ id: 'inv-44', number: 44, displayNumber: 'INV-0044', paymentRecorded: true, paymentStatus: 'Paid' }),
+      ],
+    })
+    renderSection()
+
+    const r42 = await waitFor(() => rowOf('INV-0042'))
+    const heads = screen.getAllByRole('columnheader').map(h => h.textContent)
+    expect(heads.indexOf('Payment')).toBe(heads.indexOf('Status') + 1)
+    expect(within(r42).getByText('Outstanding')).toBeInTheDocument()
+    expect(within(rowOf('INV-0043')).getByText('Part paid')).toBeInTheDocument()
+    expect(within(rowOf('INV-0044')).getByText('Paid')).toBeInTheDocument()
+    for (const n of ['INV-0041', 'CN-0007']) expect(within(rowOf(n)).queryByText(/^(Outstanding|Part paid|Paid)$/)).not.toBeInTheDocument()
+  })
+
+  it('preview: no Payment column, nothing is issued to be paid', async () => {
+    serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+
+    await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })
+    expect(screen.queryByRole('columnheader', { name: 'Payment' })).not.toBeInTheDocument()
+  })
+
   it('a credit note row says what it credits, shows its total negative and has no due date', async () => {
     serveInvoices(issued)
     renderSection()

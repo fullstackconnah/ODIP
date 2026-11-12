@@ -252,3 +252,57 @@ describe('InvoicesPage: the number downloads the PDF', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Download INV-0043 PDF' })).not.toHaveAttribute('aria-disabled', 'true'))
   })
 })
+
+describe('InvoicesPage: the Payment column and filter', () => {
+  it('shows a Payment column after Status with a pill per issued invoice, and nothing for a voided, credited or credit-note row', () => {
+    mockUseInvoiceRegister.mockReturnValue(ready([
+      row({ id: 'a', displayNumber: 'INV-0001', paymentStatus: 'PartPaid' }),
+      row({ id: 'b', displayNumber: 'INV-0002', status: 'Voided', paymentStatus: null }),
+      row({ id: 'c', displayNumber: 'INV-0003', status: 'Credited' }),
+      row({ id: 'd', displayNumber: 'CN-0001', kind: 'CreditNote', paymentStatus: null }),
+    ]))
+    renderPage()
+
+    const heads = screen.getAllByRole('columnheader').map(h => h.textContent)
+    expect(heads.indexOf('Payment')).toBe(heads.indexOf('Status') + 1)
+    const rows = screen.getAllByRole('row')
+    expect(within(rows.find(r => r.textContent?.includes('INV-0001'))!).getByText('Part paid')).toBeInTheDocument()
+    for (const n of ['INV-0002', 'INV-0003', 'CN-0001']) {
+      const r = rows.find(x => x.textContent?.includes(n))!
+      expect(within(r).queryByText(/^(Outstanding|Part paid|Paid)$/)).not.toBeInTheDocument()
+    }
+  })
+
+  it('drops the Payment column when no row on the page has a payment status', () => {
+    mockUseInvoiceRegister.mockReturnValue(ready([row({ status: 'Voided', paymentStatus: null })]))
+    renderPage('/invoices?status=Voided')
+    expect(screen.queryByRole('columnheader', { name: 'Payment' })).not.toBeInTheDocument()
+  })
+
+  it('offers All Payments, sends paymentStatus=PartPaid, and counts invoices in the subtitle', async () => {
+    const user = userEvent.setup()
+    mockUseInvoiceRegister.mockReturnValue(ready([row({ paymentStatus: 'PartPaid' })], 3))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /all payments/i }))
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(expect.arrayContaining(['Outstanding', 'Part paid', 'Paid']))
+    await user.click(screen.getByRole('option', { name: 'Part paid' }))
+
+    expect(lastParams()).toEqual({ page: '1', pageSize: '50', paymentStatus: 'PartPaid' })
+    expect(screen.getByTestId('where').textContent).toContain('paymentStatus=PartPaid')
+    expect(screen.getByText('3 invoices, newest first')).toBeInTheDocument()
+  })
+
+  it('explains an empty result when the payment filter sits beside a status or type that has no payment, and clears it with the rest', async () => {
+    const user = userEvent.setup()
+    mockUseInvoiceRegister.mockReturnValue(ready([]))
+    renderPage('/invoices?paymentStatus=Paid&status=Voided')
+    expect(screen.getByText(/have no payment status/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByTestId('where').textContent).toBe('')
+    cleanup()
+
+    renderPage('/invoices?paymentStatus=Paid')
+    expect(screen.getByText(/status, payment or date range/i)).toBeInTheDocument()
+  })
+})

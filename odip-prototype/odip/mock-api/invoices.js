@@ -36,10 +36,12 @@ const REGISTER = (() => {
       claimReference: `TC-${43000 + i}-20261020`, tripClaimId: `claim-reg-${i}`, total: 100 + i * 13.37, organisationName: orgs[i % 2],
     }
     row.billToName = self ? row.participantName : `Plan Manager ${i} Pty Ltd`
+    // Derived from the claim on the server; only an issued invoice has one.
+    row.paymentStatus = row.status === 'Issued' ? ['Outstanding', 'PartPaid', 'Paid'][i % 3] : null
     rows.push(row)
   }
   Object.assign(rows[0], { participantName: 'Wolfeschlegelsteinhausenberger-Fotheringham Participant Name', billToName: 'Plan Management Services of the Greater Wolfeschlegelsteinhausenberger Region' })
-  Object.assign(rows[1], { id: 'reg-credit', kind: 'CreditNote', displayNumber: 'CN-0007', status: 'Issued', creditsDisplayNumber: 'INV-0012', total: -123456.78 })
+  Object.assign(rows[1], { id: 'reg-credit', kind: 'CreditNote', displayNumber: 'CN-0007', status: 'Issued', creditsDisplayNumber: 'INV-0012', total: -123456.78, paymentStatus: null })
   Object.assign(rows[2], { id: 'reg-deleted', status: 'Voided', tripClaimId: undefined })
   Object.assign(rows[3], { id: 'reg-nopdf' })
   return rows
@@ -47,8 +49,8 @@ const REGISTER = (() => {
 
 function registerPage(params) {
   const q = (params.get('search') ?? '').trim().toLowerCase()
-  const kind = params.get('kind'), status = params.get('status'), from = params.get('from'), to = params.get('to')
-  const matches = REGISTER.filter((r) => (!kind || r.kind === kind) && (!status || r.status === status) && (!from || r.issueDate >= from) && (!to || r.issueDate <= to)
+  const kind = params.get('kind'), status = params.get('status'), from = params.get('from'), to = params.get('to'), paymentStatus = params.get('paymentStatus')
+  const matches = REGISTER.filter((r) => (!kind || r.kind === kind) && (!status || r.status === status) && (!paymentStatus || r.paymentStatus === paymentStatus) && (!from || r.issueDate >= from) && (!to || r.issueDate <= to)
     && (params.get('deletedClaimOnly') !== 'true' || !r.tripClaimId)
     && (!q || [r.displayNumber, r.participantName, r.billToName, r.claimReference].some((v) => v.toLowerCase().includes(q))))
   const pageSize = Number(params.get('pageSize')) || 50
@@ -74,12 +76,13 @@ function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
       id: `inv-${claimId}-${number}`, kind: 'Invoice', number, displayNumber: `${extra.prefix ?? settings.invoiceNumberPrefix}${pad4(number)}`, status,
       groupId: group.groupId, participantName: group.participantName, billToName: group.billToName, payerKind: group.payerKind,
       issueDate: ISSUED_ON, dueDate: DUE_ON, total: group.total, paymentRecorded: false, ...extra, prefix: undefined,
+      paymentStatus: status !== 'Issued' ? null : extra.paymentStatus ?? (extra.paymentRecorded ? 'PartPaid' : 'Outstanding'),
     }
   }
   function creditNote(claimId, number, credited) {
     const { dueDate, ...row } = credited
     return { ...row, id: `cn-${claimId}-${number}`, kind: 'CreditNote', number, displayNumber: `${settings.creditNotePrefix}${pad4(number)}`, status: 'Issued',
-      creditsDisplayNumber: credited.displayNumber, creditedByDisplayNumber: undefined, paymentRecorded: false }
+      creditsDisplayNumber: credited.displayNumber, creditedByDisplayNumber: undefined, paymentRecorded: false, paymentStatus: null }
   }
 
   /** A claim (Trip kind unless a participant id is given) with one line per payer and agency person, added to server.js's own fixtures so the claim pages load. */
@@ -118,7 +121,7 @@ function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
     f3.invoices = [invoice('claim-inv-f3', 42, plan, 'Voided'), invoice('claim-inv-f3', 43, self, 'Issued'), invoice('claim-inv-f3', 45, plan, 'Issued')]
     const f4 = addClaim('claim-inv-f4', 4, 'Paid', [plan, self], [])
     const credited = invoice('claim-inv-f4', 43, self, 'Credited', { creditedByDisplayNumber: 'CN-0007', paymentRecorded: true })
-    f4.invoices = [invoice('claim-inv-f4', 42, plan, 'Issued', { paymentRecorded: true }), credited, creditNote('claim-inv-f4', 7, credited)]
+    f4.invoices = [invoice('claim-inv-f4', 42, plan, 'Issued', { paymentRecorded: true, paymentStatus: 'Paid' }), credited, creditNote('claim-inv-f4', 7, credited)]
     addClaim('claim-inv-f5', 5, 'Submitted', [plan, self], []).legacy = true
     addClaim('claim-inv-f6', 6, 'Submitted', [], ['Noah Agency', 'Ella Agency'])
     addClaim('claim-inv-f7', 7, 'Draft', [payer('p-inv-0', 'Sam Lee', 'Pat Morgan — Harbour Plan Co', 'PlanManaged', 552)], ['Noah Agency'], { shiftOf: 'p-inv-0' })

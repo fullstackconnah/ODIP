@@ -170,6 +170,9 @@ export const STATUS_TONE: Record<string, Tone> = {
   issued: 'info',
   voided: 'neutral',
   credited: 'neutral',
+  // Invoice payment: owed is information, part paid needs a look, paid is done.
+  outstanding: 'neutral',
+  partpaid: 'warning',
   // NDIA claim files and their lines: a file's step is information; a discarded file and a withdrawn line no longer count.
   built: 'info',
   uploaded: 'info',

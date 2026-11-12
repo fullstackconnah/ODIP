@@ -344,6 +344,10 @@ export const INVOICE_STATUSES = ['Issued', 'Voided', 'Credited'] as const
 export type InvoiceStatus = typeof INVOICE_STATUSES[number]
 export const INVOICE_KINDS = ['Invoice', 'CreditNote'] as const
 export type InvoiceKind = typeof INVOICE_KINDS[number]
+// Derived from the claim on the server, never stored; null on a credit note, a voided or a credited invoice.
+export const INVOICE_PAYMENT_STATUSES = ['Outstanding', 'PartPaid', 'Paid'] as const
+export type InvoicePaymentStatus = typeof INVOICE_PAYMENT_STATUSES[number]
+export const INVOICE_PAYMENT_LABELS: Record<InvoicePaymentStatus, string> = { Outstanding: 'Outstanding', PartPaid: 'Part paid', Paid: 'Paid' }
 
 // ── Claim Line Item Status ──────────────────────────────
 export const CLAIM_LINE_ITEM_STATUSES = ['Draft', 'Submitted', 'Approved', 'Paid', 'PartiallyPaid', 'Rejected'] as const
