@@ -283,7 +283,7 @@ public class InquiryContactsTests
         var inquiry = SeedInquiry();
         SeedContacts(inquiry, new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Zelda", LastName = "Quill", Phone = "0499 111 222", Email = "zelda@example.com" });
 
-        var result = (await Controller("SupportWorker").GetAll(CancellationToken.None)).Result;
+        var result = (await Controller("Coordinator").GetAll(CancellationToken.None)).Result;
 
         var json = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(result).Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Contains("\"Ana\"", json);

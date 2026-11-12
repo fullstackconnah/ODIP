@@ -57,8 +57,9 @@ public class ParticipantCommunityAccessRiskItemsController : ControllerBase
             _db.ParticipantCommunityAccessRiskItems.Add(row);
         }
 
-        ParticipantGridRules.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
-        await _db.SaveChangesAsync(ct);
+        row = await ParticipantGridRules.SaveGridAnswerAsync(_db, row, "IX_ParticipantCommunityAccessRiskItems_ParticipantId_ItemType",
+            r => ParticipantGridRules.ApplyAnswer(r, dto.Rating, dto.StrategyNotes),
+            t => _db.ParticipantCommunityAccessRiskItems.FirstAsync(a => a.ParticipantId == participantId && a.ItemType == type, t), ct);
 
         return Ok(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Ok(ToDto(row)));
     }

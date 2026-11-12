@@ -75,6 +75,30 @@ public static class ParticipantGridRules
         }
     }
 
+    /// <summary>
+    /// As <see cref="SaveConsentAnswerAsync"/> for the other (participant, type) grid rows: applies the answer, saves, and on a first-save race lost
+    /// to the named unique index, drops the new row, reloads the winner with <paramref name="reload"/>, applies the answer to it and saves once more.
+    /// </summary>
+    public static async Task<T> SaveGridAnswerAsync<T>(OdipDbContext db, T row, string constraintName, Action<T> apply, Func<CancellationToken, Task<T>> reload, CancellationToken ct)
+        where T : class
+    {
+        apply(row);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return row;
+        }
+        catch (DbUpdateException ex) when (db.Entry(row).State == EntityState.Added
+            && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg && pg.ConstraintName == constraintName)
+        {
+            db.Entry(row).State = EntityState.Detached;
+            var stored = await reload(ct);
+            apply(stored);
+            await db.SaveChangesAsync(ct);
+            return stored;
+        }
+    }
+
     public static void ApplyAnswer(ParticipantHealthCondition row, bool? has, string? severity, bool? planProvided, bool? trainingRequired, string? notes)
     {
         row.Has = has;

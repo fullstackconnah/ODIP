@@ -245,3 +245,21 @@ describe('ParticipantsHubPage — Import', () => {
     expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
   })
 })
+
+describe('ParticipantsHubPage — Enquiries are for the lifecycle roles', () => {
+  it('shows a Coordinator the Enquiries tab', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderHub()
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Enquiries', 'Onboarding', 'Active participants'])
+  })
+
+  it.each(['SupportWorker', 'ReadOnly'])('gives a %s no Enquiries tab and sends ?tab=enquiries to the default tab without a fetch', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    const { location } = renderHub('/participants?tab=enquiries')
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Onboarding', 'Active participants'])
+    expect(screen.getByRole('tab', { name: 'Active participants' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText(/error|something went wrong/i)).toBeNull()
+    expect(mockUseParticipantInquiries).not.toHaveBeenCalled()
+    expect(location.current).toBe('/participants?tab=enquiries') // read-only fallback: the URL is left alone
+  })
+})

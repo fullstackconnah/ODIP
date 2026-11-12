@@ -47,19 +47,19 @@ public class TasksController : ControllerBase
 
     /// <summary>
     /// The ids a new task links to must be the caller's: the trip is read through the tenant-filtered TripInstances, and the booking, reservation, vehicle assignment and staff assignment (which
-    /// have no query filter of their own) through their trip. Returns the message for the first one that is not, or null. Update never writes these links, so only Create needs it.
+    /// have no query filter of their own) through their trip. When a trip is named, each linked row must also sit on that trip. Returns the message for the first one that is not, or null. Update never writes these links, so only Create needs it.
     /// </summary>
     private async Task<string?> LinkedRowErrorAsync(CreateTaskDto dto, CancellationToken ct)
     {
         if (dto.TripInstanceId is { } tripId && !await _db.TripInstances.AnyAsync(t => t.Id == tripId, ct)) return "Trip not found.";
         if (dto.ParticipantBookingId is { } bookingId
-            && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
+            && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && (dto.TripInstanceId == null || b.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
         if (dto.AccommodationReservationId is { } reservationId
-            && !await _db.AccommodationReservations.AnyAsync(r => r.Id == reservationId && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)) return "Reservation not found.";
+            && !await _db.AccommodationReservations.AnyAsync(r => r.Id == reservationId && (dto.TripInstanceId == null || r.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)) return "Reservation not found.";
         if (dto.VehicleAssignmentId is { } vehicleAssignmentId
-            && !await _db.VehicleAssignments.AnyAsync(a => a.Id == vehicleAssignmentId && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Vehicle assignment not found.";
+            && !await _db.VehicleAssignments.AnyAsync(a => a.Id == vehicleAssignmentId && (dto.TripInstanceId == null || a.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Vehicle assignment not found.";
         if (dto.StaffAssignmentId is { } staffAssignmentId
-            && !await _db.StaffAssignments.AnyAsync(a => a.Id == staffAssignmentId && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Staff assignment not found.";
+            && !await _db.StaffAssignments.AnyAsync(a => a.Id == staffAssignmentId && (dto.TripInstanceId == null || a.TripInstanceId == dto.TripInstanceId) && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Staff assignment not found.";
         return null;
     }
 

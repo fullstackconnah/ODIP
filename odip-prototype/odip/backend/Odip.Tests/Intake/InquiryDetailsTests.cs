@@ -238,17 +238,13 @@ public class InquiryDetailsTests
     }
 
     [Fact]
-    public async Task The_contact_name_is_withheld_from_roles_without_lifecycle_rights()
+    public async Task The_list_carries_the_contact_name_for_the_lifecycle_roles()
     {
         SeedWalsh();
 
-        var worker = Assert.Single((await ListAsync("SupportWorker")).EnumerateArray());
-        foreach (var key in new[] { "contactFirstName", "contactLastName", "contactRelationship" }) Assert.False(worker.TryGetProperty(key, out _), key);
-        Assert.Equal("0412 555 061", worker.GetProperty("phone").GetString());
-        Assert.True(worker.GetProperty("hasAddress").GetBoolean());
-
         var coordinator = Assert.Single((await ListAsync("Coordinator")).EnumerateArray());
         Assert.Equal(("Sarah", "Walsh", "Mother"), (coordinator.GetProperty("contactFirstName").GetString(), coordinator.GetProperty("contactLastName").GetString(), coordinator.GetProperty("contactRelationship").GetString()));
+        Assert.Equal("0412 555 061", coordinator.GetProperty("phone").GetString());
     }
 
     [Fact]

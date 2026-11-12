@@ -29,6 +29,7 @@ public class ParticipantInquiriesController : ControllerBase
 
     /// <summary>The Closed view: the latest <see cref="ClosedListCap"/> closed enquiries, newest close first (the id breaks a tie, so the cut is the same on every load), with the full count so the screen can say the list is cut.</summary>
     [HttpGet("closed")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantInquiryDto>>>> GetClosed(CancellationToken ct)
     {
         var query = _db.ParticipantInquiries.Include(x => x.ReferralSource).Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId).Where(x => x.ClosedAt != null);
@@ -57,14 +58,6 @@ public class ParticipantInquiriesController : ControllerBase
             x.ParticipantId is Guid participantId && states.TryGetValue(participantId, out var state)
                 ? ToDto(x, StaffOf(x), zoneId) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
                 : ToDto(x, StaffOf(x), zoneId)).ToList();
-        // A visit's address (often a home), its internal notes and the staff member's full name are for the lifecycle roles, as on /intake-visits.
-        // Everyone else who can open the Enquiries tab still sees when it is, the staff member's first name and what the invite did. The main contact's
-        // name and relationship are a third party's details, so they are withheld the same way (L2); the phone and email stay, as before the redesign.
-        var seesVisitDetails = User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true;
-        if (!seesVisitDetails) rows = rows.Select(r => r with
-        {
-            IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null, CloseNote = null, ContactFirstName = null, ContactLastName = null, ContactRelationship = null,
-        }).ToList();
         return (rows, zoneId);
     }
 
@@ -73,6 +66,7 @@ public class ParticipantInquiriesController : ControllerBase
     /// <see cref="ParticipantInquiryDto.IsDirectIntake"/>). The tab itself shows only the open ones.
     /// </summary>
     [HttpGet]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct)
     {
         var inquiries = await _db.ParticipantInquiries.Include(x => x.ReferralSource).Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
