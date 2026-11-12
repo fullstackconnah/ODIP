@@ -4,7 +4,7 @@
 // Sign-in is stubbed with page.route (Admin); the mock API holds the data (mock-api/invoices.js: register rows reg-0.., claim-inv-pay). Light theme, reduced motion, clock pinned.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, layoutCheck, checkCropHolds, writeChecks } from './lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, layoutCheck, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
