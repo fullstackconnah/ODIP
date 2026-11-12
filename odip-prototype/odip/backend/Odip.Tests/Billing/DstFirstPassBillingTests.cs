@@ -164,7 +164,7 @@ public class DstFirstPassBillingTests
         var window = ShiftClaimWindow.For(shift, completion, Sydney);
 
         Assert.True(window.Priced.StartFirstPass);
-        Assert.Contains("60 min", window.ExtraText);
+        Assert.Equal("Extra time 02:30–02:30 (clocks went back) · 60 min", window.ExtraText);
         Assert.False(ShiftClaimWindow.For(shift, new ShiftCompletion { ActualStart = completion.ActualStart, ActualEnd = completion.ActualEnd, VarianceMinutesStart = -60, ExtraTime = ExtraTimeDecision.Pending, TimeZoneId = "Australia/Sydney", IsActive = true }, Sydney).Priced.StartFirstPass);
     }
 
@@ -177,6 +177,6 @@ public class DstFirstPassBillingTests
 
         var window = ShiftClaimWindow.For(shift, completion, Sydney);
 
-        Assert.Equal("Extra time 01:30–03:30 · 60 min", window.ExtraText);
+        Assert.Equal("Extra time 01:30–03:30 (clocks went forward) · 60 min", window.ExtraText);
     }
 }
