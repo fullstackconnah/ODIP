@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CompletionReviewPage from './CompletionReviewPage'
 import type { CompletionQueueItemDto, ShiftCompletionDto, PagedResult, StaffListDto } from '@/api/types'
 import { emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
+import { TONE } from '@/lib/tone'
 
 const {
   mockUseCompletions, mockUseCompletion, mockUseStaff,
@@ -155,9 +156,10 @@ describe('CompletionReviewPage', () => {
     expect(screen.getByText(/\+5 min/)).toBeInTheDocument()
   })
 
-  it('shows an empty state when no rows match the filters', () => {
+  it('shows the filtered empty state when a date filter leaves no rows', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-09-01' } })
 
     expect(screen.getByText(/no completions match these filters/i)).toBeInTheDocument()
   })
@@ -260,7 +262,23 @@ describe('CompletionReviewPage', () => {
 
     expect(mockApproveBatchMutateAsync).toHaveBeenCalledWith(['shift-1', 'shift-2'])
     expect(await screen.findByText(/1 approved, 1 failed/i)).toBeInTheDocument()
-    expect(screen.getByText(/this shift is not pending review/i)).toBeInTheDocument()
+    expect(screen.getByText("Grace Palmer-Hughes with Jack O'Sullivan on Tue 8 Sep 2026: This shift is not pending review.")).toBeInTheDocument()
+    expect(screen.getByText(/1 approved, 1 failed/).closest('[role="status"]')).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(/shift-2/)
+  })
+
+  it('names a failed batch shift in words even when the row has left the queue', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveBatchMutateAsync.mockResolvedValue([{ shiftId: 'gone-9', approved: false, code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift is not pending review.' }])
+    renderPage()
+
+    await user.click(screen.getByLabelText('Select row shift-1'))
+    await user.click(screen.getByRole('button', { name: /approve selected \(1\)/i }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /approve all/i }))
+
+    expect(await screen.findByText('One shift: This shift is not pending review.')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/gone-9/)
   })
 
   it('hides approve/return/batch actions and shows a read-only note for ReadOnly', () => {
@@ -761,5 +779,158 @@ describe('CompletionReviewPage extra time', () => {
     expect(dialog.queryByRole('radio')).not.toBeInTheDocument()
     expect(dialog.queryByRole('button', { name: /pay extra time/i })).not.toBeInTheDocument()
     expect(dialog.getByRole('button', { name: 'Done' })).toBeInTheDocument()
+  })
+})
+
+describe('CompletionReviewPage tidy (m1112)', () => {
+  const showRow = (overrides: Partial<CompletionQueueItemDto> = {}) =>
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem(overrides)]), isLoading: false, isError: false, refetch: vi.fn() })
+  const openApprove = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    return screen.getByRole('alertdialog')
+  }
+
+  it('shows the rostered and actual times and what approving does, in the Approve dialog titled "Approve shift"', async () => {
+    const user = userEvent.setup()
+    showRow()
+    renderPage()
+    const dialog = await openApprove(user)
+
+    expect(within(dialog).getByRole('heading', { name: 'Approve shift' })).toBeInTheDocument()
+    expect(dialog.textContent).toMatch(/Rostered:.*Actual:/s)
+    expect(within(dialog).getByText("Approving sends this shift's hours to Employment Hero and makes it ready to bill.")).toBeInTheDocument()
+  })
+
+  it('says the worker answers are loading, then that they failed, and keeps Approve enabled in both', async () => {
+    const user = userEvent.setup()
+    showRow()
+    mockUseCompletion.mockReturnValue({ data: undefined, isLoading: true, isError: false } as never)
+    const { unmount } = renderPage()
+    let dialog = await openApprove(user)
+    expect(within(dialog).getByText('Loading what the worker entered...')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /^approve$/i })).toBeEnabled()
+    unmount()
+
+    mockUseCompletion.mockReturnValue({ data: undefined, isLoading: false, isError: true } as never)
+    renderPage()
+    dialog = await openApprove(user)
+    expect(within(dialog).getByText("Couldn't load what the worker entered. Close this and open it again.")).toBeInTheDocument()
+    expect(within(dialog).queryByText('Loading what the worker entered...')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /^approve$/i })).toBeEnabled()
+  })
+
+  it('reads the start and finish variance separately; a normal row is neutral, an outlier keeps the warning tone', () => {
+    showRow({ varianceMinutesStart: -3, varianceMinutesEnd: 12, isOutlierVariance: false })
+    const { unmount } = renderPage()
+    const pill = screen.getByText('Start -3 min · Finish +12 min')
+    expect(pill).toHaveAttribute('data-status-badge')
+    expect(pill).toHaveClass(...TONE.neutral.solid.split(' '))
+    unmount()
+
+    showRow({ varianceMinutesStart: 0, varianceMinutesEnd: 20, isOutlierVariance: true })
+    const second = renderPage()
+    const outlier = screen.getByText('Start on time · Finish +20 min')
+    expect(outlier).toHaveClass(...TONE.warning.solid.split(' '))
+    second.unmount()
+
+    showRow({ varianceMinutesStart: 0, varianceMinutesEnd: 0 })
+    renderPage()
+    expect(screen.getByText('On time')).toHaveAttribute('data-status-badge')
+  })
+
+  it('mutes the whole Rostered line and gives the Actual value the weight', () => {
+    showRow()
+    renderPage()
+    expect(screen.getByText(/^Rostered:/)).toHaveClass('text-[var(--color-muted-foreground)]')
+    const actual = screen.getByText(/^Actual:/).parentElement as HTMLElement
+    expect(actual.querySelector('.font-medium')).not.toBeNull()
+  })
+
+  it('says nothing is waiting, not that filters matched nothing, when the queue is empty on the default filters', () => {
+    renderPage()
+
+    expect(screen.getByText('Nothing waiting for review')).toBeInTheDocument()
+    expect(screen.getByText('Shifts show here once a worker finishes them.')).toBeInTheDocument()
+    expect(screen.queryByText(/no completions match these filters/i)).not.toBeInTheDocument()
+  })
+
+  it('lays the phone card out with the participant as the title and staff and date as one meta line', () => {
+    showRow()
+    renderPage()
+    expect(screen.getByText('Liam Okafor').closest('td')).toHaveClass('max-md:-order-2')
+    expect(screen.getByText("Jack O'Sullivan").closest('td')).toHaveClass('max-md:-order-1', 'max-md:text-[13px]')
+    expect(screen.getByText('08/09/2026').closest('td')).toHaveClass('max-md:-order-1', 'max-md:text-[13px]')
+  })
+
+  it('puts the blank-reason error on the Reason field, clears it on typing, and sends the same trimmed body with no length limit', async () => {
+    const user = userEvent.setup()
+    showRow()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
+    const dialog = within(screen.getByRole('alertdialog'))
+    const reason = dialog.getByRole('textbox', { name: /^Reason/ })
+    expect(reason).not.toHaveAttribute('maxlength')
+
+    await user.type(reason, '   ')
+    await user.click(dialog.getByRole('button', { name: /^return$/i }))
+    expect(mockReturnMutateAsync).not.toHaveBeenCalled()
+    expect(reason).toHaveAttribute('aria-invalid', 'true')
+    expect(dialog.getAllByRole('alert')).toHaveLength(1)
+    expect(dialog.getByRole('alert')).toHaveTextContent('A return reason is required.')
+
+    await user.type(reason, '  Times look off.  ')
+    expect(dialog.queryByRole('alert')).not.toBeInTheDocument()
+    await user.click(dialog.getByRole('button', { name: /^return$/i }))
+    expect(mockReturnMutateAsync).toHaveBeenCalledWith({ shiftId: 'shift-1', data: { reason: 'Times look off.' } })
+  })
+
+  it('keeps a failed Return request in its own line, apart from the Reason field', async () => {
+    const user = userEvent.setup()
+    showRow()
+    mockReturnMutateAsync.mockRejectedValue(new Error('boom'))
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
+    const dialog = within(screen.getByRole('alertdialog'))
+    const reason = dialog.getByRole('textbox', { name: /^Reason/ })
+    await user.type(reason, 'Fix the times.')
+    await user.click(dialog.getByRole('button', { name: /^return$/i }))
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent(/please try again|boom/i)
+    expect(reason).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('draws every pill in the table and the dialog with StatusBadge, in its tone', async () => {
+    const user = userEvent.setup()
+    showRow({ missingDetails: ['notes'], offRoster: true, timesAdjusted: true, returnCount: 2, extraTime: 'Approved', status: 'Completed' })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ sentFromOffline: true }), isLoading: false, isError: false } as never)
+    const { container } = renderPage()
+
+    expect(screen.getByText('Needs details')).toHaveClass(...TONE.warning.solid.split(' '))
+    expect(screen.getByText('Off roster')).toHaveClass(...TONE.warning.solid.split(' '))
+    expect(screen.getByText('Times adjusted by the worker')).toHaveClass(...TONE.info.solid.split(' '))
+    expect(screen.getByText('Returned 2 times')).toHaveClass(...TONE.neutral.solid.split(' '))
+    expect(screen.getByText('Extra time paid')).toHaveClass(...TONE.neutral.solid.split(' '))
+    expect(container.querySelectorAll('span.rounded-full:not([data-status-badge])')).toHaveLength(0)
+
+    showRow({ status: 'PendingReview' })
+    cleanup()
+    const second = renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(screen.getByText('Sent from offline')).toHaveAttribute('data-status-badge')
+    expect(document.querySelectorAll('span.rounded-full:not([data-status-badge])')).toHaveLength(0)
+    second.unmount()
+  })
+
+  it('shows a 409 from Approve in the dialog and leaves Approve available (the hook does not refetch the list on error)', async () => {
+    const user = userEvent.setup()
+    showRow()
+    mockApproveMutateAsync.mockRejectedValue({ response: { status: 409, data: { error: { code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift is not pending review.' } } } })
+    renderPage()
+    const dialog = within(await openApprove(user))
+    await user.click(dialog.getByRole('button', { name: /^approve$/i }))
+
+    expect(await dialog.findByRole('alert')).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: /^approve$/i })).toBeEnabled()
+    expect(mockApproveMutateAsync).toHaveBeenCalledTimes(1)
   })
 })
