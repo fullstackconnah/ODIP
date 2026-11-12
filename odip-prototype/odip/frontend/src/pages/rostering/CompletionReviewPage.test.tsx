@@ -920,4 +920,17 @@ describe('CompletionReviewPage tidy (m1112)', () => {
     expect(document.querySelectorAll('span.rounded-full:not([data-status-badge])')).toHaveLength(0)
     second.unmount()
   })
+
+  it('shows a 409 from Approve in the dialog and leaves Approve available (the hook does not refetch the list on error)', async () => {
+    const user = userEvent.setup()
+    showRow()
+    mockApproveMutateAsync.mockRejectedValue({ response: { status: 409, data: { error: { code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift is not pending review.' } } } })
+    renderPage()
+    const dialog = within(await openApprove(user))
+    await user.click(dialog.getByRole('button', { name: /^approve$/i }))
+
+    expect(await dialog.findByRole('alert')).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: /^approve$/i })).toBeEnabled()
+    expect(mockApproveMutateAsync).toHaveBeenCalledTimes(1)
+  })
 })
