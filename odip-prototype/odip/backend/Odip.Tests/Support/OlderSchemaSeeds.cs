@@ -72,6 +72,8 @@ internal static class OlderSchemaSeeds
         ("FundingPlans", "MyProviderOn", "date"),
         ("FundingPlans", "MyProviderSetBy", "character varying(100)"),
         ("Participants", "ServicesStartedAt", "timestamp without time zone"),
+        ("ProviderSettings", "AgreementComplaintsTerms", "character varying(2000)"),
+        ("ProviderSettings", "AgreementResponsibilitiesTerms", "character varying(2000)"),
         ("ProviderSettings", "ContactEmail", "character varying(254)"),
         ("ProviderSettings", "ContactPhone", "character varying(30)"),
         ("ProviderSettings", "CreditNotePrefix", "character varying(10)"),

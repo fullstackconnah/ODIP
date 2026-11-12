@@ -88,6 +88,8 @@ export function useProviderRow<F extends Record<string, string | boolean | numbe
     delete body.creditNotePrefix
     delete body.invoiceStartNumber
     delete body.paymentTermsDays
+    delete body.agreementResponsibilitiesTerms   // wording goes only when this section changed it; a cleared field is sent as "" (null would mean leave as is)
+    delete body.agreementComplaintsTerms
     for (const k of changed) Object.assign(body, { [k]: form[k] })
     setResult(null)
     setRefusedAt(null)

@@ -25,6 +25,8 @@ export interface ProviderSettingsDto {
   bsb: string | null
   accountNumber: string | null
   invoiceFooterNotes: string | null
+  agreementResponsibilitiesTerms?: string | null
+  agreementComplaintsTerms?: string | null
   /** MED-02: primary manager contact — shown first by the (future) MED-01 missed-medication guidance. */
   managerName: string | null
   managerPhone: string | null
@@ -73,6 +75,8 @@ export interface UpsertProviderSettingsDto {
   bsb?: string
   accountNumber?: string
   invoiceFooterNotes?: string
+  agreementResponsibilitiesTerms?: string
+  agreementComplaintsTerms?: string
   managerName?: string
   managerPhone?: string
   /** Null or absent leaves the stored zone; otherwise one of the server's seven (StateTimeZoneMap.Zones). */

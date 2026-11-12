@@ -1025,6 +1025,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.BSB).HasMaxLength(10);
             entity.Property(e => e.AccountNumber).HasMaxLength(20);
             entity.Property(e => e.InvoiceFooterNotes).HasMaxLength(2000);
+            entity.Property(e => e.AgreementResponsibilitiesTerms).HasMaxLength(2000);
+            entity.Property(e => e.AgreementComplaintsTerms).HasMaxLength(2000);
             entity.Property(e => e.TimeZoneId).HasMaxLength(64);
             entity.Property(e => e.TradingName).HasMaxLength(200);
             entity.Property(e => e.ContactEmail).HasMaxLength(254);

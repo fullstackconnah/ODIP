@@ -120,6 +120,19 @@ describe('Settings history', () => {
     expect(within(after).getAllByRole('listitem').map(li => li.textContent)).toEqual(['other: Optional', 'constructor: Optional'])
   })
 
+  it('names the two agreement wording fields and shows each line of the wording on its own line', async () => {
+    api.audit.mockResolvedValue(history([entry('a', [
+      { field: 'AgreementResponsibilitiesTerms', old: null, new: 'Cancel 48 hours ahead.\nOtherwise full fee.' },
+      { field: 'AgreementComplaintsTerms', old: 'Ask us.', new: null },
+    ])]))
+    show()
+    expect(await screen.findByText('Agreement wording: responsibilities and cancellation')).toBeInTheDocument()
+    expect(screen.getByText('Agreement wording: concerns and complaints')).toBeInTheDocument()
+    expect(screen.getByText('Cancel 48 hours ahead.')).toBeInTheDocument()
+    expect(screen.getByText('Otherwise full fee.')).toBeInTheDocument()
+    expect(screen.getByText('Ask us.')).toBeInTheDocument()
+  })
+
   it('shows a masked bank row as set, changed or cleared, never as digits', async () => {
     api.audit.mockResolvedValue(history([entry('a', [{ field: 'AccountNumber', old: null, new: 'changed' }])]))
     const { container } = show()

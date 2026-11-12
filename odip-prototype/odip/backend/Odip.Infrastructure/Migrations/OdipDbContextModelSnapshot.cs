@@ -4084,6 +4084,14 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("AgreementComplaintsTerms")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("AgreementResponsibilitiesTerms")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("BSB")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
