@@ -30,11 +30,29 @@ public class GroupActivity : ITenantEntity
 
     public ShiftStatus Status { get; set; } = ShiftStatus.Draft;
 
+    /// <summary>The recurring series this occurrence belongs to; null for a one-off.</summary>
+    public Guid? SeriesId { get; set; }
+    public GroupActivitySeries? Series { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CancelledAt { get; set; }
 
     public ICollection<GroupActivityStaff> Staff { get; set; } = new List<GroupActivityStaff>();
+}
+
+public enum GroupActivityInterval { Weekly, Fortnightly, Monthly }
+
+/// <summary>The repeat rule a recurring group activity was created with. Its occurrences are ordinary <see cref="GroupActivity"/> rows pointing back here.</summary>
+public class GroupActivitySeries : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public GroupActivityInterval Interval { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>A worker on a <see cref="GroupActivity"/>, for their own part of its window. One row per worker; a busy period to every roster rule (<c>RosterAvailability.ActivityStaffBusyAsync</c>).</summary>

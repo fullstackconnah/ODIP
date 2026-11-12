@@ -6732,6 +6732,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<Guid?>("SeriesId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateOnly>("ServiceDate")
                         .HasColumnType("date");
 
@@ -6759,11 +6762,42 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ActivityId");
 
+                    b.HasIndex("SeriesId");
+
                     b.HasIndex("ServiceLocationId");
 
                     b.HasIndex("TenantId", "ServiceDate");
 
                     b.ToTable("GroupActivities");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivitySeries", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Interval")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GroupActivitySeries");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.GroupActivityStaff", b =>
@@ -8912,12 +8946,19 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("ActivityId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Odip.Domain.Rostering.GroupActivitySeries", "Series")
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Odip.Domain.Entities.ServiceLocation", "ServiceLocation")
                         .WithMany()
                         .HasForeignKey("ServiceLocationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Activity");
+
+                    b.Navigation("Series");
 
                     b.Navigation("ServiceLocation");
                 });

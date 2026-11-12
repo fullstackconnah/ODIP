@@ -138,6 +138,7 @@ public class OdipDbContext : DbContext
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
     public DbSet<GroupActivity> GroupActivities => Set<GroupActivity>();
     public DbSet<GroupActivityStaff> GroupActivityStaff => Set<GroupActivityStaff>();
+    public DbSet<GroupActivitySeries> GroupActivitySeries => Set<GroupActivitySeries>();
     public DbSet<RosterWeek> RosterWeeks => Set<RosterWeek>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
@@ -1264,9 +1265,13 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Activity).WithMany().HasForeignKey(e => e.ActivityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.ServiceLocation).WithMany().HasForeignKey(e => e.ServiceLocationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.ActivityId);
+            entity.HasOne(e => e.Series).WithMany().HasForeignKey(e => e.SeriesId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.ServiceLocationId);
+            entity.HasIndex(e => e.SeriesId);
             entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
         });
+
+        modelBuilder.Entity<GroupActivitySeries>(entity => entity.HasKey(e => e.Id));
 
         modelBuilder.Entity<GroupActivityStaff>(entity =>
         {
@@ -2444,6 +2449,8 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<GroupActivity>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<GroupActivityStaff>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<GroupActivitySeries>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<ShiftPattern>()
