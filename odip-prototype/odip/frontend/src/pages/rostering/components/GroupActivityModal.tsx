@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { CalendarClock, Clock, FileText, UserCheck, Users, X } from 'lucide-react'
-import type { GroupActivityDto, GroupActivityFormDto, ShiftDto, SupportRatio } from '@/api/types'
+import { format, parseISO } from 'date-fns'
+import { CalendarClock, Clock, FileText, Repeat, UserCheck, Users, X } from 'lucide-react'
+import type { GroupActivityDto, GroupActivityFormDto, GroupActivityRepeats, GroupActivityScope, ShiftDto, SupportRatio } from '@/api/types'
 import { SUPPORT_RATIOS } from '@/api/types'
 import {
   useActivities, useAddGroupParticipant, useAttachShifts, useCancelGroupActivity, useCreateActivityFromShift, useCreateGroupActivity, useDetachShift, useGroupActivity, useRemoveGroupStaff,
@@ -11,11 +12,13 @@ import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DiscardChangesDialog } from '@/components/DiscardChangesDialog'
 import { FormField, inputClass } from '@/components/FormField'
+import { SelectField } from '@/components/SelectField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { formatServiceDate } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import { useOnline } from '@/pages/portal/shift/useOnline'
@@ -23,8 +26,9 @@ import { NO_LENGTH_MESSAGE, hasNoLength } from '../lib/shiftTimes'
 import { RATIO_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { firstName } from '../lib/rosterDrag'
 import { removeFromActivityCopy } from '../lib/groupActivities'
+import { dayLabel, seriesDates, seriesLastDay, seriesOverviewLine, seriesSummary, seriesUntilText } from '../lib/groupActivitySeries'
 import { StaffPickerPage, type StaffPickerProps } from './StaffPicker'
-import { AddButton, HeaderIcon, OverviewRow, PageFrame, PickGroup, PickRow, Skeleton, StepItem } from './GroupActivityParts'
+import { AddButton, Choice, HeaderIcon, OverviewRow, PageFrame, PickGroup, PickRow, Skeleton, StepItem } from './GroupActivityParts'
 
 export type ActivityModalTarget = { mode: 'new'; serviceDate: string; fromShift?: ShiftDto } | { mode: 'edit'; id: string }
 
@@ -106,12 +110,19 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const dirty = (Object.keys(edits) as (keyof Form)[]).some(changed)
 
   const [tried, setTried] = useState(false)
+  const [repeats, setRepeats] = useState<'' | GroupActivityRepeats>('')   // create only; not part of the Form, so it never counts as an unsaved edit of a saved activity
+  const [until, setUntil] = useState('')
+  const untilId = useId()
   const [minTried, setMinTried] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [writeError, setWriteError] = useState<string | null>(null)
   const [writeKey, setWriteKey] = useState<string | null>(null)   // which immediate write the error belongs to: a `p:<id>` one shows under that participant row
   const [refusedName, setRefusedName] = useState('')
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [scopeFor, setScopeFor] = useState<'when' | 'details' | null>(null)   // the page whose Save is waiting on the scope dialog
+  const [scope, setScope] = useState<GroupActivityScope>('Occurrence')
+  const scopeRadioRef = useRef<HTMLInputElement>(null)
+  const today = useProviderToday()
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [removing, setRemoving] = useState<{ kind: 'participant' | 'staff'; key: string; name: string; run: () => Promise<unknown> } | null>(null)
   const [personSearch, setPersonSearch] = useState('')
@@ -178,12 +189,12 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   useEffect(() => { if (page === 'pickStaff') staffSearchRef.current?.focus() }, [page])
 
   /** An immediate write: on a refusal the server's message shows and nothing else changes (the refetch redraws the truth). */
-  async function write(key: string, run: () => Promise<unknown>, fallback: string) {
+  async function write(key: string, run: () => Promise<unknown>, fallback: string, prefix = '') {
     setWriteError(null)
     setWriteKey(key)
     onLateRefusalClear?.()
     setPendingKey(key)
-    try { await run() } catch (err) { setWriteError(extractErrorMessage(err, fallback)) } finally { setPendingKey(null) }
+    try { await run() } catch (err) { setWriteError(prefix + extractErrorMessage(err, fallback)) } finally { setPendingKey(null) }
   }
 
   function markAttendance(p: GroupActivityDto['participants'][number], attended: boolean) {
@@ -193,14 +204,20 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
       attended ? `Couldn't undo for ${firstName(p.participantName)}.` : `Couldn't mark ${firstName(p.participantName)} as didn't attend.`)
   }
 
-  const whenErrors = [!values.title.trim() && 'title', noLength && 'end'].filter(Boolean) as string[]
+  const repeating = isNew && !fromShift && repeats !== ''
+  const lastDay = seriesLastDay(values.serviceDate)
+  const untilIssue = !repeating ? undefined
+    : !until ? 'Pick an end date.'
+    : until < values.serviceDate ? "The end date can't be before the activity date."
+    : lastDay && until > lastDay ? `Pick an end date by ${dayLabel(lastDay)}. A series can run up to 400 days.` : undefined
+  const whenErrors = [!values.title.trim() && 'title', noLength && 'end', untilIssue && 'until'].filter(Boolean) as string[]
 
   async function createDraft() {
     setTried(true)
-    if (whenErrors.length) { (whenErrors[0] === 'title' ? titleRef.current : dialogRef.current?.querySelector<HTMLElement>('[data-field="end"]'))?.focus(); return }
+    if (whenErrors.length) { (whenErrors[0] === 'title' ? titleRef.current : dialogRef.current?.querySelector<HTMLElement>(`[data-field="${whenErrors[0]}"]`))?.focus(); return }
     setSaveError(null)
     try {
-      const made = fromShift ? await createFromShift.mutateAsync({ shiftId: fromShift.id, title: values.title.trim() }) : await create.mutateAsync(toDto(values))
+      const made = fromShift ? await createFromShift.mutateAsync({ shiftId: fromShift.id, title: values.title.trim() }) : await create.mutateAsync({ ...toDto(values), repeats: repeating ? repeats : null, ...(repeating && { until }) })
       setSavedId(made.id)
       setEdits({})
       setTried(false)
@@ -211,7 +228,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   }
 
   /** One page's Save: its own edits go on top of what is saved, so the other page's unsaved edits are neither sent nor lost. */
-  async function savePage(which: 'when' | 'details') {
+  async function savePage(which: 'when' | 'details', chosen?: GroupActivityScope) {
     if (!activity) return
     if (which === 'when') {
       setTried(true)
@@ -220,16 +237,17 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
       setMinTried(true)
       if (minStaffInvalid(values.minStaff)) return
     }
+    if (activity.series && !chosen) { setScope('Occurrence'); setScopeFor(which); return }
     const keys = PAGE_KEYS[which]
     const merged = { ...initial, ...Object.fromEntries(keys.filter(k => k in edits).map(k => [k, edits[k]])) } as Form
     setSaveError(null)
     try {
-      await update.mutateAsync({ id: activity.id, data: toDto(merged), status: activity.status })
+      await update.mutateAsync({ id: activity.id, data: toDto(merged), status: activity.status, ...(chosen && { scope: chosen }) })
       setEdits(prev => { const next = { ...prev }; for (const k of keys) delete next[k]; return next })
       setTried(false)
       setMinTried(false)
     } catch (err) {
-      setSaveError(`Couldn't save. Your changes are still here. ${extractErrorMessage(err, '')}`.trim())
+      setSaveError(chosen === 'Series' ? `Nothing was changed. ${extractErrorMessage(err, '')}`.trim() : `Couldn't save. Your changes are still here. ${extractErrorMessage(err, '')}`.trim())
     }
   }
 
@@ -301,7 +319,8 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           <div className="p-4"><Skeleton lines={4} /></div>
         ) : activity ? (
           <ul className="py-2">
-            <OverviewRow id="when" icon={CalendarClock} label="When and where" value={`${formatServiceDate(activity.serviceDate)} · ${timeRange}`} current={shown === 'when'} locked={lockedFields} onOpen={() => openPage('when')} />
+            <OverviewRow id="when" icon={CalendarClock} label="When and where" value={`${formatServiceDate(activity.serviceDate)} · ${timeRange}`} current={shown === 'when'} locked={lockedFields} onOpen={() => openPage('when')}
+              extra={activity.series ? <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground"><Repeat className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>{seriesOverviewLine(activity.series)}</span></p> : undefined} />
             <OverviewRow id="people" icon={Users} label="People" value={activity.participants.length === 0 ? '0 · No one yet' : `${activity.participants.length} · ${activity.participants.map(p => firstName(p.participantName)).join(', ')}`} current={shown === 'people' || shown === 'pickPerson'} onOpen={() => openPage('people')} />
             <OverviewRow
               id="staff" icon={UserCheck} label="Staff" value={cancelled || !activity.staffNeeded ? String(activity.staffAssigned) : `${activity.staffAssigned} of ${activity.staffNeeded}`}
@@ -313,7 +332,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         ) : null}
       </div>
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border)] p-[var(--card-pad)]">
-        <div>{!isNew && !readOnly && activity && <Button variant="ghost-danger" onClick={() => setConfirmCancel(true)}>Cancel activity</Button>}</div>
+        <div>{!isNew && !readOnly && activity && <Button variant="ghost-danger" onClick={() => { setScope('Occurrence'); setConfirmCancel(true) }}>Cancel activity</Button>}</div>
         <Button variant="secondary" onClick={requestClose}><span className="whitespace-nowrap">Close</span></Button>
       </footer>
     </aside>
@@ -327,15 +346,22 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
       onBack={isNew && p === 'when' ? undefined : wide && !PARENT[p] ? undefined : back} backLabel={PARENT[p] ? `Back to ${PAGE_TITLE[PARENT[p]!]}` : 'Back to overview'} onClose={requestClose} footer={footer}
     >{body}</PageFrame>
   )
+  const cancelAll = Boolean(activity?.series) && scope === 'Series'
   const saveCallout = saveError && <div className="mb-3"><Callout tone="danger">{saveError}</Callout></div>
 
   function whenPage() {
     const showErrors = tried && whenErrors.length > 0
     const creating = isNew
+    const count = repeating && until && !untilIssue ? seriesDates(repeats as GroupActivityRepeats, values.serviceDate, until).length : 0
+    const createLabel = count >= 2 ? `Create ${count} drafts` : 'Create draft'
+    const untilShown = tried && untilIssue
+    const summary = !values.serviceDate ? <p className="text-sm text-[var(--color-muted-foreground)]">Pick a date first.</p>
+      : !until ? <p className="text-sm text-[var(--color-muted-foreground)]">Pick an end date to see how many activities this makes.</p>
+      : !untilIssue ? <p className="text-sm">{seriesSummary(repeats as GroupActivityRepeats, values.serviceDate, until)}</p> : null
     const footer = fieldsDisabled ? closeFooter : creating ? (
       <>
         <Button variant="secondary" onClick={requestClose}>Cancel</Button>
-        <Button onClick={createDraft} disabled={saving} aria-busy={saving || undefined}><span className="whitespace-nowrap">{saving ? 'Creating…' : 'Create draft'}</span></Button>
+        <Button onClick={createDraft} disabled={saving} aria-busy={saving || undefined}><span className="whitespace-nowrap">{saving ? 'Creating…' : createLabel}</span></Button>
       </>
     ) : (
       <>
@@ -367,6 +393,29 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           <FormField label="End" required error={noLength ? NO_LENGTH_MESSAGE : undefined}><input type="time" data-field="end" className="px-1" value={values.endTime} disabled={fieldsDisabled || Boolean(fromShift && isNew)} onChange={e => set({ endTime: e.target.value })} /></FormField>
         </div>
         <FormField label="Ends the next day" layout="checkbox"><input type="checkbox" checked={values.endsNextDay} disabled={fieldsDisabled || Boolean(fromShift && isNew)} onChange={e => set({ endsNextDay: e.target.checked })} /></FormField>
+        {creating && !fromShift && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <SelectField
+                label="Repeats" value={repeats} onChange={e => { setRepeats(e.target.value as '' | GroupActivityRepeats); if (!e.target.value) setUntil('') }}
+                options={[{ value: '', label: 'Does not repeat' }, { value: 'Weekly', label: 'Weekly' }, { value: 'Fortnightly', label: 'Fortnightly' }, { value: 'Monthly', label: 'Monthly' }]}
+              />
+              {repeating && (
+                <FormField label="Until" required descriptionId={untilShown ? untilId : undefined}>
+                  <input type="date" data-field="until" value={until} min={values.serviceDate || undefined} max={lastDay || undefined} aria-invalid={untilShown ? 'true' : undefined} onChange={e => setUntil(e.target.value)} />
+                </FormField>
+              )}
+            </div>
+            {repeating && (untilShown ? <p id={untilId} role="alert" className="text-xs text-[var(--color-destructive)]">{untilIssue}</p> : <div aria-live="polite">{summary}</div>)}
+          </>
+        )}
+        {!creating && activity?.series && (
+          <div>
+            <p className="text-sm font-medium">Repeats</p>
+            <p className="text-sm">{seriesUntilText(activity.series)}</p>
+            <p className="text-xs text-muted-foreground">Set when the series was made. To change it, cancel the upcoming ones and add a new series.</p>
+          </div>
+        )}
         {fromShift && isNew ? (
           <div className="rounded-sm border border-border p-2 text-sm">
             <span className="font-medium">{fromShift.participantName}</span>
@@ -551,16 +600,52 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         </div>
       </div>
 
+      {scopeFor && activity?.series && (() => {
+        const moved = scopeFor === 'when' && values.serviceDate !== initial.serviceDate
+        const choice: GroupActivityScope = moved ? 'Occurrence' : scope
+        return (
+          <ConfirmDialog
+            open
+            title="Save changes to which activities?"
+            message={
+              <fieldset className="flex flex-col gap-1">
+                <legend className="sr-only">Save to</legend>
+                <Choice name="save-scope" value="Occurrence" checked={choice === 'Occurrence'} onChange={() => setScope('Occurrence')} inputRef={scopeRadioRef} label="This activity" sub={`${formatServiceDate(activity.serviceDate)} only`} />
+                <Choice name="save-scope" value="Series" checked={choice === 'Series'} onChange={() => setScope('Series')} disabled={moved} label="This and all upcoming"
+                  sub={moved ? 'The date can only change for this activity.' : `This one and every one from ${format(parseISO(today), 'd MMM')} to ${dayLabel(activity.series.endDate)} that isn't cancelled. Past ones stay as they are.`} />
+              </fieldset>
+            }
+            confirmLabel="Save changes"
+            cancelLabel="Keep editing"
+            initialFocusRef={scopeRadioRef}
+            loading={saving}
+            onCancel={() => setScopeFor(null)}
+            onConfirm={() => { void savePage(scopeFor, choice).then(() => setScopeFor(null)) }}
+          />
+        )
+      })()}
+
       <ConfirmDialog
         open={confirmCancel}
         title={`Cancel ${activity?.title ?? 'activity'}?`}
-        message="It stays on the board, marked Cancelled. No one can be added after this."
-        confirmLabel="Cancel activity"
+        message={
+          <>
+            {activity?.series && (
+              <fieldset className="flex flex-col gap-1">
+                <legend className="sr-only">Cancel</legend>
+                <Choice name="cancel-scope" value="Occurrence" checked={scope === 'Occurrence'} onChange={() => setScope('Occurrence')} label="This activity" sub={`${formatServiceDate(activity.serviceDate)} only`} />
+                <Choice name="cancel-scope" value="Series" checked={scope === 'Series'} onChange={() => setScope('Series')} label="This and all upcoming" sub={`Every one from ${format(parseISO(activity.serviceDate), 'd MMM')} to ${dayLabel(activity.series.endDate)} that isn't already cancelled.`} />
+              </fieldset>
+            )}
+            <p>{cancelAll ? 'They stay on the board, marked Cancelled. No one can be added to them after this.' : 'It stays on the board, marked Cancelled. No one can be added after this.'}</p>
+          </>
+        }
+        confirmLabel={cancelAll ? 'Cancel activities' : 'Cancel activity'}
         cancelLabel="Keep activity"
         variant="danger"
         loading={cancel.isPending}
         onCancel={() => setConfirmCancel(false)}
-        onConfirm={() => { if (activity) void write('cancel', () => cancel.mutateAsync(activity.id), "Couldn't cancel the activity.").then(() => setConfirmCancel(false)) }}
+        onConfirm={() => { if (activity) void write('cancel', () => cancel.mutateAsync({ id: activity.id, ...(cancelAll && { scope: 'Series' as const }) }), "Couldn't cancel the activity.", cancelAll ? 'Nothing was changed. ' : '').then(() => setConfirmCancel(false)) }}
       />
 
       {removing && activity && (() => {

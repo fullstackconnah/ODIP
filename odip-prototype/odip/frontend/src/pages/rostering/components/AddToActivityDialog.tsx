@@ -9,6 +9,7 @@ import { plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import { formatShiftTimeRange } from '../lib/roster'
 import { firstName } from '../lib/rosterDrag'
+import { Choice } from './GroupActivityParts'
 
 export type AddToActivityDialogProps = {
   /** The shift being added; null keeps the dialog closed. The parent keys it by shift. */
@@ -83,14 +84,5 @@ export function AddToActivityDialog({ shift, activities, onClose, onNew, onAttac
       )}
       {error && <div className="mt-3"><Callout tone="danger">{error}</Callout></div>}
     </Modal>
-  )
-}
-
-function Choice({ value, checked, onChange, label, sub }: { value: string; checked: boolean; onChange: (v: string) => void; label: string; sub?: string }) {
-  return (
-    <label className="flex min-h-[var(--control-h)] cursor-pointer items-center gap-2 rounded-sm px-2 hover:bg-accent/60 pointer-coarse:min-h-[var(--tap-min)]">
-      <input type="radio" name="activity" value={value} checked={checked} onChange={() => onChange(value)} className="h-4 w-4 shrink-0" />
-      <span className="flex min-w-0 flex-col"><span className="text-sm font-medium">{label}</span>{sub && <span className="text-xs text-muted-foreground">{sub}</span>}</span>
-    </label>
   )
 }

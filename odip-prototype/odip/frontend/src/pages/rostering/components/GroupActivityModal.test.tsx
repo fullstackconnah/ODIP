@@ -466,3 +466,201 @@ describe('GroupActivityModal from lg (two panes)', () => {
     expect(screen.queryByRole('heading', { name: 'People', level: 2 })).toBeNull()
   })
 })
+
+describe('GroupActivityModal create: repeats', () => {
+  const pickRepeats = (value: string) => userEvent.selectOptions(screen.getByLabelText(/^Repeats/), value)
+  const setDate = (label: RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
+
+  it('repeats: Until shows only once Repeats is chosen, and choosing Does not repeat again hides and clears it', async () => {
+    open(newTarget)
+    await screen.findByLabelText(/Title/)
+    expect(screen.queryByLabelText(/^Until/)).toBeNull()
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2026-09-14')
+    await pickRepeats('')
+    expect(screen.queryByLabelText(/^Until/)).toBeNull()
+    await pickRepeats('Weekly')
+    expect(screen.getByLabelText(/^Until/)).toHaveValue('')
+  })
+
+  it('repeats: create from a shift shows no Repeats', async () => {
+    open(shiftTarget)
+    await screen.findByLabelText(/Title/)
+    expect(screen.queryByLabelText(/^Repeats/)).toBeNull()
+  })
+
+  it('repeats: blank Until after a try shows "Pick an end date." and sends no request', async () => {
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await pickRepeats('Weekly')
+    expect(screen.getByText('Pick an end date to see how many activities this makes.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    expect(await screen.findAllByText('Pick an end date.')).not.toHaveLength(0)
+    expect(screen.getByLabelText(/^Until/)).toHaveAttribute('aria-invalid', 'true')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('repeats: Until past Date+400 shows the range error and sends no request', async () => {
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    setDate(/^Date/, '2026-11-17')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2027-12-23')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    expect(await screen.findByText('Pick an end date by 22 Dec 2027. A series can run up to 400 days.')).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('repeats: an Until before the Date is refused with its own words', async () => {
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2026-08-10')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    expect(await screen.findByText("The end date can't be before the activity date.")).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('repeats: weekly 2026-11-17..2027-03-09 reads "Create 17 drafts" with the summary line, and posts repeats and until', async () => {
+    post.mockResolvedValue(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    serve(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    setDate(/^Date/, '2026-11-17')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2027-03-09')
+    expect(screen.getByText('Every Tuesday until 9 Mar 2027 · 17 activities')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create 17 drafts' }))
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    expect(post.mock.calls[0][1]).toMatchObject({ title: 'Bowling', serviceDate: '2026-11-17', repeats: 'Weekly', until: '2027-03-09' })
+  })
+
+  it('repeats: Does not repeat posts repeats null and no until', async () => {
+    post.mockResolvedValue(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    serve(makeActivity({ id: 'new-1', status: 'Draft', participants: [] }))
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    expect(post.mock.calls[0][1]).toMatchObject({ repeats: null })
+    expect(post.mock.calls[0][1]).not.toHaveProperty('until')
+  })
+
+  it('repeats: a failed series create keeps the form and shows the server message', async () => {
+    post.mockRejectedValue({ response: { status: 400, data: { errors: ['Pick an end date on or after the activity date.'], code: 'GA_SERIES_END' } } })
+    open(newTarget)
+    await userEvent.type(await screen.findByLabelText(/Title/), 'Bowling')
+    await pickRepeats('Weekly')
+    setDate(/^Until/, '2026-09-14')
+    await userEvent.click(screen.getByRole('button', { name: 'Create 5 drafts' }))
+    expect(await screen.findByText(/Couldn't save\. Your changes are still here\./)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Title/)).toHaveValue('Bowling')
+  })
+})
+
+describe('GroupActivityModal series occurrence', () => {
+  const series = { id: 'series-1', interval: 'Weekly', startDate: '2026-08-17', endDate: '2027-03-09' } as unknown as ReturnType<typeof makeActivity>['series']
+  const occurrence = (over: Partial<ReturnType<typeof makeActivity>> = {}) => makeActivity({ series, participants: [], ...over })
+  const dialog = () => screen.findByRole('alertdialog')
+
+  it('overview and when page: shows the repeat line, and a read-only Repeats value with its hint', async () => {
+    serve(occurrence())
+    open(editTarget)
+    expect(await screen.findByText('Repeats every Monday until 9 Mar 2027')).toBeInTheDocument()
+    await goTo('When and where')
+    expect(await screen.findByText('Every Monday until 9 Mar 2027')).toBeInTheDocument()
+    expect(screen.getByText('Set when the series was made. To change it, cancel the upcoming ones and add a new series.')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Repeats/)).toBeNull()
+  })
+
+  it('scope: a one-off save opens no dialog and sends no scope', async () => {
+    serve(makeActivity())
+    put.mockResolvedValue(makeActivity())
+    open(editTarget)
+    await goTo('Details')
+    await userEvent.type(await screen.findByLabelText(/Notes/), 'Bring towels')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(put.mock.calls[0][1]).not.toHaveProperty('scope')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('scope: an occurrence save opens the dialog with "This activity" focused and sends the chosen scope', async () => {
+    serve(occurrence())
+    put.mockResolvedValue(occurrence())
+    open(editTarget)
+    await goTo('Details')
+    await userEvent.type(await screen.findByLabelText(/Notes/), 'Bring towels')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    const d = await dialog()
+    expect(within(d).getByText('Save changes to which activities?')).toBeInTheDocument()
+    expect(within(d).getByRole('radio', { name: /^This activity/ })).toHaveFocus()
+    expect(within(d).getByRole('radio', { name: /^This activity/ })).toBeChecked()
+    expect(put).not.toHaveBeenCalled()
+    await userEvent.click(within(d).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(d).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(put.mock.calls[0][1]).toMatchObject({ scope: 'Series', notes: 'Bring towels' })
+  })
+
+  it('scope: the default choice sends Occurrence', async () => {
+    serve(occurrence())
+    put.mockResolvedValue(occurrence())
+    open(editTarget)
+    await goTo('Details')
+    await userEvent.type(await screen.findByLabelText(/Notes/), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(put.mock.calls[0]?.[1]).toMatchObject({ scope: 'Occurrence' }))
+  })
+
+  it('scope: a moved date disables "This and all upcoming" and says why', async () => {
+    serve(occurrence())
+    open(editTarget)
+    await goTo('When and where')
+    fireEvent.change(await screen.findByLabelText(/^Date/), { target: { value: '2026-08-18' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    const d = await dialog()
+    expect(within(d).getByRole('radio', { name: /^This and all upcoming/ })).toBeDisabled()
+    expect(within(d).getByText('The date can only change for this activity.')).toBeInTheDocument()
+  })
+
+  it('scope: a refusal shows "Nothing was changed. Tue 8 Dec: ..." in the save callout', async () => {
+    serve(occurrence())
+    const message = 'Tue 8 Dec: This shift has started, finished or been cancelled, so it can\'t join or leave an activity.'
+    put.mockRejectedValue({ response: { status: 409, data: { errors: [message], code: 'GA_SHIFT_LOCKED' } } })
+    open(editTarget)
+    await goTo('Details')
+    await userEvent.type(await screen.findByLabelText(/Notes/), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(within(await dialog()).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText(`Nothing was changed. ${message}`)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Notes/)).toHaveValue('x')
+  })
+
+  it('scope: cancel with "This and all upcoming" posts { scope: Series }', async () => {
+    serve(occurrence())
+    post.mockResolvedValue(occurrence({ status: 'Cancelled' }))
+    open(editTarget)
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel activity' }))
+    const d = await dialog()
+    expect(within(d).getByText('It stays on the board, marked Cancelled. No one can be added after this.')).toBeInTheDocument()
+    await userEvent.click(within(d).getByRole('radio', { name: /^This and all upcoming/ }))
+    expect(within(d).getByText('They stay on the board, marked Cancelled. No one can be added to them after this.')).toBeInTheDocument()
+    await userEvent.click(within(d).getByRole('button', { name: 'Cancel activities' }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/rostering/group-activities/activity-1/cancel', { scope: 'Series' }))
+  })
+
+  it('scope: a cancel refusal shows "Nothing was changed. ..." on the overview', async () => {
+    serve(occurrence())
+    const message = 'Tue 8 Dec: Something is in the way.'
+    post.mockRejectedValue({ response: { status: 409, data: { errors: [message] } } })
+    open(editTarget)
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel activity' }))
+    const d = await dialog()
+    await userEvent.click(within(d).getByRole('radio', { name: /^This and all upcoming/ }))
+    await userEvent.click(within(d).getByRole('button', { name: 'Cancel activities' }))
+    expect(await screen.findByText(`Nothing was changed. ${message}`)).toBeInTheDocument()
+  })
+})

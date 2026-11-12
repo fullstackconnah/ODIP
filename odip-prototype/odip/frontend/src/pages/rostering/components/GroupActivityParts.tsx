@@ -93,3 +93,13 @@ export function PickRow({ label, sub, onPick }: { label: string; sub?: string; o
     <li><button type="button" onClick={onPick} className="flex min-h-[max(var(--row-h),var(--tap-min))] w-full flex-col justify-center rounded-sm px-2 text-left hover:bg-[var(--color-hover-wash)] active:bg-[var(--color-hover-wash)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"><span className="text-sm font-medium">{label}</span>{sub && <span className="text-xs text-[var(--color-muted-foreground)]">{sub}</span>}</button></li>
   )
 }
+
+/** One radio row of a choice list (add-to-activity, save scope, cancel scope): a `--control-h` row, `--tap-min` on touch. */
+export function Choice({ value, checked, onChange, label, sub, name = 'activity', disabled, inputRef }: { value: string; checked: boolean; onChange: (v: string) => void; label: string; sub?: string; name?: string; disabled?: boolean; inputRef?: Ref<HTMLInputElement> }) {
+  return (
+    <label className="flex min-h-[var(--control-h)] cursor-pointer items-center gap-2 rounded-sm px-2 hover:bg-accent/60 has-[:disabled]:cursor-default has-[:disabled]:opacity-60 has-[:disabled]:hover:bg-transparent pointer-coarse:min-h-[var(--tap-min)]">
+      <input type="radio" name={name} disabled={disabled} ref={inputRef} value={value} checked={checked} onChange={() => onChange(value)} className="h-4 w-4 shrink-0" />
+      <span className="flex min-w-0 flex-col"><span className="text-sm font-medium">{label}</span>{sub && <span className="text-xs text-muted-foreground">{sub}</span>}</span>
+    </label>
+  )
+}

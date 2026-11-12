@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Rostering;
 using Odip.Application.Common;
@@ -28,7 +29,7 @@ namespace Odip.Api.Controllers;
 public partial class GroupActivitiesController : ControllerBase
 {
     private const int TitleMax = 200, LocationMax = 200, NotesMax = 2000, RoleMax = 100, ReasonMax = 2000, MinStaffMax = 20, MaxShiftsPerRequest = 20;
-    private const int MaxListDays = 93;
+    private const int MaxListDays = 93, MaxSeriesDays = 400;
     private const string DefaultTitle = "Group activity";
 
     private readonly OdipDbContext _db;
@@ -99,6 +100,11 @@ public partial class GroupActivitiesController : ControllerBase
         ["GA_BREAK_RANGE"] = (400, "The break must fall between the start and finish."),
         ["GA_NOT_STARTED"] = (409, "Mark attendance once the activity has started. Before then, remove the participant instead."),
         ["GA_ATTENDANCE_CLOSED"] = (409, RosteringController.AttendanceClosedMessage),
+        ["GA_SERIES_INTERVAL"] = (400, "Repeats must be weekly, fortnightly or monthly."),
+        ["GA_SERIES_END"] = (400, "Pick an end date on or after the activity date."),
+        ["GA_SERIES_RANGE"] = (400, "Pick an end date within 400 days of the activity date."),
+        ["GA_SERIES_SCOPE"] = (400, "Publish or change the status one activity at a time."),
+        ["GA_SERIES_DATE"] = (400, "Change the date for this activity on its own."),
         [ShiftErrorCodes.ShiftClaimLocked] = (409, "This shift is on a claim, so it can't be reopened. Delete that claim first."),
     };
 
@@ -109,9 +115,12 @@ public partial class GroupActivitiesController : ControllerBase
         db.AppSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.GroupActivitiesEnabled).FirstOrDefaultAsync(ct);
 
     /// <summary>A refusal raised anywhere under the locks: nothing is saved and the tracked changes are dropped.</summary>
-    private sealed class Refusal(ActionResult result) : Exception
+    private sealed class Refusal(ActionResult result, string? code = null, string? message = null) : Exception
     {
         public ActionResult Result { get; } = result;
+        /// <summary>The refusal's code and text when it came from <see cref="Deny"/>; null for a refusal that carries its own body (the 422 findings).</summary>
+        public string? Code { get; } = code;
+        public string? Text { get; } = message;
     }
 
     private ActionResult<ApiResponse<GroupActivityDto>> RefuseResult(string code, string? message = null) => RefuseResult<GroupActivityDto>(code, message);
@@ -128,7 +137,20 @@ public partial class GroupActivitiesController : ControllerBase
         };
     }
 
-    private Refusal Deny(string code, string? message = null) => new((ActionResult)RefuseResult(code, message).Result!);
+    private Refusal Deny(string code, string? message = null) => new((ActionResult)RefuseResult(code, message).Result!, code, message ?? Refusals[code].Message);
+
+    /// <summary>Runs one other occurrence's checks of a Series request; a refusal says which day it was ("Tue 8 Dec: ..."), its code and status unchanged.</summary>
+    private async Task<T> OnOccurrenceAsync<T>(GroupActivity target, Func<Task<T>> work)
+    {
+        var day = target.ServiceDate.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture);
+        try { return await work(); }
+        catch (Refusal r) when (r.Code is not null) { throw Deny(r.Code, $"{day}: {r.Text}"); }
+        catch (Refusal r) when (r.Result is UnprocessableEntityObjectResult { Value: ApiResponse<List<RosterFindingDto>> { Errors: { Count: > 0 } errors } })
+        {
+            errors[0] = $"{day}: {errors[0]}";
+            throw;
+        }
+    }
 
     private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;
 
@@ -205,6 +227,16 @@ public partial class GroupActivitiesController : ControllerBase
 
     private Func<Guid, CancellationToken, Task<IEnumerable<Guid>>> Attached(Guid activityId) => (t, ct) => AttachedParticipantsAsync(activityId, t, ct);
 
+    /// <summary>For a Series request: the participants on the shifts of every not-cancelled activity of this one's series (just this one's when it has no series or the scope is Occurrence).</summary>
+    private Func<Guid, CancellationToken, Task<IEnumerable<Guid>>> SeriesAttached(Guid activityId, GroupActivityScope? scope) => async (t, ct) =>
+    {
+        if (scope != GroupActivityScope.Series) return await AttachedParticipantsAsync(activityId, t, ct);
+        var seriesId = await _db.GroupActivities.AsNoTracking().Where(a => a.Id == activityId && a.TenantId == t).Select(a => a.SeriesId).FirstOrDefaultAsync(ct);
+        if (seriesId is null) return await AttachedParticipantsAsync(activityId, t, ct);
+        var ids = await _db.GroupActivities.AsNoTracking().Where(a => a.TenantId == t && a.SeriesId == seriesId && (a.Id == activityId || a.Status != ShiftStatus.Cancelled)).Select(a => a.Id).ToListAsync(ct);
+        return await _db.Shifts.AsNoTracking().Where(s => s.TenantId == t && s.GroupActivityId != null && ids.Contains(s.GroupActivityId.Value)).Select(s => s.ParticipantId).ToListAsync(ct);
+    };
+
     private async Task<GroupActivity> LoadActivityAsync(Guid id, Guid tenantId, bool forChange, CancellationToken ct)
     {
         var activity = await _db.GroupActivities.Include(a => a.Staff).FirstOrDefaultAsync(a => a.Id == id && a.TenantId == tenantId, ct) ?? throw Deny("GA_NOT_FOUND");
@@ -273,14 +305,23 @@ public partial class GroupActivitiesController : ControllerBase
         {
             var (title, location, notes) = await ValidateFieldsAsync(tenantId, dto.Title, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay, dto.Location, dto.Notes,
                 dto.MinStaffRequired, dto.ActivityId, dto.ServiceLocationId, null, token);
-            var activity = new GroupActivity
+            GroupActivity NewRow(DateOnly day, Guid? seriesId) => new()
             {
-                Id = Guid.NewGuid(), TenantId = tenantId, ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
+                Id = Guid.NewGuid(), TenantId = tenantId, ServiceDate = day, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
                 Title = title, ActivityId = dto.ActivityId, Location = location, ServiceLocationId = dto.ServiceLocationId, Notes = notes, MinStaffRequired = dto.MinStaffRequired,
-                Status = ShiftStatus.Draft,
+                Status = ShiftStatus.Draft, SeriesId = seriesId,
             };
-            _db.GroupActivities.Add(activity);
-            return await SavedAsync(activity.Id, token);
+
+            // Until without Repeats is ignored; with it, one series row and a Draft activity for each date, all saved together below.
+            if (dto.Repeats is not { } repeats) { var one = NewRow(dto.ServiceDate, null); _db.GroupActivities.Add(one); return await SavedAsync(one.Id, token); }
+            if (!Enum.IsDefined(repeats)) throw Deny("GA_SERIES_INTERVAL");
+            if (dto.Until is not { } until || until < dto.ServiceDate) throw Deny("GA_SERIES_END");
+            if (until.DayNumber - dto.ServiceDate.DayNumber > MaxSeriesDays) throw Deny("GA_SERIES_RANGE");
+            var series = new GroupActivitySeries { Id = Guid.NewGuid(), TenantId = tenantId, Interval = repeats, StartDate = dto.ServiceDate, EndDate = until };
+            _db.GroupActivitySeries.Add(series);
+            var rows = GroupActivitySeriesDates.Occurrences(repeats, dto.ServiceDate, until).Select(day => NewRow(day, series.Id)).ToList();
+            _db.GroupActivities.AddRange(rows);
+            return await SavedAsync(rows[0].Id, token);
         }, ct);
 
     // ── E3 convert a shift into an activity ─────────────────────────────────────────────────────────
@@ -309,46 +350,44 @@ public partial class GroupActivitiesController : ControllerBase
 
     // ── E4 update ───────────────────────────────────────────────────────────────────────────────────
 
+    /// <summary>Which field groups of an update to write. The opened activity takes all of them; another occurrence of a Series update takes only the groups the request changed on the opened one.</summary>
+    private readonly record struct Touch(bool Start, bool End, bool EndsNextDay, bool Title, bool Activity, bool Place, bool Notes, bool MinStaff)
+    {
+        public static readonly Touch All = new(true, true, true, true, true, true, true, true);
+        public bool Any => Start || End || EndsNextDay || Title || Activity || Place || Notes || MinStaff;
+    }
+
     [HttpPut("{id:guid}")]
     public Task<ActionResult<ApiResponse<GroupActivityDto>>> Update(Guid id, [FromBody] UpdateGroupActivityDto dto, CancellationToken ct) =>
-        WriteAsync(Attached(id), async (tenantId, token) =>
+        WriteAsync(SeriesAttached(id, dto.Scope), async (tenantId, token) =>
         {
             var activity = await LoadActivityAsync(id, tenantId, forChange: true, token);
             var (title, location, notes) = await ValidateFieldsAsync(tenantId, dto.Title, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay, dto.Location, dto.Notes,
                 dto.MinStaffRequired, dto.ActivityId, dto.ServiceLocationId, activity.ServiceLocationId, token);
             if (dto.Status is not (ShiftStatus.Draft or ShiftStatus.Published)) throw Deny("GA_STATUS");
-            var attached = await AttachedShiftsAsync(activity, token);
-            var dateChanged = dto.ServiceDate != activity.ServiceDate;
-            if (dateChanged && attached.Count > 0) throw Deny("GA_MOVE_DAY");
-            if (attached.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
+            // Any value but Series (an integer outside the enum too) acts as Occurrence; Series on a one-off acts as Occurrence.
+            var series = dto.Scope == GroupActivityScope.Series && activity.SeriesId is not null;
+            if (series && dto.Status != activity.Status) throw Deny("GA_SERIES_SCOPE");
+            if (series && dto.ServiceDate != activity.ServiceDate) throw Deny("GA_SERIES_DATE");
+
+            // What the request changes, read off the opened activity before it is written (the others only take these groups).
+            var touch = new Touch(
+                dto.StartTime != activity.StartTime, dto.EndTime != activity.EndTime, dto.EndsNextDay != activity.EndsNextDay,
+                title != activity.Title, dto.ActivityId != activity.ActivityId,
+                location != activity.Location || dto.ServiceLocationId != activity.ServiceLocationId,
+                notes != activity.Notes, dto.MinStaffRequired != activity.MinStaffRequired);
 
             var publishing = activity.Status == ShiftStatus.Draft && dto.Status == ShiftStatus.Published;
-            var (oldStart, oldEnd, oldEndsNextDay) = (activity.StartTime, activity.EndTime, activity.EndsNextDay);
-            var timesChanged = dto.StartTime != oldStart || dto.EndTime != oldEnd || dto.EndsNextDay != oldEndsNextDay;
-            activity.ServiceDate = dto.ServiceDate;
-            (activity.StartTime, activity.EndTime, activity.EndsNextDay) = (dto.StartTime, dto.EndTime, dto.EndsNextDay);
-            (activity.Title, activity.Location, activity.Notes, activity.MinStaffRequired) = (title, location, notes, dto.MinStaffRequired);
-            (activity.ActivityId, activity.ServiceLocationId, activity.Status, activity.UpdatedAt) = (dto.ActivityId, dto.ServiceLocationId, dto.Status, DateTime.UtcNow);
-
-            foreach (var shift in attached) SetTimes(shift, activity);
+            var attached = await ApplyFieldsAsync(activity, dto, dto.ServiceDate, dto.Status, (title, location, notes), Touch.All, true, token);
             // Decision 29: publishing the activity publishes its Draft shifts; un-publishing leaves them as they are.
             if (publishing) foreach (var s in attached.Where(s => s.Status == ShiftStatus.Draft)) (s.Status, s.UpdatedAt) = (ShiftStatus.Published, DateTime.UtcNow);
 
-            // A worker whose part matched the old times follows the new ones; every worker whose times or day moved is judged again (decision 18).
-            var rowsToJudge = new List<GroupActivityStaff>();
-            foreach (var row in activity.Staff)
+            if (series && touch.Any)
             {
-                var followed = timesChanged && row.StartTime == oldStart && row.EndTime == oldEnd && row.EndsNextDay == oldEndsNextDay;
-                if (followed) (row.StartTime, row.EndTime, row.EndsNextDay) = (activity.StartTime, activity.EndTime, activity.EndsNextDay);
-                if (followed || dateChanged) rowsToJudge.Add(row);
-            }
-
-            if (rowsToJudge.Count > 0)
-            {
-                var participantIds = attached.Select(s => s.ParticipantId).Distinct().ToList();
-                var snapshot = await LoadSnapshotAsync(activity, rowsToJudge.Select(r => r.UserId).ToList(), participantIds, token);
-                foreach (var row in rowsToJudge)
-                    (row.OverrideReason, row.AcknowledgedFindingCodes) = Judge(snapshot, activity, participantIds, row, null, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+                var today = await Odip.Infrastructure.Services.ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, token);
+                var targets = await SeriesTargetsAsync(activity, today, token, includeStaff: true);
+                foreach (var target in targets)
+                    await OnOccurrenceAsync(target, async () => await ApplyFieldsAsync(target, dto, target.ServiceDate, target.Status, (title, location, notes), touch, false, token));
             }
 
             if (publishing)
@@ -362,24 +401,89 @@ public partial class GroupActivitiesController : ControllerBase
             return await SavedAsync(activity.Id, token);
         }, ct);
 
+    /// <summary>The other Draft and Published activities of the opened one's series dated on or after <paramref name="from"/>, in date order. Started and cancelled ones are never touched.</summary>
+    private Task<List<GroupActivity>> SeriesTargetsAsync(GroupActivity opened, DateOnly from, CancellationToken ct, bool includeStaff)
+    {
+        IQueryable<GroupActivity> query = _db.GroupActivities;
+        if (includeStaff) query = query.Include(a => a.Staff);
+        return query.Where(a => a.TenantId == opened.TenantId && a.SeriesId == opened.SeriesId && a.Id != opened.Id && a.ServiceDate >= from
+                                && (a.Status == ShiftStatus.Draft || a.Status == ShiftStatus.Published)).OrderBy(a => a.ServiceDate).ToListAsync(ct);
+    }
+
+    /// <summary>Writes the touched field groups of an update onto one activity, then its attached shifts' times and its workers' parts; returns the shifts that count. Saves nothing.</summary>
+    private async Task<List<Shift>> ApplyFieldsAsync(GroupActivity activity, UpdateGroupActivityDto dto, DateOnly newDate, ShiftStatus newStatus,
+        (string Title, string? Location, string? Notes) tidy, Touch touch, bool opened, CancellationToken token)
+    {
+        var attached = await AttachedShiftsAsync(activity, token);
+        var dateChanged = newDate != activity.ServiceDate;
+        if (dateChanged && attached.Count > 0) throw Deny("GA_MOVE_DAY");
+        if (attached.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
+
+        var (oldStart, oldEnd, oldEndsNextDay) = (activity.StartTime, activity.EndTime, activity.EndsNextDay);
+        var timesChanged = (touch.Start && dto.StartTime != oldStart) || (touch.End && dto.EndTime != oldEnd) || (touch.EndsNextDay && dto.EndsNextDay != oldEndsNextDay);
+        activity.ServiceDate = newDate;
+        if (touch.Start) activity.StartTime = dto.StartTime;
+        if (touch.End) activity.EndTime = dto.EndTime;
+        if (touch.EndsNextDay) activity.EndsNextDay = dto.EndsNextDay;
+        if (touch.Title) activity.Title = tidy.Title;
+        if (touch.Place) (activity.Location, activity.ServiceLocationId) = (tidy.Location, dto.ServiceLocationId);
+        if (touch.Notes) activity.Notes = tidy.Notes;
+        if (touch.MinStaff) activity.MinStaffRequired = dto.MinStaffRequired;
+        if (touch.Activity) activity.ActivityId = dto.ActivityId;
+        (activity.Status, activity.UpdatedAt) = (newStatus, DateTime.UtcNow);
+        // Merged onto another occurrence's own times, the result can end before it starts (the opened one was checked already).
+        if (EndsBeforeStart(activity.StartTime, activity.EndTime, activity.EndsNextDay)) throw Deny("GA_TIMES");
+
+        foreach (var shift in attached) SetTimes(shift, activity);
+
+        // A worker whose part matched the old times follows the new ones; every worker whose times or day moved is judged again (decision 18).
+        var rowsToJudge = new List<GroupActivityStaff>();
+        foreach (var row in activity.Staff)
+        {
+            var followed = timesChanged && row.StartTime == oldStart && row.EndTime == oldEnd && row.EndsNextDay == oldEndsNextDay;
+            if (followed) (row.StartTime, row.EndTime, row.EndsNextDay) = (activity.StartTime, activity.EndTime, activity.EndsNextDay);
+            if (followed || dateChanged) rowsToJudge.Add(row);
+        }
+
+        if (rowsToJudge.Count > 0)
+        {
+            var participantIds = attached.Select(s => s.ParticipantId).Distinct().ToList();
+            var snapshot = await LoadSnapshotAsync(activity, rowsToJudge.Select(r => r.UserId).ToList(), participantIds, token);
+            foreach (var row in rowsToJudge)
+                (row.OverrideReason, row.AcknowledgedFindingCodes) = Judge(snapshot, activity, participantIds, row, null, opened ? dto.OverrideReason : null, opened ? dto.AcknowledgedFindingCodes : null);
+        }
+
+        return attached;
+    }
+
     // ── E5 cancel ───────────────────────────────────────────────────────────────────────────────────
 
     [HttpPost("{id:guid}/cancel")]
-    public Task<ActionResult<ApiResponse<GroupActivityDto>>> Cancel(Guid id, CancellationToken ct) =>
-        WriteAsync(Attached(id), async (tenantId, token) =>
+    public Task<ActionResult<ApiResponse<GroupActivityDto>>> Cancel(Guid id, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] GroupActivityScopeDto? dto = null) =>
+        WriteAsync(SeriesAttached(id, dto?.Scope), async (tenantId, token) =>
         {
             var activity = await LoadActivityAsync(id, tenantId, forChange: false, token);
+            // An already-cancelled one keeps today's early return, whatever the scope.
             if (activity.Status == ShiftStatus.Cancelled) return Ok(ApiResponse<GroupActivityDto>.Ok((await _reader.ReadAsync(id, token))!));
             EnsureChangeable(activity);
-            var attached = await AttachedShiftsAsync(activity, token);
-            if (attached.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
-            // The participants keep their own shifts. The staff rows stay for history and stop counting as busy (a cancelled activity is not read by RosterAvailability.ActivityStaffBusyAsync).
-            // shortcut: a started or finished attached shift refuses the cancel; PR3 (completion) owns what a cancelled activity does to completed shifts.
-            foreach (var shift in attached) await DetachAsync(shift, token);
-            activity.Status = ShiftStatus.Cancelled;
-            activity.CancelledAt = activity.UpdatedAt = DateTime.UtcNow;
+            await CancelOneAsync(activity, token);
+            // This one's day onward, not today: the coordinator may be cancelling from an earlier occurrence.
+            if (dto?.Scope == GroupActivityScope.Series && activity.SeriesId is not null)
+                foreach (var target in await SeriesTargetsAsync(activity, activity.ServiceDate, token, includeStaff: false))
+                    await OnOccurrenceAsync(target, async () => { await CancelOneAsync(target, token); return 0; });
             return await SavedAsync(activity.Id, token);
         }, ct);
+
+    private async Task CancelOneAsync(GroupActivity activity, CancellationToken token)
+    {
+        var attached = await AttachedShiftsAsync(activity, token);
+        if (attached.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
+        // The participants keep their own shifts. The staff rows stay for history and stop counting as busy (a cancelled activity is not read by RosterAvailability.ActivityStaffBusyAsync).
+        // shortcut: a started or finished attached shift refuses the cancel; PR3 (completion) owns what a cancelled activity does to completed shifts.
+        foreach (var shift in attached) await DetachAsync(shift, token);
+        activity.Status = ShiftStatus.Cancelled;
+        activity.CancelledAt = activity.UpdatedAt = DateTime.UtcNow;
+    }
 
     // ── E6 attach shifts ────────────────────────────────────────────────────────────────────────────
 
