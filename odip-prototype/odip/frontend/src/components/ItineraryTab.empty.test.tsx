@@ -3,7 +3,11 @@ import { render, screen } from '@testing-library/react'
 import ItineraryTab from './ItineraryTab'
 
 const { query } = vi.hoisted(() => ({ query: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useTripItinerary: query }))
+vi.mock('@/api/hooks', () => ({
+  useTripItinerary: query,
+  useMyUiPreferences: () => ({ data: undefined }),
+  useSaveUiPreferences: () => ({ mutate: () => {} }),
+}))
 
 describe('ItineraryTab — no itinerary', () => {
   it('says there is no itinerary yet, not that it failed to load', () => {

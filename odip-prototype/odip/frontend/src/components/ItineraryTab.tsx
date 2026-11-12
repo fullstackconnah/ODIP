@@ -12,6 +12,7 @@ import { retryingAfterError } from '@/lib/queryPhase'
 import { ToggleGroup } from './ToggleGroup'
 import { ItineraryList } from './ItineraryList'
 import { formatTime, parseLocalDate } from '@/lib/itineraryRows'
+import { useItineraryView, type ScheduleView } from '@/hooks/useItineraryView'
 
 interface ItineraryTabProps {
   tripId: string
@@ -33,27 +34,6 @@ function getCategoryStyle(category: string | null) {
   return categoryConfig[category ?? 'Other'] ?? categoryConfig.Other
 }
 
-// shortcut: copy of TripsPage's stored-view helpers; extract to lib when a third view toggle needs them.
-const VIEW_STORAGE_KEY = 'odip.itinerary.view'
-type ScheduleView = 'days' | 'list'
-
-function readStoredView(): ScheduleView | null {
-  try {
-    const stored = localStorage.getItem(VIEW_STORAGE_KEY)
-    return stored === 'days' || stored === 'list' ? stored : null
-  } catch {
-    return null
-  }
-}
-
-function writeStoredView(view: ScheduleView): void {
-  try {
-    localStorage.setItem(VIEW_STORAGE_KEY, view)
-  } catch {
-    // private browsing / quota — the toggle still works for this session
-  }
-}
-
 function formatDayName(date: string) {
   return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long' })
 }
@@ -63,11 +43,8 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
   const { data: itinerary, isLoading, isError, refetch } = pageQuery
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
-  const [view, setView] = useState<ScheduleView>(() => readStoredView() ?? 'days')
-  const handleViewChange = (key: string) => {
-    setView(key as ScheduleView)
-    writeStoredView(key as ScheduleView)
-  }
+  const [view, setView] = useItineraryView()
+  const handleViewChange = (key: string) => setView(key as ScheduleView)
 
   if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="itinerary" />
   if (!itinerary) {

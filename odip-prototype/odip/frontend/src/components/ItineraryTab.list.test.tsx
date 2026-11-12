@@ -21,11 +21,18 @@ const days = [
 const itinerary = {
   tripName: 'Beach Escape', totalEstimatedCost: 0, participants: [], staff: [], vehicles: [], accommodation: [], days,
 }
+const { server, save } = vi.hoisted(() => ({ server: { view: undefined as unknown }, save: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useTripItinerary: () => ({ data: itinerary, isLoading: false, isError: false }),
+  useMyUiPreferences: () => ({ data: server.view === undefined ? undefined : { itineraryView: server.view } }),
+  useSaveUiPreferences: () => ({ mutate: save }),
 }))
 
-afterEach(() => localStorage.clear())
+afterEach(() => {
+  localStorage.clear()
+  server.view = undefined
+  save.mockClear()
+})
 
 const renderTab = () => render(<MemoryRouter><ItineraryTab tripId="t1" /></MemoryRouter>)
 
@@ -101,5 +108,37 @@ describe('ItineraryTab — By day | List', () => {
     } finally {
       itinerary.days = saved
     }
+  })
+
+  it('opens List from the saved server value when the browser copy is empty, and keeps it in the browser', () => {
+    server.view = 'list'
+    renderTab()
+    expect(screen.getByRole('radio', { name: 'List' })).toBeChecked()
+    expect(localStorage.getItem('odip.itinerary.view')).toBe('list')
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('sends exactly one save per switch', () => {
+    renderTab()
+    fireEvent.click(screen.getByRole('radio', { name: 'List' }))
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(save).toHaveBeenLastCalledWith({ itineraryView: 'list' })
+    fireEvent.click(screen.getByRole('radio', { name: 'By day' }))
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(save).toHaveBeenLastCalledWith({ itineraryView: 'days' })
+  })
+
+  it('falls back to By day on a garbage server value', () => {
+    server.view = 'grid'
+    renderTab()
+    expect(screen.getByRole('radio', { name: 'By day' })).toBeChecked()
+  })
+
+  it('does not replace a choice made before the server value arrived', () => {
+    const { rerender } = renderTab()
+    fireEvent.click(screen.getByRole('radio', { name: 'List' }))
+    server.view = 'days'
+    rerender(<MemoryRouter><ItineraryTab tripId='t1' /></MemoryRouter>)
+    expect(screen.getByRole('radio', { name: 'List' })).toBeChecked()
   })
 })

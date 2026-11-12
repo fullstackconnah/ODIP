@@ -11,6 +11,8 @@ const itinerary = {
 }
 vi.mock('@/api/hooks', () => ({
   useTripItinerary: () => ({ data: itinerary, isLoading: false, isError: false }),
+  useMyUiPreferences: () => ({ data: undefined }),
+  useSaveUiPreferences: () => ({ mutate: () => {} }),
 }))
 
 // V3: the header and the glance strip already say the title, dates, days and head counts; the overview said them again.

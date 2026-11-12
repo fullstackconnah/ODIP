@@ -10,6 +10,8 @@ const { loaded, generate } = vi.hoisted(() => ({ loaded: vi.fn(), generate: vi.f
 vi.mock('./ItineraryPdf', () => { loaded(); return { generateItineraryPdf: generate } })
 vi.mock('@/api/hooks', () => ({
   useTripItinerary: () => ({ data: { tripName: 'T', startDate: '2026-11-01', endDate: '2026-11-02', days: [], participants: [], staff: [], vehicles: [], accommodation: [] }, isLoading: false, isError: false }),
+  useMyUiPreferences: () => ({ data: undefined }),
+  useSaveUiPreferences: () => ({ mutate: () => {} }),
 }))
 
 describe('ItineraryTab — the PDF library', () => {
