@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react'
 
-export type BoardViewMode = 'participant' | 'staff'
+export type BoardViewMode = 'participant' | 'staff' | 'activity'
 
 const STORAGE_KEY = 'odip.roster.boardView'
 
 function readStored(): BoardViewMode {
   try {
-    return window.sessionStorage.getItem(STORAGE_KEY) === 'staff' ? 'staff' : 'participant'
+    const stored = window.sessionStorage.getItem(STORAGE_KEY)
+    return stored === 'staff' || stored === 'activity' ? stored : 'participant'
   } catch {
     // sessionStorage unavailable (private browsing, etc.) — fall back to the default view.
     return 'participant'
