@@ -8,6 +8,7 @@ using Odip.Domain.Rostering;
 using Odip.Infrastructure.DataExport;
 using Odip.Infrastructure.Audit;
 using Odip.Tests.Claims;
+using Odip.Tests.Support;
 using Xunit;
 
 namespace Odip.Tests.GroupActivities;
@@ -355,10 +356,12 @@ public class GroupActivitySeriesTests
         var fx = new GroupActivityFixture();
         var mine = await FourWeeks(fx);
         await OtherTenantSeries(fx, useSeriesId: mine[0].SeriesId);   // foreign rows that (wrongly) carry my series id
-        var c = superAdmin ? fx.Controller(superAdminNoTenant: true, role: "SuperAdmin", clock: Early) : fx.Controller(clock: Early);
-        await c.Update(mine[0].Id, Req(mine[0], GroupActivityScope.Series, title: "Mini golf"), default);
-        Assert.All((await Rows(fx)).Where(r => r.Title == "Theirs"), r => Assert.Equal(ShiftStatus.Draft, r.Status));
-        Assert.Equal(2, (await Rows(fx)).Count(r => r.Title == "Theirs"));
-        if (!superAdmin) Assert.Equal(4, (await Rows(fx)).Count(r => r.Title == "Mini golf"));
+        // A SuperAdmin working inside the fixture organisation: the db has no tenant filter, so only the explicit tenant condition keeps foreign rows out.
+        var c = superAdmin ? fx.Controller(db: TestDb.Create(fx.DbName, fx.TenantId), role: "SuperAdmin", clock: Early) : fx.Controller(clock: Early);
+        GroupActivityFixture.Body(await c.Update(mine[0].Id, Req(mine[0], GroupActivityScope.Series, title: "Mini golf"), default), 200);
+        var rows = await Rows(fx);
+        Assert.Equal(4, rows.Count(r => r.Title == "Mini golf"));
+        Assert.Equal(2, rows.Count(r => r.Title == "Theirs"));
+        Assert.All(rows.Where(r => r.Title == "Theirs"), r => Assert.Equal(ShiftStatus.Draft, r.Status));
     }
 }
