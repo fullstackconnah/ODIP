@@ -529,7 +529,7 @@ public partial class GroupActivitiesController : ControllerBase
 
         if (!attended)
         {
-            foreach (var shift in shifts.Where(s => s.Status == ShiftStatus.Published)) { RosteringController.ApplyStatus(shift, ShiftStatus.Cancelled, now); shift.UpdatedAt = now; }
+            foreach (var shift in shifts.Where(s => s.Status == ShiftStatus.Published)) { RosteringController.ApplyStatus(shift, ShiftStatus.Cancelled, now, ShiftCancellationReason.ParticipantDidNotAttend); shift.UpdatedAt = now; }
         }
         else if (shifts.Any(s => s.Status == ShiftStatus.Cancelled))
         {

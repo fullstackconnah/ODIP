@@ -90,6 +90,20 @@ public class GroupActivityAttendanceClaimTests
     }
 
     [Fact]
+    public async Task DidNotAttend_StoresTheParticipantDidNotAttendReason_AndUndoClearsIt()
+    {
+        using var rig = new Rig();
+        var (person, shifts) = rig.Person(SupportRatio.OneToOne);
+        GroupActivityFixture.Body(await rig.Mark(person.Id, false), 200);
+        Assert.Equal(ShiftCancellationReason.ParticipantDidNotAttend, (await rig.Kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shifts[0].Id, Ct)).CancellationReason);
+
+        GroupActivityFixture.Body(await rig.Mark(person.Id, true), 200);
+        var reopened = await rig.Kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shifts[0].Id, Ct);
+        Assert.Equal(ShiftStatus.Published, reopened.Status);
+        Assert.Null(reopened.CancellationReason);
+    }
+
+    [Fact]
     public async Task DidNotAttend_TwoToOne_GivesTwoCandidates_EachClaimableOnce()
     {
         using var rig = new Rig();
