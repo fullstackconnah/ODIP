@@ -1894,6 +1894,11 @@ function groupActivityFixture(days) {
     make('mock-act-4', 3, 'Swimming', '09:30:00', '11:30:00', 'Draft', 1, [], []),
     // Two series occurrences for the Repeats line and the scope dialogs. series-weekly's "This and all upcoming" is refused by the PUT and cancel routes below.
     { ...make('series-weekly', 1, 'Boccia', '14:00:00', '16:00:00', 'Published', 1, staff(2, 'Sam Wilson', '14:00:00', '16:00:00'), []), series: { id: 'series-1', interval: 'Weekly', startDate: '2026-09-08', endDate: '2026-12-15' } },
+    // A weekly occurrence with two people and the agreement warnings (PR B): the first has no group-activity block that day, the second is outside the agreed time.
+    { ...make('series-people', 5, 'Walking group', '10:00:00', '12:00:00', 'Published', 1, staff(3, 'Alex Rivera', '10:00:00', '12:00:00'),
+      participants.slice(0, 2).map((p, i) => ({ participantId: p.id, participantName: p.fullName, ratio: 'OneToOne', shiftIds: [`shift-people-${i}`], timesDiffer: i === 1, didNotAttend: false, ...(i === 1 && { agreementStartTime: '13:00:00', agreementEndTime: '15:00:00' }) }))),
+      series: { id: 'series-3', interval: 'Weekly', startDate: '2026-09-12', endDate: '2026-12-19' },
+      participantFindings: participants.slice(0, 2).map((p, i) => ({ participantId: p.id, code: i === 0 ? 'ACTIVITY_AGREEMENT_NO_BLOCK' : 'ACTIVITY_AGREEMENT_TIME' })) },
     { ...make('series-monthly', 4, 'Craft morning', '10:00:00', '12:00:00', 'Draft', 1, [], []), series: { id: 'series-2', interval: 'Monthly', startDate: '2026-09-11', endDate: '2027-02-12' } },
   ]
 }
@@ -2376,6 +2381,13 @@ const earlyAccessDelete = [
 
 // DELETE rostering/shifts/:id mirrors the API's DeleteShift: a started or finished shift, or one with a timesheet or a note behind it, is refused 409 SHIFT_STATUS_LOCKED and kept;
 // any other shift answers true (a shift made in this process is removed). The fixture week's own shifts are rebuilt per call, so they come back, as every derived fixture here does.
+// DELETE rostering/group-activities/:id/shifts/:shiftId[?scope=Series]: the mock keeps no memberships, so the refetch still shows the person; a Series remove on series-weekly is refused.
+const groupActivityDelete = [
+  ['rostering/group-activities/:id/shifts/:shiftId', (id, shiftId, body, query) => {
+    if (query?.get('scope') === 'Series' && id === 'series-weekly') return respond(409, failEnvelope(null, [SERIES_REFUSAL], 'GA_SHIFT_LOCKED'))
+    return true
+  }],
+]
 const rosterShiftDelete = [
   ['rostering/shifts/:id', (id) => {
     const shift = [...allFixtureShifts(), ...rosterShifts].find((s) => s.id === id)
@@ -3422,6 +3434,14 @@ const postRoutes = [
     st.status = 'PendingReview'
     return buildPortalShiftDetail(base.id)
   }],
+  // POST rostering/group-activities/:id/participants: { participantId, ratio, scope? } returns the activity with the person added; a Series add on series-weekly is refused as the cancel route is.
+  ['rostering/group-activities/:id/participants', (id, body) => {
+    const a = groupActivityMock(id)
+    if (!a) return respond(404, failEnvelope(null, ['Activity not found.']))
+    if (body?.scope === 'Series' && id === 'series-weekly') return respond(409, failEnvelope(null, [SERIES_REFUSAL], 'GA_SHIFT_LOCKED'))
+    const person = participants.find((p) => p.id === body?.participantId)
+    return { ...a, participants: [...a.participants, { participantId: body?.participantId, participantName: person?.fullName ?? 'New participant', ratio: body?.ratio ?? 'OneToOne', shiftIds: [`shift-added-${a.participants.length}`], timesDiffer: false, didNotAttend: false }] }
+  }],
   // POST rostering/group-activities/:id/cancel: { scope: 'Series' } on series-weekly is refused as the server does for a later occurrence that has started.
   ['rostering/group-activities/:id/cancel', (id, body) => {
     const a = groupActivityMock(id)
@@ -3996,7 +4016,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...invoiceMock.delete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete, ...rpReportsMock.delete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...invoiceMock.delete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete, ...groupActivityDelete, ...rpReportsMock.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).
