@@ -122,6 +122,11 @@ function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
     const f4 = addClaim('claim-inv-f4', 4, 'Paid', [plan, self], [])
     const credited = invoice('claim-inv-f4', 43, self, 'Credited', { creditedByDisplayNumber: 'CN-0007', paymentRecorded: true })
     f4.invoices = [invoice('claim-inv-f4', 42, plan, 'Issued', { paymentRecorded: true, paymentStatus: 'Paid' }), credited, creditNote('claim-inv-f4', 7, credited)]
+    // A part-paid claim with every payment status beside a voided invoice, a credited one and its credit note (the Payment column captures).
+    const fp = addClaim('claim-inv-pay', 10, 'PartiallyPaid', [plan, self, ...five.slice(0, 3)], [])
+    const creditedPay = invoice('claim-inv-pay', 54, five[2], 'Credited', { creditedByDisplayNumber: 'CN-0009' })
+    fp.invoices = [invoice('claim-inv-pay', 50, plan, 'Issued'), invoice('claim-inv-pay', 51, self, 'Issued', { paymentRecorded: true }),
+      invoice('claim-inv-pay', 52, five[0], 'Issued', { paymentRecorded: true, paymentStatus: 'Paid' }), invoice('claim-inv-pay', 53, five[1], 'Voided'), creditedPay, creditNote('claim-inv-pay', 9, creditedPay)]
     addClaim('claim-inv-f5', 5, 'Submitted', [plan, self], []).legacy = true
     addClaim('claim-inv-f6', 6, 'Submitted', [], ['Noah Agency', 'Ella Agency'])
     addClaim('claim-inv-f7', 7, 'Draft', [payer('p-inv-0', 'Sam Lee', 'Pat Morgan — Harbour Plan Co', 'PlanManaged', 552)], ['Noah Agency'], { shiftOf: 'p-inv-0' })
