@@ -40,6 +40,17 @@ describe('GroupActivityCard', () => {
     expect(screen.getByRole('button', { name: /Draft$/ })).toBeInTheDocument()
   })
 
+  it('keeps the Draft word out of the truncating title, and drops the title under the times in a narrow card', () => {
+    card(makeActivity({ status: 'Draft' }))
+    const draft = screen.getByText('Draft')
+    // The ellipsis belongs to the title text only, so it can never cut the word Draft.
+    expect(draft.closest('.truncate')).toBeNull()
+    expect(screen.getByText('Bowling')).toHaveClass('truncate')
+    const row = draft.closest('[data-activity-title]')!.parentElement!
+    expect(row).toHaveClass('@max-[180px]:flex-wrap')
+    expect(draft.closest('[data-activity-title]')).toHaveClass('@max-[180px]:basis-full')
+  })
+
   it('reads Cancelled in the box with no pill and no menu', () => {
     card(makeActivity({ status: 'Cancelled', staffNeeded: 3, staffAssigned: 1 }))
     expect(screen.getByText('Cancelled')).toBeInTheDocument()

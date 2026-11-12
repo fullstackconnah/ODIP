@@ -90,14 +90,14 @@ export function GroupActivityCard({ activity, participantId, canWrite, draggable
         onKeyDown={handleOpenKeyDown}
         className="col-span-full row-[1/span_2] grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        <span className="col-span-full flex h-4 min-w-0 items-center gap-0.5 px-0.5 text-xs">
+        <span className="col-span-full flex h-4 min-w-0 items-center gap-0.5 px-0.5 text-xs @max-[180px]:h-auto @max-[180px]:flex-wrap">
           <span className={`shrink-0 font-medium tabular-nums ${cancelled ? 'text-muted-foreground line-through' : 'text-foreground'}`} title={activity.endsNextDay ? `${range} — ends the next day` : undefined}>{range}</span>
           {person?.timesDiffer && !cancelled && (
             <span className="shrink-0 text-muted-foreground" data-times-differ title="Times differ from agreement"><Clock className="h-3 w-3" aria-hidden="true" /></span>
           )}
-          <span className={`min-w-0 flex-1 truncate text-right font-medium ${cancelled ? 'text-muted-foreground' : 'text-foreground'}`} data-activity-title>
-            {draft && <span className={`pr-1 font-semibold ${TONE.warning.ink}`}>Draft</span>}
-            {activity.title}
+          <span className={`flex min-w-0 flex-1 justify-end font-medium @max-[180px]:basis-full @max-[180px]:justify-start ${cancelled ? 'text-muted-foreground' : 'text-foreground'}`} data-activity-title>
+            {draft && <span className={`shrink-0 pr-1 font-semibold ${TONE.warning.ink}`}>Draft</span>}
+            <span className="min-w-0 truncate">{activity.title}</span>
           </span>
         </span>
         <span
