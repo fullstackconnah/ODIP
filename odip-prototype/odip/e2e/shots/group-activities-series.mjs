@@ -332,9 +332,9 @@ for (const vp of VIEWPORTS) {
           const over = await r.evaluate((el) => el.scrollWidth - el.clientWidth)
           check(`${tag} B5 ${name} row has no sideways overflow`, over <= 0 && rb.r <= (await box(dlg)).r, { over })
         }
+        // People list still open, so both widths show the same state; the board's own head and body frames (RosterGrid root carries --roster-sticky-col) scroll sideways by design
+        checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `b-people-${tag}.png`), { allow: ['[class*="--roster-sticky-col"] div.overflow-x-auto'] })).checks)
         await page.keyboard.press('Escape').catch(() => {})
-        // the board week strip behind the dialog scrolls sideways by design (untouched)
-        checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `b-people-${tag}.png`), { allow: ["div.overflow-x-auto"] })).checks)
       }
       await context.close()
     })
