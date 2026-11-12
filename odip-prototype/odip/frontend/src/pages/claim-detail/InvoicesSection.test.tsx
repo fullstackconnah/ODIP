@@ -76,6 +76,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  Reflect.deleteProperty(window, 'matchMedia')
   apiClient.defaults.adapter = originalAdapter
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
   localStorage.clear()
@@ -156,6 +157,23 @@ describe('InvoicesSection', () => {
     expect(within(rowOf('INV-0043')).getByText('Part paid')).toBeInTheDocument()
     expect(within(rowOf('INV-0044')).getByText('Paid')).toBeInTheDocument()
     for (const n of ['INV-0041', 'CN-0007']) expect(within(rowOf(n)).queryByText(/^(Outstanding|Part paid|Paid)$/)).not.toBeInTheDocument()
+  })
+
+  it('from md to below 2xl the Payment column is out of the table and the pill stacks under the status; a credited row gets nothing extra', async () => {
+    window.matchMedia = ((q: string) => ({ matches: q === '(min-width: 48rem) and (max-width: 95.99rem)', media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia
+    serveInvoices({
+      ...issued,
+      invoices: [
+        row({ id: 'inv-41', number: 41, displayNumber: 'INV-0041', status: 'Credited', paymentStatus: null }),
+        row({ id: 'inv-42', paymentStatus: 'Outstanding' }),
+      ],
+    })
+    renderSection()
+
+    const r42 = await waitFor(() => rowOf('INV-0042'))
+    expect(screen.queryByRole('columnheader', { name: 'Payment' })).not.toBeInTheDocument()
+    expect(within(r42.querySelector('td[data-label="Status"]') as HTMLElement).getByText('Outstanding')).toBeInTheDocument()
+    expect(rowOf('INV-0041').querySelector('td[data-label="Status"] .mt-1')).toBeNull()
   })
 
   it('preview: no Payment column, nothing is issued to be paid', async () => {

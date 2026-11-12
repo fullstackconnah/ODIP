@@ -45,6 +45,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  Reflect.deleteProperty(window, 'matchMedia')
   cleanup()
   localStorage.clear()
   vi.clearAllMocks()
@@ -271,6 +272,22 @@ describe('InvoicesPage: the Payment column and filter', () => {
       const r = rows.find(x => x.textContent?.includes(n))!
       expect(within(r).queryByText(/^(Outstanding|Part paid|Paid)$/)).not.toBeInTheDocument()
     }
+  })
+
+  it('from md to below xl the Payment column is out of the table and the pill stacks under the status; a row with no payment status gets nothing extra', () => {
+    window.matchMedia = ((q: string) => ({ matches: q === '(min-width: 48rem) and (max-width: 79.99rem)', media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia
+    mockUseInvoiceRegister.mockReturnValue(ready([
+      row({ id: 'a', displayNumber: 'INV-0001', paymentStatus: 'PartPaid' }),
+      row({ id: 'b', displayNumber: 'INV-0002', status: 'Voided', paymentStatus: null }),
+    ]))
+    renderPage()
+
+    expect(screen.queryByRole('columnheader', { name: 'Payment' })).not.toBeInTheDocument()
+    const rows = screen.getAllByRole('row')
+    const paid = rows.find(r => r.textContent?.includes('INV-0001'))!.querySelector('td[data-label="Status"]')!
+    expect(within(paid as HTMLElement).getByText('Part paid')).toBeInTheDocument()
+    const voided = rows.find(r => r.textContent?.includes('INV-0002'))!.querySelector('td[data-label="Status"]')!
+    expect(voided.querySelector('.mt-1')).toBeNull()
   })
 
   it('drops the Payment column when no row on the page has a payment status', () => {

@@ -15,6 +15,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TextField } from '@/components/TextField'
 import { TAP_AREA, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { useIsMdToXl } from '@/hooks/useIsMdToXl'
 import { downloadFile } from '@/lib/downloadFile'
 import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -112,6 +113,8 @@ export default function InvoicesPage() {
     }
   }
 
+  const paymentStacked = useIsMdToXl()
+  const paymentPill = (row: InvoiceRegisterRowDto) => row.paymentStatus ? <StatusBadge status={row.paymentStatus} label={INVOICE_PAYMENT_LABELS[row.paymentStatus]} /> : null
   const columns: Column<InvoiceRegisterRowDto>[] = [
     {
       key: 'number',
@@ -185,15 +188,25 @@ export default function InvoicesPage() {
         </div>
       ),
     },
-    { key: 'status', header: 'Status', mobile: 'status', render: row => <StatusBadge status={row.status} /> },
+    {
+      key: 'status', header: 'Status', mobile: 'status',
+      render: row => (
+        <>
+          <StatusBadge status={row.status} />
+          {/* From md to below xl the Payment column would push Total off screen, so its pill stacks here instead (the phone card keeps its own Payment field). */}
+          {paymentStacked && row.paymentStatus && <span className="mt-1 flex">{paymentPill(row)}</span>}
+        </>
+      ),
+    },
     {
       // Blank for a credit note, a voided or a credited invoice (no payment applies); the column leaves when no row on the page has one. minWidth holds the widest pill, as the claim detail Status column does.
       key: 'paymentStatus',
       header: 'Payment',
       minWidth: '7rem',
       hideWhenEmpty: true,
+      hidden: paymentStacked,
       className: 'max-md:empty:hidden',
-      render: row => row.paymentStatus ? <StatusBadge status={row.paymentStatus} label={INVOICE_PAYMENT_LABELS[row.paymentStatus]} /> : null,
+      render: paymentPill,
     },
     {
       key: 'total',
