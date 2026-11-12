@@ -53,6 +53,7 @@ public class IncidentWitness
     /// Populated by the witness themself when they respond (approve or decline) via the portal —
     /// never by the reporter at incident creation/edit time.
     /// </summary>
+    public const int StatementMaxLength = 4000;
     public string? StatementText { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

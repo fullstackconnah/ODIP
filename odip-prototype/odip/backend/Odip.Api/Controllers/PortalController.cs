@@ -1582,11 +1582,25 @@ public class PortalController : ControllerBase
         if (witness.WitnessStatus != WitnessStatus.Pending)
             return BadRequest(ApiResponse<PortalWitnessRequestDto>.Fail("This witness request has already been responded to."));
 
+        // Checked before any write; the column holds StatementMaxLength characters.
+        var statement = dto?.StatementText?.Trim();
+        if (statement is { Length: > IncidentWitness.StatementMaxLength })
+            return BadRequest(ApiResponse<PortalWitnessRequestDto>.Fail("Keep the statement to 4,000 characters or fewer."));
+
+        // Two answers at once both read Pending above: only the one that flips the row from Pending wins.
+        // EF InMemory (the unit tests) has no ExecuteUpdate and no concurrent callers, so the check above stands alone there.
+        // The flip commits only with the saves below: a 409 or an error rolls it back, so the retry is not told it already answered.
+        await using var tx = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (_db.Database.IsRelational()
+            && await _db.IncidentWitnesses.Where(w => w.Id == id && w.WitnessStatus == WitnessStatus.Pending)
+                .ExecuteUpdateAsync(u => u.SetProperty(w => w.WitnessStatus, response), ct) != 1)
+            return BadRequest(ApiResponse<PortalWitnessRequestDto>.Fail("This witness request has already been responded to."));
+
         witness.WitnessStatus = response;
         witness.WitnessRespondedAt = DateTime.UtcNow;
         // Never overwrite a previously-typed statement with null when the caller omits it.
-        if (!string.IsNullOrWhiteSpace(dto?.StatementText))
-            witness.StatementText = dto!.StatementText!.Trim();
+        if (!string.IsNullOrWhiteSpace(statement))
+            witness.StatementText = statement;
         // So an editor's form loaded before this answer is refused (409) instead of deleting it.
         witness.IncidentReport!.UpdatedAt = DateTime.UtcNow;
         try { await _db.SaveChangesAsync(ct); }
@@ -1601,6 +1615,7 @@ public class PortalController : ControllerBase
                 return Conflict(ApiResponse<PortalWitnessRequestDto>.Fail("This incident changed while you were answering. Please send your answer again."));
             }
         }
+        if (tx != null) await tx.CommitAsync(ct);
 
         return Ok(ApiResponse<PortalWitnessRequestDto>.Ok(ToIncidentWitnessRequestDto(witness)));
     }

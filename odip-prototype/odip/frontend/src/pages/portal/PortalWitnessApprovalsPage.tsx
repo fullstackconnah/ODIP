@@ -128,6 +128,7 @@ export default function PortalWitnessApprovalsPage() {
                 onChange={(e) => setStatementText(e.target.value)}
                 rows={3}
                 className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
+                maxLength={4000}
                 placeholder="Describe what you saw…"
               />
             </label>

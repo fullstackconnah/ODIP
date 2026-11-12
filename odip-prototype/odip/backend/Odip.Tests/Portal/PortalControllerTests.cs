@@ -1162,6 +1162,54 @@ public class PortalControllerTests
     }
 
     [Theory]
+    [InlineData(4001, false)]
+    [InlineData(4000, true)]
+    public async Task RespondToIncidentWitnessRequest_StatementOver4000_IsRefused_AndSavesNothing(int length, bool saves)
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var witness = SeedIncidentWitness(db, SeedIncident(db, reporter.Id).Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+
+        // Leading and trailing spaces are trimmed first, so they never count toward the limit.
+        var result = await controller.ApproveIncidentWitnessRequest(
+            witness.Id, new PortalRespondIncidentWitnessRequestDto("  " + new string('a', length) + "  "), CancellationToken.None);
+
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        if (saves)
+        {
+            Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Equal(new string('a', length), reloaded.StatementText);
+        }
+        else
+        {
+            var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Keep the statement to 4,000 characters or fewer.", Assert.IsType<ApiResponse<PortalWitnessRequestDto>>(bad.Value).Errors![0]);
+            Assert.Equal(WitnessStatus.Pending, reloaded.WitnessStatus);
+            Assert.Null(reloaded.StatementText);
+        }
+    }
+
+    [Fact]
+    public async Task RespondToIncidentWitnessRequest_SecondAnswer_IsRefused_AndKeepsTheFirstAnswer()
+    {
+        var (db, tenant) = CreateDb();
+        var myUser = SeedUser(db);
+        var reporter = SeedUser(db, "Other", "Reporter");
+        var witness = SeedIncidentWitness(db, SeedIncident(db, reporter.Id).Id, myUser.Id);
+        var controller = MakeController(db, tenant.Object, myUser.Id);
+        await controller.ApproveIncidentWitnessRequest(witness.Id, new PortalRespondIncidentWitnessRequestDto("First."), CancellationToken.None);
+
+        var second = await controller.DeclineIncidentWitnessRequest(witness.Id, new PortalRespondIncidentWitnessRequestDto("Second."), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(second.Result);
+        var reloaded = await db.IncidentWitnesses.SingleAsync(w => w.Id == witness.Id);
+        Assert.Equal(WitnessStatus.Approved, reloaded.WitnessStatus);
+        Assert.Equal("First.", reloaded.StatementText);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task RespondToIncidentWitnessRequest_StampsTheIncidentUpdatedAt(bool approve)
