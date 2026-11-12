@@ -296,6 +296,36 @@ public class GroupActivitySeriesParticipantTests
     }
 
     [Fact]
+    public async Task AddSeries_ReAddAtNewRatio_EveryReAddedDayAndMembershipTakeIt_DaysStillOnKeepTheirs()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await Weeks(fx);
+        var p = fx.AddParticipant();
+        GroupActivityFixture.Body(await Add(fx, rows[0].Id, p, GroupActivityScope.Series, SupportRatio.TwoToOne), 200);
+        foreach (var i in new[] { 1, 2 })
+            GroupActivityFixture.Body(await Remove(fx, rows[i].Id, (await ShiftsOf(fx, p)).First(s => s.GroupActivityId == rows[i].Id).Id, GroupActivityScope.Occurrence), 200);
+        // A removed shift stays as a loose one and is taken back on re-add at its own ratio; cancelled, it is not, so the re-add makes new shifts.
+        foreach (var s in await fx.Seed.Shifts.Where(s => s.ParticipantId == p.Id && s.GroupActivityId == null).ToListAsync()) s.Status = ShiftStatus.Cancelled;
+        await fx.Seed.SaveChangesAsync();
+        GroupActivityFixture.Body(await Add(fx, rows[1].Id, p, GroupActivityScope.Series, SupportRatio.OneToOne), 200);
+        var onDay = (await ShiftsOf(fx, p)).Where(s => s.GroupActivityId != null).ToLookup(s => s.GroupActivityId);
+        Assert.All(onDay[rows[1].Id].Concat(onDay[rows[2].Id]), s => Assert.Equal(SupportRatio.OneToOne, s.Ratio));
+        Assert.Equal(2, onDay[rows[0].Id].Count(s => s.Ratio == SupportRatio.TwoToOne)); // still on: untouched
+        Assert.Equal(SupportRatio.OneToOne, (await fx.Seed.GroupActivitySeriesParticipants.SingleAsync()).Ratio);
+    }
+
+    [Fact]
+    public async Task AddSeries_AlreadyOnEveryDay_RefusedAndMembershipRatioKept()
+    {
+        var fx = new GroupActivityFixture();
+        var rows = await Weeks(fx);
+        var p = fx.AddParticipant();
+        GroupActivityFixture.Body(await Add(fx, rows[0].Id, p, GroupActivityScope.Series, SupportRatio.TwoToOne), 200);
+        Assert.Equal("GA_PARTICIPANT_IN", GroupActivityFixture.Error(await Add(fx, rows[0].Id, p, GroupActivityScope.Series, SupportRatio.OneToOne), 409));
+        Assert.Equal(SupportRatio.TwoToOne, (await fx.Seed.GroupActivitySeriesParticipants.SingleAsync()).Ratio);
+    }
+
+    [Fact]
     public async Task Remove_UnknownScopeInteger_ActsAsOccurrence()
     {
         var (fx, rows, p) = await SeriesWithMember();
