@@ -63,6 +63,7 @@ public partial class ProviderSettingsController : ControllerBase
             GSTRegistered = s.GSTRegistered, IsPaceProvider = s.IsPaceProvider,
             BankAccountName = hideBank ? null : s.BankAccountName, BSB = hideBank ? null : s.BSB,
             AccountNumber = hideBank ? null : s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
+            AgreementResponsibilitiesTerms = s.AgreementResponsibilitiesTerms, AgreementComplaintsTerms = s.AgreementComplaintsTerms,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
             TradingName = s.TradingName, ContactEmail = s.ContactEmail, ContactPhone = s.ContactPhone, Website = s.Website,
             TimeZoneId = s.TimeZoneId, // the stored value only: an effective zone would be echoed back and saved by every other section
@@ -119,6 +120,13 @@ public partial class ProviderSettingsController : ControllerBase
         var website = dto.Website?.Trim();
         if (!string.IsNullOrEmpty(website) && !IsFullWebAddress(website))
             return BadRequest(ApiResponse<bool>.Fail("Enter the full web address, starting with https://."));
+
+        // Agreement wording: line breaks folded to LF and trimmed first, so the limit counts what is stored. No [StringLength]: its 400 is an errors object, not a sentence.
+        static string? Terms(string? sent) => sent?.ReplaceLineEndings("\n").Trim();
+        var responsibilities = Terms(dto.AgreementResponsibilitiesTerms);
+        var complaints = Terms(dto.AgreementComplaintsTerms);
+        if (responsibilities?.Length > 2000 || complaints?.Length > 2000)
+            return BadRequest(ApiResponse<bool>.Fail("Enter 2,000 characters or fewer."));
 
         // Prices and public holidays follow the state, so none is assumed (a body that omits it used to become Victoria).
         var state = dto.State?.Trim().ToUpperInvariant();
@@ -196,6 +204,19 @@ public partial class ProviderSettingsController : ControllerBase
         if (dto.ContactEmail is not null) s.ContactEmail = contactEmail!.Length > 0 ? contactEmail : null;
         if (dto.ContactPhone is not null) s.ContactPhone = TrimmedOrNull(dto.ContactPhone);
         if (dto.Website is not null) s.Website = website!.Length > 0 ? website : null;
+        // Agreement wording: null leaves it, blank clears it (the PDF then prints the standard text). Each change is one history row.
+        if (responsibilities is not null)
+        {
+            var v = responsibilities.Length > 0 ? responsibilities : null;
+            AuditIfChanged(s, nameof(ProviderSettings.AgreementResponsibilitiesTerms), s.AgreementResponsibilitiesTerms, v);
+            s.AgreementResponsibilitiesTerms = v;
+        }
+        if (complaints is not null)
+        {
+            var v = complaints.Length > 0 ? complaints : null;
+            AuditIfChanged(s, nameof(ProviderSettings.AgreementComplaintsTerms), s.AgreementComplaintsTerms, v);
+            s.AgreementComplaintsTerms = v;
+        }
 
         // Sent and different only (every section echoes the row). One audit row when the effective zone moves: "today" for rosters, the portal and reminders moves with it.
         if (dto.TimeZoneId is { } newZone && newZone != s.TimeZoneId)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -409,12 +409,12 @@ describe('Billing details: invoice numbers and payment terms', () => {
     expect(screen.getByLabelText('Credit note prefix')).toHaveValue('CN-')
     expect(startNumber()).toHaveValue(1)
     expect(daysToPay()).toHaveValue(14)
-    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Bank account', 'Invoice numbers', 'Payment terms', 'Tax', 'Invoice note'])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Bank account', 'Invoice numbers', 'Payment terms', 'Tax', 'Invoice note', 'Agreement wording'])
     expect(screen.getByText('Printed before the number, as in INV-0042. New invoices only.')).toBeInTheDocument()
     expect(screen.getByText('As in CN-0007. New credit notes only.')).toBeInTheDocument()
     expect(startNumber()).toHaveAccessibleDescription("Carry on from your old system's numbers. It can't change once an invoice is issued.")
     expect(screen.getByText("Each invoice is due this many days after it's issued. 0 means due on issue.")).toBeInTheDocument()
-    expect(screen.getByText("The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice.")).toBeInTheDocument()
+    expect(screen.getByText("The bank account on your invoices, how they're numbered and when they're due, your GST status, the note printed at the foot of every invoice, and your service agreement wording.")).toBeInTheDocument()
   })
 
   it.each([
@@ -582,6 +582,74 @@ describe('Billing details: invoice numbers and payment terms', () => {
     expect(prefix()).toHaveAttribute('readonly')
     expect(startNumber()).toHaveAttribute('readonly')
     expect(daysToPay()).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Billing details: agreement wording', () => {
+  const responsibilities = () => screen.getByLabelText('Responsibilities and cancellation') as HTMLTextAreaElement
+  const complaints = () => screen.getByLabelText('Concerns and complaints') as HTMLTextAreaElement
+  const type = (field: HTMLElement, text: string) => fireEvent.change(field, { target: { value: text } })
+  async function open() {
+    renderSection('billing')
+    await screen.findByLabelText('Responsibilities and cancellation')
+  }
+
+  it('shows two empty fields with their hints and no count', async () => {
+    await open()
+    expect(responsibilities()).toHaveValue('')
+    expect(complaints()).toHaveValue('')
+    expect(responsibilities()).toHaveAttribute('rows', '6')
+    expect(screen.getByText('Printed as section 6 of the service agreement. Leave blank to print the standard draft wording.')).toBeInTheDocument()
+    expect(screen.getByText('Printed as section 7 of the service agreement. Leave blank to print the standard draft wording.')).toBeInTheDocument()
+    expect(screen.queryByText(/ \/ 2,000/)).not.toBeInTheDocument()
+  })
+
+  it('counts trimmed characters from 1,800: 1,799 shows nothing, 1,834 shows the count', async () => {
+    await open()
+    type(responsibilities(), `  ${'a'.repeat(1799)}  `)
+    expect(screen.queryByText(/ \/ 2,000/)).not.toBeInTheDocument()
+    type(responsibilities(), `  ${'a'.repeat(1834)}  `)
+    expect(screen.getByText('1,834 / 2,000')).toBeInTheDocument()
+    expect(responsibilities()).toHaveAccessibleDescription(expect.stringContaining('1,834 / 2,000'))
+  })
+
+  it('blocks 2,001 characters with the error, aria-invalid, a disabled Save and the foot count', async () => {
+    await open()
+    type(complaints(), 'b'.repeat(2001))
+    expect(complaints()).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Enter 2,000 characters or fewer.')).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+    expect(screen.getByText('Fix 1 field to save.')).toBeInTheDocument()
+    type(complaints(), 'b'.repeat(2000))
+    expect(complaints()).not.toHaveAttribute('aria-invalid')
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('sends a cleared wording as an empty string, and sends neither wording when only the invoice note changed', async () => {
+    server = makeSettings({ agreementResponsibilitiesTerms: 'Our cancellation wording.' })
+    const user = userEvent.setup()
+    await open()
+    type(screen.getByLabelText('Note at the foot of every invoice'), 'New note')
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('agreementResponsibilitiesTerms')
+    expect(putBody()).not.toHaveProperty('agreementComplaintsTerms')
+
+    type(responsibilities(), '')
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1).agreementResponsibilitiesTerms).toBe('')
+    expect(putBody(1)).not.toHaveProperty('agreementComplaintsTerms')
+  })
+
+  it('is read-only for a Coordinator, with no Save and no count', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    server = makeSettings({ agreementComplaintsTerms: 'c'.repeat(1900) })
+    await open()
+    expect(responsibilities()).toHaveAttribute('readonly')
+    expect(complaints()).toHaveAttribute('readonly')
+    expect(screen.queryByText(/ \/ 2,000/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 })

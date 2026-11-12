@@ -21,6 +21,10 @@ public class ProviderSettings : ITenantEntity
     public string? AccountNumber { get; set; }
     public string? InvoiceFooterNotes { get; set; }
 
+    // Organisation wording for service agreement sections 6 and 7; null prints the standard draft text.
+    public string? AgreementResponsibilitiesTerms { get; set; }
+    public string? AgreementComplaintsTerms { get; set; }
+
     /// <summary>
     /// MED-02: primary manager contact shown first in MED-01's missed-medication guidance (not
     /// yet built — this is the setting CRUD/display only). Nullable — unset until an Admin fills
