@@ -560,7 +560,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         variant="danger"
         loading={cancel.isPending}
         onCancel={() => setConfirmCancel(false)}
-        onConfirm={() => { if (activity) void write('cancel', () => cancel.mutateAsync(activity.id), "Couldn't cancel the activity.").then(() => setConfirmCancel(false)) }}
+        onConfirm={() => { if (activity) void write('cancel', () => cancel.mutateAsync({ id: activity.id }), "Couldn't cancel the activity.").then(() => setConfirmCancel(false)) }}
       />
 
       {removing && activity && (() => {
