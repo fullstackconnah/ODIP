@@ -244,7 +244,8 @@ for (const vp of VPS) {
   const sized = (n) => { let s = ''; while (s.length < n) s += 'Cancel at least 48 hours ahead. '; return `${s.slice(0, n - 1)}.` }
   const resp = (page) => page.getByLabel(RESP_LABEL, { exact: true })
   const comp = (page) => page.getByLabel(COMP_LABEL, { exact: true })
-  const groupShot = (page, name) => crop(page, page.locator('main section[aria-labelledby]').filter({ has: page.getByRole('heading', { name: 'Agreement wording', exact: true }) }).last(), name, vp)
+  const groupLoc = (page) => page.locator('main section[aria-labelledby]').filter({ has: page.getByRole('heading', { name: 'Agreement wording', exact: true }) }).last()
+  const groupShot = (page, name) => crop(page, groupLoc(page), name, vp)
   // A foot state crops the whole frame; the 1280 viewport grows until the page fits, as full() does.
   const frameShot = async (page, name) => {
     if (!vp.touch) await page.setViewportSize({ width: vp.width, height: Math.max(900, await page.evaluate(() => document.scrollingElement.scrollHeight)) })
@@ -337,7 +338,13 @@ for (const vp of VPS) {
     })
     await wording('saved', {}, async (p) => {
       await saveAnd(p, waitSaved)
-      await noHScroll(p, t('saved')); await groupShot(p, png('saved', 'light'))
+      await noHScroll(p, t('saved'))
+      // The group crop widened to the save foot (cropElement `also`); the foot's box is read inside the crop, so it is checked against the real clip.
+      const foot = p.getByText('Saved', { exact: true }).first()
+      const r = await cropElement(p, groupLoc(p), path.join(OUT_DIR, png('saved', 'light')), { touch: vp.touch, natural: true, pad: 16, also: foot, during: async () => ({ text: await foot.textContent(), box: await foot.boundingBox() }) })
+      checks.push(checkCropHolds({ ...r, touch: vp.touch }))
+      const { text, box: fb } = r.measured, c = r.clip
+      check(t('saved: foot reads exactly "Saved" and lies inside the crop'), text?.trim() === 'Saved' && !!fb && fb.x >= c.x && fb.y >= c.y && fb.x + fb.width <= c.x + c.width + 0.5 && fb.y + fb.height <= c.y + c.height + 0.5, { text, fb, clip: c })
     })
     try {
       const { context, page } = await openPage(browser, vp, { entries: [entry('w2', 30, [diff('AgreementResponsibilitiesTerms', RESP, 'W'.repeat(2000))])] })
