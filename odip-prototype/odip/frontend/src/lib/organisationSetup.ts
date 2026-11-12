@@ -4,9 +4,23 @@ import { calendarDaysUntil } from './dateOnly'
 
 const STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
 
-/** The one rule for "organisation details are recorded": the legal name, an address and a valid state. */
+const ABN_WEIGHTS = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
+
+/** 11 digits once spaces are removed, and the standard ABN checksum (first digit less 1, weighted sum divisible by 89). */
+export function isValidAbn(abn?: string | null): boolean {
+  const digits = (abn ?? '').replace(/ /g, '')
+  if (!/^[0-9]{11}$/.test(digits)) return false
+  const sum = ABN_WEIGHTS.reduce((total, weight, i) => total + weight * (Number(digits[i]) - (i === 0 ? 1 : 0)), 0)
+  return sum % 89 === 0
+}
+
+/** The one rule for "organisation details are recorded": the legal name, an address, a valid state and a valid ABN. The registration number stays optional. */
 export const organisationDetailsRecorded = (provider?: ProviderSettingsDto | null) =>
-  !!provider?.organisationName?.trim() && !!provider?.address?.trim() && STATES.includes(provider?.state ?? '')
+  !!provider?.organisationName?.trim() && !!provider?.address?.trim() && STATES.includes(provider?.state ?? '') && isValidAbn(provider?.abn)
+
+/** The one short line for a step that waits on the ABN; null once the ABN is valid. */
+export const organisationDetailsHint = (provider?: ProviderSettingsDto | null) =>
+  isValidAbn(provider?.abn) ? null : provider?.abn?.trim() ? 'Check your ABN to finish this step.' : 'Add your ABN to finish this step.'
 
 const hiddenKey = () => `bunya-setup-hidden:${currentTenantId() ?? 'none'}`
 
