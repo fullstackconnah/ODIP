@@ -160,9 +160,9 @@ for (const vp of VIEWPORTS) {
         await fillSeries(dlg, { date: '2026-11-17', repeats: 'Weekly', until: '2027-12-23' })
         const rangeErr = dlg.getByText('Pick an end date by 22 Dec 2027. A series can run up to 400 days.')
         await rangeErr.waitFor({ timeout: 5000 })
-        // Checked at natural height (`during`): scrolled, the sticky footer sits over the Until field and the header over Title, whatever the scroll.
+        // Checked in `during`: at 390 the crop is natural height; at 1440 the Until field is centred so the sticky footer is not over it.
         let dialogLayout
-        await shot(page, dlg, `a1-create-range-error-${tag}.png`, { touch, natural: true, during: async () => { dialogLayout = await layoutCheck(page, dlg, `create dialog ${tag}`) } })
+        await shot(page, dlg, `a1-create-range-error-${tag}.png`, { touch, natural: touch, during: async () => { await dlg.getByLabel(/^Until/).evaluate((el) => el.scrollIntoView({ block: 'center' })); dialogLayout = await layoutCheck(page, dlg, `create dialog ${tag}`) } })
         const [s, u] = await Promise.all([box(dlg.getByLabel(/^Repeats/)), box(dlg.getByLabel(/^Until/))])
         check(`${tag} 2 Repeats top = Until top with the range error showing`, near(s.y, u.y), { repeats: s.y, until: u.y })
         check(`${tag} 10 Until range error at most 2 lines`, (await lines(rangeErr)) <= 2, { lines: await lines(rangeErr) })
