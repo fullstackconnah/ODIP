@@ -301,7 +301,7 @@ public class InvoiceService
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).Text(item.SupportItemCode);
                             var dateCell = table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4);
                             if (item.ServiceStartTime is { } from && item.ServiceEndTime is { } to)
-                                dateCell.Column(c => { c.Item().Text(dateRange); c.Item().Text($"{Clock(from)} – {Clock(to)}").FontSize(9); });
+                                dateCell.Column(c => { c.Item().Text(dateRange); c.Item().Text($"{Clock(from)} – {Clock(to)}").FontSize(9).FontColor(Colors.Grey.Darken1); });
                             else
                                 dateCell.Text(dateRange);
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(perItemLines?.Contains(item.Id) == true ? string.Create(CultureInfo.InvariantCulture, $"{item.Hours:0.##} each") : item.Hours.ToString("F2", CultureInfo.InvariantCulture));
