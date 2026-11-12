@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -233,19 +235,15 @@ public class ParticipantInquiriesControllerTests
         return Data<List<ParticipantInquiryDto>>((await controller.GetAll(CancellationToken.None)).Result!);
     }
 
-    // The location is often a home address, and the notes are internal: like /intake-visits, they are for the lifecycle roles. Everyone who can open
-    // the Enquiries tab still sees when the visit is, the staff member's first name and what the invite did.
-    [Fact]
-    public async Task GetAll_keeps_a_visits_address_notes_and_staff_name_from_roles_outside_the_lifecycle()
+    // The Enquiries lists are for the roles that work enquiries; a SupportWorker (or ReadOnly) is refused, so nothing is withheld row by row any more.
+    [Theory]
+    [InlineData(nameof(ParticipantInquiriesController.GetAll)), InlineData(nameof(ParticipantInquiriesController.GetClosed))]
+    public void The_two_enquiry_lists_admit_Admin_Coordinator_and_SuperAdmin_only(string name)
     {
-        var row = Assert.Single(await BookedFeedAs("SupportWorker", Guid.NewGuid()));
-
-        Assert.Equal(VisitStart, row.IntakeStartsAt);
-        Assert.Equal("Sam", row.IntakeStaffFirstName);
-        Assert.Equal("NotConfigured", row.IntakeInviteError);
-        Assert.Null(row.IntakeLocation);
-        Assert.Null(row.IntakeNotes);
-        Assert.Null(row.IntakeStaffName);
+        var roles = typeof(ParticipantInquiriesController).GetMethod(name)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles!.Split(',');
+        Assert.Equal(["Admin", "Coordinator", "SuperAdmin"], roles.OrderBy(r => r, StringComparer.Ordinal));
+        Assert.DoesNotContain("SupportWorker", roles);
+        Assert.DoesNotContain("ReadOnly", roles);
     }
 
     [Fact]
