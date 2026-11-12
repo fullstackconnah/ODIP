@@ -131,12 +131,14 @@ public class RosteringShiftCancellationReasonTests
         Assert.Null(saved.CancelledAt);
     }
 
-    [Fact]
-    public async Task Row7_AValueOutsideTheEnum_Is400_AndNothingIsSaved()
+    [Theory]
+    [InlineData(99)]
+    [InlineData(-1)]
+    public async Task Row7_AValueOutsideTheEnum_Is400_AndNothingIsSaved(int outside)
     {
         using var db = TestDb.Create();
         var shift = Seed(db, ShiftStatus.Published);
-        var (result, saved) = await PutAsync(db, shift, DtoFor(shift, ShiftStatus.Cancelled, (ShiftCancellationReason)99));
+        var (result, saved) = await PutAsync(db, shift, DtoFor(shift, ShiftStatus.Cancelled, (ShiftCancellationReason)outside));
 
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal(ShiftErrorCodes.ShiftCancellationReasonInvalid, Assert.IsType<ApiResponse<ShiftDto>>(bad.Value).Code);

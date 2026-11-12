@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDelete } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
 import { UNCLAIMED_SHIFTS_KEY } from './claimHub'
@@ -355,6 +356,14 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // an approved completion is a completed shift the claim run can now take
       refreshBudgetFigures(qc)   // an approved completion is a completed shift: booked ahead becomes pending
+    },
+    // A 409 means the row on screen is stale (already approved elsewhere, or it now needs review): refresh it. Other failures change nothing.
+    onError: (err, v) => {
+      if (!isAxiosError(err) || err.response?.status !== 409) return
+      const shiftId = typeof v === 'string' ? v : v.shiftId
+      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
     },
   })
 }
