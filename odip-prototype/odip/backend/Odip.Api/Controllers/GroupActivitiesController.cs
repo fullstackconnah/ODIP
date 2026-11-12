@@ -49,7 +49,7 @@ public partial class GroupActivitiesController : ControllerBase
         _tenant = tenant;
         _generator = generator ?? new RosterShiftGenerator();
         _availability = new RosterAvailability(db, unavailabilityQuery);
-        _reader = new GroupActivityReader(db, _availability);
+        _reader = new GroupActivityReader(db, _availability, clock);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _clock = clock ?? TimeProvider.System;
@@ -81,6 +81,7 @@ public partial class GroupActivitiesController : ControllerBase
         ["GA_PARTICIPANT_NOT_FOUND"] = (400, "Participant not found."),
         ["GA_PARTICIPANT_ARCHIVED"] = (400, "This participant is archived, so they can't join an activity."),
         ["GA_PARTICIPANT_IN"] = (409, "That participant is already in this activity."),
+        ["GA_PARTICIPANT_SHIFT_STARTED"] = (409, "This person's shift at this time has already started. Add them to a later activity."),
         ["GA_PARTICIPANT_NOT_IN"] = (404, "That participant isn't in this activity."),
         ["GA_NOT_READY"] = (400, ParticipantReadinessGate.NotReadyMessage),
         ["GA_RATIO"] = (400, "Choose a support ratio."),
@@ -528,8 +529,8 @@ public partial class GroupActivitiesController : ControllerBase
     // ── E7 detach a shift ───────────────────────────────────────────────────────────────────────────
 
     [HttpDelete("{id:guid}/shifts/{shiftId:guid}")]
-    public Task<ActionResult<ApiResponse<GroupActivityDto>>> DetachShift(Guid id, Guid shiftId, CancellationToken ct) =>
-        WriteAsync(Attached(id), async (tenantId, token) =>
+    public Task<ActionResult<ApiResponse<GroupActivityDto>>> DetachShift(Guid id, Guid shiftId, [FromQuery] GroupActivityScope? scope, CancellationToken ct) =>
+        WriteAsync(SeriesAttached(id, scope), async (tenantId, token) =>
         {
             var activity = await LoadActivityAsync(id, tenantId, forChange: true, token);
             var attached = await AttachedShiftsAsync(activity, token);
@@ -538,36 +539,107 @@ public partial class GroupActivitiesController : ControllerBase
             if (leaving.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
             foreach (var s in leaving) await DetachAsync(s, token);
             activity.UpdatedAt = DateTime.UtcNow;
+            // Series: the same participant leaves every later activity that is still open to change, then the series stops adding them (a locked shift there refuses the lot).
+            if (scope == GroupActivityScope.Series && activity.SeriesId is { } seriesId)
+            {
+                var participantId = shift.ParticipantId;
+                var from = await SeriesFromAsync(activity, tenantId, token);
+                foreach (var target in await SeriesTargetsAsync(activity, from, token, includeStaff: false))
+                    await OnOccurrenceAsync(target, async () =>
+                    {
+                        var mine = (await AttachedShiftsAsync(target, token)).Where(s => s.ParticipantId == participantId).ToList();
+                        if (mine.Any(s => RosteringController.IsLockedForStaffChange(s.Status))) throw Deny("GA_SHIFT_LOCKED");
+                        foreach (var s in mine) await DetachAsync(s, token);
+                        if (mine.Count > 0) target.UpdatedAt = DateTime.UtcNow;
+                        return 0;
+                    });
+                var membership = await _db.GroupActivitySeriesParticipants.Where(m => m.TenantId == tenantId && m.SeriesId == seriesId && m.ParticipantId == participantId).ToListAsync(token);
+                _db.GroupActivitySeriesParticipants.RemoveRange(membership);
+            }
+
             return await SavedAsync(activity.Id, token);
         }, ct);
+
+    /// <summary>Where a Series add or remove starts: the opened day, or today in the organisation's zone when that is later (earlier days are history).</summary>
+    private async Task<DateOnly> SeriesFromAsync(GroupActivity opened, Guid tenantId, CancellationToken ct)
+    {
+        var today = await Odip.Infrastructure.Services.ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        return opened.ServiceDate > today ? opened.ServiceDate : today;
+    }
 
     // ── E8 add a participant with a one-off shift ───────────────────────────────────────────────────
 
     [HttpPost("{id:guid}/participants")]
     public Task<ActionResult<ApiResponse<GroupActivityDto>>> AddParticipant(Guid id, [FromBody] AddGroupParticipantDto dto, CancellationToken ct) =>
-        WriteAsync(async (tenantId, token) => (await AttachedParticipantsAsync(id, tenantId, token)).Append(dto.ParticipantId),
+        WriteAsync(async (tenantId, token) => (await SeriesAttached(id, dto.Scope)(tenantId, token)).Append(dto.ParticipantId),
             async (tenantId, token) =>
             {
                 var activity = await LoadActivityAsync(id, tenantId, forChange: true, token);
                 if (dto.ParticipantId == Guid.Empty) throw Deny("GA_PARTICIPANT_NOT_FOUND");
                 await EnsureParticipantCanJoinAsync(dto.ParticipantId, tenantId, token);
                 if (!Enum.IsDefined(dto.Ratio)) throw Deny("GA_RATIO");
-                var attached = await AttachedShiftsAsync(activity, token);
-                if (attached.Any(s => s.ParticipantId == dto.ParticipantId)) throw Deny("GA_PARTICIPANT_IN");
+                var series = dto.Scope == GroupActivityScope.Series && activity.SeriesId is not null;
+                if (!series && (await AttachedShiftsAsync(activity, token)).Any(s => s.ParticipantId == dto.ParticipantId)) throw Deny("GA_PARTICIPANT_IN");
                 if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, token)).Allowed) throw Deny("GA_NOT_READY");
-                await CompatibilityGateAsync(activity, [dto.ParticipantId], token);
-                // Two shifts for 2:1, one per worker; the reader counts the participant once.
-                for (var i = 0; i < (dto.Ratio == SupportRatio.TwoToOne ? 2 : 1); i++)
-                    _db.Shifts.Add(new Shift
-                    {
-                        Id = Guid.NewGuid(), TenantId = activity.TenantId, ParticipantId = dto.ParticipantId, ServiceDate = activity.ServiceDate, StartTime = activity.StartTime,
-                        EndTime = activity.EndTime, EndsNextDay = activity.EndsNextDay, Ratio = dto.Ratio, NightType = SleepoverType.None,
-                        Status = activity.Status == ShiftStatus.Published ? ShiftStatus.Published : ShiftStatus.Draft, GroupActivityId = activity.Id,
-                        Location = activity.Location, ServiceLocationId = activity.ServiceLocationId, SupportGroupCode = CatalogueGroups.GroupActivitiesGroupCode,
-                    });
-                activity.UpdatedAt = DateTime.UtcNow;
+                var added = await AddToOccurrenceAsync(activity, dto.ParticipantId, dto.Ratio, opened: true, token);
+                if (series)
+                {
+                    var membership = await _db.GroupActivitySeriesParticipants.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SeriesId == activity.SeriesId && m.ParticipantId == dto.ParticipantId, token);
+                    var from = await SeriesFromAsync(activity, tenantId, token);
+                    foreach (var target in await SeriesTargetsAsync(activity, from, token, includeStaff: true))
+                        added |= await OnOccurrenceAsync(target, () => AddToOccurrenceAsync(target, dto.ParticipantId, membership?.Ratio ?? dto.Ratio, opened: false, token));
+                    if (membership is null)
+                        _db.GroupActivitySeriesParticipants.Add(new GroupActivitySeriesParticipant { Id = Guid.NewGuid(), TenantId = tenantId, SeriesId = activity.SeriesId!.Value, ParticipantId = dto.ParticipantId, Ratio = dto.Ratio });
+                    else if (!added) throw Deny("GA_PARTICIPANT_IN", "That participant is already on every upcoming activity in this series.");
+                }
+
                 return await SavedAsync(activity.Id, token);
             }, ct);
+
+    /// <summary>
+    /// Puts the participant on one occurrence (attach or create). A not-started shift of theirs from an approved agreement block that overlaps the activity is attached (the first by start, with its 2:1
+    /// sibling) and takes the activity's times; otherwise new shifts are made. Returns false when they are already on it, or, on a later occurrence, when a started shift of theirs is in the way.
+    /// </summary>
+    private async Task<bool> AddToOccurrenceAsync(GroupActivity activity, Guid participantId, SupportRatio ratio, bool opened, CancellationToken ct)
+    {
+        if ((await AttachedShiftsAsync(activity, ct)).Any(s => s.ParticipantId == participantId)) return false;
+        var tenantId = activity.TenantId;
+        var onDay = await _db.Shifts.Where(s => s.TenantId == tenantId && s.ParticipantId == participantId && s.ServiceDate == activity.ServiceDate && s.GroupActivityId == null && s.Status != ShiftStatus.Cancelled).ToListAsync(ct);
+        var patternIds = onDay.Where(s => s.ShiftPatternId != null).Select(s => s.ShiftPatternId!.Value).Distinct().ToList();
+        var blockIds = patternIds.Count == 0 ? [] : (await _db.ShiftPatterns.AsNoTracking().Where(p => p.TenantId == tenantId && patternIds.Contains(p.Id)).Where(GroupActivityPattern.IsAgreementBlock).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var inTheWay = onDay.Where(s => (s.ShiftPatternId is { } pid ? blockIds.Contains(pid) : s.SupportGroupCode == CatalogueGroups.GroupActivitiesGroupCode)
+                                        && AgreementActivityMatch.Overlaps(activity.StartTime, activity.EndTime, activity.EndsNextDay, s.StartTime, s.EndTime, s.EndsNextDay)).ToList();
+        if (inTheWay.Any(s => RosteringController.IsLockedForStaffChange(s.Status)))
+        {
+            if (opened) throw Deny("GA_PARTICIPANT_SHIFT_STARTED");
+            return false;
+        }
+
+        if (inTheWay.OrderBy(s => s.StartTime).ThenBy(s => s.Id).FirstOrDefault() is { } candidate)
+        {
+            var shifts = await WithSiblingsAsync([candidate], ct);
+            await AttachCoreAsync(activity, shifts, null, null, ct);
+            // A Draft shift on a Published occurrence is published with it; a Published shift on a Draft occurrence stays as it was (as E6 attach does).
+            if (activity.Status == ShiftStatus.Published)
+                foreach (var s in shifts.Where(s => s.Status == ShiftStatus.Draft)) s.Status = ShiftStatus.Published;
+        }
+        else
+        {
+            await CompatibilityGateAsync(activity, [participantId], ct);
+            // Two shifts for 2:1, one per worker; the reader counts the participant once.
+            for (var i = 0; i < (ratio == SupportRatio.TwoToOne ? 2 : 1); i++)
+                _db.Shifts.Add(new Shift
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, ServiceDate = activity.ServiceDate, StartTime = activity.StartTime,
+                    EndTime = activity.EndTime, EndsNextDay = activity.EndsNextDay, Ratio = ratio, NightType = SleepoverType.None,
+                    Status = activity.Status == ShiftStatus.Published ? ShiftStatus.Published : ShiftStatus.Draft, GroupActivityId = activity.Id,
+                    Location = activity.Location, ServiceLocationId = activity.ServiceLocationId, SupportGroupCode = CatalogueGroups.GroupActivitiesGroupCode,
+                });
+        }
+
+        activity.UpdatedAt = DateTime.UtcNow;
+        return true;
+    }
 
     // ── E9 set a participant's ratio ────────────────────────────────────────────────────────────────
 

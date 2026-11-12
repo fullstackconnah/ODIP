@@ -686,7 +686,11 @@ public record GroupActivityDto
     public List<RosterFindingDto> Findings { get; init; } = new();
     /// <summary>The repeat rule when this is one occurrence of a series; null for a one-off.</summary>
     public GroupActivitySeriesDto? Series { get; init; }
+    /// <summary>Per participant on an upcoming series occurrence: ACTIVITY_AGREEMENT_NO_BLOCK or ACTIVITY_AGREEMENT_TIME, a warning only. Empty for everything else.</summary>
+    public List<GroupActivityParticipantFindingDto> ParticipantFindings { get; init; } = new();
 }
+
+public record GroupActivityParticipantFindingDto(Guid ParticipantId, string Code);
 
 public record GroupActivitySeriesDto(Guid Id, GroupActivityInterval Interval, DateOnly StartDate, DateOnly EndDate);
 
@@ -782,6 +786,8 @@ public record AddGroupParticipantDto
 {
     public Guid ParticipantId { get; init; }
     public SupportRatio Ratio { get; init; }
+    /// <summary>Series adds them to this and every later upcoming activity of the series; absent or Occurrence is this one only.</summary>
+    public GroupActivityScope? Scope { get; init; }
 }
 
 public record SetGroupRatioDto

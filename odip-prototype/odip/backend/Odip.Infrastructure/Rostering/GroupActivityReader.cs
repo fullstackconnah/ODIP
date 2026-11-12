@@ -14,7 +14,7 @@ namespace Odip.Infrastructure.Rostering;
 /// ignored on a Draft or Published activity (a participant whose shift was cancelled neither counts nor appears). Once the activity has started, a participant whose every shift is cancelled is listed
 /// with <see cref="GroupActivityParticipantDto.DidNotAttend"/>, and still counts for nothing: staff needed and the staff findings judge only the people who are attending. Shared by the group-activity endpoints and the roster board.
 /// </summary>
-public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability availability)
+public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability availability, TimeProvider? clock = null)
 {
     public async Task<GroupActivityDto?> ReadAsync(Guid id, CancellationToken ct) =>
         (await BuildAsync(await db.GroupActivities.AsNoTracking().Where(a => a.Id == id).ToListAsync(ct), ct)).FirstOrDefault();
@@ -63,6 +63,14 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
         var snapshot = staffRows.Count == 0 ? null
             : await availability.LoadAsync(userIds, participantIds, activities.Min(a => a.ServiceDate), activities.Max(a => a.ServiceDate), ct);
 
+        // Agreement warnings: only for the upcoming, not-cancelled occurrences of a series, from one read of the participants' approved group-activity blocks.
+        var today = ProviderLocalTime.TodayIn((clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, zone);
+        var warnable = activities.Where(a => a.SeriesId != null && a.Status != ShiftStatus.Cancelled && a.ServiceDate >= today).Select(a => a.Id).ToHashSet();
+        var warnIds = shifts.Where(s => s.GroupActivityId is { } g && warnable.Contains(g) && s.Status != ShiftStatus.Cancelled).Select(s => s.ParticipantId).Distinct().ToList();
+        var tenantIds = activities.Select(a => a.TenantId).Distinct().ToList();
+        var blockPatterns = warnIds.Count == 0 ? []
+            : await db.ShiftPatterns.AsNoTracking().Where(p => tenantIds.Contains(p.TenantId) && warnIds.Contains(p.ParticipantId) && p.IsActive).Where(GroupActivityPattern.IsAgreementBlock).ToListAsync(ct);
+
         var result = new List<GroupActivityDto>();
         foreach (var activity in activities)
         {
@@ -105,13 +113,23 @@ public sealed class GroupActivityReader(OdipDbContext db, RosterAvailability ava
                     Code = RosterConflictService.ActivityStaffShort, Severity = RosterFindingSeverity.Warning, RequiresReason = false,
                     Message = $"{staff.Count} of {needed} staff on this activity.",
                 });
+            var participantFindings = new List<GroupActivityParticipantFindingDto>();
+            if (warnable.Contains(activity.Id))
+                foreach (var person in attending)
+                {
+                    var agreement = blockPatterns.Where(p => p.TenantId == activity.TenantId && p.ParticipantId == person.ParticipantId && p.EffectiveFrom <= activity.ServiceDate && (p.EffectiveTo == null || p.EffectiveTo >= activity.ServiceDate))
+                        .Select(p => new AgreementBlock(p.DayOfWeek, p.StartTime, p.EndTime, p.EndsNextDay));
+                    if (AgreementActivityMatch.Check(agreement, activity.ServiceDate.DayOfWeek, activity.StartTime, activity.EndTime, activity.EndsNextDay) is { } code)
+                        participantFindings.Add(new GroupActivityParticipantFindingDto(person.ParticipantId, code));
+                }
+
             result.Add(new GroupActivityDto
             {
                 Id = activity.Id, ServiceDate = activity.ServiceDate, StartTime = activity.StartTime, EndTime = activity.EndTime, EndsNextDay = activity.EndsNextDay,
                 Title = activity.Title, ActivityId = activity.ActivityId, ActivityName = activity.ActivityId is { } a ? libraryNames.GetValueOrDefault(a) : null,
                 Location = activity.Location, ServiceLocationId = activity.ServiceLocationId, Notes = activity.Notes, MinStaffRequired = activity.MinStaffRequired,
                 Status = activity.Status, StaffNeeded = needed, StaffAssigned = staff.Count, Participants = people, Staff = staff, Findings = findings,
-                Series = activity.SeriesId is { } sid ? seriesById.GetValueOrDefault(sid) : null,
+                Series = activity.SeriesId is { } sid ? seriesById.GetValueOrDefault(sid) : null, ParticipantFindings = participantFindings,
             });
         }
 
