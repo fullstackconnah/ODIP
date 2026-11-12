@@ -57,8 +57,9 @@ public class ParticipantAdlAssessmentsController : ControllerBase
             _db.ParticipantAdlAssessments.Add(row);
         }
 
-        ParticipantGridRules.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
-        await _db.SaveChangesAsync(ct);
+        row = await ParticipantGridRules.SaveGridAnswerAsync(_db, row, "IX_ParticipantAdlAssessments_ParticipantId_AdlType",
+            r => ParticipantGridRules.ApplyAnswer(r, dto.Level, dto.Notes, dto.HowToHelpNotes),
+            t => _db.ParticipantAdlAssessments.FirstAsync(a => a.ParticipantId == participantId && a.AdlType == type, t), ct);
 
         return Ok(ApiResponse<ParticipantAdlAssessmentDto>.Ok(ToDto(row)));
     }
