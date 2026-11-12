@@ -40,11 +40,11 @@ describe('Plan budget card', () => {
     expect(useFundingPlans).toHaveBeenCalledWith(undefined)
   })
 
-  it('says "Not recorded", offers to record it, and opens the editor with "Plan not shared yet" as its skip', async () => {
+  it('says "No plan recorded", offers to record it, and opens the editor with "Plan not shared yet" as its skip', async () => {
     render(<PlanBudgetCard participantId="participant-1" planType="AgencyManaged" />)
 
-    expect(screen.getByText('Not recorded')).toBeInTheDocument()
-    expect(screen.getByText('Not recorded')).toHaveClass('text-[var(--color-muted-foreground)]')
+    expect(screen.getByText('No plan recorded')).toBeInTheDocument()
+    expect(screen.getByText('No plan recorded')).toHaveClass('text-[var(--color-muted-foreground)]')
     await user().click(screen.getByRole('button', { name: 'Record plan budget' }))
 
     const opened = screen.getByTestId('editor')
@@ -62,7 +62,7 @@ describe('Plan budget card', () => {
     expect(screen.getByText(/2 pools/)).toBeInTheDocument()
     expect(screen.getByText(/\$10,000\.00 in total/)).toBeInTheDocument()   // 8,000 Core + 2,000 stated
     expect(screen.queryByText('Ended')).not.toBeInTheDocument()
-    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+    expect(screen.queryByText('No plan recorded')).not.toBeInTheDocument()
 
     await user().click(screen.getByRole('button', { name: 'Edit' }))
 
@@ -85,7 +85,7 @@ describe('Plan budget card', () => {
     expect(screen.getByText('Ended')).toBeInTheDocument()
     expect(screen.getByText(/1\s+Jul\s+2025 – 30\s+Jun\s+2026/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+    expect(screen.queryByText('No plan recorded')).not.toBeInTheDocument()
 
     await user().click(screen.getByRole('button', { name: 'Record a new plan' }))
 

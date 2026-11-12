@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, within } from '@testing-library/react'
-import { Fold, Section, WaitingToSend } from './ui'
+import { Fact, Fold, Section, WaitingToSend } from './ui'
 
 // jsdom applies no CSS, so the open-state swap is pinned as the classes that do it.
 const labels = (root: HTMLElement) => ({ show: within(root).getByText('Show'), hide: within(root).getByText('Hide') })
@@ -43,5 +43,17 @@ describe('WaitingToSend', () => {
     const b = render(<WaitingToSend stuck />)
     expect(b.container).toHaveTextContent('Still trying')
     expect(b.container.querySelector('svg')).toBeTruthy()
+  })
+})
+
+describe('Fact', () => {
+  it('shows the muted dash with the accessible name "Not recorded" for an empty value, and the value otherwise', () => {
+    const a = render(<dl><Fact label="Notes" value="  " /></dl>)
+    const dd = a.container.querySelector('dd')!
+    expect(dd).toHaveTextContent('—')
+    expect(within(dd).getByText('Not recorded')).toHaveClass('sr-only')
+    expect(within(dd).getByText('—')).toHaveClass('text-[var(--color-muted-foreground)]')
+    const b = render(<dl><Fact label="Notes" value="Calm" /></dl>)
+    expect(b.container.querySelector('dd')).toHaveTextContent(/^Calm$/)
   })
 })

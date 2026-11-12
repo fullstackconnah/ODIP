@@ -44,7 +44,7 @@ describe('Intake NDIS & Funding step: the plan budget card', () => {
     const user = userEvent.setup()
     render(<Harness participantId="participant-1" />)
 
-    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText('No plan recorded')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
     expect(screen.getByRole('dialog', { name: 'Record plan budget' })).toBeInTheDocument()
 
@@ -53,7 +53,7 @@ describe('Intake NDIS & Funding step: the plan budget card', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(create).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
-    expect(screen.getByText('Not recorded')).toBeInTheDocument()   // nothing was recorded, and nothing is wrong
+    expect(screen.getByText('No plan recorded')).toBeInTheDocument()   // nothing was recorded, and nothing is wrong
   })
 
   it('summarises a recorded plan with Edit', () => {
@@ -61,14 +61,14 @@ describe('Intake NDIS & Funding step: the plan budget card', () => {
     render(<Harness participantId="participant-1" />)
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
-    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+    expect(screen.queryByText('No plan recorded')).not.toBeInTheDocument()
   })
 
   it('is not on the step for a participant whose funding is not the NDIS', () => {
     render(<Harness fundingSource="Other" participantId="participant-1" />)
 
     expect(screen.queryByRole('heading', { name: 'Plan budget' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+    expect(screen.queryByText('No plan recorded')).not.toBeInTheDocument()
   })
 
   it('is not on the step for a role that may not see money', () => {

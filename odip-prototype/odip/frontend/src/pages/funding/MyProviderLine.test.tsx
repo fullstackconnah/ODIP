@@ -1,3 +1,4 @@
+import { TONE } from '@/lib/tone'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -24,10 +25,11 @@ const show = (overrides = {}, planType: 'AgencyManaged' | 'PlanManaged' | 'SelfM
   render(<MyProviderLine participantId="participant-1" plan={plan(overrides)} planType={planType} />)
 
 describe('My provider line', () => {
-  it('says "Not recorded" with no date for a plan that has no record', () => {
+  it('says "Not set" with no date for a plan that has no record', () => {
     show()
     expect(screen.getByText('My provider')).toBeInTheDocument()
-    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText('Not set')).toBeInTheDocument()
+    expect(screen.getByText('Not set').className).toContain(TONE.neutral.solid)
     expect(screen.queryByText(/^(on|from) /)).not.toBeInTheDocument()
   })
 
@@ -53,7 +55,7 @@ describe('My provider line', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('opens the modal on the current choice, hides the date for "Not recorded", and shows the labelled date for the others', async () => {
+  it('opens the modal on the current choice, hides the date for "Not set", and shows the labelled date for the others', async () => {
     show({ myProvider: 'Recorded', myProviderOn: '2026-10-28' })
     await user().click(screen.getByRole('button', { name: 'Update' }))
 
@@ -64,7 +66,7 @@ describe('My provider line', () => {
     await user().click(screen.getByRole('radio', { name: 'Requested' }))
     expect(screen.getByLabelText('Requested on')).toHaveAttribute('max', '2026-11-03')
 
-    await user().click(screen.getByRole('radio', { name: 'Not recorded' }))
+    await user().click(screen.getByRole('radio', { name: 'Not set' }))
     expect(screen.queryByLabelText(/Requested on|Recorded from/)).not.toBeInTheDocument()
   })
 
@@ -82,11 +84,11 @@ describe('My provider line', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('saves "Not recorded" with no date', async () => {
+  it('saves "Not set" with no date', async () => {
     mutate.mockImplementation((_body: unknown, opts: { onSuccess: () => void }) => opts.onSuccess())
     show({ myProvider: 'Requested', myProviderOn: '2026-11-01' })
     await user().click(screen.getByRole('button', { name: 'Update' }))
-    await user().click(screen.getByRole('radio', { name: 'Not recorded' }))
+    await user().click(screen.getByRole('radio', { name: 'Not set' }))
     await user().click(screen.getByRole('button', { name: 'Save' }))
 
     expect(mutate).toHaveBeenCalledWith({ planId: 'plan-1', body: { myProvider: 'Unknown', myProviderOn: null } }, expect.anything())

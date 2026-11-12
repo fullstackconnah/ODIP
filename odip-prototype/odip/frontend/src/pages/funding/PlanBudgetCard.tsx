@@ -13,7 +13,7 @@ import { formatCurrency } from '@/lib/utils'
 import { FundingPlanEditor } from './FundingPlanEditor'
 
 /**
- * The "Plan budget" card on Intake's NDIS & Funding step and the Profile wizard (budget phase 1). It shows the participant's current plan record in one line, or "Not recorded", and opens the
+ * The "Plan budget" card on Intake's NDIS & Funding step and the Profile wizard (budget phase 1). It shows the participant's current plan record in one line, or "No plan recorded", and opens the
  * same editor the Funding tab uses. "Plan not shared yet" is the explicit skip: the editor's close button says it when nothing is recorded to change, and it simply closes (a participant who
  * has not shared their plan is no error, and the budget can be recorded later on their Funding tab). The budget is saved through the funding endpoints and never through the participant's
  * patch groups, which are atomic and would wipe it; and it needs a participant to exist, so on a brand-new intake it says to save a draft first. The card is for the roles that may see
@@ -52,7 +52,7 @@ function PlanBudgetCardBody({ participantId, planType }: { participantId?: strin
   } else if (!current) {
     body = (
       <div className="flex flex-col items-start gap-2">
-        <p className="text-sm text-[var(--color-muted-foreground)]">Not recorded</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">No plan recorded</p>
         <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">
           The figures come from the plan the participant shares, or their plan manager. If the plan has not been shared yet, leave this and record it later on the participant&rsquo;s Funding tab.
         </p>
