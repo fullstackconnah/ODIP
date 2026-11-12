@@ -32,7 +32,7 @@ export default function OrganisationSetupSection() {
     {
       title: 'Organisation details', purpose: 'Review the legal name and address used on your documents.',
       destination: 'organisation', action: 'Open organisation profile', phase: providerPhase,
-      status: detailsRecorded ? 'Details recorded' : 'Not recorded',
+      status: detailsRecorded ? 'Details recorded' : 'To do',
       recorded: detailsRecorded, noun: 'organisation profile', retry: () => provider.refetch(),
     },
     {

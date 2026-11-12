@@ -27,7 +27,7 @@ function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null,
     // Optional and neutral: a business that runs trips is not nagged. Done once trips are switched off. Left out until the answer is known.
     ...(hiddenTrips === undefined ? [] : [{ title: 'What you run', optional: true, done: hiddenTrips, status: hiddenTrips ? 'Trips and holidays hidden' : 'Trips and holidays shown',
       purpose: 'Choose whether your organisation runs trips and holidays. Turning them off tidies the menu; nothing is deleted.', actions: [{ label: 'Choose what shows', to: '/settings?section=workspace-visibility' }] }]),
-    { title: 'Organisation details', done: organisationDetailsRecorded(provider), status: organisationDetailsRecorded(provider) ? 'Details recorded' : 'Not recorded',
+    { title: 'Organisation details', done: organisationDetailsRecorded(provider), status: organisationDetailsRecorded(provider) ? 'Details recorded' : 'To do',
       purpose: 'Check the legal name, address and state that go on your invoices and claims.', actions: [{ label: 'Review details', to: '/settings?section=setup' }] },
     { title: 'Staff', done: staff >= 1,
       status: fromEh ? (staff ? `${staffNoun}, from Employment Hero` : 'Waiting for the first check from Employment Hero') : staff ? `${staffNoun}, not counting Admins` : 'No staff yet',

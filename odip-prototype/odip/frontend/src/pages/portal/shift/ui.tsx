@@ -39,13 +39,13 @@ export function Chip({ children, tone = 'neutral' }: { children: ReactNode; tone
   return <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${TONE[tone].solid}`}>{children}</span>
 }
 
-/** A labelled value; a missing one reads "Not recorded", never a blank. */
+/** A labelled value; a missing one shows the house muted dash (as FactList does), named "Not recorded" for screen readers, never a blank. */
 export function Fact({ label, value }: { label: string; value: string | null | undefined }) {
   const has = !!value && value.trim().length > 0
   return (
     <div>
       <dt className="text-xs text-[var(--color-muted-foreground)]">{label}</dt>
-      <dd className={`text-sm whitespace-pre-wrap ${has ? '' : 'text-[var(--color-muted-foreground)] italic'}`}>{has ? value : 'Not recorded'}</dd>
+      <dd className="text-sm whitespace-pre-wrap">{has ? value : <><span className="text-[var(--color-muted-foreground)]" aria-hidden="true">—</span><span className="sr-only">Not recorded</span></>}</dd>
     </div>
   )
 }

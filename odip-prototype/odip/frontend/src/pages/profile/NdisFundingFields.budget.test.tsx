@@ -31,7 +31,7 @@ describe('Profile wizard funding fields: the plan budget card', () => {
     render(<Harness fundingSource="Ndis" />)
 
     expect(screen.getByRole('heading', { name: 'Plan budget' })).toBeInTheDocument()
-    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText('No plan recorded')).toBeInTheDocument()
     expect(useFundingPlans).toHaveBeenCalledWith('participant-1')
   })
 

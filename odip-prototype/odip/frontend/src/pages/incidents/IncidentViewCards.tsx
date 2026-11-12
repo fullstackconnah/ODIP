@@ -157,7 +157,7 @@ export function RpCard({ incident, edit }: CardProps) {
     <ViewCard title="Restrictive practice details" group="rp" edit={edit}>
       <FactList
         items={[
-          { label: 'Type', value: incident.restrictivePracticeType ? RESTRICTIVE_PRACTICE_TYPE_LABELS[incident.restrictivePracticeType] : 'Not recorded' },
+          { label: 'Type', value: incident.restrictivePracticeType ? RESTRICTIVE_PRACTICE_TYPE_LABELS[incident.restrictivePracticeType] : null },
           { label: 'Linked practice', value: incident.restrictivePracticeId ? incident.restrictivePracticeDescription || '—' : unapproved ? 'Not on the register' : 'No practice linked' },
           { label: 'Practice review date', value: incident.restrictivePracticeReviewDate ? formatDateAu(incident.restrictivePracticeReviewDate) : null },
           { label: 'Authorisation', value: incident.isRestrictivePracticeAuthorised == null ? 'Not determined' : <RpAuthorisationBadge authorised={incident.isRestrictivePracticeAuthorised} /> },

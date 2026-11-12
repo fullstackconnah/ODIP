@@ -17,7 +17,7 @@ import { extractErrorMessage } from '@/lib/utils'
 const MIN_DATE = '1990-01-01'
 
 const SHOWN: Record<MyProviderRecord, { label: string; tone: Tone; since: string | null; dateLabel: string | null }> = {
-  Unknown: { label: 'Not recorded', tone: 'warning', since: null, dateLabel: null },
+  Unknown: { label: 'Not set', tone: 'neutral', since: null, dateLabel: null },
   Requested: { label: 'Requested', tone: 'info', since: 'on', dateLabel: 'Requested on' },
   Recorded: { label: 'Recorded', tone: 'success', since: 'from', dateLabel: 'Recorded from' },
 }
