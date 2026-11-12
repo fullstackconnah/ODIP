@@ -150,7 +150,7 @@ const wordingMetrics = (page) => page.evaluate(() => {
     height: { a: R(a).height, b: R(b).height, control: token('--control-h'), tap: token('--tap-min') },
     gap: { before: R(group('Agreement wording')).top - R(group('Invoice note')).bottom, between: R(group('Invoice note')).top - R(group('Tax')).bottom, token: token('--section-gap') },
     field: { gap: R(wb).top - R(wa).bottom, token: token('--field-gap-y') },
-    count: { text: countEl.textContent, gap: countEl.textContent ? R(countEl).top - R(hint('Responsibilities and cancellation')).bottom : null, margin: parseFloat(getComputedStyle(hint('Responsibilities and cancellation')).marginTop), size: countEl.textContent ? type(countEl).size : null },
+    count: { text: countEl.textContent, gap: countEl.textContent ? R(countEl).top - R(hint('Responsibilities and cancellation')).bottom : null, margin: parseFloat(getComputedStyle(hint('Responsibilities and cancellation')).marginTop), size: countEl.textContent ? type(countEl).size : null, mt: getComputedStyle(countEl).marginTop, cls: countEl.className, top: R(countEl).top, hintBottom: R(hint('Responsibilities and cancellation')).bottom },
     type: { label: ['Responsibilities and cancellation', 'Concerns and complaints', 'Note at the foot of every invoice'].map((t) => type(label(t))), hint: ['Responsibilities and cancellation', 'Concerns and complaints', 'Note at the foot of every invoice'].map((t) => (hint(t) ? type(hint(t)) : null)).filter(Boolean) },
     save: save ? { height: R(save).height, disabled: save.disabled } : null,
     invalid: [a.getAttribute('aria-invalid'), b.getAttribute('aria-invalid')],
@@ -292,7 +292,7 @@ for (const vp of VPS) {
       await noHScroll(p, t('server 400')); await frameShot(p, png('server-400', 'light'))
     })
     await wording('changed elsewhere', { put: '409' }, async (p) => {
-      await saveAnd(p, (pg) => pg.getByText(/changed by someone else/i).first().waitFor({ state: 'visible', timeout: 30_000 }))
+      await saveAnd(p, (pg) => pg.getByText(/Someone else changed these settings/).first().waitFor({ state: 'visible', timeout: 30_000 }))
       await noHScroll(p, t('409')); await frameShot(p, png('changed-elsewhere-409', 'light'))
     })
     try {
