@@ -191,11 +191,11 @@ export default function InvoicesPage() {
     {
       key: 'status', header: 'Status', mobile: 'status',
       render: row => (
-        <>
+        <div className="flex flex-col items-start gap-1 py-1">
           <StatusBadge status={row.status} />
           {/* From md to below 2xl the Payment column would push Total off screen, so its pill stacks here instead (the phone card keeps its own Payment field). */}
-          {paymentStacked && row.paymentStatus && <span className="mt-1 flex">{paymentPill(row)}</span>}
-        </>
+          {paymentStacked && row.paymentStatus && paymentPill(row)}
+        </div>
       ),
     },
     {
