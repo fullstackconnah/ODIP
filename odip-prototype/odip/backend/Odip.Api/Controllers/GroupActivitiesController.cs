@@ -404,7 +404,8 @@ public partial class GroupActivitiesController : ControllerBase
     /// <summary>The other Draft and Published activities of the opened one's series dated on or after <paramref name="from"/>, in date order. Started and cancelled ones are never touched.</summary>
     private Task<List<GroupActivity>> SeriesTargetsAsync(GroupActivity opened, DateOnly from, CancellationToken ct, bool includeStaff)
     {
-        var query = includeStaff ? _db.GroupActivities.Include(a => a.Staff) : _db.GroupActivities;
+        IQueryable<GroupActivity> query = _db.GroupActivities;
+        if (includeStaff) query = query.Include(a => a.Staff);
         return query.Where(a => a.TenantId == opened.TenantId && a.SeriesId == opened.SeriesId && a.Id != opened.Id && a.ServiceDate >= from
                                 && (a.Status == ShiftStatus.Draft || a.Status == ShiftStatus.Published)).OrderBy(a => a.ServiceDate).ToListAsync(ct);
     }
