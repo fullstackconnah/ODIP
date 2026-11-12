@@ -12,10 +12,14 @@ import type { PortalWitnessRequestDto } from '@/api/types'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
+import { formatRatio } from '@/lib/format'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 
 /** An INSTANT (a dose given), in the zone it was recorded in. */
+/** The server's limit on a witness statement (#827). */
+const STATEMENT_MAX = 4000
+
 function formatDateTime(value: string | null, timeZone: string | null) {
   return formatWithTimeZone(value, timeZone, { dateStyle: 'medium', timeStyle: 'short' }, undefined)
 }
@@ -109,6 +113,11 @@ export default function PortalWitnessApprovalsPage() {
     setStatementText('')
   }
 
+  // The textarea cuts at the limit without a word, so the count appears at 90% and names the limit at the end. A hint, not an error: the 4,000 characters save as typed.
+  const used = statementText.length
+  const ratio = formatRatio(used.toLocaleString('en-AU'), STATEMENT_MAX.toLocaleString('en-AU'))
+  const statementHint = used >= STATEMENT_MAX ? `${ratio}. That's the limit, so check the end of your statement.` : used >= STATEMENT_MAX * 0.9 ? ratio : ''
+
   const dialogCopy = (() => {
     if (!pendingAction) return { title: '', message: null as ReactNode, confirmLabel: '', variant: 'default' as const }
     const { request, action } = pendingAction
@@ -128,9 +137,11 @@ export default function PortalWitnessApprovalsPage() {
                 onChange={(e) => setStatementText(e.target.value)}
                 rows={3}
                 className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
-                maxLength={4000}
+                maxLength={STATEMENT_MAX}
+                aria-describedby="witness-statement-hint"
                 placeholder="Describe what you saw…"
               />
+              <span id="witness-statement-hint" aria-live="polite" className={`block text-xs tabular-nums text-[var(--color-on-warning-container)] ${statementHint ? 'mt-1' : ''}`}>{statementHint}</span>
             </label>
           </div>
         ),

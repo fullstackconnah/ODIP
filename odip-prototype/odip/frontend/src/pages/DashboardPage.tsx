@@ -86,7 +86,10 @@ export default function DashboardPage() {
   // advertises a new date beside a count that still belongs to yesterday.
   const now = useNow()
   const today = localIsoDate(now)
-  const summary = useDashboard()
+  // The groups this viewer decides here, by the server's own gates (SHAPE §3). A SuperAdmin decides only inside an organisation: the key canImportData reads.
+  const gates = decisionGates(permissions, !!getViewAs('odip_viewing_tenant'))
+  // An unscoped SuperAdmin has no summary to read: the server refuses it (the counts would span every organisation).
+  const summary = useDashboard(!gates.needsOrganisation)
   const { data: settings } = useSettings()
   const staff = useStaff({ isActive: 'true' })
   const alerts = useParticipantAlertsAggregate(canViewAlerts)
@@ -98,8 +101,6 @@ export default function DashboardPage() {
   const alertsLoading = awaitsData(alerts)
   const warningDays = settings?.qualificationWarningDays ?? 30
 
-  // The groups this viewer decides here, by the server's own gates (SHAPE §3). A SuperAdmin decides only inside an organisation: the key canImportData reads.
-  const gates = decisionGates(permissions, !!getViewAs('odip_viewing_tenant'))
   const groups = useDecisionGroups(gates, { viewerId: id, today, warningDays, mayCloseBudgetReview: isAdmin || isSuperAdmin, staff })
   const decision = useDecisionState()
   const [hasRecovery, setHasRecovery] = useState(false)
@@ -358,6 +359,8 @@ export default function DashboardPage() {
             {!holdMain && <h2 id="dashboard-alerts" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Alerts</h2>}
             {holdMain ? spinner : summary.isError || retryingAfterError(summary) ? (
               <PageState kind="error" noun="dashboard summary" onRetry={() => summary.refetch()} />
+            ) : !d && gates.needsOrganisation ? (
+              <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its dashboard.</p>
             ) : !d ? (
               // No summary yet (in flight, or paused offline) is a spinner, never a band of zeros.
               spinner

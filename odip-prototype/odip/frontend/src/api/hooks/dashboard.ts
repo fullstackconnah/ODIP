@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { apiGet } from '../client'
 import type { DashboardSummaryDto, SetupStatusDto } from '../types'
 
-export function useDashboard() {
+export function useDashboard(enabled = true) {
   return useQuery({
     queryKey: ['dashboard'],
     queryFn: () => apiGet<DashboardSummaryDto>('/dashboard/summary'),
+    enabled,
   })
 }
 

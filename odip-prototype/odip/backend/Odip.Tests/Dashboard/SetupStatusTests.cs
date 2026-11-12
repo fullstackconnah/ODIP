@@ -177,6 +177,22 @@ public class SetupStatusTests
         Assert.Contains(DashboardController.ChooseOrganisation, Assert.IsType<ApiResponse<SetupStatusDto>>(bad.Value).Errors!);
     }
 
+    [Fact]
+    public async Task Summary_UnscopedSuperAdminIsRefusedWithTheMessage()
+    {
+        var result = await new DashboardController(Db(A), tenant: Caller(null, isSuperAdmin: true)).GetSummary(Ct);
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains(DashboardController.ChooseOrganisationForSummary, Assert.IsType<ApiResponse<DashboardSummaryDto>>(bad.Value).Errors!);
+    }
+
+    [Fact]
+    public async Task Summary_SuperAdminViewingAnOrganisationAndAnAdminStillGetTheCounts()
+    {
+        // CurrentTenant sets IsSuperAdmin false once a view-as tenant is chosen, so both callers look like this.
+        var result = await new DashboardController(Db(A), tenant: Caller(A)).GetSummary(Ct);
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
     // The token's own tenant_id with no view-as header: CurrentTenant keeps IsSuperAdmin = true, so every query filter is bypassed. The tenant half of the guard is not enough.
     [Fact]
     public async Task Setup_SuperAdminWithTheirOwnTenantAndNoViewAsIsRefused()
