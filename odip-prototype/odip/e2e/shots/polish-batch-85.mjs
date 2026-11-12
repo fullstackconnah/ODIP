@@ -77,13 +77,16 @@ try {
         add(`ready table does not scroll sideways [${st.name}]`, m, m.scrollW <= m.clientW + 1)
       }
 
-      const table = panel.locator('table').first()
-      const target = mobile ? panel.getByRole('row').filter({ hasText: 'Mia Chen' }).first() : table
-      const c = await cropElement(page, target, path.join(OUT_DIR, `claims-ready-checks-${st.name}.png`), { touch: mobile, hideChrome: true, pad: 16 })
-      add(`ready crop holds [${st.name}]`, c.overlap ?? null, c.overlap?.pass !== false)
+      const crop = async (target) => {
+        const c = await cropElement(page, target, path.join(OUT_DIR, `claims-ready-checks-${st.name}.png`), { touch: mobile, hideChrome: true, pad: 16 })
+        add(`ready crop holds [${st.name}]`, c.overlap ?? null, c.overlap?.pass !== false)
+      }
+      if (!mobile) await crop(panel.locator('table').first())
       if (st.name !== '1536') {
         // The Blocked filter keeps the phone page under the helper's 4000 px cap (52 clean seed lines would not fit); the tab strip scrolls sideways by design (Tabs.tsx, flex-nowrap below md).
         await panel.getByRole('radio', { name: /^Blocked/ }).click()
+        // The phone crop is the Blocked filter's TC-45004 card: a Ready card with no checks text showed nothing of the change.
+        if (mobile) await crop(panel.getByRole('row').filter({ hasText: 'TC-45004' }).first())
         await page.evaluate(() => window.scrollTo(0, 0))
         const full = await fullPage(page, path.join(OUT_DIR, 'full', `claims-hub-${st.name}.png`), { touch: mobile, allow: ['[role="tablist"]'] })
         checks.push(...full.checks)
