@@ -853,4 +853,12 @@ describe('CompletionReviewPage tidy (m1112)', () => {
     expect(screen.getByText('Shifts show here once a worker finishes them.')).toBeInTheDocument()
     expect(screen.queryByText(/no completions match these filters/i)).not.toBeInTheDocument()
   })
+
+  it('lays the phone card out with the participant as the title and staff and date as one meta line', () => {
+    showRow()
+    renderPage()
+    expect(screen.getByText('Liam Okafor').closest('td')).toHaveClass('max-md:-order-2')
+    expect(screen.getByText("Jack O'Sullivan").closest('td')).toHaveClass('max-md:-order-1', 'max-md:text-[13px]')
+    expect(screen.getByText('08/09/2026').closest('td')).toHaveClass('max-md:-order-1', 'max-md:text-[13px]')
+  })
 })

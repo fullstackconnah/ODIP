@@ -402,9 +402,9 @@ export default function CompletionReviewPage() {
   }
 
   const columns: Column<CompletionQueueItemDto>[] = [
-    { key: 'participantName', header: 'Participant', render: row => row.participantName },
-    { key: 'staffName', header: 'Staff', render: row => row.staffName },
-    { key: 'serviceDate', header: 'Date', render: row => formatDateAu(row.serviceDate) },
+    { key: 'participantName', header: 'Participant', mobile: 'primary', render: row => row.participantName },
+    { key: 'staffName', header: 'Staff', mobile: 'meta', render: row => row.staffName },
+    { key: 'serviceDate', header: 'Date', mobile: 'meta', render: row => formatDateAu(row.serviceDate) },
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
       key: 'variance', header: 'Variance', className: 'md:min-w-[16rem]', render: row => (
