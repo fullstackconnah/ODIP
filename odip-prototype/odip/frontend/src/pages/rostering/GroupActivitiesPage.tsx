@@ -63,7 +63,7 @@ const columns: Column<GroupActivityDto>[] = [
     render: a => (
       <div className="min-w-0">
         <CellText className="font-semibold">{a.title}</CellText>
-        {a.location && <CellText className="text-xs text-[var(--color-muted-foreground)]">{a.location}</CellText>}
+        {(a.series || a.location) && <CellText className="text-xs text-[var(--color-muted-foreground)]">{[a.series?.interval, a.location].filter(Boolean).join(' · ')}</CellText>}
       </div>
     ),
   },
