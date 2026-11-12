@@ -102,11 +102,15 @@ const stackedFits = async (page, ctx, expectStacked) => {
     return { n, bad }
   })
   // Polish 97: the stacked pills sit gap-1 (0.25rem) apart, and the lower one clears the row rule by at least that gap.
-  if (expectStacked && ctx.startsWith('claim-invoices')) { // the register's own pills are outside this item
+  if (expectStacked) {
     const r = await rem(page)
     const pairs = await page.evaluate(() => [...document.querySelectorAll('td[data-label="Status"]')].flatMap((td) => { const [a, b] = td.querySelectorAll('[data-status-badge]'); if (!b) return []; const c = td.getBoundingClientRect(), br = b.getBoundingClientRect(); return [{ gap: br.top - a.getBoundingClientRect().bottom, below: c.bottom - br.bottom }] }))
     const want = 0.25 * r
     check(`2c ${ctx}: stacked pills gap-1 apart and the lower pill clears the row rule by at least that`, pairs.length > 0 && pairs.every((p) => Math.abs(p.gap - want) <= 0.5 && p.below >= want - 0.5), { want, pairs })
+    // Polish 98: a stacked pill's left edge equals the left edge of a one-pill row's badge (items-start, no indent).
+    const lefts = await page.evaluate(() => [...document.querySelectorAll('td[data-label="Status"]')].map((td) => { const [a, b] = td.querySelectorAll('[data-status-badge]'); return { first: a.getBoundingClientRect().left, second: b ? b.getBoundingClientRect().left : null } }))
+    const one = lefts.filter((l) => l.second === null), two = lefts.filter((l) => l.second !== null)
+    check(`2d ${ctx}: stacked pills share the left edge of a one-pill row's badge`, one.length > 0 && two.length > 0 && two.every((l) => Math.abs(l.first - one[0].first) <= 0.5 && Math.abs(l.second - one[0].first) <= 0.5), { one: one[0], two: two[0] })
   }
   check(`2b ${ctx}: ${expectStacked ? 'stacked payment pills sit under the status, on one line, inside the cell' : 'no stacked pill'}`, bad.length === 0 && (expectStacked ? n > 0 : n === 0), { n, bad })
 }
@@ -138,6 +142,11 @@ for (const vp of VPS) {
   await pillsFit(page, `register ${vp.name}`)
   const regStacked = vp.width < 1536 && !phone // 2xl up keeps its own Payment column; md to below 2xl stacks it
   if (!phone) { await stackedFits(page, `register ${vp.name}`, regStacked); await frameFits(page, `register ${vp.name}`) }
+  if (regStacked && ['1024', '1440'].includes(vp.name)) { // Polish 98: a padded crop of a stacked row (Issued over Outstanding)
+    const row = page.locator('tr', { hasText: 'INV-9994' }).first()
+    const r = await cropElement(page, row, path.join(OUT_DIR, `register-pills-stacked-${vp.name}.png`), { touch: false, hideChrome: true })
+    checks.push(checkCropHolds({ ...r, touch: false }))
+  }
   if (phone) await noHScroll(page, 'register-mixed 390')
   else {
     const out = await rowHeight(page, 'INV-9994'), voided = await rowHeight(page, 'INV-9997')

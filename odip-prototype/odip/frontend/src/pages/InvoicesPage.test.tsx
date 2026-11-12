@@ -293,6 +293,10 @@ describe('InvoicesPage: the Payment column and filter', () => {
     const rows = screen.getAllByRole('row')
     const paid = rows.find(r => r.textContent?.includes('INV-0001'))!.querySelector('td[data-label="Status"]')!
     expect(within(paid as HTMLElement).getByText('Part paid')).toBeInTheDocument()
+    // Same pill stack as the claim invoices table: gap-1 apart, py-1 so the lower pill clears the row rule.
+    const stack = within(paid as HTMLElement).getByText('Part paid').closest('[data-status-badge]')!.parentElement!
+    expect(stack).toHaveClass('flex', 'flex-col', 'items-start', 'gap-1', 'py-1')
+    expect(stack.querySelectorAll('[data-status-badge]')).toHaveLength(2)
     const voided = rows.find(r => r.textContent?.includes('INV-0002'))!.querySelector('td[data-label="Status"]')!
     expect(voided.querySelector('.mt-1')).toBeNull()
   })
