@@ -3,6 +3,18 @@ namespace Odip.Domain.Rostering.Services;
 /// <summary>One block of an approved agreement (one <see cref="ShiftPattern"/>): the weekday it falls on and its times.</summary>
 public readonly record struct AgreementBlock(DayOfWeek Day, TimeOnly Start, TimeOnly End, bool EndsNextDay);
 
+/// <summary>The one test for "this pattern is a block of an approved group-activity agreement": made by an agreement revision and carrying the group-activities catalogue group, which approval sets (<c>SetSupportTypesAsync</c>). Shared by the attach step, the generator and the reader's warning.</summary>
+public static class GroupActivityPattern
+{
+    // shortcut: group blocks billed as community access are not recognised, upgrade when an organisation uses that setting with group activities.
+    public static readonly System.Linq.Expressions.Expression<Func<ShiftPattern, bool>> IsAgreementBlock =
+        p => p.SourceDraftId != null && p.SupportGroupCode == Odip.Domain.Billing.Catalogue.CatalogueGroups.GroupActivitiesGroupCode;
+
+    private static readonly Func<ShiftPattern, bool> Compiled = IsAgreementBlock.Compile();
+
+    public static bool Is(ShiftPattern pattern) => Compiled(pattern);
+}
+
 /// <summary>
 /// Whether a group activity sits inside what a participant's agreement funds (group activities part 2). Pure: the caller reads the blocks. The result only ever feeds a warning; nothing is refused on it.
 /// </summary>

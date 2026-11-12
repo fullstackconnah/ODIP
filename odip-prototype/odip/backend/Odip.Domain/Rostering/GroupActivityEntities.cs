@@ -1,4 +1,5 @@
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
 namespace Odip.Domain.Rostering;
