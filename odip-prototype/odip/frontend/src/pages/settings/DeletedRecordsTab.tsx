@@ -68,7 +68,7 @@ export default function DeletedRecordsTab() {
     { key: 'entityType', header: 'Type', mobile: 'meta', render: r => typeName(r.entityType) },
     { key: 'deletedByName', header: 'Deleted by', maxWidth: '12rem', mobile: 'meta', render: r => r.deletedByName ?? 'System' },
     {
-      key: 'deletedAt', header: 'Deleted', align: 'right', mobile: 'meta',
+      key: 'deletedAt', header: 'Deleted', mobile: 'meta',
       render: r => <span className="tabular-nums" title={formatDateTimeAu(r.deletedAt)}>{formatDateTimeAu(r.deletedAt)}</span>,
     },
     {

@@ -56,7 +56,8 @@ const instantDay = (value: string | null) => (value ? formatServiceDate(parseApi
 
 const NBSP = String.fromCharCode(160)
 const range = (from: string | null, to: string | null) => (from && to ? `${from}${NBSP}${String.fromCharCode(0x2013, 0x2060)}${NBSP}${to}` : from ?? to)
-const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' · ')
+// The NBSP after the dot keeps it with what follows, so a wrapped label never ends a line on "·".
+const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(` ·${NBSP}`)
 
 /** The first line of a deleted row: what it was, from the values it held. A type missing its fields falls back to its name or title, then to the type name. */
 export function recordLabel(entityType: string, fields: AuditChange[]): string {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { fieldLabel, recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
 
 const held = (o: Record<string, string>) => Object.entries(o).map(([field, old]) => ({ field, old, new: null }))
+const NBSP = String.fromCharCode(160)
 const DASH = ' –⁠ '
 
 describe('typeName', () => {
@@ -32,19 +33,19 @@ describe('fieldLabel', () => {
 
 describe('recordLabel', () => {
   it('names a shift by its day and times, in the ISO or the en-AU form the audit wrote', () => {
-    const want = `Tue 10 Nov 2026 · 9:00am${DASH}3:00pm`
+    const want = `Tue 10 Nov 2026 ·${NBSP}9:00am${DASH}3:00pm`
     expect(recordLabel('Shift', held({ ServiceDate: '2026-11-10', StartTime: '09:00:00', EndTime: '15:00:00' }))).toBe(want)
     expect(recordLabel('Shift', held({ ServiceDate: '10/11/2026', StartTime: '9:00 AM', EndTime: '3:00 PM' }))).toBe(want)
   })
 
   it('names a pattern, an availability and a risk entry from their own fields', () => {
-    expect(recordLabel('ShiftPattern', held({ DayOfWeek: 'Monday', StartTime: '09:00:00', EndTime: '15:00:00' }))).toBe(`Every Monday · 9:00am${DASH}3:00pm`)
-    expect(recordLabel('StaffAvailability', held({ AvailabilityType: 'Unavailable', StartDateTime: '2026-11-10T04:00:00Z' }))).toBe('Unavailable · Tue 10 Nov 2026')
+    expect(recordLabel('ShiftPattern', held({ DayOfWeek: 'Monday', StartTime: '09:00:00', EndTime: '15:00:00' }))).toBe(`Every Monday ·${NBSP}9:00am${DASH}3:00pm`)
+    expect(recordLabel('StaffAvailability', held({ AvailabilityType: 'Unavailable', StartDateTime: '2026-11-10T04:00:00Z' }))).toBe(`Unavailable ·${NBSP}Tue 10 Nov 2026`)
     expect(recordLabel('ParticipantRiskEntry', held({ Description: 'Choking risk at mealtimes' }))).toBe('Choking risk at mealtimes')
   })
 
   it('shows a value it cannot read as it was kept, never drops it', () => {
-    expect(recordLabel('Shift', held({ ServiceDate: 'sometime', StartTime: 'noon' }))).toBe('sometime · noon')
+    expect(recordLabel('Shift', held({ ServiceDate: 'sometime', StartTime: 'noon' }))).toBe(`sometime ·${NBSP}noon`)
   })
 
   it('falls back to the first Name, Title, Description or Notes, then to the type name', () => {
