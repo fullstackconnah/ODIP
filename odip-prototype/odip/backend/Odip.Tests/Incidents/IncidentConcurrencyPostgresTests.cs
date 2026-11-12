@@ -279,6 +279,38 @@ public class IncidentConcurrencyPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(WitnessStatus.Pending, (await check.IncidentWitnesses.AsNoTracking().SingleAsync(w => w.Id == witnessId)).WitnessStatus);
     }
 
+    [SkippableFact]
+    public async Task AWitnessAnswerThatReadPendingButWasAnsweredFirst_IsRefused_AndTheFirstAnswerStands()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, _, id, _) = await SeedAsync();
+        var witnessId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        await using (var seed = Open(tenantId))
+        {
+            seed.Users.Add(new User { Id = staffId, TenantId = tenantId, FirstName = "Priya", LastName = "Nair", Username = $"priya.{Guid.NewGuid():N}", Email = $"priya.{Guid.NewGuid():N}@example.test", Role = UserRole.SupportWorker, IsActive = true });
+            seed.IncidentWitnesses.Add(new IncidentWitness { Id = witnessId, IncidentReportId = id, WitnessUserId = staffId, WitnessName = "Priya Nair", WitnessStatus = WitnessStatus.Pending });
+            await seed.SaveChangesAsync(Ct);
+        }
+        await using var first = Open(tenantId);
+        await using var second = Open(tenantId);
+        await second.IncidentWitnesses.SingleAsync(w => w.Id == witnessId, Ct);   // the second request already read Pending, so only the conditional flip can refuse it
+
+        var portalFirst = new PortalController(first, TenantMock(tenantId).Object) { ControllerContext = Caller(staffId) };
+        Assert.IsType<OkObjectResult>((await portalFirst.ApproveIncidentWitnessRequest(witnessId, new PortalRespondIncidentWitnessRequestDto("First answer."), Ct)).Result);
+        await using var mid = Open(tenantId);
+        var afterFirst = await mid.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == id, Ct);
+        var portalSecond = new PortalController(second, TenantMock(tenantId).Object) { ControllerContext = Caller(staffId) };
+        var result = await portalSecond.DeclineIncidentWitnessRequest(witnessId, new PortalRespondIncidentWitnessRequestDto("Second answer."), Ct);
+
+        var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("This witness request has already been responded to.", Assert.Single(Assert.IsType<ApiResponse<PortalWitnessRequestDto>>(refused.Value).Errors!));
+        await using var check = Open(tenantId);
+        var stored = await check.IncidentWitnesses.AsNoTracking().SingleAsync(w => w.Id == witnessId, Ct);
+        Assert.Equal((WitnessStatus.Approved, "First answer."), (stored.WitnessStatus, stored.StatementText));
+        Assert.Equal(afterFirst.UpdatedAt, (await check.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == id, Ct)).UpdatedAt);   // the refused answer saved nothing else
+    }
+
     /// <summary>Another editor saves between the witness answer's reload and its retry: the second save is the one that must lose.</summary>
     private sealed class BumpBeforeSecondSave(OdipDbContext other, Guid incidentId) : SaveChangesInterceptor
     {
