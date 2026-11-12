@@ -587,9 +587,9 @@ public class InvoiceService
                 double Gap(ClaimSpan s)
                 {
                     var zone = ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone);
-                    var alone = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, s.Start, s.End, s.EndsNextDay, shift.NightType, zone)?.Sum(b => b.To - b.From) ?? 0;
+                    var alone = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, s.Start, s.End, s.EndsNextDay, shift.NightType, zone, s.StartFirstPass, s.EndFirstPass)?.Sum(b => b.To - b.From) ?? 0;
                     // Elapsed, like the hours billed: the wall-clock length is an hour out on a night the clocks change.
-                    return Math.Abs(ShiftBands.ElapsedMinutes(s.StartLocal, s.EndLocal, zone) / 60.0 - alone / 60.0 - (double)billed.GetValueOrDefault(shift.Id));
+                    return Math.Abs(ShiftBands.ElapsedMinutes(s.StartLocal, s.EndLocal, zone, s.StartFirstPass, s.EndFirstPass) / 60.0 - alone / 60.0 - (double)billed.GetValueOrDefault(shift.Id));
                 }
                 var window = cw.WithoutExtra is { } without && Gap(without) < Gap(cw.Priced) ? without : cw.Priced;
                 line.ServiceStartTime = window.Start;

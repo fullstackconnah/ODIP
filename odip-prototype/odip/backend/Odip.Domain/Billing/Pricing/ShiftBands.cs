@@ -16,11 +16,11 @@ public sealed record ShiftBandSplit(IReadOnlyList<ShiftBandPart> Parts, bool Sle
 public static class ShiftBands
 {
     /// <summary>Elapsed minutes between two wall-clock readings in the zone, the measure the bands bill by (an hour is added or lost on the nights the clocks change).</summary>
-    public static int ElapsedMinutes(DateTime from, DateTime to, TimeZoneInfo zone) => OccurrencePricer.RealMinutes(from, to, zone);
+    public static int ElapsedMinutes(DateTime from, DateTime to, TimeZoneInfo zone, bool fromFirstPass = false, bool toFirstPass = false) => OccurrencePricer.RealMinutes(from, to, zone, fromFirstPass, toFirstPass);
 
     /// <param name="publicHolidays">The whole-day public holidays that apply where the participant is, any date (the shift can run into the day after its service date).</param>
     /// <param name="zone">The organisation's time zone, where the clocks change.</param>
-    public static ShiftBandSplit Split(DateOnly serviceDate, TimeOnly start, TimeOnly end, bool workerMaySleep, IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone)
+    public static ShiftBandSplit Split(DateOnly serviceDate, TimeOnly start, TimeOnly end, bool workerMaySleep, IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, bool startFirstPass = false, bool endFirstPass = false)
     {
         // The state is only a key into the calendar; every holiday is national here, because the caller has already picked the state's own. A new pricer per call: it caches the zone and the day bands.
         var calendar = new HolidayCalendar(publicHolidays.Select(d => new HolidayEntry(d, null, "Public holiday")));
@@ -29,7 +29,7 @@ public static class ShiftBands
         {
             Id = "shift", Start = start, End = end, Days = new[] { serviceDate.DayOfWeek }, WorkerMaySleep = workerMaySleep, Location = new PlanLocation { State = "VIC" },
         };
-        var parts = pricer.Parts(block, serviceDate);
+        var parts = pricer.Parts(block, serviceDate, startFirstPass, endFirstPass);
         return new ShiftBandSplit(parts, parts.Any(p => p.Sleepover));
     }
 }

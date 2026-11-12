@@ -297,8 +297,8 @@ public partial class ShiftClaimGenerationService
         ShiftPriceOutcome PriceOn(Shift shift, ClaimSpan w, TimeZoneInfo shiftZone) => ShiftPriceEstimator.Price(
             new ShiftRateRows(RowsOf(shift), personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.Ratio, shift.NightType,
             participant.IsIntensiveSupport, state, publicHolidays, shiftZone,
-            ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone),
-            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId), headcount.Of(shift.GroupActivityId, shiftZone)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null);
+            ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, w.Start, w.End, w.EndsNextDay, shift.NightType, shiftZone, w.StartFirstPass, w.EndFirstPass),
+            AgreementPatternMapper.GroupSizeOf(shift.GroupActivityId, shift.Ratio, BlockOf(shift.ShiftPatternId), headcount.Of(shift.GroupActivityId, shiftZone)), BlockOf(shift.ShiftPatternId)?.HeadcountChanges is { Count: > 0 }, shift.GroupActivityId is not null, w.StartFirstPass, w.EndFirstPass);
         var extraRefusal = await ExtraTimeRefusalsAsync(participant, shifts, windows, PriceOn, placeZones, orgZone, ct);
 
         var lineItems = new List<ShiftLineCalc>();

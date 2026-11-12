@@ -221,9 +221,10 @@ public static class ShiftPriceEstimator
     /// <param name="onGroupActivity">True when the shift is attached to a group activity: a shared-support one with no <paramref name="groupOf"/> is then refused for its missing agreement headcount, not as a shared-support shift in general.</param>
     /// <param name="groupHeadcountChanged">True when the shift's agreement block changes the headcount part-way: its starting ratio is not what was delivered all through, so a group line is refused and claimed by hand.</param>
     /// <param name="unclaimed">Minute offsets from the rostered start (<see cref="ShiftBreakRules.UnclaimedSpans"/>): breaks taken alone come off the hourly stretches they fall in, before each line is rounded. A sleepover item is flat and never changes. Null (a future shift, a cancellation) deducts nothing.</param>
+    /// <param name="startFirstPass">The start / end is a worked time in the first pass of the hour the clocks repeat (<see cref="ShiftBands.ElapsedMinutes"/>); a rostered wall time never is.</param>
     public static ShiftPriceOutcome Price(
         ShiftRateRows rows, string? groupCode, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
-        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false, bool onGroupActivity = false)
+        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null, int? groupOf = null, bool groupHeadcountChanged = false, bool onGroupActivity = false, bool startFirstPass = false, bool endFirstPass = false)
     {
         // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
         // so this is said before the shift's kind.
@@ -238,7 +239,7 @@ public static class ShiftPriceEstimator
         if (endsNextDay && end > start) return ShiftPriceOutcome.Unpriced(TimesMismatchBecause, TimesMismatchKind);
 
         var maySleep = nightType is SleepoverType.Sleepover or SleepoverType.PassiveNight;
-        var split = ShiftBands.Split(serviceDate, start, end, maySleep, publicHolidays, zone);
+        var split = ShiftBands.Split(serviceDate, start, end, maySleep, publicHolidays, zone, startFirstPass, endFirstPass);
         if (maySleep && !split.SleepoverQualified)
             return ShiftPriceOutcome.Unpriced($"it is {(nightType == SleepoverType.Sleepover ? "a sleepover" : "a passive night")} but is not 8 hours or more across midnight", SleepoverTooShortKind);
 
