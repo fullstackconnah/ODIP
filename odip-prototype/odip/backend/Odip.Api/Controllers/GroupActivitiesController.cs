@@ -589,10 +589,11 @@ public partial class GroupActivitiesController : ControllerBase
                     var membership = await _db.GroupActivitySeriesParticipants.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SeriesId == activity.SeriesId && m.ParticipantId == dto.ParticipantId, token);
                     var from = await SeriesFromAsync(activity, tenantId, token);
                     foreach (var target in await SeriesTargetsAsync(activity, from, token, includeStaff: true))
-                        added |= await OnOccurrenceAsync(target, () => AddToOccurrenceAsync(target, dto.ParticipantId, membership?.Ratio ?? dto.Ratio, opened: false, token));
+                        added |= await OnOccurrenceAsync(target, () => AddToOccurrenceAsync(target, dto.ParticipantId, dto.Ratio, opened: false, token));
                     if (membership is null)
                         _db.GroupActivitySeriesParticipants.Add(new GroupActivitySeriesParticipant { Id = Guid.NewGuid(), TenantId = tenantId, SeriesId = activity.SeriesId!.Value, ParticipantId = dto.ParticipantId, Ratio = dto.Ratio });
                     else if (!added) throw Deny("GA_PARTICIPANT_IN", "That participant is already on every upcoming activity in this series.");
+                    else membership.Ratio = dto.Ratio; // only once something was added, so a refused add leaves it alone
                 }
 
                 return await SavedAsync(activity.Id, token);
