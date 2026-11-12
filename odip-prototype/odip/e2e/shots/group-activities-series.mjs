@@ -71,6 +71,8 @@ const toBoard = async (page, dark) => {
 }
 
 const tokenPx = (page, token) => page.evaluate((t) => { const p = document.createElement('div'); p.style.height = `var(${t})`; document.body.append(p); const h = p.getBoundingClientRect().height; p.remove(); return h }, token)
+// A control's tap size is the larger of its box and its TAP_AREA ::before (the transparent hit area under a coarse pointer).
+const tapSize = (locator) => locator.evaluate((el) => { const b = el.getBoundingClientRect(), p = getComputedStyle(el, '::before'); return { w: Math.max(b.width, parseFloat(p.width) || 0), h: Math.max(b.height, parseFloat(p.height) || 0) } })
 const box = (locator) => locator.evaluate((el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom } })
 const lines = (locator) => locator.evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
 const textLines = (locator) => locator.evaluate((el) => { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); const tops = new Set(); for (let n = w.nextNode(); n; n = w.nextNode()) { const r = document.createRange(); r.selectNodeContents(n); for (const q of r.getClientRects()) tops.add(Math.round(q.top)) } return tops.size })
@@ -323,7 +325,7 @@ for (const vp of VIEWPORTS) {
       if (!dark) {
         for (const [name, r] of [['noblock', first], ['time', second]]) {
           const badge = r.locator('span', { hasText: /^(Not in agreement|Outside agreed time)$/ }).first()
-          const line = r.locator('p.text-xs').first()
+          const line = r.locator('p.text-xs').last() // the warning paragraph follows the time-range paragraph; .first() counted the time range (1 line)
           const [bf, lf] = await Promise.all([badge.evaluate((el) => getComputedStyle(el).fontSize), line.evaluate((el) => getComputedStyle(el).fontSize)])
           check(`${tag} B5 ${name} badge is the sm StatusBadge (text-xs, same size as the line)`, bf === lf, { badge: bf, line: lf })
           const n = await lines(line)
@@ -348,9 +350,13 @@ for (const vp of VIEWPORTS) {
     await dlg.getByRole('button', { name: 'Marcus Tran' }).click()
     await alert(page).waitFor({ timeout: 5000 })
     await alert(page).getByRole('radio', { name: /^This and all upcoming/ }).check()
-    await shot(page, alert(page), `b-add-scope-${tag}.png`, { touch })
+    await shot(page, alert(page), `b-people-add-scope-${tag}.png`, { touch })
     const sub = await alert(page).locator('label span.text-xs').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))))
     check(`${tag} B4 add dialog sub lines at most 3 lines`, sub.every((n) => n <= 3), { sub })
+    if (touch) {
+      const tapMin = await tokenPx(page, '--tap-min'), hs = await alert(page).getByRole('button').evaluateAll((els) => els.map((el) => Math.max(el.getBoundingClientRect().height, parseFloat(getComputedStyle(el, '::before').height) || 0)))
+      check(`${tag} B6 add-scope dialog buttons >= --tap-min`, hs.length > 0 && hs.every((h) => h >= tapMin - 0.5), { hs, tapMin })
+    }
     await context.close()
   })
   await scene(`people remove-scope ${tag}`, async () => {
@@ -358,12 +364,20 @@ for (const vp of VIEWPORTS) {
     await toBoard(page, false)
     const dlg = await openPeople(page)
     await gotoRow(dlg, 'People')
+    if (touch) {
+      const tapMin = await tokenPx(page, '--tap-min'), t = await tapSize(dlg.getByRole('button', { name: /^Remove Liam Okafor from/ }))
+      check(`${tag} B6 People-row remove control >= --tap-min each way`, t.w >= tapMin - 0.5 && t.h >= tapMin - 0.5, { t, tapMin })
+    }
     await dlg.getByRole('button', { name: /^Remove Liam Okafor from/ }).click()
     await alert(page).waitFor({ timeout: 5000 })
     await alert(page).getByRole('radio', { name: /^This and all upcoming/ }).check()
-    await shot(page, alert(page), `b-remove-scope-${tag}.png`, { touch })
+    await shot(page, alert(page), `b-people-remove-scope-${tag}.png`, { touch })
     const sub = await alert(page).locator('label span.text-xs').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))))
     check(`${tag} B4 remove dialog sub lines at most 3 lines`, sub.every((n) => n <= 3), { sub })
+    if (touch) {
+      const tapMin = await tokenPx(page, '--tap-min'), hs = await alert(page).getByRole('button').evaluateAll((els) => els.map((el) => Math.max(el.getBoundingClientRect().height, parseFloat(getComputedStyle(el, '::before').height) || 0)))
+      check(`${tag} B6 remove-scope dialog buttons >= --tap-min`, hs.length > 0 && hs.every((h) => h >= tapMin - 0.5), { hs, tapMin })
+    }
     await context.close()
   })
 }

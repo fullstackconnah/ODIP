@@ -101,6 +101,13 @@ const stackedFits = async (page, ctx, expectStacked) => {
     }
     return { n, bad }
   })
+  // Polish 97: the stacked pills sit gap-1 (0.25rem) apart, and the lower one clears the row rule by at least that gap.
+  if (expectStacked && ctx.startsWith('claim-invoices')) { // the register's own pills are outside this item
+    const r = await rem(page)
+    const pairs = await page.evaluate(() => [...document.querySelectorAll('td[data-label="Status"]')].flatMap((td) => { const [a, b] = td.querySelectorAll('[data-status-badge]'); if (!b) return []; const c = td.getBoundingClientRect(), br = b.getBoundingClientRect(); return [{ gap: br.top - a.getBoundingClientRect().bottom, below: c.bottom - br.bottom }] }))
+    const want = 0.25 * r
+    check(`2c ${ctx}: stacked pills gap-1 apart and the lower pill clears the row rule by at least that`, pairs.length > 0 && pairs.every((p) => Math.abs(p.gap - want) <= 0.5 && p.below >= want - 0.5), { want, pairs })
+  }
   check(`2b ${ctx}: ${expectStacked ? 'stacked payment pills sit under the status, on one line, inside the cell' : 'no stacked pill'}`, bad.length === 0 && (expectStacked ? n > 0 : n === 0), { n, bad })
 }
 
@@ -176,6 +183,11 @@ for (const vp of VPS) {
   await shot(page, vp, mixedName, { claim1024: vp.name === '1024' })
   await pillsFit(page, `claim-invoices ${vp.name}`)
   if (!phone) await stackedFits(page, `claim-invoices ${vp.name}`, true) // below 2xl (1536) the pill stacks, at 1024 and 1440 alike
+  if (!phone) {
+    const stack = page.locator('td [data-status-badge]').locator('xpath=..').filter({ has: page.locator('[data-status-badge]:nth-of-type(2)') }).first()
+    await stack.scrollIntoViewIfNeeded()
+    await cropElement(page, stack.locator('xpath=..'), path.join(OUT_DIR, 'crops', `claim-invoices-pills-stacked-${vp.name}.png`), { pad: 16, touch: false })
+  }
   if (phone) await noHScroll(page, 'claim-invoices-mixed 390')
   else {
     const out = await rowHeight(page, 'INV-0052'), voided = await rowHeight(page, 'INV-0053')
