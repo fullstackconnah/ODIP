@@ -763,3 +763,41 @@ describe('CompletionReviewPage extra time', () => {
     expect(dialog.getByRole('button', { name: 'Done' })).toBeInTheDocument()
   })
 })
+
+describe('CompletionReviewPage tidy (m1112)', () => {
+  const showRow = (overrides: Partial<CompletionQueueItemDto> = {}) =>
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem(overrides)]), isLoading: false, isError: false, refetch: vi.fn() })
+  const openApprove = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    return screen.getByRole('alertdialog')
+  }
+
+  it('shows the rostered and actual times and what approving does, in the Approve dialog titled "Approve shift"', async () => {
+    const user = userEvent.setup()
+    showRow()
+    renderPage()
+    const dialog = await openApprove(user)
+
+    expect(within(dialog).getByRole('heading', { name: 'Approve shift' })).toBeInTheDocument()
+    expect(dialog.textContent).toMatch(/Rostered:.*Actual:/s)
+    expect(within(dialog).getByText("Approving sends this shift's hours to Employment Hero and makes it ready to bill.")).toBeInTheDocument()
+  })
+
+  it('says the worker answers are loading, then that they failed, and keeps Approve enabled in both', async () => {
+    const user = userEvent.setup()
+    showRow()
+    mockUseCompletion.mockReturnValue({ data: undefined, isLoading: true, isError: false } as never)
+    const { unmount } = renderPage()
+    let dialog = await openApprove(user)
+    expect(within(dialog).getByText('Loading what the worker entered...')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /^approve$/i })).toBeEnabled()
+    unmount()
+
+    mockUseCompletion.mockReturnValue({ data: undefined, isLoading: false, isError: true } as never)
+    renderPage()
+    dialog = await openApprove(user)
+    expect(within(dialog).getByText("Couldn't load what the worker entered. Close this and open it again.")).toBeInTheDocument()
+    expect(within(dialog).queryByText('Loading what the worker entered...')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /^approve$/i })).toBeEnabled()
+  })
+})

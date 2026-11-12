@@ -77,6 +77,10 @@ function ExtraTimeChoiceGroup({ row, value, onChange, disabled, saving }: {
   )
 }
 
+function DetailFailed() {
+  return <p role="status" className="text-xs text-[var(--color-destructive)]">Couldn't load what the worker entered. Close this and open it again.</p>
+}
+
 function rosteredVsActual(row: CompletionQueueItemDto) {
   const timeFmt = { timeStyle: 'short' as const }
   return (
@@ -305,7 +309,7 @@ export default function CompletionReviewPage() {
   const failedResults = (batchResults ?? []).filter(r => !r.approved && r.code !== C.detailsMissing)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
-  const { data: detail } = useCompletion(detailShiftId)
+  const { data: detail, isLoading: detailLoading, isError: detailError } = useCompletion(detailShiftId)
 
   const { data: pricing } = usePlanPricingSettings(canReviewCompletions)
   const approveCompletion = useApproveCompletion()
@@ -539,7 +543,7 @@ export default function CompletionReviewPage() {
         open={approveTarget !== null}
         onCancel={closeApprove}
         onConfirm={handleApproveConfirm}
-        title="Approve completion"
+        title="Approve shift"
         confirmLabel="Approve"
         loading={approveCompletion.isPending}
         confirmDisabled={travelEditing || setBreakKind.isPending}
@@ -547,6 +551,10 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${unbroken(formatServiceDate(approveTarget.serviceDate))} for ${approveTarget.staffName}?` : ''}</p>
+            {approveTarget && rosteredVsActual(approveTarget)}
+            <p className="text-xs text-[var(--color-muted-foreground)]">Approving sends this shift's hours to Employment Hero and makes it ready to bill.</p>
+            {detailLoading && <p role="status" className="text-xs text-[var(--color-muted-foreground)]">Loading what the worker entered...</p>}
+            {detailError && <DetailFailed />}
             {detail && approveTarget && (
               <WorkerAnswers c={detail} canEditTravel={pricing?.claimProviderTravel === true} onTravelOpenChange={setTravelEditing}
                 breaks={{ first: firstName(approveTarget.participantName), staffFirst: firstName(approveTarget.staffName), pendingKind: setBreakKind.isPending, onChange: changeKind }} />
@@ -598,13 +606,14 @@ export default function CompletionReviewPage() {
         open={returnTarget !== null}
         onCancel={closeReturn}
         onConfirm={handleReturnConfirm}
-        title="Return completion"
+        title="Return shift"
         variant="danger"
         confirmLabel="Return"
         loading={returnCompletion.isPending}
         message={
           <div className="space-y-3">
             <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${unbroken(formatServiceDate(returnTarget.serviceDate))} to ${returnTarget.staffName} for correction?` : ''}</p>
+            {detailError && <DetailFailed />}
             {detail && returnTarget && <WorkerAnswers c={detail} breaks={{ first: firstName(returnTarget.participantName), staffFirst: firstName(returnTarget.staffName) }} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             <label className="block text-sm text-[var(--color-foreground)]">
