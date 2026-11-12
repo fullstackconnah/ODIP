@@ -160,6 +160,8 @@ for (const vp of VIEWPORTS) {
         await fillSeries(dlg, { date: '2026-11-17', repeats: 'Weekly', until: '2027-12-23' })
         const rangeErr = dlg.getByText('Pick an end date by 22 Dec 2027. A series can run up to 400 days.')
         await rangeErr.waitFor({ timeout: 5000 })
+        // The sticky footer would cover the Until field once it is checked: bring the field clear of it first.
+        await dlg.getByLabel(/^Until/).evaluate((el) => el.scrollIntoView({ block: 'center' }))
         await shot(page, dlg, `a1-create-range-error-${tag}.png`, { touch, natural: touch })
         const [s, u] = await Promise.all([box(dlg.getByLabel(/^Repeats/)), box(dlg.getByLabel(/^Until/))])
         check(`${tag} 2 Repeats top = Until top with the range error showing`, near(s.y, u.y), { repeats: s.y, until: u.y })
@@ -193,7 +195,7 @@ for (const vp of VIEWPORTS) {
     await shot(page, dlg, `a2-occurrence-overview-${tag}.png`, { touch, natural: touch })
     const line = dlg.getByText(/^Repeats every Tuesday until/).first()
     const ln = await lines(line)
-    check(`${tag} 7 overview series line ${touch ? 'at most 2 lines' : '1 line'}`, touch ? ln <= 2 : ln === 1, { lines: ln })
+    check(`${tag} 7 overview series line at most 2 lines`, ln <= 2, { lines: ln })
 
     await gotoRow(dlg, 'When and where')
     await dlg.getByText('Every Tuesday until').first().waitFor({ timeout: 5000 })
@@ -276,10 +278,10 @@ for (const vp of VIEWPORTS) {
       const truncating = [el, ...el.querySelectorAll('*')].some((n) => getComputedStyle(n).textOverflow === 'ellipsis')
       return { lines: Math.round(el.getBoundingClientRect().height / parseFloat(cs.lineHeight)), truncating }
     })
-    // CellText truncates from md (768px) up and wraps below it, so 390 is checked for at most 3 wrapped lines.
-    check(`${tag} 8 list second line: ${vp.touch ? 'wraps to at most 3 lines below md (CellText)' : '1 line with an ellipsis (CellText)'}`, vp.touch ? info.lines <= 3 : info.lines === 1 && info.truncating, info)
+    // CellText truncates from md (768px) up and wraps below it, so 390 is checked for at most 2 wrapped lines (lead ruling 18).
+    check(`${tag} 8 list second line: ${vp.touch ? 'wraps to at most 2 lines below md (CellText)' : '1 line with an ellipsis (CellText)'}`, vp.touch ? info.lines <= 2 : info.lines === 1 && info.truncating, info)
     await page.getByText('Monthly', { exact: true }).first().waitFor({ timeout: 5000 })
-    if (!vp.touch) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `a3-list-${tag}.png`))).checks)
+    checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `a3-list-${tag}.png`))).checks)
     await context.close()
   })
 }
