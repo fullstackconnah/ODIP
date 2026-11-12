@@ -4,7 +4,7 @@ import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { StatusBadge } from '@/components/StatusBadge'
 import { plural } from '@/lib/format'
-import { organisationDetailsRecorded, setSetupHidden } from '@/lib/organisationSetup'
+import { organisationDetailsHint, organisationDetailsRecorded, setSetupHidden } from '@/lib/organisationSetup'
 import { usePermissions } from '@/lib/permissions'
 import { TONE } from '@/lib/tone'
 
@@ -28,7 +28,7 @@ function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null,
     ...(hiddenTrips === undefined ? [] : [{ title: 'What you run', optional: true, done: hiddenTrips, status: hiddenTrips ? 'Trips and holidays hidden' : 'Trips and holidays shown',
       purpose: 'Choose whether your organisation runs trips and holidays. Turning them off tidies the menu; nothing is deleted.', actions: [{ label: 'Choose what shows', to: '/settings?section=workspace-visibility' }] }]),
     { title: 'Organisation details', done: organisationDetailsRecorded(provider), status: organisationDetailsRecorded(provider) ? 'Details recorded' : 'To do',
-      purpose: 'Check the legal name, address and state that go on your invoices and claims.', actions: [{ label: 'Review details', to: '/settings?section=setup' }] },
+      purpose: ['Check the legal name, address, state and ABN that go on your invoices and claims.', organisationDetailsHint(provider)].filter(Boolean).join(' '), actions: [{ label: 'Review details', to: '/settings?section=setup' }] },
     { title: 'Staff', done: staff >= 1,
       status: fromEh ? (staff ? `${staffNoun}, from Employment Hero` : 'Waiting for the first check from Employment Hero') : staff ? `${staffNoun}, not counting Admins` : 'No staff yet',
       purpose: fromEh ? 'Bunya Support checks Employment Hero for staff every 30 minutes.' : 'Import your staff list, or add people one at a time. Each one gets an invite to sign in.',

@@ -15,7 +15,7 @@ vi.mock('@/api/client', async importOriginal => ({
 }))
 
 const provider: ProviderSettingsDto = {
-  id: 'synthetic-provider', registrationNumber: 'not-shown-registration', abn: 'not-shown-abn',
+  id: 'synthetic-provider', registrationNumber: 'not-shown-registration', abn: '51 824 753 556',
   organisationName: 'Synthetic Support', address: '1 Example Street', state: 'VIC', gstRegistered: true, isPaceProvider: true,
   bankAccountName: 'PRIVATE BANK NAME', bsb: '123-456', accountNumber: '987654321', invoiceFooterNotes: 'PRIVATE FOOTER',
   managerName: 'PRIVATE MANAGER', managerPhone: 'PRIVATE PHONE', timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null, participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce', onboardingItemModes: { complaints: 'Required', rights: 'Required', myProvider: 'Required', budget: 'Off' },
@@ -55,7 +55,7 @@ describe('Organisation setup read-only facts', () => {
     for (const [name, target] of [['Open organisation profile', 'organisation'], ['Open plan pricing', 'pricing'], ['Open billing details', 'billing'], ['Open safety checks', 'safety']]) {
       expect(screen.getByRole('link', { name })).toHaveAttribute('href', `/settings?section=${target}`)
     }
-    for (const value of ['PRIVATE', '123-456', '987654321', 'not-shown', 'Synthetic Support', '1 Example Street', 'Enforce']) {
+    for (const value of ['PRIVATE', '123-456', '987654321', 'not-shown', '824 753', 'Synthetic Support', '1 Example Street', 'Enforce']) {
       expect(container.innerHTML).not.toContain(value)
     }
     expect(container.querySelector('input,select,textarea')).toBeNull()
@@ -68,12 +68,23 @@ describe('Organisation setup read-only facts', () => {
 
   it.each([
     ['no row', null], ['blank name', { ...provider, organisationName: ' ' }],
-    ['blank address', { ...provider, address: ' ' }], ['unknown state', { ...provider, state: 'ZZ' }],
+    ['blank address', { ...provider, address: ' ' }], ['unknown state', { ...provider, state: 'ZZ' }], ['blank ABN', { ...provider, abn: '' }], ['invalid ABN', { ...provider, abn: '51824753557' }],
   ])('does not claim details recorded for %s', async (_name, details) => {
     respond(details)
     show()
     expect(await screen.findByText('To do')).toBeInTheDocument()
     expect(screen.queryByText('Details recorded')).not.toBeInTheDocument()
+  })
+
+  it('says an ABN is needed when it is blank, and nothing when it is valid', async () => {
+    respond({ ...provider, abn: '' })
+    const { unmount } = show()
+    expect(await screen.findByText(/Add your ABN to finish this step\./)).toBeInTheDocument()
+    unmount()
+    respond(provider)
+    show()
+    await screen.findByText('Details recorded')
+    expect(screen.queryByText(/your ABN/)).not.toBeInTheDocument()
   })
 
   it.each([null, { ...pricing, registrationGroupsConfirmed: false }])('keeps registration groups for review without explicit confirmation', async groups => {

@@ -6,7 +6,7 @@ import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { isSetupHidden, organisationDetailsRecorded, setSetupHidden } from '@/lib/organisationSetup'
+import { isSetupHidden, organisationDetailsHint, organisationDetailsRecorded, setSetupHidden } from '@/lib/organisationSetup'
 import { queryPhase } from '@/lib/queryPhase'
 
 /** Optional guidance only: recorded facts never stand in for an administrator's review. Mounted by the gated Settings section. */
@@ -30,7 +30,7 @@ export default function OrganisationSetupSection() {
       recorded: false, noun: 'workspace visibility settings', retry: () => visibility.refetch(),
     },
     {
-      title: 'Organisation details', purpose: 'Review the legal name and address used on your documents.',
+      title: 'Organisation details', purpose: ['Review the legal name, address and ABN used on your documents.', organisationDetailsHint(provider.data)].filter(Boolean).join(' '),
       destination: 'organisation', action: 'Open organisation profile', phase: providerPhase,
       status: detailsRecorded ? 'Details recorded' : 'To do',
       recorded: detailsRecorded, noun: 'organisation profile', retry: () => provider.refetch(),

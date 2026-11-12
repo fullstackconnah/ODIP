@@ -6,7 +6,7 @@ import type { ProviderSettingsDto, SetupStatusDto } from '@/api/types'
 import { SetupSteps } from './SetupSteps'
 
 const empty: SetupStatusDto = { staffCount: 0, participantCount: 0, participantsWithPlanCount: 0, firstPublishedWeekStart: null, hasInvoice: false, employmentHeroAvailable: false }
-const provider = (over: Partial<ProviderSettingsDto> = {}) => ({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW', ...over }) as ProviderSettingsDto
+const provider = (over: Partial<ProviderSettingsDto> = {}) => ({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW', abn: '51 824 753 556', ...over }) as ProviderSettingsDto
 
 function show(status: SetupStatusDto, prov: ProviderSettingsDto | null, role = 'Admin', card: 'steps' | 'done' = 'steps', onHide = () => {}, hiddenTrips?: boolean) {
   localStorage.setItem('odip_user', JSON.stringify({ role, tenantId: 't1' }))
@@ -120,5 +120,18 @@ describe('SetupSteps Organisation details status', () => {
     show(empty, null)
     expect(within(screen.getAllByRole('listitem').find(li => within(li).queryByText('Organisation details'))!).getByText('To do')).toBeInTheDocument()
     expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
+  })
+
+  const orgRow = () => screen.getAllByRole('listitem').find(li => within(li).queryByText('Organisation details'))!
+  it.each([['blank', '', 'Add your ABN to finish this step.'], ['invalid', '51824753557', 'Check your ABN to finish this step.']])('with a %s ABN the step is To do and says what is needed', (_n, abn, hint) => {
+    show(empty, provider({ abn }))
+    expect(within(orgRow()).getByText('To do')).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(hint))).toBeInTheDocument()
+  })
+
+  it('with a valid ABN (spaces allowed) the step is recorded and there is no ABN line', () => {
+    show(empty, provider())
+    expect(within(orgRow()).getByText('Details recorded')).toBeInTheDocument()
+    expect(screen.queryByText(/your ABN/)).not.toBeInTheDocument()
   })
 })
