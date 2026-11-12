@@ -20,23 +20,25 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ParticipantDocumentComposer
 {
-    public static ParticipantDocumentModel ComposeIntakeForm(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries, bool maskIdNumbers = false) =>
+    public static ParticipantDocumentModel ComposeIntakeForm(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries, DateTime generatedAt, bool maskIdNumbers = false) =>
         Compose(
             "Intake Form",
             participant,
             riskEntries,
             tag => tag is ParticipantDocumentTag.Intake or ParticipantDocumentTag.Shared,
             includeCommunityAccess: false,
-            maskIdNumbers);
+            maskIdNumbers,
+            generatedAt);
 
-    public static ParticipantDocumentModel ComposeParticipantProfile(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries, bool maskIdNumbers = false) =>
+    public static ParticipantDocumentModel ComposeParticipantProfile(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries, DateTime generatedAt, bool maskIdNumbers = false) =>
         Compose(
             "Participant Profile",
             participant,
             riskEntries,
             tag => tag is ParticipantDocumentTag.Profile or ParticipantDocumentTag.Shared,
             includeCommunityAccess: participant.ServiceStreams.HasFlag(ServiceStreams.CommunityAccessDailyLiving),
-            maskIdNumbers);
+            maskIdNumbers,
+            generatedAt);
 
     /// <summary>
     /// PF-10.6 — the "CLIENT SUPPORT NEEDS SUMMARY" per-trip staff cheat-sheet. Unlike
@@ -50,7 +52,7 @@ public static class ParticipantDocumentComposer
     /// when null the TRIP/DATE/GROUP header line still renders with the placeholder dash rather
     /// than being omitted, since it's a fixed cheat-sheet layout, not a conditional section.
     /// </summary>
-    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip, DateOnly today, bool maskIdNumbers = false)
+    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip, DateOnly today, DateTime generatedAt, bool maskIdNumbers = false)
     {
         var fields = new List<ParticipantDocumentField>
         {
@@ -89,7 +91,7 @@ public static class ParticipantDocumentComposer
             "Client Support Needs Summary",
             participant.FullName,
             maskIdNumbers ? ParticipantIdMask.Mask(participant.NdisNumber) : participant.NdisNumber,
-            DateTime.UtcNow,
+            generatedAt,
             sections,
             TripName: trip != null ? OrPlaceholder(trip.TripName) : EmptyPlaceholder,
             TripDate: trip != null ? trip.StartDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
@@ -102,7 +104,8 @@ public static class ParticipantDocumentComposer
         IReadOnlyList<ParticipantRiskEntry> riskEntries,
         Func<ParticipantDocumentTag, bool> tagMatches,
         bool includeCommunityAccess,
-        bool maskIdNumbers)
+        bool maskIdNumbers,
+        DateTime generatedAt)
     {
         var sections = new List<ParticipantDocumentSection>();
 
@@ -141,7 +144,7 @@ public static class ParticipantDocumentComposer
         }
 
         return new ParticipantDocumentModel(title, participant.FullName,
-            maskIdNumbers ? ParticipantIdMask.Mask(participant.NdisNumber) : participant.NdisNumber, DateTime.UtcNow, sections);
+            maskIdNumbers ? ParticipantIdMask.Mask(participant.NdisNumber) : participant.NdisNumber, generatedAt, sections);
     }
 
     // ── Scalar field formatting ──────────────────────────────────────────────────────────

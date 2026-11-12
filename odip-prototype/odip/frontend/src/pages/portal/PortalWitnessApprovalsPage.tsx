@@ -116,6 +116,9 @@ export default function PortalWitnessApprovalsPage() {
   // The textarea cuts at the limit without a word, so the count appears at 90% and names the limit at the end. A hint, not an error: the 4,000 characters save as typed.
   const used = statementText.length
   const ratio = formatRatio(used.toLocaleString('en-AU'), STATEMENT_MAX.toLocaleString('en-AU'))
+  // The screen-reader copy changes only at 3,600, 3,900 and 4,000, so it is not read on every key.
+  const liveStep = [STATEMENT_MAX * 0.9, 3900].filter((n) => used >= n).pop()
+  const liveHint = used >= STATEMENT_MAX ? `${ratio}. That's the limit, so check the end of your statement.` : liveStep ? `At least ${formatRatio(liveStep.toLocaleString('en-AU'), STATEMENT_MAX.toLocaleString('en-AU'))}` : ''
   const statementHint = used >= STATEMENT_MAX ? `${ratio}. That's the limit, so check the end of your statement.` : used >= STATEMENT_MAX * 0.9 ? ratio : ''
 
   const dialogCopy = (() => {
@@ -130,19 +133,22 @@ export default function PortalWitnessApprovalsPage() {
         message: (
           <div className="space-y-3">
             <p>{`Please ${verb} "${request.incidentTitle}" involving ${request.participantName}.`}</p>
-            <label className="block text-sm text-[var(--color-foreground)]">
-              Witness statement <span className="text-[var(--color-muted-foreground)]">(optional)</span>
-              <textarea
-                value={statementText}
-                onChange={(e) => setStatementText(e.target.value)}
-                rows={3}
-                className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
-                maxLength={STATEMENT_MAX}
-                aria-describedby="witness-statement-hint"
-                placeholder="Describe what you saw…"
-              />
-              <span id="witness-statement-hint" aria-live="polite" className={`block text-xs tabular-nums text-[var(--color-on-warning-container)] ${statementHint ? 'mt-1' : ''}`}>{statementHint}</span>
-            </label>
+            <div>
+              <label className="block text-sm text-[var(--color-foreground)]">
+                Witness statement <span className="text-[var(--color-muted-foreground)]">(optional)</span>
+                <textarea
+                  value={statementText}
+                  onChange={(e) => setStatementText(e.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
+                  maxLength={STATEMENT_MAX}
+                  aria-describedby="witness-statement-hint"
+                  placeholder="Describe what you saw…"
+                />
+              </label>
+              <span id="witness-statement-hint" className={`block text-xs tabular-nums text-[var(--color-on-warning-container)] ${statementHint ? 'mt-1' : ''}`}>{statementHint}</span>
+              <span aria-live="polite" className="sr-only">{liveHint}</span>
+            </div>
           </div>
         ),
       }

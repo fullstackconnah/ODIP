@@ -38,7 +38,7 @@ public static class ParticipantDocumentRenderer
                         row.ConstantItem(160).AlignRight().Column(c =>
                         {
                             c.Item().Text(model.Title).Bold().FontSize(14);
-                            c.Item().Text($"Generated: {model.GeneratedAtUtc:dd MMM yyyy HH:mm}").FontSize(9);
+                            c.Item().Text($"Generated: {model.GeneratedAt:dd MMM yyyy HH:mm}").FontSize(9);
                         });
                     });
                     // PF-10.6 — the Client Overview's "TRIP | DATE | GROUP" header line. Only

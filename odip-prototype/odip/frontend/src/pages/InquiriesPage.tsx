@@ -17,7 +17,6 @@ import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import { useConfirmIntakeBooking, useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
-import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase, retryingAfterError } from '@/lib/queryPhase'
 import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, invitee, isPastVisit, refusalOf, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
@@ -71,7 +70,6 @@ export function InquiriesTable() {
 function useInquiriesScreen() {
   const navigate = useNavigate()
   const belowMd = useIsBelowMd()
-  const { canManageParticipantLifecycle } = usePermissions()
   // Open | Closed (spec addendum E4, lead decision 6): the house status filter, in the URL beside tab=enquiries.
   const [searchParams, setSearchParams] = useSearchParams()
   const view = searchParams.get('view') === 'closed' ? 'closed' : 'open'
@@ -224,7 +222,6 @@ function useInquiriesScreen() {
     if (!search.trim()) return true
     const term = search.trim().toLowerCase()
     const fields = view === 'closed'
-      // The note only where it shows: the server withholds it from roles without lifecycle rights.
       ? [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, row.closeOutcome && CLOSE_OUTCOME_LABELS[row.closeOutcome], row.closeNote]
       : [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, sourceLabel(row), row.referralSourceName, row.provenance]
     return fields.filter(Boolean).some(field => String(field).toLowerCase().includes(term))
@@ -235,11 +232,10 @@ function useInquiriesScreen() {
   const openRow = (row: ParticipantInquiryDto) => stageOf(row) === 'new' ? editExisting(row) : navigate(`/participants/${row.participantId}/intake`)
 
   // Next step (SHAPE section 3): one outline button that does the row's work, then the menu with the rest. A blocked row leads with the fix, which
-  // is the reason in three words; its full sentence is the link's description. A role that cannot act reads the same step as text. The control
+  // is the reason in three words; its full sentence is the link's description. The control
   // carries `data-intake-control` so focus lands on it after the booking panel closes when the row has no visit button.
   const nextStepCell = (row: ParticipantInquiryDto) => {
     const step = nextStep(row)
-    if (!canManageParticipantLifecycle) return <span className="text-sm text-[var(--color-muted-foreground)]">{step.waiting}</span>
     const name = <span className="sr-only"> for {nameOf(row)}</span>
     const items = menuItems(row)
     return (
@@ -292,13 +288,12 @@ function useInquiriesScreen() {
       minWidth: '14rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.
       sortFn: (a, b) => (a.intakeStartsAt ?? '9999').localeCompare(b.intakeStartsAt ?? '9999'),
-      render: row => <IntakeCell row={row} canManage={canManageParticipantLifecycle} onOpen={r => openBooking(r)} />,
+      render: row => <IntakeCell row={row} onOpen={r => openBooking(r)} />,
     },
     { key: 'id', header: 'Next step', type: 'custom', pin: 'end', render: nextStepCell },
   ]
   const zoneOf = (row: ParticipantInquiryDto) => row.timeZoneId || FALLBACK_ZONE
   // The Closed view (SHAPE section 11): why and when, and Reopen. No "closed by" on the row (lead decision 7); the audit trail keeps who.
-  // The server withholds the note from roles without lifecycle rights, so they get no Note column at all: "—" would read as "no note" (SHAPE 11).
   const noteColumn: Column<ParticipantInquiryDto> = {
     key: 'closeNote', header: 'Note',
     render: row => (row.closeNote
@@ -309,7 +304,7 @@ function useInquiriesScreen() {
     { key: 'firstName', header: 'Participant', sortable: true, mobile: 'primary', render: row => nameOf(row) },
     { key: 'phone', header: 'Contact', render: row => <ContactCell row={row} /> },
     { key: 'closeOutcome', header: 'Outcome', mobile: 'meta', render: row => (row.closeOutcome ? CLOSE_OUTCOME_LABELS[row.closeOutcome] : '') },
-    ...(canManageParticipantLifecycle ? [noteColumn] : []),
+    noteColumn,
     {
       key: 'closedAt', header: 'Closed', sortable: true, mobile: 'meta',
       sortFn: (a, b) => (a.closedAt ?? '').localeCompare(b.closedAt ?? ''),
@@ -317,11 +312,11 @@ function useInquiriesScreen() {
     },
     {
       key: 'id', header: 'Actions', type: 'custom', pin: 'end',
-      render: row => canManageParticipantLifecycle ? (
+      render: row => (
         <div className={`flex items-center gap-2 ${ROW_ACTIONS_CARD}`} onClick={e => e.stopPropagation()}>
           <Button size="sm" variant="secondary" onClick={() => setReopening(row)}>Reopen<span className="sr-only"> {nameOf(row)}</span></Button>
         </div>
-      ) : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span>,
+      ),
     },
   ]
   const showEmptyState = !isError && !isLoading && open.length === 0
@@ -365,8 +360,8 @@ function useInquiriesScreen() {
       {showTable && !isLoading && filtered.length === 0
         ? <EmptyState icon={Search} title="No enquiries match your search" description={truncated?.isTruncated ? `Try a different search term, or clear the search. Search looks through the latest ${inquiries.length} closed enquiries only.` : `Try a different search term, or clear the search to see every ${view} enquiry.`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
         : showTable && (view === 'closed'
-          ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={canManageParticipantLifecycle ? editExisting : undefined} />
-          : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />)}
+          ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={editExisting} />
+          : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={openRow} />)}
       <IntakeBookingPanel row={bookingRow} focusDate={booking?.focusDate} onClose={closeBooking} onRequestCancel={setCancelling} />
       <IntakeCancelDialog row={cancelling && (inquiries.find(r => r.id === cancelling.id) ?? cancelling)} onCancel={() => setCancelling(null)} onDone={onCancelled} />
       {closing && <CloseInquiryDialog row={closing} onCancel={() => setClosing(null)} onDone={onClosed} />}

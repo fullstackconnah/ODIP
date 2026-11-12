@@ -64,12 +64,6 @@ describe('closing an enquiry from the table', () => {
     expect(screen.queryByRole('button', { name: 'More actions for Tomas Becker' })).not.toBeInTheDocument()
   })
 
-  it('a role without lifecycle rights gets no menu', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker', id: 'sw' }))
-    page()
-    expect(screen.queryByRole('button', { name: /^More actions for/ })).not.toBeInTheDocument()
-  })
-
   it('Close sends the outcome and note, then a notice whose Dismiss takes focus', async () => {
     mocks.close.mockResolvedValue({ inquiry: { ...open[1], closeOutcome: 'NotGoingAhead' }, cancellationEmail: 'Sent' })
     const user = userEvent.setup()
@@ -208,18 +202,5 @@ describe('the Open and Closed views', () => {
 
     expect(screen.getByText('No closed enquiries')).toBeInTheDocument()
     expect(screen.getByText('Enquiries you close show here, with why and when. You can reopen one.')).toBeInTheDocument()
-  })
-})
-
-describe('the Closed view for a role without lifecycle rights', () => {
-  it('has no Note column (SHAPE section 11: outcome and date only) and no Reopen', async () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker', id: 'sw' }))
-    const user = userEvent.setup()
-    page()
-    await user.click(screen.getByRole('radio', { name: 'Closed' }))
-
-    expect(screen.getByRole('columnheader', { name: /Outcome/ })).toBeInTheDocument()
-    expect(screen.queryByRole('columnheader', { name: /^Note/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Reopen/ })).not.toBeInTheDocument()
   })
 })

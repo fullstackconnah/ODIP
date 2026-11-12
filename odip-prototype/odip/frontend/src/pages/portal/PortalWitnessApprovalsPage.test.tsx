@@ -244,10 +244,27 @@ describe('PortalWitnessApprovalsPage', () => {
         expect(hintOf(field)).toHaveTextContent('')
       })
 
-      it('shows the count from 3,600 characters, tied to the field and announced politely', async () => {
+      it('shows the count from 3,600 characters, tied to the field and not itself a live region', async () => {
         const field = await statementField(3612)
         expect(hintOf(field)).toHaveTextContent('3,612 / 4,000')
-        expect(hintOf(field)).toHaveAttribute('aria-live', 'polite')
+        expect(hintOf(field)).not.toHaveAttribute('aria-live')
+        expect(field).toHaveAccessibleName('Witness statement (optional)')
+      })
+
+      it('announces only at 3,600, 3,900 and 4,000, and clears under 3,600', async () => {
+        const field = await statementField(3601)
+        const live = () => screen.getByRole('alertdialog').querySelector('.sr-only[aria-live="polite"]')!.textContent
+        const type = (n: number) => fireEvent.change(field, { target: { value: 'a'.repeat(n) } })
+        const first = live()
+        expect(first).toBe('At least 3,600 / 4,000')
+        type(3650)
+        expect(live()).toBe(first)
+        type(3900)
+        expect(live()).toBe('At least 3,900 / 4,000')
+        type(4000)
+        expect(live()).toBe('4,000 / 4,000. That\x27s the limit, so check the end of your statement.')
+        type(3000)
+        expect(live()).toBe('')
       })
 
       it('names the limit at 4,000 and leaves the field valid and the buttons enabled', async () => {

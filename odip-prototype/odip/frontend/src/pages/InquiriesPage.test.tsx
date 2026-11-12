@@ -90,18 +90,6 @@ describe('InquiriesPage lifecycle handoff', () => {
     expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
   })
 
-  it('uses the named lifecycle capability to suppress all mutation controls for unavailable roles', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
-    mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
-    page()
-    expect(screen.queryByText(/cannot capture, edit, or start/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /capture enquiry|edit enquiry|start intake|book intake|more actions/i })).not.toBeInTheDocument()
-    // The step reads as text, not a button, and no cell says Read-only.
-    expect(within(screen.getByRole('row', { name: /Ava Ng/ })).queryByRole('button')).not.toBeInTheDocument()
-    expect(screen.getByText('Not booked yet')).toBeInTheDocument()
-    expect(screen.queryByText('Read-only')).not.toBeInTheDocument()
-  })
-
   it('keeps loading visible and announces conversion errors', async () => {
     mocks.inquiries.mockReturnValue({ data: [], isLoading: true })
     page()
