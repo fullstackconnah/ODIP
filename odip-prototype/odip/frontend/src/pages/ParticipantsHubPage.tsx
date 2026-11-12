@@ -37,8 +37,6 @@ const TABS: { id: TabId; label: string; title: string }[] = [
 
 const DEFAULT_TAB: TabId = 'active'
 
-const TAB_KEYS: TabId[] = TABS.map(t => t.id)
-
 /**
  * Hub page that unifies the Enquiries, Onboarding and Active participants routes
  * behind one shared PageHeader and one accessible Tabs primitive. Each tab mounts
@@ -53,7 +51,9 @@ export default function ParticipantsHubPage() {
   const { canManageParticipantLifecycle, canImportData } = usePermissions()
   // The stage is `?tab=` (shareable and bookmarkable; the default drops the param) and the URL is its only source, read from the ROUTER's
   // location so the page is correct under MemoryRouter in tests and BrowserRouter in the app.
-  const [activeId, selectTab] = useTabParam(TAB_KEYS, DEFAULT_TAB)
+  // Enquiries are for the roles that can work them; for anyone else the tab is absent, so `?tab=enquiries` is an unknown key and reads as the default.
+  const tabs = useMemo(() => TABS.filter(t => t.id !== 'enquiries' || canManageParticipantLifecycle), [canManageParticipantLifecycle])
+  const [activeId, selectTab] = useTabParam(tabs.map(t => t.id), DEFAULT_TAB)
   const activeMeta = TABS.find(t => t.id === activeId) ?? TABS[2]
 
   // Each body export renders its own PageHeader via its standalone page wrapper
@@ -65,7 +65,7 @@ export default function ParticipantsHubPage() {
   useDocumentTitle(activeMeta.title)
 
   const items: TabItem[] = useMemo(
-    () => TABS.map(t => ({
+    () => tabs.map(t => ({
       id: t.id,
       label: t.label,
       content: (
@@ -76,7 +76,7 @@ export default function ParticipantsHubPage() {
         </>
       ),
     })),
-    [],
+    [tabs],
   )
 
   // Block flow, not a flex column with a section gap: the title row (32px), 12px, and the tab strip (40px
