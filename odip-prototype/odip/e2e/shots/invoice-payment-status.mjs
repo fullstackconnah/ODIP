@@ -86,7 +86,7 @@ const pillsFit = async (page, ctx) => {
 
 // 12: the table's own scroll frame needs no sideways scroll (scrollWidth equals clientWidth).
 const frameFits = async (page, ctx) => {
-  const f = await page.evaluate(() => { let e = document.querySelector('main table')?.parentElement; while (e && !['auto', 'scroll'].includes(getComputedStyle(e).overflowX)) e = e.parentElement; return e ? { scrollWidth: e.scrollWidth, clientWidth: e.clientWidth } : null })
+  const f = await page.evaluate(() => { let e = document.querySelector('main table')?.parentElement; while (e && !['auto', 'scroll'].includes(getComputedStyle(e).overflowX)) e = e.parentElement; return e ? { scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, cols: Object.fromEntries([...e.querySelectorAll('th')].map((h) => [h.textContent.trim() || 'actions', Math.round(h.getBoundingClientRect().width * 10) / 10])) } : null })
   check(`12 ${ctx}: table frame scrollWidth equals clientWidth`, f && f.scrollWidth === f.clientWidth, f)
 }
 // 2b: where Payment is stacked, each payment pill sits under the status badge on one line, inside the Status cell; `expectStacked` says none may be missing.

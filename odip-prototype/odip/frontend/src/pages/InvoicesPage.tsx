@@ -149,7 +149,7 @@ export default function InvoicesPage() {
     },
     ...(showOrganisation ? [{
       key: 'organisationName', header: 'Organisation', mobile: 'meta' as const,
-      render: (row: InvoiceRegisterRowDto) => <div className="md:max-w-[8.5rem] xl:max-w-[10rem]"><CellText>{row.organisationName}</CellText></div>,
+      render: (row: InvoiceRegisterRowDto) => <div className="md:max-w-[10rem]"><CellText>{row.organisationName}</CellText></div>,
     }] : []),
     {
       key: 'issueDate',
@@ -177,7 +177,7 @@ export default function InvoicesPage() {
         <Link
           to={`/claims/${row.tripClaimId}`}
           title={row.claimReference}
-          className={`block text-[var(--color-primary)] hover:underline md:max-w-[7rem] md:truncate xl:max-w-none ${TAP_TRUNCATED_LINK}`}
+          className={`block text-[var(--color-primary)] hover:underline md:max-w-[6.5rem] md:truncate xl:max-w-none ${TAP_TRUNCATED_LINK}`}
         >
           {row.claimReference || '—'}
         </Link>
