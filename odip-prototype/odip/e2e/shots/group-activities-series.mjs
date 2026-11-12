@@ -354,7 +354,7 @@ for (const vp of VIEWPORTS) {
     const sub = await alert(page).locator('label span.text-xs').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))))
     check(`${tag} B4 add dialog sub lines at most 3 lines`, sub.every((n) => n <= 3), { sub })
     if (touch) {
-      const tapMin = await tokenPx(page, '--tap-min'), hs = await alert(page).getByRole('button').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))
+      const tapMin = await tokenPx(page, '--tap-min'), hs = await alert(page).getByRole('button').evaluateAll((els) => els.map((el) => Math.max(el.getBoundingClientRect().height, parseFloat(getComputedStyle(el, '::before').height) || 0)))
       check(`${tag} B6 add-scope dialog buttons >= --tap-min`, hs.length > 0 && hs.every((h) => h >= tapMin - 0.5), { hs, tapMin })
     }
     await context.close()
@@ -375,7 +375,7 @@ for (const vp of VIEWPORTS) {
     const sub = await alert(page).locator('label span.text-xs').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))))
     check(`${tag} B4 remove dialog sub lines at most 3 lines`, sub.every((n) => n <= 3), { sub })
     if (touch) {
-      const tapMin = await tokenPx(page, '--tap-min'), hs = await alert(page).getByRole('button').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))
+      const tapMin = await tokenPx(page, '--tap-min'), hs = await alert(page).getByRole('button').evaluateAll((els) => els.map((el) => Math.max(el.getBoundingClientRect().height, parseFloat(getComputedStyle(el, '::before').height) || 0)))
       check(`${tag} B6 remove-scope dialog buttons >= --tap-min`, hs.length > 0 && hs.every((h) => h >= tapMin - 0.5), { hs, tapMin })
     }
     await context.close()
