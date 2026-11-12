@@ -48,7 +48,10 @@ public class InvoiceService
     {
         var (claim, group, settings) = await GroupForRenderAsync(claimId, groupId, ct);
         var snapshot = BuildSnapshot(claim, group, settings);
-        return (Render(snapshot, perItemLines: await PerItemLinesAsync(snapshot, ct)), $"DRAFT-{claim.ClaimReference}.pdf");
+        var perItem = await PerItemLinesAsync(snapshot, ct);
+        if (TenantOf(claim) is { } tenantId)
+            await StampShiftTimesAsync(snapshot, claim, tenantId, ProviderTimeZoneResolver.For(settings.TimeZoneId, settings.State).Zone, perItem, ct);
+        return (Render(snapshot, perItemLines: perItem), $"DRAFT-{claim.ClaimReference}.pdf");
     }
 
     /// <summary>The invoice each plan- or self-managed payer would get if the claim were submitted now: never saved, never numbered.</summary>
@@ -295,7 +298,11 @@ public class InvoiceService
                                 : string.Create(CultureInfo.InvariantCulture, $"{item.ServiceFrom:dd/MM/yyyy} – {item.ServiceTo:dd/MM/yyyy}");
 
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).Text(item.SupportItemCode);
-                            table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).Text(dateRange);
+                            var dateCell = table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4);
+                            if (item.ServiceStartTime is { } from && item.ServiceEndTime is { } to)
+                                dateCell.Column(c => { c.Item().Text(dateRange); c.Item().Text($"{Clock(from)} – {Clock(to)}").FontSize(9); });
+                            else
+                                dateCell.Text(dateRange);
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(perItemLines?.Contains(item.Id) == true ? string.Create(CultureInfo.InvariantCulture, $"{item.Hours:0.##} each") : item.Hours.ToString("F2", CultureInfo.InvariantCulture));
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(string.Create(CultureInfo.InvariantCulture, $"${item.UnitPrice:F2}"));
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(Money(item.LineTotal));
@@ -440,7 +447,8 @@ public class InvoiceService
 
         var tenantId = TenantOf(claim) ?? throw new InvalidOperationException("The claim has no organisation.");
         var settings = await SettingsForAsync(tenantId, ct) ?? throw new InvoiceRefusedException("Set up your organisation's invoice details in Settings first.");
-        var issueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.For(settings.TimeZoneId, settings.State).Zone);
+        var zone = ProviderTimeZoneResolver.For(settings.TimeZoneId, settings.State).Zone;
+        var issueDate = ProviderLocalTime.TodayIn(now, zone);
         Guid? actorId = Guid.TryParse(actor?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
 
         var issued = new List<Invoice>();
@@ -448,6 +456,7 @@ public class InvoiceService
         {
             var number = await TakeNumberAsync(tenantId, InvoiceKind.Invoice, settings.InvoiceStartNumber, ct);
             var invoice = BuildSnapshot(claim, group, settings);
+            await StampShiftTimesAsync(invoice, claim, tenantId, zone, null, ct);
             // Explicit: SaveChanges stamps a TenantId only when one is in scope, and a SuperAdmin not viewing as an organisation has none.
             invoice.TenantId = tenantId;
             foreach (var line in invoice.Lines) line.TenantId = tenantId;
@@ -509,7 +518,7 @@ public class InvoiceService
             Lines = original.Lines.Select(l => new InvoiceLine
             {
                 Id = Guid.NewGuid(), TenantId = original.TenantId, ClaimLineItemId = l.ClaimLineItemId, SupportItemCode = l.SupportItemCode, ServiceFrom = l.ServiceFrom, ServiceTo = l.ServiceTo,
-                Hours = l.Hours, UnitPrice = l.UnitPrice, LineTotal = l.LineTotal, GSTCode = l.GSTCode,
+                Hours = l.Hours, UnitPrice = l.UnitPrice, LineTotal = l.LineTotal, GSTCode = l.GSTCode, ServiceStartTime = l.ServiceStartTime, ServiceEndTime = l.ServiceEndTime,
             }).ToList(),
         };
         original.Status = InvoiceStatus.Credited;
@@ -545,6 +554,34 @@ public class InvoiceService
             }).ToList(),
         };
     }
+
+    /// <summary>
+    /// Stamps the shift's claim window (provider local) on each hours line of a shift, the window the claim was priced from; per-item, trip and manual lines, and a shift not found
+    /// in this organisation, keep both times null. A fixed handful of queries per invoice, none when the claim has no shift lines.
+    /// </summary>
+    private async Task StampShiftTimesAsync(Invoice inv, TripClaim claim, Guid tenantId, TimeZoneInfo orgZone, HashSet<Guid>? perItem, CancellationToken ct)
+    {
+        var shiftOf = claim.LineItems.Where(l => l.ShiftId != null).ToDictionary(l => l.Id, l => l.ShiftId!.Value);
+        if (shiftOf.Count == 0) return;
+        perItem ??= await PerItemLinesAsync(inv, ct);
+        var hours = inv.Lines.Where(l => !perItem.Contains(l.Id) && l.ClaimLineItemId is { } c && shiftOf.ContainsKey(c)).ToList();
+        if (hours.Count == 0) return;
+        var ids = hours.Select(l => shiftOf[l.ClaimLineItemId!.Value]).Distinct().ToList();
+        // Explicit organisation guard: a SuperAdmin with no organisation in scope passes the global query filter.
+        var shifts = await _db.Shifts.AsNoTracking().Where(s => s.TenantId == tenantId && ids.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);
+        if (shifts.Count == 0) return;
+        var completions = await ShiftClaimWindow.LoadAsync(_db, shifts.Keys.ToList(), ct);
+        var zones = await ProviderTimeZoneResolver.ZonesOfLocationsAsync(_db, tenantId, shifts.Values.Select(s => s.ServiceLocationId), ct);
+        foreach (var line in hours)
+            if (shifts.TryGetValue(shiftOf[line.ClaimLineItemId!.Value], out var shift))
+            {
+                var window = ShiftClaimWindow.For(shift, completions.GetValueOrDefault(shift.Id), ProviderTimeZoneResolver.ZoneOf(shift, zones, orgZone)).Priced;
+                line.ServiceStartTime = window.Start;
+                line.ServiceEndTime = window.End;
+            }
+    }
+
+    private static string Clock(TimeOnly t) => t.ToString("h:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant();
 
     /// <summary>The ids of the invoice lines whose catalogue item (on the line's service date) is unit Each, from one catalogue query; a code the catalogue no longer holds reads as hours.</summary>
     private async Task<HashSet<Guid>> PerItemLinesAsync(Invoice inv, CancellationToken ct)
