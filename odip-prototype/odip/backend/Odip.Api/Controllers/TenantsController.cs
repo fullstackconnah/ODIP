@@ -141,7 +141,7 @@ public class TenantsController : ControllerBase
             Id = Guid.NewGuid(),
             TenantId = tenant.Id,
             RegistrationNumber = ps.RegistrationNumber,
-            ABN = ps.ABN,
+            ABN = ProviderSettingsController.TidyAbn(ps.ABN),
             OrganisationName = string.IsNullOrWhiteSpace(ps.OrganisationName) ? dto.Name : ps.OrganisationName,
             Address = ps.Address,
             State = state,
