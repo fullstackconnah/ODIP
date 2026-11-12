@@ -42,7 +42,7 @@ export function installDashboardDefaults() {
     mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false })
     // A finished organisation: its first week was published long ago, so the setup card is not drawn and no existing assertion moves.
     mockUseSetupStatus.mockReturnValue(settled({ ...FINISHED_ORG }))
-    mockUseProviderSettings.mockReturnValue(settled({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW' }))
+    mockUseProviderSettings.mockReturnValue(settled({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW', abn: '51 824 753 556' }))
     // No decision groups: a test sees the band exactly as its viewer's role draws it.
     mockUseDecisionGroups.mockReturnValue([])
   })
