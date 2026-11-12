@@ -66,6 +66,25 @@ public class CrossTenantTaskBodyIdTests
         Assert.Empty(await db.BookingTasks.IgnoreQueryFilters().ToListAsync());
     }
 
+    // The same organisation is not enough: a task on one trip cannot link another trip's booking, reservation or assignment.
+    [Theory]
+    [InlineData("booking", "Booking not found.")]
+    [InlineData("reservation", "Reservation not found.")]
+    [InlineData("vehicle assignment", "Vehicle assignment not found.")]
+    [InlineData("staff assignment", "Staff assignment not found.")]
+    public async Task TaskCreate_LinkedRowOfAnotherTripInTheSameTenant_Returns400_AndWritesNothing(string kind, string message)
+    {
+        using var db = Db();
+        var tripA = Trip(db, A);
+        var tripB = PlantLinked(db, A);
+
+        var result = await new TasksController(db).Create(TaskFor(kind, tripB, tripA.Id), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<TaskDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal(message, Assert.Single(body.Errors!));
+        Assert.Empty(await db.BookingTasks.IgnoreQueryFilters().ToListAsync());
+    }
+
     [Fact]
     public async Task TaskCreate_OwnLinkedRows_StillCreates()
     {

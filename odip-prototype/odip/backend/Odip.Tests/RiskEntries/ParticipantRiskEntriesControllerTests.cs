@@ -49,6 +49,17 @@ public class ParticipantRiskEntriesControllerTests
         IsActive = isActive,
     };
 
+    [Fact]
+    public async Task GetForParticipant_ParticipantMissing_ReturnsNotFound()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantRiskEntriesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.GetForParticipant(Guid.NewGuid(), false, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
     // ── Create ────────────────────────────────────────────────────────────
 
     [Fact]
