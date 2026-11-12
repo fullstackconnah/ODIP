@@ -2322,6 +2322,22 @@ describe('ShiftSlideOver cancellation reason', () => {
     expect(screen.queryByLabelText(REASON_FIELD)).not.toBeInTheDocument()
   })
 
+  it('a refused Save focuses the panel\'s own invalid field, not an invalid element elsewhere on the page', async () => {
+    const outside = document.createElement('input')
+    outside.setAttribute('aria-invalid', 'true')
+    document.body.prepend(outside)
+    try {
+      const user = userEvent.setup()
+      panel(makeShift({ status: 'Published' }))
+      await chooseStatus(user, 'Cancelled')
+      await save(user)
+      await waitFor(() => expect(screen.getByLabelText(REASON_FIELD)).toHaveFocus())
+      expect(outside).not.toHaveFocus()
+    } finally {
+      outside.remove()
+    }
+  })
+
   it('shows a required field with the placeholder once Cancelled is chosen, and offers the ten reasons with no blank item', async () => {
     const user = userEvent.setup()
     panel(makeShift({ status: 'Published' }))

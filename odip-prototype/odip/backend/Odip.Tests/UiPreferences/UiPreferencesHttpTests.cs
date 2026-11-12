@@ -50,6 +50,20 @@ public class UiPreferencesHttpTests
     }
 
     [Fact]
+    public async Task OnePersonsSave_LeavesAnotherPersonsSavedRowAlone_InTheSameOrganisation()
+    {
+        await using var host = await TestHost.StartAsync();
+        var (a, b) = (await host.AddUserAsync(), await host.AddUserAsync());
+
+        await host.SendAsync(HttpMethod.Put, "Admin", b, Body("days"));
+        await host.SendAsync(HttpMethod.Put, "Admin", a, Body("list"));
+
+        Assert.Equal("days", await host.ViewAsync(b));
+        Assert.Equal("list", await host.ViewAsync(a));
+        Assert.Equal(2, await host.RowCountAsync());
+    }
+
+    [Fact]
     public async Task SecondPut_UpdatesTheOneRow()
     {
         await using var host = await TestHost.StartAsync();

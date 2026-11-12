@@ -2,14 +2,17 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { UI_PREFERENCES_KEY } from '@/api/hooks'
 import { useItineraryView } from './useItineraryView'
 
 const { apiGet, apiPut } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPut: vi.fn() }))
 vi.mock('@/api/client', async importOriginal => ({ ...(await importOriginal<object>()), apiGet, apiPut }))
 
 const KEY = 'odip.itinerary.view'
+let lastQc: QueryClient
 function setup() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  lastQc = qc
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   return renderHook(() => useItineraryView(), { wrapper })
 }
@@ -52,12 +55,27 @@ describe('useItineraryView', () => {
     const { result } = setup()
     act(() => result.current[1]('list'))
     await waitFor(() => expect(apiPut).toHaveBeenCalledTimes(1))
+    await act(async () => { await Promise.allSettled(apiPut.mock.results.map(r => r.value)) })   // the PUT has failed before anything is asserted
     expect(apiPut).toHaveBeenCalledWith('/me/ui-preferences', { itineraryView: 'list' })
     expect(result.current[0]).toBe('list')
     expect(localStorage.getItem(KEY)).toBe('list')
     act(() => result.current[1]('days'))
     await waitFor(() => expect(apiPut).toHaveBeenCalledTimes(2))
+    await act(async () => { await Promise.allSettled(apiPut.mock.results.map(r => r.value)) })
     expect(result.current[0]).toBe('days')
     expect(localStorage.getItem(KEY)).toBe('days')
+  })
+  it('a read still in flight when the person switches cannot put the old value back, in the cache or the browser copy', async () => {
+    let resolveGet: (v: unknown) => void = () => {}
+    apiGet.mockImplementation(() => new Promise(r => { resolveGet = r }))
+    apiPut.mockResolvedValue({ itineraryView: 'list' })
+    const { result } = setup()
+    await waitFor(() => expect(apiGet).toHaveBeenCalled())
+    act(() => result.current[1]('list'))
+    await waitFor(() => expect(apiPut).toHaveBeenCalledTimes(1))
+    await act(async () => { resolveGet({ itineraryView: 'days' }); await Promise.resolve() })
+    expect(lastQc.getQueryData(UI_PREFERENCES_KEY)).toEqual({ itineraryView: 'list' })
+    expect(result.current[0]).toBe('list')
+    expect(localStorage.getItem(KEY)).toBe('list')
   })
 })

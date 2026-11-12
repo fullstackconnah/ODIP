@@ -18,6 +18,10 @@ export function useSaveUiPreferences() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (prefs: UiPreferences) => apiPut<UiPreferences>('/me/ui-preferences', prefs),
-    onMutate: prefs => qc.setQueryData<UiPreferences>(UI_PREFERENCES_KEY, prefs),
+    // Cancel a read still in flight first, or it lands after this save and puts the older value back.
+    onMutate: async prefs => {
+      await qc.cancelQueries({ queryKey: UI_PREFERENCES_KEY })
+      qc.setQueryData<UiPreferences>(UI_PREFERENCES_KEY, prefs)
+    },
   })
 }
