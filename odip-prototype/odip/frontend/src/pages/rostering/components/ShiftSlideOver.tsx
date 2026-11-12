@@ -378,7 +378,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     if (status === 'Cancelled' && !cancellationReason && existing?.status !== 'Cancelled') {
       setReasonError('Choose a cancellation reason.')
       // The field can sit below the fold on a short screen: focus scrolls it into view for the person who pressed Save.
-      requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
+      requestAnimationFrame(() => participantFieldRef.current?.closest('[role="dialog"]')?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
       return
     }
 

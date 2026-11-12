@@ -3,16 +3,17 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
-const { mockApiGet } = vi.hoisted(() => ({ mockApiGet: vi.fn() }))
+const { mockApiGet, mockApiPost } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiPost: vi.fn() }))
 
 vi.mock('../client', () => ({
   apiGet: mockApiGet,
-  apiPost: vi.fn(),
+  apiPost: mockApiPost,
   apiPut: vi.fn(),
   apiDelete: vi.fn(),
 }))
 
-import { usePendingCompletionCount, usePendingCompletionQueue } from './rostering'
+import { AxiosError } from 'axios'
+import { useApproveCompletion, usePendingCompletionCount, usePendingCompletionQueue } from './rostering'
 
 function wrapper(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
@@ -23,6 +24,7 @@ const queue = (totalCount: number) => ({ items: [], totalCount, page: 1, pageSiz
 
 beforeEach(() => {
   mockApiGet.mockReset()
+  mockApiPost.mockReset()
 })
 
 afterEach(() => {
@@ -107,5 +109,35 @@ describe('usePendingCompletionCount (the sidebar badge) behaves as it did', () =
     const failing = renderHook(() => usePendingCompletionCount(), { wrapper: wrapper(qc) })
     await waitFor(() => expect(mockApiGet).toHaveBeenCalled())
     expect(failing.result.current).toBe(0)
+  })
+})
+
+describe('useApproveCompletion: a refused approve refreshes what the coordinator is looking at', () => {
+  const refused = (status: number) => new AxiosError('refused', 'ERR_BAD_REQUEST', undefined, undefined, { status, data: {}, statusText: '', headers: {}, config: {} as never })
+  const approve = async (error: unknown) => {
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+    const keys = [['rostering-completions'], ['rostering-completion', 's1'], ['rostering-completion-review', 's1'], ['roster-board']]
+    keys.forEach(k => qc.setQueryData(k, { stale: true }))
+    mockApiPost.mockImplementation(() => (error ? Promise.reject(error) : Promise.resolve({})))
+    const { result } = renderHook(() => useApproveCompletion(), { wrapper: wrapper(qc) })
+    let thrown: unknown = null
+    await act(async () => { await result.current.mutateAsync('s1').catch(e => { thrown = e }) })
+    const invalidated = keys.map(k => qc.getQueryState(k)?.isInvalidated)
+    return { invalidated, error: thrown }
+  }
+
+  it('on a 409 invalidates the list and this shift\x27s completion and review, not the board, and the error still reaches the caller', async () => {
+    const err = refused(409)
+    const { invalidated, error } = await approve(err)
+    expect(invalidated).toEqual([true, true, true, false])
+    expect(error).toBe(err)
+  })
+
+  it('on a 500 invalidates nothing', async () => {
+    expect((await approve(refused(500))).invalidated).toEqual([false, false, false, false])
+  })
+
+  it('on success still refreshes the list, this shift and the board', async () => {
+    expect((await approve(null)).invalidated).toEqual([true, true, true, true])
   })
 })
