@@ -22,7 +22,7 @@ function dayText(d: TripBarDayDto, spoken = false): string {
  * Trip staffing rendered read-only on the roster board — visibly a different material from a
  * shift chip (filled secondary surface, no border, a map glyph) so a coordinator never mistakes
  * it for something editable here. Not draggable, no menu; the only interaction is navigating to
- * the trip itself. A trip short of staff ends its bar with an amber "n short" pill (a reminder, never a block). Sits in the row's second lane at --control-h-sm (24px) with a mouse; under a coarse
+ * the trip itself. The link is `relative` so its sr-only spans stay inside the board scroller instead of widening the page. A trip short of staff ends its bar with an amber "n short" pill (a reminder, never a block). Sits in the row's second lane at --control-h-sm (24px) with a mouse; under a coarse
  * pointer it is a link, so it takes --control-h (44px), the touch target. When a visible day has an itinerary time, a second line (text-xs, aria-hidden) gives one cell per day,
  * each over its own day column: the trip's start and finish that day, not the worker's own hours.
  */
@@ -57,7 +57,7 @@ export function TripBar({ tripBar, days }: TripBarProps) {
     <Link
       to={`/trips/${tripBar.tripInstanceId}`}
       style={{ gridColumn: `${startCol} / ${endCol}` }}
-      className={`rounded-sm bg-secondary-container text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`relative rounded-sm bg-secondary-container text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         hasTimes ? 'flex min-h-[var(--control-h-sm)] flex-col pointer-coarse:min-h-[var(--control-h)]' : 'flex h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] items-center gap-1.5 px-2'
       }`}
       title={`${tripBar.tripName} (${tripBar.tripCode})${short ? ` · ${short} staff short` : ''}${times.map(d => ` · ${format(parseISO(d.date), 'EEE')} ${dayText(d)}`).join('')}`}
