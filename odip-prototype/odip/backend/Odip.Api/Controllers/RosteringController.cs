@@ -336,6 +336,19 @@ public class RosteringController : ControllerBase
                 .ToDictionaryAsync(x => x.TripId, x => x.Count, ct);
         }
 
+        // The trip bars' daily start and finish (the trip's itinerary, see TripDayTimes). One grouped query for every trip on the board, not one per bar; returns the days for one bar's own range, inside the week.
+        async Task<Func<TripInstance, DateOnly, DateOnly, List<TripBarDayDto>>> TripBarDaysAsync(IEnumerable<TripInstance> trips)
+        {
+            var ids = trips.Select(t => t.Id).Distinct().ToList();
+            var rows = await _db.ScheduledActivities
+                .Where(a => ids.Contains(a.TripDay.TripInstanceId) && a.TripDay.Date >= start && a.TripDay.Date <= end)
+                .Select(a => new { a.TripDay.TripInstanceId, a.TripDay.Date, a.StartTime, a.EndTime, a.Status })
+                .ToListAsync(ct);
+            var byTrip = rows.ToLookup(r => r.TripInstanceId, r => new TripDayTimes.ActivityTime(r.Date, r.StartTime, r.EndTime, r.Status));
+            return (trip, from, to) => TripDayTimes.For(trip, byTrip[trip.Id], from < start ? start : from, to > end ? end : to)
+                .Select(d => new TripBarDayDto { Date = d.Date, Start = d.Start, Finish = d.Finish }).ToList();
+        }
+
         RosterBoardDto board;
 
         if (groupByValue == RosterBoardGroupBy.Participant)
@@ -353,12 +366,14 @@ public class RosteringController : ControllerBase
                 .ToListAsync(ct);
             var weekTripBars = weekBookings.Where(b => b.TripInstance.EndDate >= start).ToList();
             var assignedByTrip = await AssignedByTripAsync(weekTripBars.Select(b => b.TripInstanceId));
+            var daysFor = await TripBarDaysAsync(weekBookings.Select(b => b.TripInstance));
 
             TripBarDto ToParticipantTripBar(ParticipantBooking b) => new()
             {
                 TripInstanceId = b.TripInstanceId, TripCode = b.TripInstance.TripCode, TripName = b.TripInstance.TripName,
                 StartDate = b.TripInstance.StartDate, EndDate = b.TripInstance.EndDate, IsDriver = false,
-                StaffShort = TripStaffing.StaffShort(b.TripInstance, assignedByTrip.GetValueOrDefault(b.TripInstanceId))
+                StaffShort = TripStaffing.StaffShort(b.TripInstance, assignedByTrip.GetValueOrDefault(b.TripInstanceId)),
+                Days = daysFor(b.TripInstance, b.TripInstance.StartDate, b.TripInstance.EndDate)
             };
 
             var participantRows = new List<RosterParticipantRowDto>();
@@ -402,12 +417,18 @@ public class RosteringController : ControllerBase
                         Status = w.Kind == UnavailabilityKind.ApprovedLeave ? LeaveStatus.Approved : LeaveStatus.Pending,
                     })
                     .ToList(),
+                // The trip assignments the findings already loaded (weekTripAssignments), clipped like the staff rows' bars; no new query.
+                StaffTrips = weekTripAssignments
+                    .Where(a => a.AssignmentStart <= end)
+                    .Select(a => new StaffTripDto { StaffId = a.UserId, TripInstanceId = a.TripInstanceId, TripName = a.TripInstance.TripName, From = a.AssignmentStart, To = a.AssignmentEnd })
+                    .ToList(),
             };
         }
         else
         {
             var rows = new List<RosterStaffRowDto>();
             var assignedByTrip = await AssignedByTripAsync(weekTripAssignments.Where(a => a.AssignmentStart <= end).Select(a => a.TripInstanceId));
+            var daysFor = await TripBarDaysAsync(weekTripAssignments.Where(a => a.AssignmentStart <= end).Select(a => a.TripInstance));
 
             foreach (var staff in activeStaff.Where(s => staffId is null || s.Id == staffId))
             {
@@ -421,7 +442,8 @@ public class RosteringController : ControllerBase
                 {
                     TripInstanceId = a.TripInstanceId, TripCode = a.TripInstance.TripCode, TripName = a.TripInstance.TripName,
                     StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver,
-                    StaffShort = TripStaffing.StaffShort(a.TripInstance, assignedByTrip.GetValueOrDefault(a.TripInstanceId))
+                    StaffShort = TripStaffing.StaffShort(a.TripInstance, assignedByTrip.GetValueOrDefault(a.TripInstanceId)),
+                    Days = daysFor(a.TripInstance, a.AssignmentStart, a.AssignmentEnd)
                 }).ToList();
 
                 var myLeave = weekWindows

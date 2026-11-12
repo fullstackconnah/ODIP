@@ -406,6 +406,15 @@ export interface TripBarDto {
   isDriver: boolean
   /** Staff the trip still needs; 0 when covered, unset or past fixing. */
   staffShort: number
+  /** Trip days with a start or finish time (the trip's itinerary, not the worker's own hours); a day with no time is absent. Optional: older fixtures leave it out. */
+  days?: TripBarDayDto[]
+}
+
+export interface TripBarDayDto {
+  date: string
+  /** `HH:mm:ss`. */
+  start?: string | null
+  finish?: string | null
 }
 
 export interface LeaveBarDto {
@@ -441,6 +450,15 @@ export interface StaffLeaveDto {
   from: string
   to: string
   status: Extract<LeaveStatus, 'Approved' | 'Pending'>
+}
+
+/** One trip assignment touching the board's week (participant board only; the Staff view has its rows' trip bars): the staff picker's "On a trip that day". Whole days, both ends inclusive. */
+export interface StaffTripDto {
+  staffId: string
+  tripInstanceId: string
+  tripName: string
+  from: string
+  to: string
 }
 
 /** A whole day the person marked Available or Preferred, with no leave or unavailability: the staff picker's "Available that day". */
@@ -524,6 +542,8 @@ export type RosterBoardDto =
       pendingAgreements?: PendingAgreementDto[]
       /** The week's approved and pending leave of every active staff member, for the staff picker. */
       staffLeave?: StaffLeaveDto[]
+      /** The week's trip assignments of every active staff member, for the staff picker. */
+      staffTrips?: StaffTripDto[]
       /** Whole days each active staff member marked Available or Preferred and is not away; absent from an older API. */
       staffAvailableDays?: StaffAvailableDayDto[]
       exceptions: RosterExceptionDto[]

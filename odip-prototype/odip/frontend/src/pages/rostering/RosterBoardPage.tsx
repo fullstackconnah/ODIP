@@ -43,7 +43,7 @@ import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledS
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekLabel, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
-  rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
+  rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, tripsFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
   firstName, joinedSentence,
 } from './lib/rosterDrag'
 import {
@@ -266,6 +266,7 @@ export default function RosterBoardPage() {
   const swapShift = swapTarget ? boardShifts.find(s => s.id === swapTarget.id && s.staffId && !isLockedShift(s)) ?? null : null
   if (swapTarget && !swapShift) setSwapTarget(null)
   // Leave for the picker: the participant board sends the week's leave; the Staff view has it on its rows' leave bars (lead decision L3).
+  const boardTrips = useMemo(() => (!board ? [] : board.groupBy === 'Participant' ? board.staffTrips ?? [] : tripsFromStaffRows(board.staffRows)), [board])
   const boardLeave = useMemo(() => (!board ? [] : board.groupBy === 'Participant' ? board.staffLeave ?? [] : leaveFromStaffRows(board.staffRows)), [board])
   const publishWeek = usePublishWeek()
   const today = useProviderToday()
@@ -1086,6 +1087,7 @@ export default function RosterBoardPage() {
         staffLoading={staffLoading}
         shifts={boardShifts}
         leave={boardLeave}
+        trips={boardTrips}
         availableDays={board?.staffAvailableDays ?? []}
         hours={hours}
         sheet={belowMd}
@@ -1099,7 +1101,7 @@ export default function RosterBoardPage() {
           target={activityTarget}
           canWrite={canWrite}
           participants={participantOptions.map(o => ({ id: o.value, fullName: o.label }))}
-          pickerData={{ staff, staffLoading, shifts: boardShifts, leave: boardLeave, availableDays: board?.staffAvailableDays ?? [], hours }}
+          pickerData={{ staff, staffLoading, shifts: boardShifts, leave: boardLeave, trips: boardTrips, availableDays: board?.staffAvailableDays ?? [], hours }}
           boardShifts={boardShifts}
           onAddStaff={addStaffFromModal}
           lateRefusal={modalLateRefusal}

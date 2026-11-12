@@ -671,6 +671,59 @@ public class RosteringControllerTests
     }
 
     [Fact]
+    public async Task Board_trip_bars_carry_the_days_times_on_participant_and_staff_rows_and_StaffTrips_only_in_participant_mode()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Amy", "Ng");
+        var crew = SeedStaff(db, firstName: "Ben", lastName: "Turner");
+
+        // Wed-Fri; Wed has an activity, Thu only a cancelled one, Fri nothing.
+        var trip = new TripInstance
+        {
+            Id = Guid.NewGuid(), TripName = "Coast Walk", TripCode = "CW-01", StartDate = ServiceDate.AddDays(2), DurationDays = 3,
+            Status = TripStatus.Confirmed
+        };
+        db.TripInstances.Add(trip);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = ServiceDate
+        });
+        db.StaffAssignments.Add(new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = crew.Id, Status = AssignmentStatus.Confirmed,
+            AssignmentStart = trip.StartDate, AssignmentEnd = trip.EndDate
+        });
+        var wed = new TripDay { Id = Guid.NewGuid(), TripInstanceId = trip.Id, DayNumber = 1, Date = trip.StartDate };
+        var thu = new TripDay { Id = Guid.NewGuid(), TripInstanceId = trip.Id, DayNumber = 2, Date = trip.StartDate.AddDays(1) };
+        db.TripDays.AddRange(wed, thu);
+        db.ScheduledActivities.AddRange(
+            new ScheduledActivity { Id = Guid.NewGuid(), TripDayId = wed.Id, Title = "Walk", StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(17, 0) },
+            new ScheduledActivity { Id = Guid.NewGuid(), TripDayId = thu.Id, Title = "Called off", StartTime = new TimeOnly(9, 0), Status = ScheduledActivityStatus.Cancelled });
+        db.SaveChanges();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var byParticipant = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>((await controller.GetBoard(ServiceDate, "participant", CancellationToken.None)).Result).Value).Data!;
+        var byStaff = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>((await controller.GetBoard(ServiceDate, "staff", CancellationToken.None)).Result).Value).Data!;
+
+        foreach (var bar in new[]
+                 {
+                     Assert.Single(Assert.Single(byParticipant.ParticipantRows!, r => r.ParticipantId == participant.Id).TripBars),
+                     Assert.Single(Assert.Single(byStaff.StaffRows!, r => r.StaffId == crew.Id).TripBars)
+                 })
+        {
+            var day = Assert.Single(bar.Days); // Thursday (cancelled only) and Friday (nothing) are absent
+            Assert.Equal(trip.StartDate, day.Date);
+            Assert.Equal(new TimeOnly(8, 0), day.Start);
+            Assert.Equal(new TimeOnly(17, 0), day.Finish);
+        }
+
+        var staffTrip = Assert.Single(byParticipant.StaffTrips!);
+        Assert.Equal((crew.Id, trip.Id, "Coast Walk", trip.StartDate, trip.EndDate), (staffTrip.StaffId, staffTrip.TripInstanceId, staffTrip.TripName, staffTrip.From, staffTrip.To));
+        Assert.Null(byStaff.StaffTrips);
+    }
+
+    [Fact]
     public async Task GetBoard_UnrecognisedGroupBy_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
