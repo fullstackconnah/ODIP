@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { Download } from 'lucide-react'
 import { useClaimInvoices } from '@/api/hooks'
-import type { InvoiceSummaryDto, PayerGroupDto, TripClaimDetailDto } from '@/api/types'
+import { INVOICE_PAYMENT_LABELS, type InvoiceSummaryDto, type PayerGroupDto, type TripClaimDetailDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { DataTable, CellText } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -9,6 +9,7 @@ import { VoidInvoiceDialog } from '@/components/VoidInvoiceDialog'
 import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { downloadFile } from '@/lib/downloadFile'
 import { formatInstantDateAu, plural } from '@/lib/format'
+import { useIsMdTo2xl } from '@/hooks/useIsMdTo2xl'
 import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { TONE } from '@/lib/tone'
@@ -20,6 +21,7 @@ type InvoiceRow = { id: string; payer: PayerGroupDto; invoice?: InvoiceSummaryDt
 type Correction = { invoice: InvoiceSummaryDto; mode: 'void' | 'credit' }
 
 const MUTED_LINE = 'text-xs text-[var(--color-muted-foreground)]'
+const paymentPill = (row: InvoiceRow) => row.invoice?.paymentStatus ? <StatusBadge status={row.invoice.paymentStatus} label={INVOICE_PAYMENT_LABELS[row.invoice.paymentStatus]} /> : null
 const dashed = (name: string) => name.trim().replace(/\s+/g, '-')
 
 /** Only plan- and self-managed payers are invoiced. */
@@ -42,6 +44,7 @@ type InvoicesSectionProps = {
 export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSectionProps) {
   const query = useClaimInvoices(claim.id)
   const { canCorrectInvoices } = usePermissions()
+  const paymentStacked = useIsMdTo2xl()
   // An Admin's row is too wide to pin anything at 1024: a pinned cell would cover the sign of a credit note's Total. Every column opts out,
   // because opting out only the first hands the start pin to the next one (DataTable pinsOf).
   const unpinned = canCorrectInvoices ? false : undefined
@@ -181,8 +184,24 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 // Wider than the widest pill, so Issued turning Voided or Credited never moves the table (SHAPE C3).
                 minWidth: '7rem',
                 render: (row: InvoiceRow) => row.invoice
-                  ? <StatusBadge status={row.invoice.status} />
+                  ? (
+                    <>
+                      <StatusBadge status={row.invoice.status} />
+                      {/* From md to below 2xl the Payment column would clip the row actions, so its pill stacks here instead (the phone card keeps its own Payment field). */}
+                      {paymentStacked && row.invoice.paymentStatus && <span className="mt-1 flex">{paymentPill(row)}</span>}
+                    </>
+                  )
                   : state === 'preview' ? <StatusBadge tone="neutral" label="Not issued" /> : <span className="text-[var(--color-muted-foreground)] max-md:hidden">—</span>,
+              },
+              {
+                key: 'payment',
+                pin: unpinned,
+                header: 'Payment',
+                // Derived from the claim's payments; blank on a credit note, a voided or a credited invoice, and the column is out of the preview and legacy states.
+                minWidth: '7rem',
+                hidden: state !== 'issued' || paymentStacked,
+                className: 'max-md:empty:hidden',
+                render: paymentPill,
               },
               {
                 key: 'issueDate',
