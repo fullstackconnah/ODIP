@@ -1161,6 +1161,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
         serviceLocationId: null,
         overrideReason: null,
         acknowledgedFindingCodes: [],
+        cancellationReason: null,
       },
     })
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
@@ -2298,5 +2299,118 @@ describe('ShiftSlideOver cut participant list', () => {
   it('shows nothing for a whole list', () => {
     renderPanel({ mode: 'create' }, null)
     expect(screen.queryByText(/showing the first/i)).not.toBeInTheDocument()
+  })
+})
+
+// Cancellation reason (2026-11-12 spec): chosen when a shift is cancelled, required only for a new cancel, never cleared from the menu.
+describe('ShiftSlideOver cancellation reason', () => {
+  const REASON_FIELD = /^Cancellation reason/
+  const panel = (shift: ShiftDto, canWrite = true) => render(
+    <ShiftSlideOver target={{ mode: 'edit', shift }} onClose={noop} canWrite={canWrite} participantOptions={participantOptions} staffOptions={staffOptions} />,
+  )
+  const chooseStatus = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(screen.getByRole('option', { name }))
+  }
+  const save = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Save' }))
+
+  it('shows no reason field while the status is Draft or Published, and none on create', () => {
+    panel(makeShift({ status: 'Published' }))
+    expect(screen.queryByLabelText(REASON_FIELD)).not.toBeInTheDocument()
+    cleanup()
+    render(<ShiftSlideOver target={{ mode: 'create', participantId: 'participant-1' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.queryByLabelText(REASON_FIELD)).not.toBeInTheDocument()
+  })
+
+  it('shows a required field with the placeholder once Cancelled is chosen, and offers the ten reasons with no blank item', async () => {
+    const user = userEvent.setup()
+    panel(makeShift({ status: 'Published' }))
+    await chooseStatus(user, 'Cancelled')
+
+    const field = screen.getByLabelText(REASON_FIELD)
+    expect(field).toHaveTextContent('Choose a reason')
+    expect(screen.getByText('Cancellation reason *')).toBeInTheDocument()
+    await user.click(field)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual([
+      'Participant unwell', 'Participant family matter', 'Participant transport unavailable', 'Participant did not attend', 'Participant cancelled, other reason',
+      'Staff unavailable', 'Cancelled by the provider', 'Weather or emergency', 'Rostered by mistake', 'Other',
+    ])
+  })
+
+  it('refuses Save on a new cancel with no reason, says why, saves nothing, and clears the message on choosing one', async () => {
+    const user = userEvent.setup()
+    panel(makeShift({ status: 'Published' }))
+    await chooseStatus(user, 'Cancelled')
+    await save(user)
+
+    expect(await screen.findByText('Choose a cancellation reason.')).toBeInTheDocument()
+    expect(screen.getByLabelText(REASON_FIELD)).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(screen.getByLabelText(REASON_FIELD)).toHaveFocus())
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
+
+    await user.click(screen.getByLabelText(REASON_FIELD))
+    await user.click(screen.getByRole('option', { name: 'Weather or emergency' }))
+    expect(screen.queryByText('Choose a cancellation reason.')).not.toBeInTheDocument()
+    await save(user)
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ status: 'Cancelled', cancellationReason: 'Weather' })
+  })
+
+  it('drops the message and sends no reason when the status goes back from Cancelled', async () => {
+    const user = userEvent.setup()
+    panel(makeShift({ status: 'Published' }))
+    await chooseStatus(user, 'Cancelled')
+    await save(user)
+    expect(await screen.findByText('Choose a cancellation reason.')).toBeInTheDocument()
+
+    await chooseStatus(user, 'Draft')
+    expect(screen.queryByLabelText(REASON_FIELD)).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose a cancellation reason.')).not.toBeInTheDocument()
+    await save(user)
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ status: 'Draft', cancellationReason: null })
+  })
+
+  it("shows an already cancelled shift's reason, optional, and sends it back unchanged", async () => {
+    const user = userEvent.setup()
+    panel(makeShift({ status: 'Cancelled', cancellationReason: 'ParticipantUnwell' }))
+    expect(screen.getByLabelText(REASON_FIELD)).toHaveTextContent('Participant unwell')
+    expect(screen.getByText('Cancellation reason').closest('label')?.textContent).not.toMatch(/\*|required/i)
+    await save(user)
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ status: 'Cancelled', cancellationReason: 'ParticipantUnwell' })
+  })
+
+  it('lets an old cancelled shift with no reason save without choosing one', async () => {
+    const user = userEvent.setup()
+    panel(makeShift({ status: 'Cancelled', cancellationReason: null }))
+    expect(screen.getByLabelText(REASON_FIELD)).toHaveTextContent('Choose a reason')
+    await save(user)
+    expect(screen.queryByText('Choose a cancellation reason.')).not.toBeInTheDocument()
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ status: 'Cancelled', cancellationReason: null })
+  })
+
+  it('changes the reason on a cancelled shift', async () => {
+    const user = userEvent.setup()
+    panel(makeShift({ status: 'Cancelled', cancellationReason: 'ParticipantUnwell' }))
+    await user.click(screen.getByLabelText(REASON_FIELD))
+    await user.click(screen.getByRole('option', { name: 'Staff unavailable' }))
+    await save(user)
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.cancellationReason).toBe('StaffUnavailable')
+  })
+
+  it('reads only: a viewer sees the reason disabled, and nothing when none was recorded', () => {
+    panel(makeShift({ status: 'Cancelled', cancellationReason: 'Other' }), false)
+    expect(screen.getByLabelText(REASON_FIELD)).toBeDisabled()
+    expect(screen.getByLabelText(REASON_FIELD)).toHaveTextContent('Other')
+    cleanup()
+    panel(makeShift({ status: 'Cancelled', cancellationReason: null }), false)
+    expect(screen.queryByLabelText(REASON_FIELD)).not.toBeInTheDocument()
+  })
+
+  it('sends no reason on a create', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValueOnce(makeShift({ id: 'new-shift' }))
+    render(<ShiftSlideOver target={{ mode: 'create', participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    await save(user)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).not.toHaveProperty('cancellationReason')
   })
 })

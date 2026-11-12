@@ -1,3 +1,4 @@
+import type { ShiftCancellationReason } from './enums'
 import type { LeaveType } from './leave'
 
 export type ReportRange = { from: string; to: string }
@@ -8,6 +9,12 @@ export interface HoursByWorkerRowDto {
   approvedShifts: number
   approvedHours: number
   awaitingApprovalHours: number
+}
+
+/** One row of Cancellations by reason. A null reason is the cancelled shifts with no reason recorded. */
+export interface CancellationReasonCountDto {
+  reason: ShiftCancellationReason | null
+  cancelled: number
 }
 
 export interface ShiftFulfilmentWeekDto {

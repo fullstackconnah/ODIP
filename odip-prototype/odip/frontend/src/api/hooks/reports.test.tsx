@@ -7,7 +7,7 @@ const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn(async () => []) }))
 
 vi.mock('../client', () => ({ apiGet: mockGet }))
 
-import { useHoursByWorkerReport, useLeaveTakenReport, useShiftFulfilmentReport } from './reports'
+import { useCancellationsByReasonReport, useHoursByWorkerReport, useLeaveTakenReport, useShiftFulfilmentReport } from './reports'
 
 const range = { from: '2026-09-28', to: '2026-10-25' }
 const qc = new QueryClient()
@@ -19,6 +19,7 @@ describe('report hooks', () => {
   it.each([
     ['hours', useHoursByWorkerReport, '/reports/hours-by-worker'],
     ['fulfilment', useShiftFulfilmentReport, '/reports/shift-fulfilment'],
+    ['cancellations', useCancellationsByReasonReport, '/reports/cancellations-by-reason'],
     ['leave', useLeaveTakenReport, '/reports/leave-taken'],
   ])('%s reads its URL with the range', async (_name, hook, url) => {
     const { result } = renderHook(() => hook(range, true), { wrapper })

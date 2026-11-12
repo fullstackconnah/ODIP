@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { restoreZone, setZone } from '@/test/timeZone'
-import type { HoursByWorkerRowDto, LeaveTakenRowDto, ShiftFulfilmentWeekDto } from '@/api/types/reports'
+import type { CancellationReasonCountDto, HoursByWorkerRowDto, LeaveTakenRowDto, ShiftFulfilmentWeekDto } from '@/api/types/reports'
 
 type Q = { data?: unknown[]; isError?: boolean; isPlaceholderData?: boolean; isFetching?: boolean; refetch: () => void }
 const h = vi.hoisted(() => ({
-  hours: {} as Q, fulfilment: {} as Q, leave: {} as Q,
-  hoursHook: vi.fn(), fulfilmentHook: vi.fn(), leaveHook: vi.fn(),
+  hours: {} as Q, fulfilment: {} as Q, cancellations: {} as Q, leave: {} as Q,
+  hoursHook: vi.fn(), fulfilmentHook: vi.fn(), cancellationsHook: vi.fn(), leaveHook: vi.fn(),
   perms: { hasOrganisation: true },
   saveBlob: vi.fn(),
 }))
@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useHoursByWorkerReport: (...a: unknown[]) => (h.hoursHook(...a), h.hours),
   useShiftFulfilmentReport: (...a: unknown[]) => (h.fulfilmentHook(...a), h.fulfilment),
+  useCancellationsByReasonReport: (...a: unknown[]) => (h.cancellationsHook(...a), h.cancellations),
   useLeaveTakenReport: (...a: unknown[]) => (h.leaveHook(...a), h.leave),
 }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => h.perms }))
@@ -29,11 +30,14 @@ const week = (weekStart: string, o: Partial<ShiftFulfilmentWeekDto> = {}): Shift
 const leave = (leaveId: string, workerName: string, from: string, to: string, daysInRange: number): LeaveTakenRowDto =>
   ({ leaveId, workerId: workerName, workerName, type: 'Annual', from, to, daysInRange })
 
+const cancelled = (reason: CancellationReasonCountDto["reason"], n: number): CancellationReasonCountDto => ({ reason, cancelled: n })
+
 const ok = (data: unknown[]): Q => ({ data, refetch: vi.fn() })
 
 function setData() {
   h.hours = ok([worker('Ava Nguyen', 5, 7, 1.5), worker('=cmd', 2, 9.25)])
   h.fulfilment = ok([week('2026-09-28'), week('2026-10-05', { shifts: 0, filled: 0, unstaffed: 0, fillRatePercent: null, partWeek: true })])
+  h.cancellations = ok([cancelled("ParticipantUnwell", 3), cancelled("Weather", 5), cancelled(null, 2)])
   h.leave = ok([leave('l1', 'Sam Lee', '2026-10-05', '2026-10-06', 2)])
 }
 
@@ -73,10 +77,11 @@ describe('ReportsPage', () => {
   })
 
   it('says each report is empty without a Download button', () => {
-    h.hours = ok([]); h.fulfilment = ok([]); h.leave = ok([])
+    h.hours = ok([]); h.fulfilment = ok([]); h.cancellations = ok([]); h.leave = ok([])
     renderAt()
     expect(screen.getByText('No completed shifts in this range. Try a wider date range.')).toBeInTheDocument()
     expect(screen.getByText('No shifts in this range. Try a wider date range.')).toBeInTheDocument()
+    expect(screen.getByText('No cancelled shifts in this range. Try a wider date range.')).toBeInTheDocument()
     expect(screen.getByText('No approved leave in this range. Try a wider date range.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Download CSV/ })).not.toBeInTheDocument()
   })
@@ -125,6 +130,37 @@ describe('ReportsPage', () => {
     fireEvent.click(download('Hours by worker'))
     const { text } = await lastCsv()
     expect(text.indexOf("'=cmd")).toBeLessThan(text.indexOf('Ava Nguyen'))
+  })
+  it('shows the cancellations by reason in list order, labelled, with Not recorded last in normal ink', () => {
+    renderAt()
+    const cancellations = section('Cancellations by reason')
+    const reasons = within(cancellations).getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell').map(c => c.textContent))
+    expect(reasons).toEqual([['Participant unwell', '3'], ['Weather or emergency', '5'], ['Not recorded', '2']])
+    expect(within(cancellations).getByText('Not recorded').className).not.toMatch(/muted/)
+    expect(h.cancellationsHook).toHaveBeenLastCalledWith({ from: '2026-09-28', to: '2026-10-25' }, true)
+    expect(section('Shift fulfilment by week').compareDocumentPosition(cancellations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(cancellations.compareDocumentPosition(section('Leave taken')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keys the Not recorded row so it renders beside real reasons without a duplicate-key warning', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderAt()
+    expect(warn.mock.calls.flat().join(' ')).not.toMatch(/same key|unique 'key'/)
+    warn.mockRestore()
+  })
+
+  it('sorts cancellations only on request, and a CSV follows the screen order', async () => {
+    renderAt()
+    fireEvent.click(download('Cancellations by reason'))
+    const first = await lastCsv()
+    expect(first.filename).toBe('cancellations-by-reason-2026-09-28-to-2026-10-25.csv')
+    expect(first.text.split(/\r?\n/).filter(Boolean)).toEqual(['Reason,Cancelled shifts', 'Participant unwell,3', 'Weather or emergency,5', 'Not recorded,2'])
+
+    const head = () => within(section('Cancellations by reason')).getByRole('columnheader', { name: /Cancelled shifts/ })
+    fireEvent.click(head())
+    fireEvent.click(head())
+    fireEvent.click(download('Cancellations by reason'))
+    expect((await lastCsv()).text.split(/\r?\n/).filter(Boolean).slice(1)).toEqual(['Weather or emergency,5', 'Participant unwell,3', 'Not recorded,2'])
   })
 
   it('keeps old rows but disables Download while a new range loads', () => {

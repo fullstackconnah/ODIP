@@ -4,7 +4,7 @@ import type {
   PortalDoseOutcomeDto,
   PortalShiftRoutineDto,
 } from './shift-package'
-import type { SupportRatio, SleepoverType, ShiftStatus, EmploymentType, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
+import type { SupportRatio, SleepoverType, ShiftStatus, ShiftCancellationReason, EmploymentType, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { LeaveStatus, UnavailabilityKind } from './leave'
 import type { AgreementKind } from './service-agreement-drafts'
 import type { PlanBlockRequirements } from './plan-pricing'
@@ -103,6 +103,8 @@ export interface ShiftDto {
   /** The claim a line of this shift sits on; present while that holds the support type fixed. */
   claimReference?: string | null
   status: ShiftStatus
+  /** Why a Cancelled shift was cancelled. Null or absent on any other status, and on a shift cancelled without a reason (including every one from before this existed). */
+  cancellationReason?: ShiftCancellationReason | null
   shiftPatternId: string | null
   notes: string | null
   /** Where the shift happens, as a coordinator typed it for this shift (a venue, a centre). Omitted when none: never the participant's address. */
@@ -611,6 +613,8 @@ export interface CreateShiftDto {
 }
 
 export type UpdateShiftDto = CreateShiftDto & {
+  /** Why the shift is cancelled; read only when `status` is Cancelled. Left out (or null) on an already cancelled shift keeps the stored reason. */
+  cancellationReason?: ShiftCancellationReason | null
   /** The chip's Publish: who the board showed on the shift (null for nobody). The server answers 409 when the shift has another worker now. Left out by the slide-over, which is not checked. */
   expectedStaffId?: string | null
 }
