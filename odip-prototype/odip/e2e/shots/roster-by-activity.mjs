@@ -64,12 +64,12 @@ try {
       const lane = day?.parentElement?.previousElementSibling
       const body = document.querySelector('[data-activity-day]')?.parentElement
       const header = [...document.querySelectorAll('[data-roster-day], [data-day]')]
-      const probe = document.createElement('div'); probe.style.width = 'var(--roster-sticky-col)'; lane?.appendChild(probe); const stickyCol = probe.getBoundingClientRect().width; probe.remove()
+      const probe = document.createElement('div'); probe.style.width = 'var(--roster-sticky-col, 195px)'; lane?.appendChild(probe); const stickyCol = probe.getBoundingClientRect().width; probe.remove()
       return { stickyCol, laneW: lane?.getBoundingClientRect().width ?? 0, laneH: lane?.getBoundingClientRect().height ?? 0, cells: [...(body?.children ?? [])].map((c) => c.getBoundingClientRect().left), header: header.map((h) => h.getBoundingClientRect().left) }
     })
     const stickyCol = geo.stickyCol
     const rowH = await cssPx(page, '--row-h')
-    check(`${tag}: lane first cell equals --roster-sticky-col (${stickyCol}px)`, Math.abs(geo.laneW - stickyCol) <= 1, `lane ${geo.laneW}`)
+    check(`${tag}: lane first cell equals --roster-sticky-col, 195px below 1500 (${stickyCol}px)`, Math.abs(geo.laneW - stickyCol) <= 1, `lane ${geo.laneW}`)
     check(`${tag}: lane height at least --row-h (${rowH}px)`, geo.laneH >= rowH - 1, `lane ${geo.laneH}`)
     if (geo.header.length === geo.cells.length) check(`${tag}: lane day cells line up with the header`, geo.cells.every((x, i) => Math.abs(x - geo.header[i]) <= 1), JSON.stringify({ cells: geo.cells, header: geo.header }))
 
