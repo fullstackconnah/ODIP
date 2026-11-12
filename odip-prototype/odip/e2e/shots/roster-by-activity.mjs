@@ -118,6 +118,22 @@ try {
       check('activity-1440-draft: card title starts with the word Draft', /^Draft/.test(title), JSON.stringify(title))
       await page.screenshot({ path: path.join(OUT_DIR, 'full', 'activity-1440-draft.png') })
       await cropElement(page, swim, path.join(OUT_DIR, 'crops', 'activity-1440-draft.png'), { pad: 16, touch: false })
+      // Item 1 (polish 97): in the narrow 1440 column the title drops under the times and Draft is never cut; widened, it sits on the times line again (Draft and plain cards alike).
+      const rowOf = (c) => c.locator('[data-activity-title]').evaluate((t) => {
+        const r = t.parentElement.firstElementChild.getBoundingClientRect(), tt = t.getBoundingClientRect(), d = t.firstElementChild
+        return { under: tt.top >= r.bottom - 0.5, sameLine: Math.abs(tt.top + tt.height / 2 - (r.top + r.height / 2)) < r.height, draftWhole: d && d.textContent === 'Draft' ? d.scrollWidth <= d.clientWidth : null }
+      })
+      const narrow = await rowOf(swim)
+      check('activity-1440-draft-narrow: title under the times, word Draft whole', narrow.under && narrow.draftWhole === true, JSON.stringify(narrow))
+      const nextCard = swim.locator('xpath=following-sibling::*[1]')
+      if (await nextCard.count()) { const a1 = await swim.boundingBox(), b1 = await nextCard.boundingBox(); check('activity-1440-draft-narrow: card clears the next sibling', !a1 || !b1 || a1.y + a1.height <= b1.y + 0.5, JSON.stringify({ a1, b1 })) }
+      await cropElement(page, swim, path.join(OUT_DIR, 'crops', 'activity-1440-draft-narrow.png'), { pad: 16, touch: false })
+      const bowl = stateCard('Bowling'); await bowl.scrollIntoViewIfNeeded()
+      await swim.evaluate((el) => { el.style.width = '260px' }); await bowl.evaluate((el) => { el.style.width = '260px' })
+      const wideDraft = await rowOf(swim), widePlain = await rowOf(bowl)
+      check('activity-1440-draft-wide: title on the times line (Draft and plain card), Draft whole', wideDraft.sameLine && widePlain.sameLine && wideDraft.draftWhole === true, JSON.stringify({ wideDraft, widePlain }))
+      await cropElement(page, swim, path.join(OUT_DIR, 'crops', 'activity-1440-draft-wide.png'), { pad: 16, touch: false })
+      await swim.evaluate((el) => { el.style.width = '' }); await bowl.evaluate((el) => { el.style.width = '' })
       // 11 keyboard: Enter opens the panel, focus returns to the card on close
       await bowling.focus()
       await page.keyboard.press('Enter')
