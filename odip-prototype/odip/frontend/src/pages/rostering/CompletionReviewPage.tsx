@@ -477,19 +477,21 @@ export default function CompletionReviewPage() {
       )}
 
       {batchResults && (
-        <div role="status" className="rounded-lg border border-[var(--color-border)] bg-[var(--color-accent)]/40 p-3 text-sm space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <p>
-              {batchResults.filter(r => r.approved).length} approved
-              {leftOut.length > 0 && `, ${leftOut.length} left out: details missing`}
-              {failedResults.length > 0 && `, ${failedResults.length} failed`}.
-            </p>
-            <Button variant="ghost" size="sm" onClick={() => setBatchResults(null)}>Dismiss</Button>
-          </div>
-          {failedResults.map(r => (
-            <p key={r.shiftId} className="text-xs text-[var(--color-destructive)]">{r.shiftId}: {r.message ?? r.code ?? 'Could not approve.'}</p>
-          ))}
-        </div>
+        <Callout tone={leftOut.length + failedResults.length > 0 ? 'warning' : 'success'} polite actions={<Button variant="ghost" size="sm" onClick={() => setBatchResults(null)}>Dismiss</Button>}>
+          <p>
+            {batchResults.filter(r => r.approved).length} approved
+            {leftOut.length > 0 && `, ${leftOut.length} left out: details missing`}
+            {failedResults.length > 0 && `, ${failedResults.length} failed`}.
+          </p>
+          {failedResults.map(r => {
+            const row = rows.find(x => x.shiftId === r.shiftId)   // a row that has left the queue can't be named, so it reads "One shift"
+            return (
+              <p key={r.shiftId} className="text-xs mt-1">
+                {row ? `${row.participantName} with ${row.staffName} on ${formatServiceDate(row.serviceDate)}` : 'One shift'}: {r.message ?? r.code ?? 'Could not approve.'}
+              </p>
+            )
+          })}
+        </Callout>
       )}
 
       <GroupStaffReviewSection canReview={canReviewCompletions} />

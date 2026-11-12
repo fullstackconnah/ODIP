@@ -262,7 +262,23 @@ describe('CompletionReviewPage', () => {
 
     expect(mockApproveBatchMutateAsync).toHaveBeenCalledWith(['shift-1', 'shift-2'])
     expect(await screen.findByText(/1 approved, 1 failed/i)).toBeInTheDocument()
-    expect(screen.getByText(/this shift is not pending review/i)).toBeInTheDocument()
+    expect(screen.getByText("Grace Palmer-Hughes with Jack O'Sullivan on Tue 8 Sep 2026: This shift is not pending review.")).toBeInTheDocument()
+    expect(screen.getByText(/1 approved, 1 failed/).closest('[role="status"]')).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(/shift-2/)
+  })
+
+  it('names a failed batch shift in words even when the row has left the queue', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockApproveBatchMutateAsync.mockResolvedValue([{ shiftId: 'gone-9', approved: false, code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift is not pending review.' }])
+    renderPage()
+
+    await user.click(screen.getByLabelText('Select row shift-1'))
+    await user.click(screen.getByRole('button', { name: /approve selected \(1\)/i }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /approve all/i }))
+
+    expect(await screen.findByText('One shift: This shift is not pending review.')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/gone-9/)
   })
 
   it('hides approve/return/batch actions and shows a read-only note for ReadOnly', () => {
