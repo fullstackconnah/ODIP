@@ -140,6 +140,7 @@ public class OdipDbContext : DbContext
     public DbSet<GroupActivity> GroupActivities => Set<GroupActivity>();
     public DbSet<GroupActivityStaff> GroupActivityStaff => Set<GroupActivityStaff>();
     public DbSet<GroupActivitySeries> GroupActivitySeries => Set<GroupActivitySeries>();
+    public DbSet<GroupActivitySeriesParticipant> GroupActivitySeriesParticipants => Set<GroupActivitySeriesParticipant>();
     public DbSet<RosterWeek> RosterWeeks => Set<RosterWeek>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
@@ -1273,6 +1274,15 @@ public class OdipDbContext : DbContext
         });
 
         modelBuilder.Entity<GroupActivitySeries>(entity => entity.HasKey(e => e.Id));
+
+        modelBuilder.Entity<GroupActivitySeriesParticipant>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne<GroupActivitySeries>().WithMany().HasForeignKey(e => e.SeriesId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Participant>().WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.SeriesId, e.ParticipantId }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
+        });
 
         modelBuilder.Entity<GroupActivityStaff>(entity =>
         {
@@ -2461,6 +2471,8 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<GroupActivityStaff>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<GroupActivitySeries>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<GroupActivitySeriesParticipant>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<ShiftPattern>()

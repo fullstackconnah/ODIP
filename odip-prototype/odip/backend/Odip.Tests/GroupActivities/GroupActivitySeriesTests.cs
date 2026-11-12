@@ -127,6 +127,8 @@ public class GroupActivitySeriesTests
     {
         Assert.Contains(typeof(GroupActivitySeries), AuditedEntities.Types);
         Assert.Contains(ExportTables.All, t => t.EntityType == typeof(GroupActivitySeries));
+        Assert.Contains(typeof(GroupActivitySeriesParticipant), AuditedEntities.Types);
+        Assert.Contains(ExportTables.All, t => t.EntityType == typeof(GroupActivitySeriesParticipant));
     }
 
     // ── update ──────────────────────────────────────────────────────────────────────────────────────

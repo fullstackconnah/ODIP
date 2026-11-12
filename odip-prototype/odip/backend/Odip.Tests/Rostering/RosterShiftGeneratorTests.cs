@@ -397,4 +397,104 @@ public class RosterShiftGeneratorTests
 
         Assert.Null((await db.Shifts.SingleAsync()).Location);
     }
+
+    // ---- Group activities part 2: a participant already on an activity in a block's window is not rostered a second time ----
+
+    private static ShiftPattern GroupBlock(Guid participantId, Action<ShiftPattern>? change = null) =>
+        Pattern(participantId, change: p =>
+        {
+            p.SourceDraftId = Guid.NewGuid();
+            p.SupportGroupCode = Odip.Domain.Billing.Catalogue.CatalogueGroups.GroupActivitiesGroupCode;
+            change?.Invoke(p);
+        });
+
+    private static async Task AddActivityShiftAsync(OdipDbContext db, Guid participantId, int startHour, int endHour, ShiftStatus status = ShiftStatus.Draft, DateOnly? date = null)
+    {
+        db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = participantId, GroupActivityId = Guid.NewGuid(), ServiceDate = date ?? Mon5Oct,
+            StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0), Status = status,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData(13, 15, 1, 0)]   // touching ends do not overlap: the block's shift is made
+    [InlineData(7, 9, 1, 0)]
+    [InlineData(11, 15, 0, 1)]   // partly inside the block: already there
+    [InlineData(10, 12, 0, 1)]
+    public async Task Generator_OverlapRule_TouchingEnds_NotAlreadyThere(int start, int end, int created, int alreadyThere)
+    {
+        var (db, participantId) = await SeedAsync(id => GroupBlock(id));
+        await using var _ = db;
+        await AddActivityShiftAsync(db, participantId, start, end);
+
+        var result = await new RosterShiftGenerator().GenerateAsync(db, participantId, new[] { (await db.ShiftPatterns.SingleAsync()).Id }, Mon5Oct, Mon5Oct, CancellationToken.None);
+
+        Assert.Equal((created, alreadyThere), (result.Created, result.AlreadyThere));
+    }
+
+    [Fact]
+    public async Task Generator_PartialOverlap_Skips()
+    {
+        var (db, participantId) = await SeedAsync(id => GroupBlock(id));
+        await using var _ = db;
+        await AddActivityShiftAsync(db, participantId, 12, 16);
+
+        var result = await new RosterShiftGenerator().GenerateAsync(db, participantId, new[] { (await db.ShiftPatterns.SingleAsync()).Id }, Mon5Oct, Mon5Oct, CancellationToken.None);
+
+        Assert.Equal((0, 1), (result.Created, result.AlreadyThere));
+        Assert.Equal(1, await db.Shifts.CountAsync());
+    }
+
+    [Fact]
+    public async Task Generator_NonGroupPattern_Unaffected()
+    {
+        var (db, participantId) = await SeedAsync(id => Pattern(id, change: p => p.SourceDraftId = Guid.NewGuid()));   // an agreement block, but not a group-activity one
+        await using var _ = db;
+        await AddActivityShiftAsync(db, participantId, 9, 13);
+
+        var result = await new RosterShiftGenerator().GenerateAsync(db, participantId, new[] { (await db.ShiftPatterns.SingleAsync()).Id }, Mon5Oct, Mon5Oct, CancellationToken.None);
+
+        Assert.Equal((1, 0), (result.Created, result.AlreadyThere));
+    }
+
+    [Fact]
+    public async Task Generator_CancelledActivityShift_DoesNotCount()
+    {
+        var (db, participantId) = await SeedAsync(id => GroupBlock(id));
+        await using var _ = db;
+        await AddActivityShiftAsync(db, participantId, 9, 13, ShiftStatus.Cancelled);
+
+        var result = await new RosterShiftGenerator().GenerateAsync(db, participantId, new[] { (await db.ShiftPatterns.SingleAsync()).Id }, Mon5Oct, Mon5Oct, CancellationToken.None);
+
+        Assert.Equal(1, result.Created);
+    }
+
+    [Fact]
+    public async Task Generator_AnotherParticipantsActivityShift_DoesNotCount()
+    {
+        var (db, participantId) = await SeedAsync(id => GroupBlock(id));
+        await using var _ = db;
+        await AddActivityShiftAsync(db, Guid.NewGuid(), 9, 13);
+
+        var result = await new RosterShiftGenerator().GenerateAsync(db, participantId, new[] { (await db.ShiftPatterns.SingleAsync()).Id }, Mon5Oct, Mon5Oct, CancellationToken.None);
+
+        Assert.Equal(1, result.Created);
+    }
+
+    [Fact]
+    public async Task Generator_AddedPatterns_ApprovalPath_SkipsAttachedActivity()
+    {
+        var (db, participantId) = await SeedAsync();
+        await using var _ = db;
+        await AddActivityShiftAsync(db, participantId, 9, 13);
+        var unsaved = GroupBlock(participantId);
+        db.ShiftPatterns.Add(unsaved);                     // not saved: the approval path adds its patterns and saves them with its own work
+
+        var result = await new RosterShiftGenerator().AddAsync(db, new[] { unsaved }, Mon5Oct, Mon5Oct, CancellationToken.None);
+
+        Assert.Equal((0, 1), (result.Created, result.AlreadyThere));
+        Assert.Empty(result.MadeShifts);
+    }
 }

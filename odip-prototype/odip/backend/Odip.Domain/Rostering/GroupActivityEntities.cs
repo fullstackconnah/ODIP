@@ -1,4 +1,5 @@
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
 namespace Odip.Domain.Rostering;
@@ -53,6 +54,17 @@ public class GroupActivitySeries : ITenantEntity
     public DateOnly EndDate { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A participant who is on a whole recurring series (group activities part 2): written by a Series-scope add, removed by a Series-scope remove. It belongs to the series, so cancelling occurrences never touches it. Ratio is the one asked for; an occurrence with no agreement shift to attach is made at it.</summary>
+public class GroupActivitySeriesParticipant : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid SeriesId { get; set; }
+    public Guid ParticipantId { get; set; }
+    public SupportRatio Ratio { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>A worker on a <see cref="GroupActivity"/>, for their own part of its window. One row per worker; a busy period to every roster rule (<c>RosterAvailability.ActivityStaffBusyAsync</c>).</summary>

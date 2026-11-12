@@ -221,6 +221,7 @@ public static class ExportTables
         Own<GroupActivity>("group-activities.csv", "Group activities: several participants and workers at one place and time."),
         Own<GroupActivityStaff>("group-activity-staff.csv", "Which workers are rostered to each group activity."),
         Own<GroupActivitySeries>("group-activity-series.csv", "The repeat rule of each recurring group activity: how often and between which dates."),
+        Own<GroupActivitySeriesParticipant>("group-activity-series-participants.csv", "Which participants are on a whole recurring group activity, and at what support ratio."),
         Own<ShiftNote>("shift-notes.csv", "Notes written on shifts."),
         Own<ShiftCompletion>("shift-completions.csv", "Shift finishes: actual times, what happened, and the review."),
         Own<ShiftBreak>("shift-breaks.csv", "Breaks taken during shifts."),

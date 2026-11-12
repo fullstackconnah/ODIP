@@ -65,3 +65,10 @@ export function activityLanes(activities: readonly GroupActivityDto[]): Activity
   return [...byKey].map(([key, list]) => ({ key, label: (list[0].activityName ?? list[0].title).trim(), activities: list }))
     .sort((a, b) => a.label.localeCompare(b.label, 'en-AU', { sensitivity: 'base' }))
 }
+
+/** The advisory agreement warning on a participant row. Names no agreed times: the server sends only the code. */
+export function agreementWarning(code: string, first: string, weekday: string) {
+  if (code === 'ACTIVITY_AGREEMENT_NO_BLOCK') return { label: 'Not in agreement', line: `${first}'s agreement has no group activity on ${weekday}s. They can still come. To clear this, add a ${weekday} group activity to the agreement.` }
+  if (code === 'ACTIVITY_AGREEMENT_TIME') return { label: 'Outside agreed time', line: `This activity runs outside the ${weekday} group activity time in ${first}'s agreement. They can still come. To clear this, change the agreed time or this activity's time.` }
+  return null
+}

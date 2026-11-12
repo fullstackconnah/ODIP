@@ -83,6 +83,8 @@ public sealed class RosterShiftGenerator
             occurrences.SelectMany(x => x.Dates).Min(), occurrences.SelectMany(x => x.Dates).Max(), ct);
         if (carried is not null) existing.UnionWith(carried);
         var skippedDays = await SkippedHolidaysAsync(db, occurrences.Select(x => x.Pattern), ct);
+        var activityShifts = await ActivityShiftsAsync(db, occurrences.Where(x => GroupActivityPattern.Is(x.Pattern)).Select(x => x.Pattern).ToList(),
+            occurrences.SelectMany(x => x.Dates).Min(), occurrences.SelectMany(x => x.Dates).Max(), ct);
 
         int created = 0, alreadyThere = 0, holidays = 0;
         DateOnly? first = null, last = null;
@@ -93,6 +95,9 @@ public sealed class RosterShiftGenerator
             {
                 if (existing.Contains((pattern.Id, date))) { alreadyThere++; continue; }
                 if (pattern.SourceDraftId is { } draftId && pattern.SourceBlockKey is { } blockKey && skippedDays.TryGetValue(draftId, out var skipped) && skipped.Contains((blockKey, date))) { holidays++; continue; }
+                // A participant already put on a group activity in this block's window is funded by that activity's shift: counted as there, nothing made.
+                if (activityShifts.Count > 0 && GroupActivityPattern.Is(pattern) && activityShifts.Any(a => a.ParticipantId == pattern.ParticipantId && a.Date == date
+                        && AgreementActivityMatch.Overlaps(pattern.StartTime, pattern.EndTime, pattern.EndsNextDay, a.Start, a.End, a.EndsNextDay))) { alreadyThere++; continue; }
 
                 var shift = new Shift
                 {
@@ -145,6 +150,18 @@ public sealed class RosterShiftGenerator
             .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= first && s.ServiceDate <= last)
             .Select(s => new { s.ShiftPatternId, s.ServiceDate }).ToListAsync(ct);
         return rows.Select(r => (r.ShiftPatternId!.Value, r.ServiceDate)).ToHashSet();
+    }
+
+    /// <summary>The not-cancelled shifts attached to a group activity for the patterns' participants over [first, last], found by participant and date (not by pattern id, so patterns not saved yet are covered too). Empty when no pattern is a group-activity block.</summary>
+    private static async Task<List<(Guid ParticipantId, DateOnly Date, TimeOnly Start, TimeOnly End, bool EndsNextDay)>> ActivityShiftsAsync(OdipDbContext db, List<ShiftPattern> groupPatterns, DateOnly first, DateOnly last, CancellationToken ct)
+    {
+        if (groupPatterns.Count == 0) return [];
+        var tenants = groupPatterns.Select(p => p.TenantId).Distinct().ToList();
+        var people = groupPatterns.Select(p => p.ParticipantId).Distinct().ToList();
+        var rows = await db.Shifts.AsNoTracking()
+            .Where(s => tenants.Contains(s.TenantId) && people.Contains(s.ParticipantId) && s.GroupActivityId != null && s.Status != ShiftStatus.Cancelled && s.ServiceDate >= first && s.ServiceDate <= last)
+            .Select(s => new { s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay }).ToListAsync(ct);
+        return rows.Select(r => (r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay)).ToList();
     }
 
     /// <summary>For each agreement revision the patterns come from: the (block, day) pairs its stored pricing says were skipped for a public holiday.</summary>

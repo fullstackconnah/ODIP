@@ -6830,6 +6830,39 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("GroupActivitySeries");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivitySeriesParticipant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Ratio")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("SeriesId", "ParticipantId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ParticipantId");
+
+                    b.ToTable("GroupActivitySeriesParticipants");
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.GroupActivityStaff", b =>
                 {
                     b.Property<Guid>("Id")
@@ -9000,6 +9033,21 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Series");
 
                     b.Navigation("ServiceLocation");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Rostering.GroupActivitySeriesParticipant", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", null)
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Odip.Domain.Rostering.GroupActivitySeries", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.GroupActivityStaff", b =>

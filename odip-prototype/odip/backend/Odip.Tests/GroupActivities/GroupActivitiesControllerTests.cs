@@ -442,7 +442,7 @@ public class GroupActivitiesControllerTests
         var a = fx.AddActivity();
         var shift = fx.AddShift(fx.AddParticipant());
         GroupActivityFixture.Body(await fx.Controller().AttachShifts(a.Id, new AttachShiftsDto { ShiftIds = [shift.Id] }, default), 200);
-        GroupActivityFixture.Body(await fx.Controller().DetachShift(a.Id, shift.Id, default), 200);
+        GroupActivityFixture.Body(await fx.Controller().DetachShift(a.Id, shift.Id, null, default), 200);
         Assert.Null((await fx.Seed.Shifts.AsNoTracking().SingleAsync()).GroupActivityId);
     }
 

@@ -108,6 +108,10 @@ public sealed class RosterConflictService
     public const string CasualFortnightHours = "CASUAL_FORTNIGHT_HOURS";
     /// <summary>A group activity has fewer workers than it needs (group activities D7). On the activity only: never blocks and is never stored.</summary>
     public const string ActivityStaffShort = "ACTIVITY_STAFF_SHORT";
+    /// <summary>Group activities part 2: a participant on a series occurrence has no agreement block that weekday. A warning only, never stored or gated.</summary>
+    public const string ActivityAgreementNoBlock = "ACTIVITY_AGREEMENT_NO_BLOCK";
+    /// <summary>Group activities part 2: the weekday has a block but the activity is not inside it. A warning only, never stored or gated.</summary>
+    public const string ActivityAgreementTime = "ACTIVITY_AGREEMENT_TIME";
 
     /// <summary>Rostered hours in a fortnight above which a casual worker gets <c>CASUAL_FORTNIGHT_HOURS</c>. Fixed, not an org setting (R6).</summary>
     public const decimal CasualFortnightHoursCap = 76m;

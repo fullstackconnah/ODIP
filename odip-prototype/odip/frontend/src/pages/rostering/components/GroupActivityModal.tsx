@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import { format, parseISO } from 'date-fns'
 import { CalendarClock, Clock, FileText, Repeat, UserCheck, Users, X } from 'lucide-react'
 import type { GroupActivityDto, GroupActivityFormDto, GroupActivityRepeats, GroupActivityScope, ShiftDto, SupportRatio } from '@/api/types'
@@ -25,7 +25,7 @@ import { useOnline } from '@/pages/portal/shift/useOnline'
 import { NO_LENGTH_MESSAGE, hasNoLength } from '../lib/shiftTimes'
 import { RATIO_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { firstName } from '../lib/rosterDrag'
-import { removeFromActivityCopy } from '../lib/groupActivities'
+import { agreementWarning, removeFromActivityCopy } from '../lib/groupActivities'
 import { dayLabel, seriesDates, seriesLastDay, seriesOverviewLine, seriesSummary, seriesUntilText } from '../lib/groupActivitySeries'
 import { StaffPickerPage, type StaffPickerProps } from './StaffPicker'
 import { AddButton, Choice, HeaderIcon, OverviewRow, PageFrame, PickGroup, PickRow, Skeleton, StepItem } from './GroupActivityParts'
@@ -62,6 +62,16 @@ const PARENT: Partial<Record<PageId, PageId>> = { pickPerson: 'people', pickStaf
 const PAGE_TITLE: Record<PageId, string> = { when: 'When and where', people: 'People', staff: 'Staff', details: 'Details', pickPerson: 'Add participant', pickStaff: 'Add staff' }
 
 const hhmm = (t: string) => t.slice(0, 5)
+
+/** The add and remove scope choice. A Series add or remove starts from the later of this activity's date and today. */
+function PeopleScopeChoices({ name, scope, onChange, serviceDate, today, endDate, tail, radioRef }: { name: string; scope: GroupActivityScope; onChange: (s: GroupActivityScope) => void; serviceDate: string; today: string; endDate: string; tail: string; radioRef?: Ref<HTMLInputElement> }) {
+  return (
+    <>
+      <Choice name={name} value="Occurrence" checked={scope === 'Occurrence'} onChange={() => onChange('Occurrence')} inputRef={radioRef} label="This activity" sub={`${formatServiceDate(serviceDate)} only`} />
+      <Choice name={name} value="Series" checked={scope === 'Series'} onChange={() => onChange('Series')} label="This and all upcoming" sub={`Every one from ${format(parseISO(serviceDate > today ? serviceDate : today), 'd MMM')} to ${dayLabel(endDate)}${tail}`} />
+    </>
+  )
+}
 const noBreak = (range: string) => range.replace(/–/g, '–⁠')
 
 function formOf(a: GroupActivityDto | null, target: ActivityModalTarget | null): Form {
@@ -124,7 +134,9 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   const scopeRadioRef = useRef<HTMLInputElement>(null)
   const today = useProviderToday()
   const [confirmDiscard, setConfirmDiscard] = useState(false)
-  const [removing, setRemoving] = useState<{ kind: 'participant' | 'staff'; key: string; name: string; run: () => Promise<unknown> } | null>(null)
+  const [removing, setRemoving] = useState<{ kind: 'participant' | 'staff'; key: string; name: string; run: (scope?: GroupActivityScope) => Promise<unknown> } | null>(null)
+  const [adding, setAdding] = useState<{ id: string; name: string } | null>(null)   // a person picked on a series occurrence, waiting on the scope dialog
+  const [peopleScope, setPeopleScope] = useState<GroupActivityScope>('Occurrence')   // the add and remove dialogs' choice; only one is open at a time
   const [personSearch, setPersonSearch] = useState('')
   const titleRef = useRef<HTMLInputElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -195,6 +207,13 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
     onLateRefusalClear?.()
     setPendingKey(key)
     try { await run() } catch (err) { setWriteError(prefix + extractErrorMessage(err, fallback)) } finally { setPendingKey(null) }
+  }
+
+  const pick = (label: string, run: () => Promise<unknown>, prefix = '') => {
+    setRefusedName(firstName(label))
+    setPersonSearch('')
+    setPage('people')
+    void write('add', run, `Couldn't add ${firstName(label)}.`, prefix)
   }
 
   function markAttendance(p: GroupActivityDto['participants'][number], attended: boolean) {
@@ -274,6 +293,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   // ── Overview ────────────────────────────────────────────────────────────────────────────────────────────────────────
   const place = places.find(p => p.id === values.serviceLocationId)?.name
   const timeRange = activity ? noBreak(formatShiftTimeRange(activity.startTime, activity.endTime)) : ''
+  const notInAgreement = activity?.participantFindings?.length ?? 0
   const staffShort = activity && !cancelled ? Math.max(0, activity.staffNeeded - activity.staffAssigned) : 0
   const lockedFields = started || cancelled
   const overviewNotice = writeError && (writeKey === 'cancel' || writeKey === 'status') ? writeError : null
@@ -321,7 +341,8 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           <ul className="py-2">
             <OverviewRow id="when" icon={CalendarClock} label="When and where" value={`${formatServiceDate(activity.serviceDate)} · ${timeRange}`} current={shown === 'when'} locked={lockedFields} onOpen={() => openPage('when')}
               extra={activity.series ? <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground"><Repeat className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>{seriesOverviewLine(activity.series)}</span></p> : undefined} />
-            <OverviewRow id="people" icon={Users} label="People" value={activity.participants.length === 0 ? '0 · No one yet' : `${activity.participants.length} · ${activity.participants.map(p => firstName(p.participantName)).join(', ')}`} current={shown === 'people' || shown === 'pickPerson'} onOpen={() => openPage('people')} />
+            <OverviewRow id="people" icon={Users} label="People" value={activity.participants.length === 0 ? '0 · No one yet' : `${activity.participants.length} · ${activity.participants.map(p => firstName(p.participantName)).join(', ')}`} extra={notInAgreement > 0 ? <StatusBadge tone="warning" label={`${notInAgreement} not in agreement`} className="mt-1 inline-block" /> : undefined}
+              current={shown === 'people' || shown === 'pickPerson'} onOpen={() => openPage('people')} />
             <OverviewRow
               id="staff" icon={UserCheck} label="Staff" value={cancelled || !activity.staffNeeded ? String(activity.staffAssigned) : `${activity.staffAssigned} of ${activity.staffNeeded}`}
               extra={staffShort > 0 ? <StatusBadge tone="warning" label={`${staffShort} short`} className="mt-1 inline-block" /> : undefined}
@@ -469,12 +490,14 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         {activity.participants.length === 0 && <p className="text-sm text-muted-foreground">No one yet.</p>}
         {activity.participants.map(p => {
           const pending = pendingKey === `p:${p.participantId}`
+          const finding = activity.participantFindings?.find(f => f.participantId === p.participantId)
+          const warning = finding ? agreementWarning(finding.code, firstName(p.participantName), format(parseISO(activity.serviceDate), 'EEEE')) : null
           return (
             <div key={p.participantId} data-participant-row={p.participantId} className={`flex flex-col gap-1 rounded-sm border border-border p-2 ${pending ? 'opacity-60' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-medium">{p.participantName}</span>
                 {!readOnly && !started && (
-                  <button type="button" aria-label={`Remove ${p.participantName} from ${activity.title}`} disabled={pending} onClick={() => setRemoving({ kind: 'participant', key: `p:${p.participantId}`, name: p.participantName, run: async () => { for (const shiftId of p.shiftIds) await detach.mutateAsync({ id: activity.id, shiftId }) } })} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                  <button type="button" aria-label={`Remove ${p.participantName} from ${activity.title}`} disabled={pending} onClick={() => { setPeopleScope('Occurrence'); setRemoving({ kind: 'participant', key: `p:${p.participantId}`, name: p.participantName, run: async scope => { for (const [i, shiftId] of p.shiftIds.entries()) await detach.mutateAsync({ id: activity.id, shiftId, ...(scope && i === p.shiftIds.length - 1 && { scope }) }) } }) }} className={`inline-flex h-[var(--control-h-sm)] w-[var(--control-h-sm)] items-center justify-center rounded-[var(--radius-sm)] ${TAP_AREA}`}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
                 )}
                 {started && (
                   <div className="flex shrink-0 items-center gap-2">
@@ -492,7 +515,12 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
               </div>
               <p className="text-xs text-muted-foreground">{pending ? 'Saving…' : p.didNotAttend ? 'Shift cancelled as a no-show.' : formatShiftTimeRange(activity.startTime, activity.endTime)}</p>
               {writeError && writeKey === `p:${p.participantId}` && <p role="alert" className="text-xs text-destructive">{writeError}</p>}
-              {p.timesDiffer && (
+              {warning ? (
+                <>
+                  <StatusBadge tone="warning" size="sm" label={warning.label} className="self-start" />
+                  <p className="text-xs text-muted-foreground">{warning.line}</p>
+                </>
+              ) : p.timesDiffer && (
                 <p className="flex items-start gap-1 text-xs text-muted-foreground"><Clock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /><span>Times differ from agreement {p.agreementStartTime && p.agreementEndTime ? `(${noBreak(formatShiftTimeRange(p.agreementStartTime, p.agreementEndTime))})` : ''}</span></p>
               )}
               {!started && <select aria-label={`Ratio for ${p.participantName}`} className={inputClass} value={p.ratio} disabled={readOnly || pending || p.ratio === 'TwoToOne'} onChange={e => { if (e.target.value !== p.ratio) void write(`p:${p.participantId}`, () => setRatio.mutateAsync({ id: activity.id, participantId: p.participantId, ratio: e.target.value as SupportRatio }), `Couldn't change the ratio for ${firstName(p.participantName)}.`) }}>{SUPPORT_RATIOS.filter(r => r !== 'TwoToOne' || p.ratio === r).map(r => <option key={r} value={r}>{RATIO_LABELS[r] ?? r}</option>)}</select>}
@@ -539,12 +567,6 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
   }
 
   function pickPersonPage() {
-    const pick = (label: string, run: () => Promise<unknown>) => {
-      setRefusedName(firstName(label))
-      setPersonSearch('')
-      setPage('people')
-      void write('add', run, `Couldn't add ${firstName(label)}.`)
-    }
     return frame('pickPerson', undefined, undefined, (
       <div className="flex flex-col">
         <input type="search" aria-label="Find participant" placeholder="Find participant" value={personSearch} onChange={e => setPersonSearch(e.target.value)} className={`${inputClass} sticky top-0 z-[1] mb-2`} />
@@ -554,7 +576,7 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
           ))}
         </PickGroup>}
         <PickGroup label="Everyone else">
-          {others.map(p => <PickRow key={p.id} label={p.fullName} onPick={() => { if (activity) pick(p.fullName, () => addPerson.mutateAsync({ id: activity.id, participantId: p.id, ratio: 'OneToOne' })) }} />)}
+          {others.map(p => <PickRow key={p.id} label={p.fullName} onPick={() => { if (!activity) return; if (activity.series) { setPeopleScope('Occurrence'); setAdding({ id: p.id, name: p.fullName }) } else pick(p.fullName, () => addPerson.mutateAsync({ id: activity.id, participantId: p.id, ratio: 'OneToOne' })) }} />)}
         </PickGroup>
       </div>
     ))
@@ -625,6 +647,28 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
         )
       })()}
 
+      {adding && activity?.series && (
+        <ConfirmDialog
+          open
+          title={`Add ${firstName(adding.name)} to which activities?`}
+          message={
+            <fieldset className="flex flex-col gap-1">
+              <legend className="sr-only">Add to</legend>
+              <PeopleScopeChoices name="add-scope" scope={peopleScope} onChange={setPeopleScope} serviceDate={activity.serviceDate} today={today} endDate={activity.series.endDate} tail=" that isn't cancelled. They join the series." radioRef={scopeRadioRef} />
+            </fieldset>
+          }
+          confirmLabel={`Add ${firstName(adding.name)}`}
+          cancelLabel="Back"
+          initialFocusRef={scopeRadioRef}
+          onCancel={() => setAdding(null)}
+          onConfirm={() => {
+            const a = adding, series = peopleScope === 'Series'
+            setAdding(null)
+            pick(a.name, () => addPerson.mutateAsync({ id: activity.id, participantId: a.id, ratio: 'OneToOne', ...(series && { scope: 'Series' as const }) }), series ? 'Nothing was changed. ' : '')
+          }}
+        />
+      )}
+
       <ConfirmDialog
         open={confirmCancel}
         title={`Cancel ${activity?.title ?? 'activity'}?`}
@@ -650,16 +694,27 @@ export function GroupActivityModal({ target, canWrite, participants, pickerData,
 
       {removing && activity && (() => {
         const copy = removeFromActivityCopy(removing.kind, firstName(removing.name), activity.title)
+        const seriesScope = removing.kind === 'participant' && activity.series ? peopleScope : 'Occurrence'
         return (
           <ConfirmDialog
             open
             title={copy.title}
-            message={copy.message}
+            message={
+              <>
+                {removing.kind === 'participant' && activity.series && (
+                  <fieldset className="flex flex-col gap-1">
+                    <legend className="sr-only">Remove from</legend>
+                    <PeopleScopeChoices name="remove-scope" scope={peopleScope} onChange={setPeopleScope} serviceDate={activity.serviceDate} today={today} endDate={activity.series.endDate} tail=". They leave the series." />
+                  </fieldset>
+                )}
+                <p>{copy.message}</p>
+              </>
+            }
             confirmLabel="Remove"
             cancelLabel="Keep"
             variant="danger"
             onCancel={() => setRemoving(null)}
-            onConfirm={() => { const r = removing; setRemoving(null); void write(r.key, r.run, `Couldn't remove ${firstName(r.name)}.`) }}
+            onConfirm={() => { const r = removing, series = seriesScope === 'Series'; setRemoving(null); void write(r.key, () => r.run(series ? 'Series' : undefined), `Couldn't remove ${firstName(r.name)}.`, series ? 'Nothing was changed. ' : '') }}
           />
         )
       })()}

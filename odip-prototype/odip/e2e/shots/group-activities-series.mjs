@@ -286,5 +286,86 @@ for (const vp of VIEWPORTS) {
   })
 }
 
+// ── PR B: scope on add and remove people, agreement warning (SHAPE.md Section B) ──
+async function openPeople(page) {
+  await page.locator('[data-activity-card="series-people"] [data-activity-open]').first().click()
+  const dlg = page.getByRole('dialog').first()
+  await dlg.getByText(/^Repeats every Saturday until/).first().waitFor({ timeout: 10_000 })
+  return dlg
+}
+const prow = (dlg, i) => dlg.locator('[data-participant-row]').nth(i)
+
+for (const vp of VIEWPORTS) {
+  const tag = String(vp.w)
+  const touch = vp.touch
+  await scene(`people overview ${tag}`, async () => {
+    const { context, page } = await open(browser, vp)
+    await toBoard(page, false)
+    const dlg = await openPeople(page)
+    const pill = dlg.getByText('2 not in agreement')
+    await pill.waitFor({ timeout: 5000 })
+    await shot(page, dlg, `b-overview-people-pill-${tag}.png`, { touch, natural: touch })
+    const b = await box(pill), d = await box(dlg)
+    check(`${tag} B overview pill sits inside the dialog`, b.x >= d.x && b.r <= d.r, { pill: [b.x, b.r], dialog: [d.x, d.r] })
+    await context.close()
+  })
+  for (const dark of [false, true]) {
+    const suffix = dark ? '-dark' : ''
+    await scene(`people warnings ${tag}${suffix}`, async () => {
+      const { context, page } = await open(browser, vp)
+      await toBoard(page, dark)
+      const dlg = await openPeople(page)
+      await gotoRow(dlg, 'People')
+      const first = prow(dlg, 0), second = prow(dlg, 1)
+      await first.getByText('Not in agreement').waitFor({ timeout: 5000 })
+      if (!dark) await shot(page, first, `b-warning-noblock-${tag}.png`, { touch, natural: touch })
+      await shot(page, second, `b-warning-time-${tag}${suffix}.png`, { touch, natural: touch })
+      if (!dark) {
+        for (const [name, r] of [['noblock', first], ['time', second]]) {
+          const badge = r.locator('span', { hasText: /^(Not in agreement|Outside agreed time)$/ }).first()
+          const line = r.locator('p.text-xs').first()
+          const [bf, lf] = await Promise.all([badge.evaluate((el) => getComputedStyle(el).fontSize), line.evaluate((el) => getComputedStyle(el).fontSize)])
+          check(`${tag} B5 ${name} badge is the sm StatusBadge (text-xs, same size as the line)`, bf === lf, { badge: bf, line: lf })
+          const n = await lines(line)
+          check(`${tag} B5 ${name} warning line at most 3 lines`, n <= 3, { lines: n })
+          const rb = await box(r)
+          const over = await r.evaluate((el) => el.scrollWidth - el.clientWidth)
+          check(`${tag} B5 ${name} row has no sideways overflow`, over <= 0 && rb.r <= (await box(dlg)).r, { over })
+        }
+        // People list still open, so both widths show the same state; the board's own head and body frames (RosterGrid root carries --roster-sticky-col) scroll sideways by design
+        checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `b-people-${tag}.png`), { allow: ['[class*="--roster-sticky-col"] div.overflow-x-auto'] })).checks)
+        await page.keyboard.press('Escape').catch(() => {})
+      }
+      await context.close()
+    })
+  }
+  await scene(`people add-scope ${tag}`, async () => {
+    const { context, page } = await open(browser, vp)
+    await toBoard(page, false)
+    const dlg = await openPeople(page)
+    await gotoRow(dlg, 'People')
+    await dlg.getByRole('button', { name: 'Add participant' }).click()
+    await dlg.getByRole('button', { name: 'Marcus Tran' }).click()
+    await alert(page).waitFor({ timeout: 5000 })
+    await alert(page).getByRole('radio', { name: /^This and all upcoming/ }).check()
+    await shot(page, alert(page), `b-add-scope-${tag}.png`, { touch })
+    const sub = await alert(page).locator('label span.text-xs').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))))
+    check(`${tag} B4 add dialog sub lines at most 3 lines`, sub.every((n) => n <= 3), { sub })
+    await context.close()
+  })
+  await scene(`people remove-scope ${tag}`, async () => {
+    const { context, page } = await open(browser, vp)
+    await toBoard(page, false)
+    const dlg = await openPeople(page)
+    await gotoRow(dlg, 'People')
+    await dlg.getByRole('button', { name: /^Remove Liam Okafor from/ }).click()
+    await alert(page).waitFor({ timeout: 5000 })
+    await alert(page).getByRole('radio', { name: /^This and all upcoming/ }).check()
+    await shot(page, alert(page), `b-remove-scope-${tag}.png`, { touch })
+    const sub = await alert(page).locator('label span.text-xs').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))))
+    check(`${tag} B4 remove dialog sub lines at most 3 lines`, sub.every((n) => n <= 3), { sub })
+    await context.close()
+  })
+}
 await browser.close()
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1
