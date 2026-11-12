@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CompletionReviewPage from './CompletionReviewPage'
@@ -897,5 +897,27 @@ describe('CompletionReviewPage tidy (m1112)', () => {
 
     expect(await dialog.findByRole('alert')).toHaveTextContent(/please try again|boom/i)
     expect(reason).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('draws every pill in the table and the dialog with StatusBadge, in its tone', async () => {
+    const user = userEvent.setup()
+    showRow({ missingDetails: ['notes'], offRoster: true, timesAdjusted: true, returnCount: 2, extraTime: 'Approved', status: 'Completed' })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ sentFromOffline: true }), isLoading: false, isError: false } as never)
+    const { container } = renderPage()
+
+    expect(screen.getByText('Needs details')).toHaveClass(...TONE.warning.solid.split(' '))
+    expect(screen.getByText('Off roster')).toHaveClass(...TONE.warning.solid.split(' '))
+    expect(screen.getByText('Times adjusted by the worker')).toHaveClass(...TONE.info.solid.split(' '))
+    expect(screen.getByText('Returned 2 times')).toHaveClass(...TONE.neutral.solid.split(' '))
+    expect(screen.getByText('Extra time paid')).toHaveClass(...TONE.neutral.solid.split(' '))
+    expect(container.querySelectorAll('span.rounded-full:not([data-status-badge])')).toHaveLength(0)
+
+    showRow({ status: 'PendingReview' })
+    cleanup()
+    const second = renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(screen.getByText('Sent from offline')).toHaveAttribute('data-status-badge')
+    expect(document.querySelectorAll('span.rounded-full:not([data-status-badge])')).toHaveLength(0)
+    second.unmount()
   })
 })

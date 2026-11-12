@@ -29,7 +29,6 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { Modal } from '@/components/Modal'
 import { formatDuration } from '@/lib/planBlocks'
 import { firstNameOf as firstName } from '@/lib/greeting'
-import { TONE } from '@/lib/tone'
 import { NumberField } from '@/components/NumberField'
 import { apiErrorCode } from '@/lib/shiftPackageErrors'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
@@ -256,7 +255,7 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
     <div className="space-y-1">
       {c.sentFromOffline && (
         <div>
-          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Sent from offline</span>
+          <StatusBadge tone="neutral" label="Sent from offline" />
           {c.submittedAt && <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">Reached Bunya Support {t(c.submittedAt)}</span>}
         </div>
       )}
@@ -413,22 +412,22 @@ export default function CompletionReviewPage() {
       key: 'variance', header: 'Variance', className: 'md:min-w-[16rem]', render: row => (
         <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
           {row.missingDetails.length > 0 && (
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Needs details</span>
+            <StatusBadge tone="warning" label="Needs details" />
           )}
           <StatusBadge tone={row.isOutlierVariance ? 'warning' : 'neutral'} label={varianceLabel(row.varianceMinutesStart, row.varianceMinutesEnd)} />
           {row.offRoster && (
             // Words, not colour alone: the start or a set finish is more than 5 minutes off the roster, whatever the outlier setting says.
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.warning.solid}`}>Off roster</span>
+            <StatusBadge tone="warning" label="Off roster" />
           )}
           {row.timesAdjusted && (
             // An adjustment is not a compliance warning, so it takes the info tone (SHAPE §7).
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.info.solid}`}>Times adjusted by the worker</span>
+            <StatusBadge tone="info" label="Times adjusted by the worker" />
           )}
           {row.returnCount > 0 && (
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Returned {plural(row.returnCount, 'time')}</span>
+            <StatusBadge tone="neutral" label={`Returned ${plural(row.returnCount, 'time')}`} />
           )}
           {row.extraTime && (
-            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>{EXTRA_TIME_LABEL[row.extraTime]}</span>
+            <StatusBadge tone="neutral" label={EXTRA_TIME_LABEL[row.extraTime]} />
           )}
           <IncidentIndicator shiftId={row.shiftId} />
           {row.missingDetails.length > 0 && (
