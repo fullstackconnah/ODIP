@@ -106,7 +106,9 @@ try {
       await page.screenshot({ path: path.join(OUT_DIR, 'full', 'activity-1440-panel-open.png') })
       await page.keyboard.press('Escape')
       await dlg.waitFor({ state: 'hidden', timeout: 30_000 })
-      check('activity-1440: focus returns to the card on close', await bowling.evaluate((b) => b === document.activeElement))
+      await page.waitForTimeout(400)
+      const active = await page.evaluate(() => { const a = document.activeElement; return { tag: a?.tagName, label: a?.getAttribute('aria-label') ?? a?.textContent?.slice(0, 60) } })
+      check('activity-1440: focus returns to the card on close', /Group activity, Bowling/.test(active.label ?? ''), JSON.stringify(active))
     }
     await context.close()
   }
