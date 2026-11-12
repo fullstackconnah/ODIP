@@ -66,7 +66,7 @@ const checks = []
 const add = (name, pass, detail) => checks.push({ name, pass: !!pass, detail })
 const settled = (p) => p.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, { timeout: 5000 }).catch(() => {})
 const bar = (page, id) => page.locator(`a[href="/trips/${id}"]`).first()
-const shot = async (page, loc, name) => { const r = await cropElement(page, loc, path.join(OUT_DIR, `${name}.png`)); checks.push(checkCropHolds(r)); return r }
+const shot = async (page, loc, name, opts) => { const r = await cropElement(page, loc, path.join(OUT_DIR, `${name}.png`), opts); checks.push(checkCropHolds(r)); return r }
 const full = async (page, name) => { mkdirSync(path.join(OUT_DIR, 'full'), { recursive: true }); const r = await fullPage(page, path.join(OUT_DIR, 'full', `${name}.png`), { allow: BOARD_SCROLLER }); checks.push(...r.checks) }
 // A token or class measured in px with a throwaway probe element.
 const probe = (page, css, cls = '') => page.evaluate(([style, c]) => { const d = document.createElement('div'); d.className = c; d.style.cssText = `position:absolute;visibility:hidden;${style}`; d.textContent = 'x'; document.body.append(d); const h = d.getBoundingClientRect().height; d.remove(); return h }, [css, cls])
@@ -217,10 +217,18 @@ try {
       return { nameTrunc: name ? name.scrollWidth > name.clientWidth : null, tags: tags.filter((s) => s.clientWidth > 1).map((s) => [s.textContent, s.scrollWidth, s.clientWidth]) }
     })
     add('6 one-day bar: name truncates, Driver and short pill do not clip', one.nameTrunc === true && one.tags.length >= 2 && one.tags.every((x) => x[1] <= x[2]), one)
-    await bar(page, 't-one').scrollIntoViewIfNeeded()
-    await shot(page, bar(page, 't-one'), 'one-day-bar-with-driver-and-short-pill')
-    await bar(page, 't-a').scrollIntoViewIfNeeded()
-    await shot(page, bar(page, 't-a'), 'coarse-pointer')
+    // Scroll the board scroller (not the page) so the bar's start sits just right of the sticky staff column; the bottom nav is fixed chrome, so the crops use natural (a page-tall viewport puts it below the content).
+    const alignBar = (id) => bar(page, id).evaluate((a) => {
+      const sc = a.closest('[class*="overflow-x-auto"]'), stickyRight = Math.max(...[...sc.querySelectorAll('.sticky')].map((e) => e.getBoundingClientRect().right))
+      sc.scrollLeft += a.getBoundingClientRect().left - stickyRight
+    })
+    // A one-day bar (194 px) does not fit beside the staff column (212 px) in 390 px, so end it at the scroller's right edge: its first few px sit under the sticky column, as in normal scrolling.
+    await bar(page, 't-one').evaluate((a) => { const sc = a.closest('[class*="overflow-x-auto"]'); sc.scrollLeft += a.getBoundingClientRect().right - Math.min(sc.getBoundingClientRect().right, innerWidth) })
+    await shot(page, bar(page, 't-one'), 'one-day-bar-with-driver-and-short-pill', { natural: true })
+    // The 3-day bar (590 px) is wider than the 390 viewport, so no whole-element crop can hold it: crop the board scroller's visible box with the bar's start scrolled in. Check 3 above measured the real bar against --control-h.
+    await alignBar('t-a')
+    await shot(page, bar(page, 't-a').locator('xpath=ancestor::*[contains(@class,"overflow-x-auto")][1]'), 'coarse-pointer', { natural: true })
+    await page.evaluate(() => document.querySelectorAll('[class*="overflow-x-auto"]').forEach((e) => { e.scrollLeft = 0 })) // the full-page layout check below is for the board at rest
     await full(page, 'board-at-390')
     // Picker as a sheet.
     await page.locator('[data-shift-plus="u1"]').click()
