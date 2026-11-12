@@ -9,7 +9,7 @@ const settled = { waiting: false, failed: false }
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks() })
 
 describe('isValidAbn', () => {
-  it.each([['51824753556', true], ['51 824 753 556', true], ['51824753557', false], ['5182475355', false], ['518247535560', false], ['5182475355a', false], ['', false], [undefined, false]])('%s -> %s', (abn, ok) => {
+  it.each([['51824753556', true], ['51 824 753 556', true], ['51\t824\t753\t556', true], ['51 824 753 556', true], [' \t51 824 753 556 ', true], ['51-824-753-556', false], ['51824753557', false], ['5182475355', false], ['518247535560', false], ['5182475355a', false], ['', false], [undefined, false], [null, false]])('%s -> %s', (abn, ok) => {
     expect(isValidAbn(abn)).toBe(ok)
   })
 })
