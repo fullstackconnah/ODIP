@@ -231,7 +231,7 @@ describe('InvoicesSection', () => {
     renderSection()
 
     await screen.findByRole('button', { name: 'Download INV-0042' })
-    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Number', 'Bill to', 'Total', 'Status', 'Issued', 'Due', 'Actions'])
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Number', 'Bill to', 'Total', 'Status', 'Payment', 'Issued', 'Due', 'Actions'])
   })
 
   it('Download holds one x across rows on desktop and every phone card ends in a full-width actions row (finish 2, 4)', async () => {
