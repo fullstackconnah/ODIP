@@ -208,7 +208,7 @@ export default function IncidentsPage() {
   const deleteIncident = useDeleteIncident()
   const { data: overdueQsc = [], isError: overdueQscError, refetch: refetchOverdueQsc } = useOverdueQscIncidents()
 
-  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<IncidentListDto>({
     deleteMutation: deleteIncident,
     restoreMutation: restoreIncident,
     entityName: (i) => i.title,
@@ -260,7 +260,7 @@ export default function IncidentsPage() {
   // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), except the title (two lines). From md up the box scrolls
   // sideways with the title and the actions pinned, so no column is dropped. Order is Title, NDIS Commission, Status, Severity, Date, then
   // Type, Trip and Participant: the five a coordinator triages by are on screen at 1024, and Type is too at 1280.
-  const incidentColumns: Column<any>[] = [
+  const incidentColumns: Column<IncidentListDto>[] = [
     {
       key: 'title',
       header: 'Title',

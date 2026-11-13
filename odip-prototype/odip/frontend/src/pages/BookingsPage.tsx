@@ -132,7 +132,7 @@ export default function BookingsPage() {
               key: 'participantName',
               header: 'Participant',
               mobile: 'primary',
-              render: (b: any) => (
+              render: (b) => (
                 <Link to={`/participants/${b.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
                   {b.participantName || '\u2014'}
                 </Link>
@@ -142,7 +142,7 @@ export default function BookingsPage() {
               key: 'tripName',
               header: 'Trip',
               mobile: 'meta',
-              render: (b: any) => (
+              render: (b) => (
                 <Link to={`/trips/${b.tripInstanceId}`} className="hover:text-[var(--color-primary)]">
                   {b.tripName || '\u2014'}
                 </Link>
