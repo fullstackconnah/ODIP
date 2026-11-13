@@ -11,12 +11,13 @@ import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
 // next step. The refusal arrives as a SignInRefused thrown by the sign-in mutation, which has already signed out of Firebase and, for an unverified email,
 // sent the verification link once.
 
-const { mockLogin, mockResend, mockDevLogin, sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
+const { mockLogin, mockResend, mockDevLogin, sendPasswordResetEmail, firebase, devUsers } = vi.hoisted(() => ({
   mockLogin: vi.fn(),
   mockResend: vi.fn(),
   mockDevLogin: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   firebase: { auth: {} as object | null, devAuth: false },
+  devUsers: { data: [] as { username: string; role: string; tenantName: string | null }[] },
 }))
 
 vi.mock('@/lib/firebase', () => ({
@@ -36,7 +37,7 @@ vi.mock('@/api/hooks', async () => ({
   useLogin: () => ({ mutateAsync: mockLogin, isPending: false }),
   useResendVerification: () => ({ mutateAsync: mockResend, isPending: false }),
   useDevLogin: () => ({ mutateAsync: mockDevLogin, isPending: false }),
-  useDevUsers: () => ({ data: [], isError: false, error: null }),
+  useDevUsers: () => ({ data: devUsers.data, isError: false, error: null }),
   // GET /auth/config: Microsoft sign-in is off here (LoginPage.microsoft.test.tsx covers it on).
   useAuthConfig: () => ({ data: { microsoft: false, microsoftStartUrl: null }, isPending: false, isError: false }),
 }))
@@ -48,6 +49,7 @@ const refusal = (code: SignInRefusal['code'], retryAfterSeconds: number | null =
 beforeEach(() => {
   firebase.auth = {}
   firebase.devAuth = false
+  devUsers.data = []
   mockLogin.mockReset()
   mockResend.mockReset().mockResolvedValue(undefined)
   mockDevLogin.mockReset()
@@ -606,6 +608,13 @@ describe('LoginPage: one field treatment, one primary', () => {
     expect(dev).toHaveClass('border', 'bg-[var(--color-card)]')
     expect(dev.className).not.toContain('bg-[var(--color-primary)]')
     expect(dev.className).not.toContain('gradient')
+  })
+
+  it('lists a developer user by the role as people read it', () => {
+    firebase.devAuth = true
+    devUsers.data = [{ username: 'sam', role: 'SupportWorker', tenantName: null }]
+    renderPage()
+    expect(screen.getByRole('option', { name: 'sam — Support Worker' })).toBeInTheDocument()
   })
 
   it('sets Forgot password at 14px with the touch floor', () => {
