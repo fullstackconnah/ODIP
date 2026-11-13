@@ -734,7 +734,7 @@ public class ClaimsController : ControllerBase
             OrganisationName = x.I.SellerOrganisationName,
             PaymentStatus = x.Pay,
         });
-        return Ok(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Ok(await PagedResult<InvoiceRegisterRowDto>.CreateAsync(rows, page, pageSize, ct)));
+        return Ok(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Ok(await PagedResults.CreateAsync(rows, page, pageSize, ct)));
     }
 
     // POST /api/v1/invoices/{invoiceId}/void — an invoice with no payment recorded; its number is kept and never used again.

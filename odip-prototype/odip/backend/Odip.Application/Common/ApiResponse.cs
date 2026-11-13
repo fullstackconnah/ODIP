@@ -48,13 +48,4 @@ public class PagedResult<T>
     public bool HasPrevious => Page > 1;
     /// <summary>Keyset paging only (GetCompletions): pass it back as <c>after</c> for the rows after this page's last one, so rows cannot slide between pages.</summary>
     public string? NextCursor { get; set; }
-
-    public static async Task<PagedResult<T>> CreateAsync(
-        IQueryable<T> query, int page, int pageSize, CancellationToken ct = default)
-    {
-        var totalCount = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(query, ct);
-        var items = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
-            query.Skip((page - 1) * pageSize).Take(pageSize), ct);
-        return new PagedResult<T> { Items = items, TotalCount = totalCount, Page = page, PageSize = pageSize };
-    }
 }
