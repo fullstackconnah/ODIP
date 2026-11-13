@@ -76,7 +76,7 @@ public class ComplaintsController : ControllerBase
             .ThenBy(c => c.Id)
             .Select(c => new ListRow(c.Id, c.ReceivedOn, c.Channel, c.ComplainantKind, c.ComplainantName, c.Participant == null ? null : c.Participant.FirstName, c.Participant == null ? null : c.Participant.PreferredName, c.Participant == null ? null : c.Participant.LastName, c.Summary, c.Status, c.AcknowledgedOn, c.IsActive, c.UpdatedAt));
 
-        var paged = await PagedResult<ListRow>.CreateAsync(ordered, page, pageSize, ct);
+        var paged = await PagedResults.CreateAsync(ordered, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<ComplaintListDto>>.Ok(new PagedResult<ComplaintListDto>
         {
             Items = paged.Items.Select(r => new ComplaintListDto
