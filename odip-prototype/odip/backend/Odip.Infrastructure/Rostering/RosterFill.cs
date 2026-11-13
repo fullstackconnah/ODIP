@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Infrastructure.Rostering;
 
@@ -22,6 +23,10 @@ public static class RosterFill
         // A shift on a group activity has no worker of its own: it is covered when its activity has a worker, and never Open (the activity warns when it is short instead).
         var staffed = (await db.GroupActivityStaff.Select(r => r.GroupActivityId).Distinct().ToListAsync(ct)).ToHashSet();
         var byWeek = rows.ToLookup(r => RosterWeek.MondayOf(r.ServiceDate));
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(db, ct)).Zone; // shortcut: the organisation zone, as the board
+        // Real hours: the board and the portal show the same length, so the outlook agrees with them on the nights the clocks change.
+        decimal Hours(DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay) =>
+            ProviderLocalTime.RosteredHours(new Shift { ServiceDate = serviceDate, StartTime = start, EndTime = end, EndsNextDay = endsNextDay }, zone);
 
         return Enumerable.Range(0, weeks).Select(i => firstMonday.AddDays(7 * i)).Select(w =>
         {
@@ -34,8 +39,8 @@ public static class RosterFill
                 Shifts = week.Count,
                 Filled = filled.Count,
                 Open = open.Count,
-                HoursFilled = filled.Sum(r => Shift.HoursBetween(r.StartTime, r.EndTime, r.EndsNextDay)),
-                HoursOpen = open.Sum(r => Shift.HoursBetween(r.StartTime, r.EndTime, r.EndsNextDay)),
+                HoursFilled = filled.Sum(r => Hours(r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay)),
+                HoursOpen = open.Sum(r => Hours(r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay)),
                 Draft = week.Count(r => r.Status == ShiftStatus.Draft)
             };
         }).ToList();

@@ -115,6 +115,7 @@ public class RosteringController : ControllerBase
         if (participantId is not null && groupByValue != RosterBoardGroupBy.Participant) return BadRequest(ApiResponse<RosterBoardDto>.Fail("participantId needs groupBy=participant."));
 
         var start = WeekStart(weekStart ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
+        var orgZone = (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone; // shortcut: one organisation zone for the whole board, as PortalController's list does; per-location zones when a tenant spans zones
         var end = start.AddDays(6);
         var days = Enumerable.Range(0, 7).Select(i => start.AddDays(i)).ToList();
 
@@ -220,7 +221,7 @@ public class RosteringController : ControllerBase
         // Workers on group activities are busy too (group activities D7): their staff rows go in as transient shifts, so the snapshot sees them but weekShifts (and so the board) never does.
         var staffBusy = await RosterAvailability.ActivityStaffBusyAsync(_db, staffIds, fortnightStart, fortnightStart.AddDays(13), ct);   // the fortnight always holds the week
         var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts.Concat(staffBusy.Where(b => b.ServiceDate >= start && b.ServiceDate <= end)).ToList(), weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours,
-            otherWeekShifts.Concat(staffBusy.Where(b => (b.ServiceDate < start || b.ServiceDate > end) && casualIds.Contains(b.UserId!.Value))).ToList());
+            otherWeekShifts.Concat(staffBusy.Where(b => (b.ServiceDate < start || b.ServiceDate > end) && casualIds.Contains(b.UserId!.Value))).ToList(), orgZone);
 
         // Group activities (PR1): while the switch is off the board carries none, so a stray row never shows. Cancelled activities are not listed.
         var groupActivitiesEnabled = _tenant?.TenantId is { } boardTenant
@@ -271,7 +272,7 @@ public class RosteringController : ControllerBase
                 Id = shift.Id, ParticipantId = shift.ParticipantId, ParticipantName = participant?.FullName ?? string.Empty,
                 StaffId = shift.UserId, StaffName = staff?.FullName,
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
-                DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status, CancellationReason = shift.CancellationReason,
+                DurationHours = ProviderLocalTime.RosteredHours(shift, orgZone), Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status, CancellationReason = shift.CancellationReason,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
                 GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
@@ -382,7 +383,7 @@ public class RosteringController : ControllerBase
                 var participantShifts = weekShifts.Where(s => s.ParticipantId == participant.Id).ToList();
                 var shiftDtos = participantShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
                 var myTripBars = weekBookings.Where(b => b.ParticipantId == participant.Id).Select(ToParticipantTripBar).ToList();
-                var scheduledHours = participantShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
+                var scheduledHours = participantShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => ProviderLocalTime.RosteredHours(s, orgZone));
                 var daysWithoutCover = days.Count(d =>
                     !participantShifts.Any(s => s.ServiceDate == d) &&
                     !myTripBars.Any(tb => tb.StartDate <= d && d <= tb.EndDate));
@@ -436,7 +437,7 @@ public class RosteringController : ControllerBase
                 var shiftDtos = staffShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
 
                 var (complianceLevel, complianceNotes) = ComputeCompliance(staff, start);
-                var rosteredHours = staffShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
+                var rosteredHours = staffShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => ProviderLocalTime.RosteredHours(s, orgZone));
 
                 var myTripBars = weekTripAssignments.Where(a => a.UserId == staff.Id && a.AssignmentStart <= end).Select(a => new TripBarDto
                 {
@@ -2574,12 +2575,13 @@ public class RosteringController : ControllerBase
         var fromAgreement = shift.ShiftPatternId is { } patternId && (await ShiftSourcesAsync(new[] { shift.ShiftPatternId }, ct)).TryGetValue(patternId, out sourceVersion);
         var regulars = await RosterRegulars.ByPatternAsync(_db, new[] { shift.ShiftPatternId }, ct);
 
+        var orgZone = (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone; // shortcut: the organisation zone, like the board
         return new ShiftDto
         {
             Id = shift.Id, ParticipantId = shift.ParticipantId, ParticipantName = participant?.FullName ?? string.Empty,
             StaffId = shift.UserId, StaffName = staff?.FullName,
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
-            DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status, CancellationReason = shift.CancellationReason,
+            DurationHours = ProviderLocalTime.RosteredHours(shift, orgZone), Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status, CancellationReason = shift.CancellationReason,
             ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
             GroupActivityId = shift.GroupActivityId, IsGroupLine = shift.GroupActivityId is null ? null : true,
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),

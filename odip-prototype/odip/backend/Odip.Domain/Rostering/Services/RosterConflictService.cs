@@ -42,6 +42,7 @@ public sealed record PublicHolidayRef(DateOnly Date, string Name);
 /// Last positional parameter so existing callers keep compiling; null and an empty list are both
 /// treated as "no holidays" — see <see cref="RosterConflictService.Check"/>.</param>
 /// <param name="StaffShiftsInFortnight">This staff member's other shifts in the candidate's fortnight (<see cref="RosterFortnight"/>), excluding the candidate itself; only a casual worker's are loaded. Null skips <c>CASUAL_FORTNIGHT_HOURS</c> (trips, LiveCaster, anything that does not load them). Last positional parameter so existing callers keep compiling.</param>
+/// <param name="Zone">The organisation's zone, in which a shift's real hours are counted for <c>OVER_HOURS</c> and the casual fortnight cap (a night the clocks change is an hour long or short). Null reads <see cref="ProviderLocalTime.FallbackZoneId"/>.</param>
 /// <param name="CallerIsAdmin">Who is making the write, for the rules that only an admin may override (DOUBLE_BOOKED_SHIFT, 2026-10-27). Null (the board display, the generator, Publish week, the import, trips) keeps a plain Warning; false makes it Blocking; true makes it a Warning that needs a reason. Last positional parameter so existing callers keep compiling.</param>
 public sealed record RosterCheckContext(
     User Staff,
@@ -54,7 +55,8 @@ public sealed record RosterCheckContext(
     decimal WeeklyHoursThreshold,
     IReadOnlyList<PublicHolidayRef>? PublicHolidays = null,
     bool? CallerIsAdmin = null,
-    IReadOnlyList<Shift>? StaffShiftsInFortnight = null);
+    IReadOnlyList<Shift>? StaffShiftsInFortnight = null,
+    TimeZoneInfo? Zone = null);
 
 /// <summary>One other (non-cancelled) trip window this vehicle already covers, used by
 /// <see cref="RosterConflictService.CheckVehicleAssignment"/> to detect an overlap. AssignmentId
@@ -483,7 +485,8 @@ public sealed class RosterConflictService
     {
         // StaffShiftsInWeek also carries the Sunday before and the Monday after (for the overlap check), so count only the candidate's own Monday to Sunday.
         var monday = candidate.ServiceDate.AddDays(-(((int)candidate.ServiceDate.DayOfWeek + 6) % 7));
-        var total = ctx.StaffShiftsInWeek.Where(s => s.Status != ShiftStatus.Cancelled && s.ServiceDate >= monday && s.ServiceDate <= monday.AddDays(6)).Sum(s => s.DurationHours) + candidate.DurationHours;
+        var zone = ctx.Zone ?? ProviderLocalTime.ResolveZone(null); // real hours: a night the clocks change is an hour long or short
+        var total = ctx.StaffShiftsInWeek.Where(s => s.Status != ShiftStatus.Cancelled && s.ServiceDate >= monday && s.ServiceDate <= monday.AddDays(6)).Sum(s => ProviderLocalTime.RosteredHours(s, zone)) + ProviderLocalTime.RosteredHours(candidate, zone);
         if (total > ctx.WeeklyHoursThreshold)
         {
             findings.Add(new RosterFinding(OverHours, RosterFindingSeverity.Warning,
@@ -499,8 +502,9 @@ public sealed class RosterConflictService
     {
         if (ctx.Staff.EmploymentType != EmploymentType.Casual || ctx.StaffShiftsInFortnight is null) return;
         var start = RosterFortnight.StartOf(candidate.ServiceDate);
+        var zone = ctx.Zone ?? ProviderLocalTime.ResolveZone(null); // real hours: a night the clocks change is an hour long or short
         var end = start.AddDays(13);
-        var total = ctx.StaffShiftsInFortnight.Where(s => s.Status != ShiftStatus.Cancelled && s.ServiceDate >= start && s.ServiceDate <= end).Sum(s => s.DurationHours) + candidate.DurationHours;
+        var total = ctx.StaffShiftsInFortnight.Where(s => s.Status != ShiftStatus.Cancelled && s.ServiceDate >= start && s.ServiceDate <= end).Sum(s => ProviderLocalTime.RosteredHours(s, zone)) + ProviderLocalTime.RosteredHours(candidate, zone);
         if (total > CasualFortnightHoursCap)
         {
             var inv = CultureInfo.InvariantCulture;

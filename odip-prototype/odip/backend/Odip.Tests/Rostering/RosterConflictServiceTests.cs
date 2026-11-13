@@ -74,7 +74,8 @@ public class RosterConflictServiceTests
         CompatibilityLevel compatibility = CompatibilityLevel.Allowed,
         decimal weeklyHoursThreshold = RosterConflictService.DefaultWeeklyHoursThreshold,
         IReadOnlyList<PublicHolidayRef>? publicHolidays = null,
-        IReadOnlyList<Shift>? staffShiftsInFortnight = null) => new(
+        IReadOnlyList<Shift>? staffShiftsInFortnight = null,
+        TimeZoneInfo? zone = null) => new(
         Staff: staff,
         Participant: participant,
         StaffShiftsInWeek: staffShiftsInWeek ?? Array.Empty<Shift>(),
@@ -84,7 +85,8 @@ public class RosterConflictServiceTests
         Compatibility: compatibility,
         WeeklyHoursThreshold: weeklyHoursThreshold,
         PublicHolidays: publicHolidays,
-        StaffShiftsInFortnight: staffShiftsInFortnight);
+        StaffShiftsInFortnight: staffShiftsInFortnight,
+        Zone: zone);
 
     private static bool HasCode(IReadOnlyList<RosterFinding> findings, string code) =>
         findings.Any(f => f.Code == code);
@@ -1298,5 +1300,41 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant));
 
         Assert.False(HasCode(findings, RosterConflictService.CredentialExpired));
+    }
+
+    // ── Real hours on the nights the clocks change ───────────
+
+    private static readonly TimeZoneInfo Sydney = ProviderLocalTime.ResolveZone("Australia/Sydney");
+
+    [Fact]
+    public void Weekly_total_counts_the_real_nine_hours_of_the_night_daylight_saving_ends()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        // Sat 3 Apr 2027 22:00 to 06:00 is 9h really (8h by the wall clock); with the Monday 7h that is 16h, over a 15h threshold.
+        var candidate = CandidateShift(staff, participant, serviceDate: new DateOnly(2027, 4, 3), start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), endsNextDay: true);
+        var monday = CandidateShift(staff, participant, serviceDate: new DateOnly(2027, 3, 29), start: new TimeOnly(9, 0), end: new TimeOnly(16, 0));
+
+        var findings = new RosterConflictService().Check(candidate,
+            CompliantContext(staff, participant, staffShiftsInWeek: new[] { monday }, weeklyHoursThreshold: 15m, zone: Sydney));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.OverHours);
+        Assert.Contains("(16h)", finding.Message);
+    }
+
+    [Fact]
+    public void Casual_fortnight_counts_the_real_seven_hours_of_the_night_daylight_saving_starts()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var day = new DateOnly(2027, 10, 2);
+        var candidate = CandidateShift(staff, participant, serviceDate: day, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), endsNextDay: true);
+        var start = RosterFortnight.StartOf(day);
+        // 69h of other shifts (eight 8h and one 5h, all after the 2am change), so 69 + 7 = 76 exactly; the wall clock would say 77.
+        var others = Enumerable.Range(0, 9).Select(i => CandidateShift(staff, participant, serviceDate: start.AddDays(i), end: new TimeOnly(i == 8 ? 14 : 17, 0))).ToArray();
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInFortnight: others, zone: Sydney));
+
+        Assert.False(HasCode(findings, RosterConflictService.CasualFortnightHours));
     }
 }

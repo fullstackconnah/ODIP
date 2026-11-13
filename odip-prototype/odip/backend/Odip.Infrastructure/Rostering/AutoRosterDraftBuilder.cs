@@ -39,7 +39,8 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
 
         var snapshot = await availability.LoadAsync(poolIds, participantIds, monday, end, ct);
         var weekly = RosterAvailability.WeeklyHoursFor(await RosterAvailability.WeeklyHoursAsync(db, [tenantId], ct), tenantId);
-        var rostered = weekShifts.Where(s => s.UserId is not null).GroupBy(s => s.UserId!.Value).ToDictionary(g => g.Key, g => g.Sum(s => s.DurationHours));
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(db, tenantId, ct)).Zone; // the organisation's zone: real hours, so a night the clocks change counts as long as it is
+        var rostered = weekShifts.Where(s => s.UserId is not null).GroupBy(s => s.UserId!.Value).ToDictionary(g => g.Key, g => g.Sum(s => ProviderLocalTime.RosteredHours(s, zone)));
         var workers = staff.Select(u =>
         {
             var (goal, isDefault) = AutoRosterRules.GoalFor(u, weekly);
@@ -49,14 +50,14 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
         // The organisation's reach, from the same row SettingsController.Get picks; no row means 3, today's behaviour.
         var reach = Math.Clamp(await db.AppSettings.AsNoTracking().Where(s => s.TenantId == tenantId).OrderBy(s => s.Id).Select(s => (int?)s.AutoRosterReach).FirstOrDefaultAsync(ct) ?? 3, 0, 3);
         var plan = AutoRosterPlanner.Plan(new AutoRosterInput(open, workers, regulars,
-            ranks.Where(c => poolIds.Contains(c.UserId)).ToDictionary(c => (c.UserId, c.ParticipantId), c => (c.Level, c.Rank)), notReady, reach), new SnapshotAutoRosterOracle(snapshot));
+            ranks.Where(c => poolIds.Contains(c.UserId)).ToDictionary(c => (c.UserId, c.ParticipantId), c => (c.Level, c.Rank)), notReady, reach, zone), new SnapshotAutoRosterOracle(snapshot));
 
         var shiftsById = open.ToDictionary(s => s.Id);
         var names = workers.ToDictionary(w => w.Id, w => w.Name);
         string PersonName(Shift s) => participants.TryGetValue(s.ParticipantId, out var p) ? p.FullName : "Participant";
         int? RankOf(int rank) => rank > 0 ? rank : null;
         // A split's two parts count towards each person's draft hours (the Hours tab counts each half's own hours).
-        var draftHours = plan.Placements.Select(p => (Staff: p.StaffId, Hours: shiftsById[p.ShiftId].DurationHours))
+        var draftHours = plan.Placements.Select(p => (Staff: p.StaffId, Hours: ProviderLocalTime.RosteredHours(shiftsById[p.ShiftId], zone)))
             .Concat(plan.Splits.Select(x => (Staff: x.FirstStaffId, Hours: Shift.HoursBetween(shiftsById[x.ShiftId].StartTime, x.CutAt, false))))
             .Concat(plan.Splits.Select(x => (Staff: x.SecondStaffId, Hours: Shift.HoursBetween(x.CutAt, shiftsById[x.ShiftId].EndTime, false))))
             .GroupBy(x => x.Staff).ToDictionary(g => g.Key, g => g.Sum(x => x.Hours));
