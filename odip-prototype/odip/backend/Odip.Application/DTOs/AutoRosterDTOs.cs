@@ -29,6 +29,9 @@ public record AutoRosterSplitDto
     public TimeOnly StartTime { get; init; }
     public TimeOnly EndTime { get; init; }
     public TimeOnly CutAt { get; init; }
+    /// <summary>Each part's real rostered hours (start to cut, cut to end), so a clock-change night counts as long as it is; they sum to the whole shift's.</summary>
+    public decimal FirstHours { get; init; }
+    public decimal SecondHours { get; init; }
     public AutoRosterSegmentDto First { get; init; } = new();
     public AutoRosterSegmentDto Second { get; init; } = new();
     /// <summary>Either part is past the organisation's auto-roster reach; omitted when false so the default draft is unchanged.</summary>
@@ -51,6 +54,8 @@ public record AutoRosterChangeDto
     public DateOnly ServiceDate { get; init; }
     public TimeOnly StartTime { get; init; }
     public TimeOnly EndTime { get; init; }
+    /// <summary>The shift's real rostered hours (<see cref="Odip.Domain.Rostering.ProviderLocalTime.RosteredHours"/>): 9 for 22:00 to 06:00 the night daylight saving ends, where the clock says 8.</summary>
+    public decimal Hours { get; init; }
     public Guid StaffId { get; init; }
     public string StaffName { get; init; } = string.Empty;
     public AutoRosterPick Pick { get; init; }

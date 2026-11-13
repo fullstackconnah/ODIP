@@ -127,7 +127,8 @@ public static class ProviderLocalTime
     public static TimeSpan RosteredElapsed(Shift shift, TimeZoneInfo zone)
     {
         var (start, end) = RosteredWindowLocal(shift);
-        return LocalToUtc(end, zone) - LocalToUtc(start, zone);
+        // A start inside the skipped spring-forward hour moves to 03:xx while an end at 03:00 does not, so the raw difference can be negative: no shift is shorter than nothing.
+        return TimeSpan.FromTicks(Math.Max(0, (LocalToUtc(end, zone) - LocalToUtc(start, zone)).Ticks));
     }
 
     /// <summary><see cref="RosteredElapsed"/> in hours, unrounded like <see cref="Shift.HoursBetween"/>.</summary>
