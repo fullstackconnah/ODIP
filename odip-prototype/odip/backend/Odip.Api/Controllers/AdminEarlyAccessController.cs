@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -94,7 +95,7 @@ public class AdminEarlyAccessController : ControllerBase
     {
         Id = Guid.NewGuid(), EntityType = nameof(EarlyAccessRequest), EntityId = id, Action = action,
         ChangedAt = DateTimeOffset.UtcNow,
-        ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
+        ChangedById = User.TryGetUserId(),
         ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
     };
 
