@@ -96,7 +96,7 @@ public class BookingsController : ControllerBase
                 InsuranceStatus = b.InsuranceStatus, PaymentStatus = b.PaymentStatus
             });
 
-        var result = await PagedResult<BookingListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        var result = await PagedResults.CreateAsync(projectedQuery, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<BookingListDto>>.Ok(result));
     }
 
