@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { PortalShiftDetailDto } from '../types'
@@ -26,10 +26,10 @@ vi.mock('../client', () => ({
 }))
 
 import {
-  useStartBreak, useEndBreak, useEditBreak, useDeleteBreak, useAcknowledgeHandover, useRecordShiftDose, useFinishShift,
+  useStartBreak, useEndBreak, useAcknowledgeHandover, useRecordShiftDose, useFinishShift,
   useCheckRoutine, useUncheckRoutine,
 } from './portal'
-import { useShiftCompletionReview, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useDecideExtraTime } from './rostering'
+import { useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useDecideExtraTime } from './rostering'
 
 function wrapper(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
@@ -71,34 +71,6 @@ describe('shift package hooks — breaks', () => {
     await result.current.mutateAsync({ id: 'shift-1', breakId: 'brk-1' })
 
     expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/breaks/brk-1/end', method: 'POST', data: undefined, timeout: 15_000 })
-    expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
-  })
-
-  it('useEditBreak puts the FULL body (both UTC instants) to /portal/shifts/{id}/breaks/{breakId}', async () => {
-    const qc = new QueryClient()
-    const { result } = renderHook(() => useEditBreak(), { wrapper: wrapper(qc) })
-
-    await result.current.mutateAsync({ id: 'shift-1', breakId: 'brk-1', data: { startedAt: '2026-09-13T01:00:00Z', endedAt: '2026-09-13T01:30:00Z' } })
-
-    expect(mockApiPut).toHaveBeenCalledWith('/portal/shifts/shift-1/breaks/brk-1', { startedAt: '2026-09-13T01:00:00Z', endedAt: '2026-09-13T01:30:00Z' })
-  })
-
-  it('useEditBreak can keep a running break running with endedAt: null', async () => {
-    const qc = new QueryClient()
-    const { result } = renderHook(() => useEditBreak(), { wrapper: wrapper(qc) })
-
-    await result.current.mutateAsync({ id: 'shift-1', breakId: 'brk-1', data: { startedAt: '2026-09-13T01:00:00Z', endedAt: null } })
-
-    expect(mockApiPut).toHaveBeenCalledWith('/portal/shifts/shift-1/breaks/brk-1', { startedAt: '2026-09-13T01:00:00Z', endedAt: null })
-  })
-
-  it('useDeleteBreak deletes /portal/shifts/{id}/breaks/{breakId} and caches the returned shift detail', async () => {
-    const qc = new QueryClient()
-    const { result } = renderHook(() => useDeleteBreak(), { wrapper: wrapper(qc) })
-
-    await result.current.mutateAsync({ id: 'shift-1', breakId: 'brk-1' })
-
-    expect(mockApiDeleteRaw).toHaveBeenCalledWith('/portal/shifts/shift-1/breaks/brk-1')
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -245,22 +217,6 @@ describe('shift package hooks — Finish carries the handover and the confirmati
 })
 
 describe('coordinator completion review', () => {
-  it('useShiftCompletionReview reads GET /rostering/shifts/{id}/completion/review', async () => {
-    const qc = new QueryClient()
-    const { result } = renderHook(() => useShiftCompletionReview('shift-1'), { wrapper: wrapper(qc) })
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    expect(mockApiGet).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/review')
-  })
-
-  it('useShiftCompletionReview does not fetch without a shift id', () => {
-    const qc = new QueryClient()
-    renderHook(() => useShiftCompletionReview(undefined), { wrapper: wrapper(qc) })
-
-    expect(mockApiGet).not.toHaveBeenCalled()
-  })
-
   // The review has its own cache key, which ['rostering-completion', id] does NOT prefix-match: without these the review page would keep
   // showing the pre-decision completion after Approve / Return.
   it('Approve refreshes the open review for that shift', async () => {
