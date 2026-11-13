@@ -10,6 +10,7 @@ import type {
   CheckVehicleAssignmentDto,
   RosterFindingDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export function useVehicles(params?: Record<string, string>) {
   return useQuery({
@@ -92,7 +93,7 @@ export function useCreateVehicleAssignment() {
       apiPostRaw<VehicleAssignmentDto>('/vehicle-assignments', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-vehicles'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }

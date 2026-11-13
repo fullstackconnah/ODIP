@@ -18,6 +18,7 @@ import type { AmbulantStatus, PersonalCareLevel, RiskRatingLevel, OvernightSuppo
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import type { PatchSupportNeedsMobilityDto } from '@/api/types/participant-patch'
+import { QK } from '@/api/queryKeys'
 
 function Tag({ label }: { label: string }) {
   return (
@@ -101,7 +102,7 @@ function useSaveSnm(participantId: string, p: ParticipantDetailDto) {
   const qc = useQueryClient()
   const patch = usePatchParticipant()
   return async (draft: Partial<PatchSupportNeedsMobilityDto>, expected: PatchParticipantDto['expectedRevisions']) => {
-    const latest = qc.getQueryData<ParticipantDetailDto>(['participant', participantId]) ?? p
+    const latest = qc.getQueryData<ParticipantDetailDto>([QK.participant, participantId]) ?? p
     // With expectedRevisions the hook itself waits for the refetch, so the next card saved straight after reads the fresh cache.
     await patch.mutateAsync({ id: participantId, data: { supportNeedsMobility: { ...snmSnapshot(latest), ...draft }, expectedRevisions: expected } })
   }

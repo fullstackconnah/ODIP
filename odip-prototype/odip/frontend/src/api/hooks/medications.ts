@@ -13,6 +13,7 @@ import type {
   MissedMedicationContactDto,
   PagedResult,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 // Invalidates every cache that a medication/administration mutation can affect —
 // the register list, participant medication lists, medication detail, MAR days,
@@ -28,8 +29,8 @@ function invalidateMedicationCaches(qc: ReturnType<typeof useQueryClient>) {
 function invalidateRestraintCaches(qc: ReturnType<typeof useQueryClient>, participantId: string | undefined) {
   invalidateMedicationCaches(qc)
   qc.invalidateQueries({ queryKey: participantId ? ['restrictive-practices', participantId] : ['restrictive-practices'] })
-  qc.invalidateQueries({ queryKey: participantId ? ['participant', participantId] : ['participant'] })
-  qc.invalidateQueries({ queryKey: ['participants'] })
+  qc.invalidateQueries({ queryKey: participantId ? [QK.participant, participantId] : [QK.participant] })
+  qc.invalidateQueries({ queryKey: [QK.participants] })
 }
 
 export function useParticipantMedications(participantId: string | undefined, includeInactive?: boolean) {

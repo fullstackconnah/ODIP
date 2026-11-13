@@ -13,7 +13,7 @@ import {
 } from './claims'
 import { useCreateFundingPlan, useUpdateBudgetSettings, useUpdateFundingPlan } from './funding'
 import { useCancelBooking, useCreateBooking, useDeleteBooking, usePatchBooking, useUpdateBooking } from './bookings'
-import { usePatchTrip, useUpdateTrip } from './trips'
+import { useUpdateTrip } from './trips'
 import { useApproveServiceAgreementDraft } from './service-agreement-drafts'
 import {
   useApproveCompletion, useApproveCompletionsBatch, useAssignShift, useCreateShift, useDeleteShift, useGeneratePattern, useMoveStaff, usePublishWeek, useReturnCompletion, useUpdateShift,
@@ -189,7 +189,6 @@ describe('the writes that move a participant’s money', () => {
     ['cancelling a trip booking', client => run(client, useCancelBooking, 'b-1')],
     ['removing a trip booking', client => run(client, useDeleteBooking, 'b-1')],
     ['changing a trip (its status or dates)', client => run(client, useUpdateTrip, { id: 't-1', data: { status: 'Completed' } } as never)],
-    ['patching a trip (its status)', client => run(client, usePatchTrip, { id: 't-1', data: { status: 'InProgress' } } as never)],
     ['approving an agreement revision for rostering', client => run(client, useApproveServiceAgreementDraft, { participantId: 'p-1', draftId: 'd-1', acknowledgeOverlaps: false } as never)],
   ]
 

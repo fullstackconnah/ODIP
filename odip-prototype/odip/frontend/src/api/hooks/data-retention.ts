@@ -4,6 +4,7 @@ import { apiClient, apiGet, apiPost } from '../client'
 import type { DataExportFailure, DataExportSaved, PurgeRecordDto, RetentionDueDto } from '../types'
 import { extractErrorMessage } from '@/lib/utils'
 import { exportFailure, saveZip } from './data-export'
+import { QK } from '@/api/queryKeys'
 
 export const RETENTION_DUE_KEY = ['data-retention', 'due'] as const
 /** The one per-participant export mutation. The tab and the dialog read its state by this key, so only one runs at a time. */
@@ -63,7 +64,7 @@ export function usePurgeParticipant() {
     onSuccess: (_record, { participantId }) => {
       queryClient.setQueryData<RetentionDueDto[]>(RETENTION_DUE_KEY, (rows) => rows?.filter((r) => r.participantId !== participantId))
       void queryClient.invalidateQueries({ queryKey: RETENTION_DUE_KEY })
-      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: [QK.tasks] })
     },
   })
 }

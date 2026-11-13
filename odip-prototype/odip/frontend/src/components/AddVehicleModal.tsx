@@ -67,12 +67,9 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedVehicleId, tripInstanceId])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const filteredVehicles = (allVehicles as any[])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((v: any) => v.isActive && !assignedVehicleIds.has(v.id))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((v: any) => {
+  const filteredVehicles = allVehicles
+    .filter(v => v.isActive && !assignedVehicleIds.has(v.id))
+    .filter(v => {
       if (!search.trim()) return true
       const q = search.toLowerCase()
       return v.vehicleName?.toLowerCase().includes(q) || v.registration?.toLowerCase().includes(q)
@@ -218,8 +215,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {filteredVehicles.length === 0 ? (
                 <p className="text-sm text-[var(--color-muted-foreground)] text-center py-4">No vehicles found</p>
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ) : filteredVehicles.map((v: any) => (
+              ) : filteredVehicles.map(v => (
                 <button
                   key={v.id}
                   onClick={() => setSelectedVehicleId(v.id)}
