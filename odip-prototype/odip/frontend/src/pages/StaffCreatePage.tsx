@@ -23,6 +23,7 @@ import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome 
 import { extractErrorMessage } from '@/lib/utils'
 import { httpStatusOf } from '@/lib/httpStatus'
 import { formGrid, span } from '@/lib/formGrid'
+import { roleLabel } from '@/lib/format'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
 import { NumberField } from '@/components/NumberField'
@@ -74,18 +75,6 @@ const staffSchema = z.object({
 })
 
 type StaffFormData = z.infer<typeof staffSchema>
-
-// Every account-role value the backend can return on an existing record, even ones this form
-// never offers as a selectable option (SuperAdmin, and Admin when the actor is a Coordinator) —
-// used to label a locked/blocked role field with its real current value rather than showing a
-// blank select.
-const ROLE_LABELS: Record<string, string> = {
-  SupportWorker: 'Support Worker',
-  Coordinator: 'Coordinator',
-  ReadOnly: 'Read Only',
-  Admin: 'Admin',
-  SuperAdmin: 'SuperAdmin',
-}
 
 // PP-85 — same error-extraction idiom as RecordAdministrationModal.tsx/MedicationFormPage.tsx,
 // surfacing the backend's specific validation/conflict message (e.g. "A user with this email
@@ -148,7 +137,7 @@ export default function StaffCreatePage() {
   const isTargetSuperAdmin = isEdit && existingRole === 'SuperAdmin'
   const isRoleLocked = isEdit && !!existingRole && !isTargetSuperAdmin && !roleOptionValues.includes(existingRole)
   const roleSelectOptions = isRoleLocked && existingRole
-    ? [...ROLE_OPTIONS, { value: existingRole, label: ROLE_LABELS[existingRole] ?? existingRole }]
+    ? [...ROLE_OPTIONS, { value: existingRole, label: roleLabel(existingRole) }]
     : ROLE_OPTIONS
 
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<StaffFormData>({
