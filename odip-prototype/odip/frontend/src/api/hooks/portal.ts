@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPostRaw, apiPut, apiDeleteRaw } from '../client'
+import { apiGet, apiPost, apiPostRaw, apiPut } from '../client'
 import type {
   PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto, FinishDetailsDto, LocationReasonDto,
-  EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
+  AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
 } from '../types'
 import type { PortalActivityShiftDto, StartActivityShiftDto, FinishActivityShiftDto } from '../types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -12,6 +12,7 @@ import { offlineQueue, type NewRecord } from '@/lib/offline/queue'
 import { readSaved, readSession, writeSaved } from '@/lib/offline/store'
 import { applyQueued, applyQueuedList, applyQueuedNotes } from '@/lib/offline/overlay'
 import { shiftLabel } from '@/lib/offline/label'
+import { QK } from '@/api/queryKeys'
 
 // ══════════════════════════════════════════════════════════════
 // OFFLINE: the portal reads fall back to the copy saved on this phone, and the worker's writes go through the
@@ -210,20 +211,6 @@ export function useEndBreak() {
     ({ id, breakId }) => ({ kind: 'breakEnd', path: `/portal/shifts/${id}/breaks/${breakId}/end`, method: 'POST', body: undefined, clientTimeField: 'endedAt', target: breakId }),
     takeDetail,
   )
-}
-
-/** PUT portal/shifts/{id}/breaks/{breakId} — correct a break's times (UTC) before Finish. */
-export function useEditBreak() {
-  return useShiftDetailWrite(({ id, breakId, data }: { id: string; breakId: string; data: EditShiftBreakDto }) =>
-    apiPut<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}`, data))
-}
-
-/** DELETE portal/shifts/{id}/breaks/{breakId} — remove a break before Finish (audited). */
-export function useDeleteBreak() {
-  return useShiftDetailWrite(async ({ id, breakId }: { id: string; breakId: string }) => {
-    const response = await apiDeleteRaw<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}`)
-    return response.data as PortalShiftDetailDto
-  })
 }
 
 /**
@@ -434,6 +421,6 @@ export function useSetActivityAttendance() {
       apiPost<PortalActivityShiftDto>(`/portal/activity-staff/${id}/attendance`, { participantId, attended }),
     // A mark changes what the board, the activity and the staff review show, so all of them refetch, a refusal included.
     onSettled: () =>
-      Promise.all(['portal-my-shifts', 'group-activity', 'group-activities', 'roster-board', 'rostering-group-staff-reviews'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+      Promise.all(['portal-my-shifts', 'group-activity', 'group-activities', QK.rosterBoard, 'rostering-group-staff-reviews'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   })
 }

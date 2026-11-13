@@ -16,6 +16,7 @@ import type {
   StaffOverviewDto,
   SignInAccountDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export function useStaff(params?: Record<string, string>) {
   return useQuery({
@@ -78,7 +79,7 @@ export function useUpdateStaff() {
       qc.invalidateQueries({ queryKey: ['staff'] })
       qc.invalidateQueries({ queryKey: ['staff-detail', vars.id] })
       qc.invalidateQueries({ queryKey: ['staff-overview', vars.id] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: ['staff-available'] })
     },
   })
@@ -155,7 +156,7 @@ export function useCreateStaffAssignment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -168,7 +169,7 @@ export function useUpdateStaffAssignment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -180,7 +181,7 @@ export function useDeleteStaffAssignment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -206,7 +207,7 @@ export function useCreateStaffAvailability() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['schedule-overview'] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })   // the picker's "Available that day" reads these records
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })   // the picker's "Available that day" reads these records
     },
   })
 }
@@ -219,7 +220,7 @@ export function useUpdateStaffAvailability() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['schedule-overview'] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })   // the picker's "Available that day" reads these records
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })   // the picker's "Available that day" reads these records
     },
   })
 }
@@ -231,7 +232,7 @@ export function useDeleteStaffAvailability() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['schedule-overview'] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })   // the picker's "Available that day" reads these records
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })   // the picker's "Available that day" reads these records
     },
   })
 }

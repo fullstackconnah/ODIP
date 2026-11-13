@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiPutRaw } from '../client'
 import type { ParticipantCommunityAccessRiskItemDto, UpsertParticipantCommunityAccessRiskItemDto, CommunityAccessRiskItemType } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /**
  * PF-10.2/PF-10.4 (SPEC-05). The 22-row Community Access Risk Assessment matrix has its own
@@ -15,7 +16,7 @@ export function useUpsertCommunityAccessRiskItem() {
     mutationFn: ({ participantId, itemType, data }: { participantId: string; itemType: CommunityAccessRiskItemType; data: UpsertParticipantCommunityAccessRiskItemDto }) =>
       apiPutRaw<ParticipantCommunityAccessRiskItemDto>(`/participants/${participantId}/community-access-risk-items/${itemType}`, data),
     onSuccess: (_res, variables) => {
-      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
+      qc.invalidateQueries({ queryKey: [QK.participant, variables.participantId] })
     },
   })
 }

@@ -156,17 +156,17 @@ export default function TemplateFormPanel({
     }
     try {
       if (isEdit && template) {
-        await updateMutation.mutateAsync({ id: template.id, data: payload as any })
+        await updateMutation.mutateAsync({ id: template.id, data: payload })
         setSuccessMessage('Template updated')
       } else {
-        await createMutation.mutateAsync(payload as any)
+        await createMutation.mutateAsync(payload)
         setSuccessMessage('Template created')
       }
       timerRef.current = setTimeout(() => {
         setSuccessMessage(null)
         onClose()
       }, 1500)
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(extractErrorMessage(err, 'Failed to save template.'))
     }
   }

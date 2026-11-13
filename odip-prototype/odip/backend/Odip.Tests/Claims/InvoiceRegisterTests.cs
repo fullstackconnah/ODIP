@@ -117,6 +117,16 @@ public class InvoiceRegisterTests
         Assert.Equal(("CN-0001", 430.58m), (inv.CreditedByDisplayNumber, inv.Total));
     }
 
+    [Theory]
+    [InlineData(TripClaimStatus.Paid, InvoicePaymentStatus.Paid)]
+    [InlineData(TripClaimStatus.PartiallyPaid, InvoicePaymentStatus.PartPaid)]
+    public async Task TheClaimStatusAlone_LabelsTheInvoice_WhateverItsLinesSay(TripClaimStatus claim, InvoicePaymentStatus label)
+    {
+        var (kit, invoices) = SeedPay(TenantA, claim, (ClaimLineItemStatus.Submitted, 0m));
+        Assert.Equal([invoices[0].DisplayNumber], Numbers(await List(kit, paymentStatus: label)));
+        Assert.Empty(Numbers(await List(kit, paymentStatus: InvoicePaymentStatus.Outstanding)));
+    }
+
     [Fact]
     public async Task Filters_KindStatusAndInclusiveDates()
     {

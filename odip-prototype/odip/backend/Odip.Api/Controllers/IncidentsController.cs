@@ -426,7 +426,7 @@ public class IncidentsController : ControllerBase
         var projectedQuery = query.OrderByDescending(i => i.IncidentDateTime).ThenBy(i => i.Id)
             .Select(IncidentProjections.ToListDto(DateTime.UtcNow));
 
-        var result = await PagedResult<IncidentListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        var result = await PagedResults.CreateAsync(projectedQuery, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<IncidentListDto>>.Ok(result));
     }
 

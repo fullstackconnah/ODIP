@@ -11,6 +11,7 @@ import type { ChecklistItemType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { rethrowSectionError } from '@/lib/sectionConflict'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
+import { QK } from '@/api/queryKeys'
 
 const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
@@ -64,7 +65,7 @@ export function BehaviourSupportCard({ p, participantId, canEdit }: { p: Partici
 
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
-      const latest = qc.getQueryData<ParticipantDetailDto>(['participant', participantId]) ?? p
+      const latest = qc.getQueryData<ParticipantDetailDto>([QK.participant, participantId]) ?? p
       await patchParticipant.mutateAsync({
         id: participantId,
         data: {
@@ -81,7 +82,7 @@ export function BehaviourSupportCard({ p, participantId, canEdit }: { p: Partici
           expectedRevisions: expected,
         },
       })
-      await qc.invalidateQueries({ queryKey: ['participant', participantId] })
+      await qc.invalidateQueries({ queryKey: [QK.participant, participantId] })
     } catch (err) {
       rethrowSectionError(err, 'Failed to save Behaviour support.')
     }
@@ -145,7 +146,7 @@ export function TypicalDayCard({ p, participantId, canEdit }: { p: ParticipantDe
           expectedRevisions: expected,
         },
       })
-      await qc.invalidateQueries({ queryKey: ['participant', participantId] })
+      await qc.invalidateQueries({ queryKey: [QK.participant, participantId] })
     } catch (err) {
       rethrowSectionError(err, 'Failed to save Typical day.')
     }

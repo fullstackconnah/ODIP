@@ -319,6 +319,23 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })).toBeInTheDocument()
   })
 
+  it('says under the approved line which roles could approve and which role approved, and says nothing more for an older approval', async () => {
+    drafts.mockReturnValue({ data: [draft({ approval: { ...approval, approverRolesInForce: 'Admin,Coordinator', approvedByRoles: 'Coordinator' } })], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    const { unmount } = renderPage()
+    await user.click(stepButton('Save'))
+
+    const line = screen.getByText('Roles that could approve at the time: Admin, Coordinator. Approved as: Coordinator.')
+    expect(screen.getByText(/^Approved for rostering by Alex/).nextElementSibling).toBe(line)
+    unmount()
+
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    renderPage()
+    await user.click(stepButton('Save'))
+    expect(screen.getByText(/^Approved for rostering by Alex/)).toBeInTheDocument()
+    expect(screen.queryByText(/Roles that could approve|Approved as:/)).not.toBeInTheDocument()
+  })
+
   it('offers Populate roster once the newest save is approved, and says what it added; an unapproved save offers approval instead', async () => {
     drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
     populateMutate.mockImplementation((_vars, options) => options.onSuccess({ created: 5, alreadyThere: 0, weeks: [] }))

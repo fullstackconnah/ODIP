@@ -9,6 +9,7 @@ import type {
   CreateReservationDto,
   UpdateReservationDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export function useAccommodation(params?: Record<string, string>) {
   return useQuery({
@@ -81,7 +82,7 @@ export function useCreateReservation() {
       apiPostRaw<ReservationDto>('/reservations', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-accommodation'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -93,7 +94,7 @@ export function useUpdateReservation() {
       apiPutRaw<ReservationDto>(`/reservations/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-accommodation'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -104,7 +105,7 @@ export function useDeleteReservation() {
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/reservations/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-accommodation'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
