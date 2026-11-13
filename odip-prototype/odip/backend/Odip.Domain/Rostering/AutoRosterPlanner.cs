@@ -32,7 +32,8 @@ public sealed record AutoRosterInput(
     IReadOnlyDictionary<Guid, Guid> RegularByPattern,
     IReadOnlyDictionary<(Guid UserId, Guid ParticipantId), (CompatibilityLevel Level, int Rank)> Compatibility,
     IReadOnlySet<Guid> NotReadyParticipants,
-    int ReachTier = 3);
+    int ReachTier = 3,
+    TimeZoneInfo? Zone = null);
 
 /// <summary><c>NeedsLook</c> on a placement, alternate or split: a non-regular pick whose tier is past the input's reach. The flag never changes who is proposed.</summary>
 public sealed record AutoRosterAlternate(Guid StaffId, AutoRosterPick Pick, int Rank, bool NeedsLook = false);
@@ -97,8 +98,11 @@ public static class AutoRosterPlanner
         }
 
         bool Past(Candidate c) => c.Tier > input.ReachTier;
+        // Real hours in the organisation's zone, like the worker's RosteredHours: a night the clocks change is an hour long or short. The split minimum below stays on the bare-time wall clock.
+        var zone = input.Zone ?? ProviderLocalTime.ResolveZone(null);
+        decimal Hours(Shift s) => ProviderLocalTime.RosteredHours(s, zone);
         decimal HoursOf(AutoRosterWorker w) => w.RosteredHours + draft[w.Id];
-        bool UnderGoal(AutoRosterWorker w, Shift s) => HoursOf(w) + s.DurationHours <= w.Goal;
+        bool UnderGoal(AutoRosterWorker w, Shift s) => HoursOf(w) + Hours(s) <= w.Goal;
         decimal Load(AutoRosterWorker w) => w.Goal <= 0 ? (HoursOf(w) > 0 ? decimal.MaxValue : 0m) : HoursOf(w) / w.Goal;
         IOrderedEnumerable<Candidate> Ordered(IEnumerable<Candidate> candidates, Shift s) => candidates
             .OrderBy(c => c.Tier).ThenBy(c => UnderGoal(c.Worker, s) ? 0 : 1).ThenBy(c => c.Rank).ThenBy(c => Load(c.Worker))
@@ -108,7 +112,7 @@ public static class AutoRosterPlanner
         {
             var under = UnderGoal(c.Worker, shift);
             oracle.Book(Probe(shift, c.Worker.Id));
-            draft[c.Worker.Id] += shift.DurationHours;
+            draft[c.Worker.Id] += Hours(shift);
             placements.Add(new AutoRosterPlacement(shift.Id, c.Worker.Id, pick, c.Rank == int.MaxValue ? 0 : c.Rank, under, regularAway,
                 warnings.OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).ToList(),
                 alternates.Select(a => new AutoRosterAlternate(a.Worker.Id, PickOf(a.Level), a.Rank == int.MaxValue ? 0 : a.Rank, Past(a))).ToList(), pick != AutoRosterPick.Regular && Past(c)));
@@ -165,7 +169,7 @@ public static class AutoRosterPlanner
                 continue;
             }
 
-            uncovered.Add(new AutoRosterUncovered(shift.Id, ReasonFor(pool.Count, all), RecommendationsFor(shift, all, Ordered, HoursOf)));
+            uncovered.Add(new AutoRosterUncovered(shift.Id, ReasonFor(pool.Count, all), RecommendationsFor(shift, all, Ordered, HoursOf, Hours)));
             stuck.Add(shift);
         }
 
@@ -201,7 +205,7 @@ public static class AutoRosterPlanner
             foreach (var (part, c) in new[] { (Part(shift, shift.StartTime, at), a), (Part(shift, at, shift.EndTime), b) })
             {
                 oracle.Book(Probe(part, c.Worker.Id));
-                draft[c.Worker.Id] += part.DurationHours;
+                draft[c.Worker.Id] += Hours(part);
             }
 
             splits.Add(new AutoRosterSplit(shift.Id, at, a.Worker.Id, b.Worker.Id, Past(a) || Past(b)));
@@ -242,12 +246,12 @@ public static class AutoRosterPlanner
 
     /// <summary>D10: display-only. The best person who is only over hours, the best who is only held by pending leave or a competency, else a plain pointer.</summary>
     private static List<AutoRosterRecommendation> RecommendationsFor(Shift shift, List<Candidate> all,
-        Func<IEnumerable<Candidate>, Shift, IOrderedEnumerable<Candidate>> ordered, Func<AutoRosterWorker, decimal> hoursOf)
+        Func<IEnumerable<Candidate>, Shift, IOrderedEnumerable<Candidate>> ordered, Func<AutoRosterWorker, decimal> hoursOf, Func<Shift, decimal> hours)
     {
         var recs = new List<AutoRosterRecommendation>();
         if (ordered(all.Where(c => c.Kind == Kind.Hours), shift).FirstOrDefault() is { } over)
         {
-            var takes = (hoursOf(over.Worker) + shift.DurationHours).ToString("0.##", CultureInfo.InvariantCulture);
+            var takes = (hoursOf(over.Worker) + hours(shift)).ToString("0.##", CultureInfo.InvariantCulture);
             recs.Add(new(AutoRosterRecommendationKind.OverGoal, over.Worker.Id, $"Ask {over.Worker.Name}: takes them to {takes} h (goal {over.Worker.Goal.ToString("0.##", CultureInfo.InvariantCulture)} h)"));
         }
 

@@ -34,7 +34,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
             .Where(c => userIds.Contains(c.UserId) && participantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
         return new Snapshot(staff, participants, shifts, trips, windows, compatibility, await PublicHolidaysAsync(from, to, ct),
-            await WeeklyHoursAsync(db, staff.Select(u => u.TenantId), ct));
+            await WeeklyHoursAsync(db, staff.Select(u => u.TenantId), ct), zone: (await ProviderTimeZoneResolver.ResolveAsync(db, ct)).Zone);
     }
 
     /// <summary>
@@ -116,7 +116,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
     /// <summary>What the rules read for a set of shifts, held in memory; <see cref="Check"/> builds each shift's <see cref="RosterCheckContext"/> as the controller's check did.</summary>
     public sealed class Snapshot(IEnumerable<User> staff, IEnumerable<Participant> participants, IEnumerable<Shift> shifts, IReadOnlyList<StaffAssignment> trips,
         IReadOnlyList<UnavailabilityWindow> windows, IReadOnlyDictionary<(Guid UserId, Guid ParticipantId), CompatibilityLevel> compatibility, IReadOnlyList<PublicHolidayRef> holidays,
-        IReadOnlyDictionary<Guid, int>? weeklyHours = null, IEnumerable<Shift>? fortnightShifts = null)
+        IReadOnlyDictionary<Guid, int>? weeklyHours = null, IEnumerable<Shift>? fortnightShifts = null, TimeZoneInfo? zone = null)
     {
         // L5 and L-b: what makes a regular "away", as the short reason the chip shows. Pending leave is not away; an expired screening (R3) is.
         private static readonly Dictionary<string, string> AwayReasons = new()
@@ -192,7 +192,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
                 compatibility.TryGetValue((userId, candidate.ParticipantId), out var level) ? level : CompatibilityLevel.Allowed,
                 WeeklyHoursFor(weeklyHours, worker.TenantId), holidays, callerIsAdmin,
                 worker.EmploymentType != EmploymentType.Casual ? null
-                    : _shifts.Concat(_fortnightShifts).Where(s => s.UserId == userId && s.ServiceDate >= fortnight && s.ServiceDate <= fortnight.AddDays(13) && s.Id != exclude && s.Id != leavingShiftId).DistinctBy(s => s.Id).ToList());
+                    : _shifts.Concat(_fortnightShifts).Where(s => s.UserId == userId && s.ServiceDate >= fortnight && s.ServiceDate <= fortnight.AddDays(13) && s.Id != exclude && s.Id != leavingShiftId).DistinctBy(s => s.Id).ToList(), zone);
             return _rules.Check(candidate, ctx).ToList();
         }
     }
