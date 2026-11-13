@@ -277,8 +277,8 @@ export function useRecordShiftDose() {
       apiPost<AdministrationDto>(`/portal/shifts/${shiftId}/medications/${medicationId}/administrations`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: [QK.portalShiftDetail, vars.shiftId] })
-      qc.invalidateQueries({ queryKey: ['mar'] })
-      qc.invalidateQueries({ queryKey: ['participant-administrations'] })
+      qc.invalidateQueries({ queryKey: [QK.mar] })
+      qc.invalidateQueries({ queryKey: [QK.participantAdministrations] })
     },
     // 409 ADMINISTRATION_ALREADY_RECORDED / SLOT_BUSY: someone else changed the slot, so the shift detail on screen is stale.
     onError: (_err, vars) => {

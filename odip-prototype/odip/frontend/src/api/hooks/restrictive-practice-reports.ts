@@ -19,8 +19,8 @@ function useInvalidateRpReports() {
   return () => {
     qc.invalidateQueries({ queryKey: ['rp-report-lines'] })
     qc.invalidateQueries({ queryKey: [QK.dashboard] })
-    qc.invalidateQueries({ queryKey: ['participant-alerts'] })
-    qc.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] })
+    qc.invalidateQueries({ queryKey: [QK.participantAlerts] })
+    qc.invalidateQueries({ queryKey: [QK.participantAlertsAggregate] })
   }
 }
 

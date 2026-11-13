@@ -41,7 +41,7 @@ export function useConvertParticipantInquiry() {
 
 /** The onboarding checklist of one participant (the route's id is the PARTICIPANT's, despite its name). */
 export function useOnboarding(participantId: string | undefined) {
-  return useQuery({ queryKey: ['onboarding', participantId], enabled: !!participantId, queryFn: () => apiGet<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding`) })
+  return useQuery({ queryKey: [QK.onboarding, participantId], enabled: !!participantId, queryFn: () => apiGet<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding`) })
 }
 
 /** The Onboarding tab's rows. */
@@ -55,7 +55,7 @@ export function useRecordOnboardingAgreement(participantId: string | undefined) 
   return useMutation({
     mutationFn: (data: RecordOnboardingAgreementDto) => apiPost<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding/agreement-record`, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      qc.invalidateQueries({ queryKey: [QK.onboarding, participantId] })
       qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
@@ -67,7 +67,7 @@ export function useRecordOnboardingExplained(participantId: string | undefined) 
   return useMutation({
     mutationFn: (data: RecordOnboardingExplainedDto) => apiPost<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding/explained-record`, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      qc.invalidateQueries({ queryKey: [QK.onboarding, participantId] })
       qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })

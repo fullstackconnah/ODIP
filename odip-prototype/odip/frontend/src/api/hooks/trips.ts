@@ -9,6 +9,7 @@ import type {
   UpdateTripDto,
   PagedResult,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /**
  * TripsController clamps `pageSize` to a ceiling of 200 (`Math.Clamp(pageSize, 1, 200)`).
@@ -34,7 +35,7 @@ export function useTrips(params?: Record<string, string>) {
 
 export function useTrip(id: string | undefined) {
   return useQuery({
-    queryKey: ['trip', id],
+    queryKey: [QK.trip, id],
     queryFn: () => apiGet<TripDetailDto>(`/trips/${id}`),
     enabled: !!id,
   })
@@ -55,7 +56,7 @@ export function useUpdateTrip() {
       apiPutRaw<TripDetailDto>(`/trips/${id}`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['trips'] })
-      qc.invalidateQueries({ queryKey: ['trip', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.trip, vars.id] })
       refreshBudgetFigures(qc)   // its status and dates decide whether, when and for how much each of its bookings is in a budget
     },
   })

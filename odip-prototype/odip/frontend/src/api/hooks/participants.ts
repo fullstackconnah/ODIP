@@ -174,7 +174,7 @@ function useLifecycleAction(action: 'begin-services' | 'make-active') {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: [QK.participants] })
       qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
-      qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.onboarding, vars.id] })
       qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
       qc.invalidateQueries({ queryKey: [QK.participantInquiries] })
       // The board lists who can receive services and tags a services-started row.
@@ -263,7 +263,7 @@ export function usePatchParticipant() {
       if (!vars.data.expectedRevisions) qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // The checklist's "Profile details" item and the worklist are derived from these fields.
       qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
-      qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.onboarding, vars.id] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: ['participant-rostering', vars.id] })
       // The funding source decides whether the NDIS ledger counts this participant.

@@ -365,7 +365,7 @@ export function useDecideExtraTime() {
       qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
-      qc.invalidateQueries({ queryKey: ['employment-hero', 'payroll'] })   // the Payroll check shows the paid window
+      qc.invalidateQueries({ queryKey: [QK.employmentHero, 'payroll'] })   // the Payroll check shows the paid window
     },
   })
 }

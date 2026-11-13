@@ -52,7 +52,7 @@ export function useCreateBooking() {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
@@ -68,7 +68,7 @@ export function useUpdateBooking() {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
       qc.invalidateQueries({ queryKey: ['participant-bookings'] })
     },
@@ -83,7 +83,7 @@ export function usePatchBooking() {
     onSuccess: () => {
       refreshBudgetFigures(qc)   // a patch can confirm or cancel the booking
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
@@ -99,7 +99,7 @@ export function useDeleteBooking() {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
@@ -114,7 +114,7 @@ export function useCancelBooking() {
       refreshBudgetFigures(qc)   // a cancelled booking costs nothing
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
     },
   })
 }

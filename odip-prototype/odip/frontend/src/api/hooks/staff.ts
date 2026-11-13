@@ -117,7 +117,7 @@ export function useConfirmStaffAddress() {
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: ['staff'] })
       qc.invalidateQueries({ queryKey: ['staff-overview', id] })
-      qc.invalidateQueries({ queryKey: ['employment-hero'] })
+      qc.invalidateQueries({ queryKey: [QK.employmentHero] })
     },
   })
 }
@@ -155,7 +155,7 @@ export function useCreateStaffAssignment() {
       apiPostRaw<StaffAssignmentDto>('/staff-assignments', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
@@ -168,7 +168,7 @@ export function useUpdateStaffAssignment() {
       apiPutRaw<StaffAssignmentDto>(`/staff-assignments/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
@@ -180,7 +180,7 @@ export function useDeleteStaffAssignment() {
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/staff-assignments/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-staff'] })
-      qc.invalidateQueries({ queryKey: ['trip'] })
+      qc.invalidateQueries({ queryKey: [QK.trip] })
       qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
@@ -205,7 +205,7 @@ export function useCreateStaffAvailability() {
   return useMutation({
     mutationFn: (data: CreateStaffAvailabilityDto) => apiPostRaw<StaffAvailabilityDto>('/staff-availability', data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: [QK.scheduleOverview] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })   // the picker's "Available that day" reads these records
     },
@@ -218,7 +218,7 @@ export function useUpdateStaffAvailability() {
     mutationFn: ({ id, data }: { id: string; data: UpdateStaffAvailabilityDto }) =>
       apiPutRaw<StaffAvailabilityDto>(`/staff-availability/${id}`, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: [QK.scheduleOverview] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })   // the picker's "Available that day" reads these records
     },
@@ -230,7 +230,7 @@ export function useDeleteStaffAvailability() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/staff-availability/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: [QK.scheduleOverview] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })   // the picker's "Available that day" reads these records
     },

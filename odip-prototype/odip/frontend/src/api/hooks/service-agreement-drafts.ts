@@ -35,7 +35,7 @@ export function useCreateServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
-      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      queryClient.invalidateQueries({ queryKey: [QK.onboarding, participantId] })
       queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
@@ -55,7 +55,7 @@ export function usePatternChange() {
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
-      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      queryClient.invalidateQueries({ queryKey: [QK.onboarding, participantId] })
       queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
@@ -85,12 +85,12 @@ export function useRenewAgreement() {
       apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/renew`),
     onSuccess: (_, { participantId }) => Promise.all([
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
+      queryClient.invalidateQueries({ queryKey: [QK.onboarding, participantId] }),
       queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
-      queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.participantAlerts, participantId] }),
+      queryClient.invalidateQueries({ queryKey: [QK.participantAlertsAggregate] }),
     ]),
   })
 }
@@ -99,12 +99,12 @@ export function useRenewAgreement() {
 const refreshAgreements = (queryClient: ReturnType<typeof useQueryClient>, participantId: string) => [
   queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
   queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
-  queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
+  queryClient.invalidateQueries({ queryKey: [QK.onboarding, participantId] }),
   queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
   queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
   queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
-  queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
-  queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] }),
+  queryClient.invalidateQueries({ queryKey: [QK.participantAlerts, participantId] }),
+  queryClient.invalidateQueries({ queryKey: [QK.participantAlertsAggregate] }),
 ]
 
 /** Deletes the newest draft that was never approved (a 409 says why not, in the server's words). */
@@ -180,7 +180,7 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       queryClient.invalidateQueries({ queryKey: [QK.participants] }),
       queryClient.invalidateQueries({ queryKey: [QK.participant, participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
+      queryClient.invalidateQueries({ queryKey: [QK.onboarding, participantId] }),
       queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
       // An approved renewal ends the "ending" flag; the alerts are refreshed with the budget figures below.
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),

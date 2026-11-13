@@ -41,7 +41,7 @@ export function useApproveAgreements(onProgress?: (done: number) => void) {
         // With the organisation's setting on, an approval may have moved someone to Active: the lists, their header and their checklist.
         queryClient.invalidateQueries({ queryKey: [QK.participants] }),
         queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
-        ...ids.flatMap(id => [queryClient.invalidateQueries({ queryKey: [QK.participant, id] }), queryClient.invalidateQueries({ queryKey: ['onboarding', id] })]),
+        ...ids.flatMap(id => [queryClient.invalidateQueries({ queryKey: [QK.participant, id] }), queryClient.invalidateQueries({ queryKey: [QK.onboarding, id] })]),
       ])
     },
   })
