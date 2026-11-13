@@ -208,4 +208,18 @@ public class DstFirstPassBillingTests
     [Fact]
     public void AHeadcountCutInTheRepeatedHour_OfAShiftThatEndsInTheSecondPass_StaysTheSecondPass() =>
         Assert.Equal(new[] { 70, 20 }, PartMinutes(new TimeOnly(2, 10), new TimeOnly(2, 40), new TimeOnly(2, 20), true, false));
+
+    // The claim run reads the same hours as the board: the April night is 9 h, not its 8 wall-clock hours.
+    [Fact]
+    public async Task ALeftOutRow_OfTheClockChangeNight_SaysItsRosteredHours()
+    {
+        var (kit, engine, person) = NewKit();
+        using var _ = kit;
+        person.NdisNumber = "";
+        Seed(kit, person, Sat, new TimeOnly(22, 0), new TimeOnly(6, 0), null, null);
+
+        var row = Assert.Single((await Assert.ThrowsAsync<NothingClaimableException>(() => engine.PreviewAsync(person.Id, Sat, Sat, Ct))).LeftOut);
+
+        Assert.EndsWith("· 9 h", row.Description);
+    }
 }
