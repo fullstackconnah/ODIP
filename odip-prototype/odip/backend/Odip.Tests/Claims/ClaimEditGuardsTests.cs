@@ -216,6 +216,26 @@ public class ClaimEditGuardsTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    public async Task AZeroDollarLine_CannotBeMarkedPaid_AndIsLeftAsItWas(int? paidAmount)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Submitted);
+        line.TotalAmount = 0m;
+        db.SaveChanges();
+        var before = line.Status;
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid, PaidAmount = paidAmount }, Ct);
+
+        Assert.Equal(400, StatusOf(result));
+        Assert.Equal("A $0.00 line can't be marked paid.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((before, (decimal?)null, (DateTime?)null), (stored.Status, stored.PaidAmount, stored.PaidAt));
+    }
+
+    [Theory]
     [InlineData(TripClaimStatus.Draft)]
     [InlineData(TripClaimStatus.Ready)]
     public async Task ADraftClaimsLine_CanBeEdited_AndTheClaimTotalIsTheSumOfAllItsStoredLines(TripClaimStatus status)

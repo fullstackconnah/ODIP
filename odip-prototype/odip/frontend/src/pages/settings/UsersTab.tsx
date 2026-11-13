@@ -8,7 +8,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { DataTable, RowActions } from '@/components/DataTable'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { useNotices, type Notice } from '@/hooks/useNotices'
-import { formatRelative } from '@/lib/format'
+import { formatRelative, roleLabel } from '@/lib/format'
 import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
@@ -39,14 +39,6 @@ const ROLE_COLORS: Record<string, string> = {
   Coordinator: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
   SupportWorker: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   ReadOnly: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  SuperAdmin: 'Super Admin',
-  Admin: 'Admin',
-  Coordinator: 'Coordinator',
-  SupportWorker: 'Support Worker',
-  ReadOnly: 'Read Only',
 }
 
 const PAGE_SIZE = 20
@@ -207,7 +199,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
             header: 'Role',
             render: (user: AdminUserDto) => (
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
-                {ROLE_LABELS[user.role] ?? user.role}
+                {roleLabel(user.role)}
               </span>
             ),
           },

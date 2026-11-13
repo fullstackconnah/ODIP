@@ -430,6 +430,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         PatternsCreated = approval.PatternsCreated, PatternsEnded = approval.PatternsEnded, ShiftsCreated = approval.ShiftsCreated,
         HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
         AgreedByName = approval.AgreedByName, AgreedHow = approval.AgreedHow,
+        ApproverRolesInForce = approval.ApproverRolesInForce, ApprovedByRoles = approval.ApprovedByRoles,
     };
 
     /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>

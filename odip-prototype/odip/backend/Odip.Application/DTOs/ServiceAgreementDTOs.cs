@@ -252,6 +252,10 @@ public record DraftApprovalDto
     public string? AgreedByName { get; init; }
     /// <summary>How they agreed. Absent when not said.</summary>
     public Odip.Domain.Enums.AgreementAgreedHow? AgreedHow { get; init; }
+    /// <summary>The roles that could approve when it was approved, comma-joined (an empty string when none). Null for an approval made before this was recorded.</summary>
+    public string? ApproverRolesInForce { get; init; }
+    /// <summary>The roles the approver acted in, comma-joined. Null for an approval made before this was recorded.</summary>
+    public string? ApprovedByRoles { get; init; }
 }
 
 /// <summary>
