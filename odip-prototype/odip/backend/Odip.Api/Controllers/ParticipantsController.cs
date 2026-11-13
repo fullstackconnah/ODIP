@@ -162,7 +162,7 @@ public class ParticipantsController : ControllerBase
                 ServicesStartedAt = p.ServicesStartedAt,
             });
 
-        var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        var result = await PagedResults.CreateAsync(projectedQuery, page, pageSize, ct);
 
         // What is missing for each participant on this page (intake, onboarding, signed agreement),
         // for the quiet "Not ready" note in pickers and the register. Three queries for the page.

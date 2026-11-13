@@ -12,7 +12,7 @@ public static class PagingParams
 
     /// <summary>
     /// House convention: page defaults to/floors at 1; pageSize clamps into [1, maxPageSize].
-    /// Deliberately NOT called from PagedResult&lt;T&gt;.CreateAsync — Rostering's
+    /// Deliberately NOT called from PagedResults.CreateAsync — Rostering's
     /// GetCompletions builds a PagedResult manually from an in-memory-sorted list (derived sort
     /// key, not SQL-translatable) without ever calling CreateAsync, so baking the clamp into
     /// CreateAsync would leave that call site unprotected while looking covered. Every action
