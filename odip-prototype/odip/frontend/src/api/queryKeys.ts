@@ -6,4 +6,9 @@ export const QK = {
   tasks: 'tasks',
   tripItinerary: 'trip-itinerary',
   participants: 'participants',
+  participantOnboardingWorklist: 'participant-onboarding-worklist',
+  portalShiftDetail: 'portal-shift-detail',
+  rosteringCompletions: 'rostering-completions',
+  participantInquiries: 'participant-inquiries',
+  rosterPatterns: 'roster-patterns',
 } as const

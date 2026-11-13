@@ -46,6 +46,7 @@ import { SyncBar } from './sync/SyncBar'
 import { useNow } from './shift/useNow'
 import type { PortalShiftDetailDto, StartShiftDto } from '@/api/types'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { QK } from '@/api/queryKeys'
 
 const TAB_KEYS = ['now', 'about', 'notes'] as const
 type TabKey = typeof TAB_KEYS[number]
@@ -250,7 +251,7 @@ export default function PortalShiftDetailPage() {
       await finishShift.mutateAsync({ id, data: { detailsLater: true, ...(reuse && { endTappedAt: tappedAt }) } })
     } catch (err) {
       const fresh = shiftDetailFromError(err)
-      if (fresh) qc.setQueryData(['portal-shift-detail', id], fresh)
+      if (fresh) qc.setQueryData([QK.portalShiftDetail, id], fresh)
       else setActionError(apiErrorMessages(err)[0] ?? "Couldn't end the shift. Check your connection and try again.")
     } finally {
       setEnding(false)

@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { apiDeleteRaw, apiGet, apiPost, apiPostRaw, apiPut, apiPutRaw } from '../client'
 import { fetchPagedList } from './pagedList'
 import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, CreateReferralSourceDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, ReferralSourceDto, RecordOnboardingExplainedDto, SetIntakeBookingDto, UpdateParticipantInquiryDto, UpdateReferralSourceDto } from '../types/inquiries'
+import { QK } from '@/api/queryKeys'
 
 /** The Enquiries tab's rows: the open view (today's key and URL, so every existing caller is unchanged) or the closed one. */
 export function useParticipantInquiries(view: 'open' | 'closed' = 'open') {
   return useQuery({
-    queryKey: view === 'open' ? ['participant-inquiries'] : ['participant-inquiries', 'closed'],
+    queryKey: view === 'open' ? [QK.participantInquiries] : [QK.participantInquiries, 'closed'],
     // The closed list is the latest 200 (a PagedResult), so the screen can say when it is cut.
     queryFn: () => (view === 'open' ? apiGet<ParticipantInquiryDto[]>('/inquiries') : fetchPagedList<ParticipantInquiryDto>('/inquiries/closed')),
   })
@@ -18,24 +19,24 @@ export function useParticipantInquiries(view: 'open' | 'closed' = 'open') {
  */
 export function useParticipantInquiry(id: string | undefined) {
   return useQuery({
-    queryKey: ['participant-inquiries', id], enabled: !!id, staleTime: 0, refetchOnMount: 'always',
+    queryKey: [QK.participantInquiries, id], enabled: !!id, staleTime: 0, refetchOnMount: 'always',
     queryFn: () => apiGet<ParticipantInquiryDetailDto>(`/inquiries/${id}`),
   })
 }
 
 export function useCreateParticipantInquiry() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (data: CreateParticipantInquiryDto) => apiPost<ParticipantInquiryDto>('/inquiries', data), onSuccess: () => qc.invalidateQueries({ queryKey: ['participant-inquiries'] }) })
+  return useMutation({ mutationFn: (data: CreateParticipantInquiryDto) => apiPost<ParticipantInquiryDto>('/inquiries', data), onSuccess: () => qc.invalidateQueries({ queryKey: [QK.participantInquiries] }) })
 }
 
 export function useUpdateParticipantInquiry() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: ({ id, data }: { id: string; data: UpdateParticipantInquiryDto }) => apiPut<ParticipantInquiryDto>(`/inquiries/${id}`, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['participant-inquiries'] }) })
+  return useMutation({ mutationFn: ({ id, data }: { id: string; data: UpdateParticipantInquiryDto }) => apiPut<ParticipantInquiryDto>(`/inquiries/${id}`, data), onSuccess: () => qc.invalidateQueries({ queryKey: [QK.participantInquiries] }) })
 }
 
 export function useConvertParticipantInquiry() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: ({ id, participantId }: { id: string; participantId?: string }) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/convert`, participantId ? { participantId } : {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['participant-inquiries'] }) })
+  return useMutation({ mutationFn: ({ id, participantId }: { id: string; participantId?: string }) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/convert`, participantId ? { participantId } : {}), onSuccess: () => qc.invalidateQueries({ queryKey: [QK.participantInquiries] }) })
 }
 
 /** The onboarding checklist of one participant (the route's id is the PARTICIPANT's, despite its name). */
@@ -45,7 +46,7 @@ export function useOnboarding(participantId: string | undefined) {
 
 /** The Onboarding tab's rows. */
 export function useOnboardingWorklist() {
-  return useQuery({ queryKey: ['participant-onboarding-worklist'], queryFn: () => apiGet<OnboardingWorklistRow[]>('/inquiries/onboarding-worklist') })
+  return useQuery({ queryKey: [QK.participantOnboardingWorklist], queryFn: () => apiGet<OnboardingWorklistRow[]>('/inquiries/onboarding-worklist') })
 }
 
 /** The checklist's "Signed agreement" item: a signed date or a reason there is no written agreement. The server validates and answers field errors. */
@@ -55,7 +56,7 @@ export function useRecordOnboardingAgreement(participantId: string | undefined) 
     mutationFn: (data: RecordOnboardingAgreementDto) => apiPost<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding/agreement-record`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['onboarding', participantId] })
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
 }
@@ -67,14 +68,14 @@ export function useRecordOnboardingExplained(participantId: string | undefined) 
     mutationFn: (data: RecordOnboardingExplainedDto) => apiPost<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding/explained-record`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['onboarding', participantId] })
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
 }
 
 /** A booking change shows on the enquiry row and on both schedule views. */
 function refreshIntake(qc: QueryClient) {
-  qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+  qc.invalidateQueries({ queryKey: [QK.participantInquiries] })
   qc.invalidateQueries({ queryKey: ['intake-visits'] })
 }
 
@@ -99,7 +100,7 @@ export function useCancelIntakeBooking() {
     onError: () => refreshIntake(qc),
     onSuccess: (result, { id }) => {
       // The row shows Book intake at once, so the page can focus it now rather than the old line 1 the refetch would then remove.
-      qc.setQueryData<ParticipantInquiryDto[]>(['participant-inquiries'], rows => rows?.map(r => r.id !== id ? r : {
+      qc.setQueryData<ParticipantInquiryDto[]>([QK.participantInquiries], rows => rows?.map(r => r.id !== id ? r : {
         ...r, intakeStartsAt: null, intakeDurationMinutes: null, intakeLocation: null, intakeStaffUserId: null, intakeStaffFirstName: null,
         intakeStaffName: null, intakeNotes: null, intakeInviteSentAt: null, intakeInviteError: null, intakeConfirmedAt: null,
         updatedAt: result.inquiry.updatedAt, // the cancel bumped the version: Book intake, pressed before the refetch lands, must start from it
@@ -172,7 +173,7 @@ export function useUpdateReferralSource() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['referral-sources'] })
       // A rename shows on every enquiry carrying the source.
-      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      qc.invalidateQueries({ queryKey: [QK.participantInquiries] })
     },
   })
 }
