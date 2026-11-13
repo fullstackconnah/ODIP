@@ -328,7 +328,7 @@ export default function ParticipantDetailPage() {
   // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
   // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
   const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
-    : p.intakeCompletedAt ? ['/participants?tab=onboarding', 'onboarding'] : ['/participants?tab=enquiries', 'enquiries']
+    : p.intakeCompletedAt ? ['/participants?tab=onboarding', 'onboarding'] : !canManageParticipantLifecycle ? ['/participants', 'participants'] : ['/participants?tab=enquiries', 'enquiries']
   const otherAlerts = canViewAlerts && (alertsData?.alerts ?? []).some(a => a.severity !== 'Critical')
 
   return (

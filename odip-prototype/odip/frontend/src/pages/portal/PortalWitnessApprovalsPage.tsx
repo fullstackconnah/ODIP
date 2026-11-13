@@ -118,8 +118,9 @@ export default function PortalWitnessApprovalsPage() {
   const ratio = formatRatio(used.toLocaleString('en-AU'), STATEMENT_MAX.toLocaleString('en-AU'))
   // The screen-reader copy changes only at 3,600, 3,900 and 4,000, so it is not read on every key.
   const liveStep = [STATEMENT_MAX * 0.9, 3900].filter((n) => used >= n).pop()
-  const liveHint = used >= STATEMENT_MAX ? `${ratio}. That's the limit, so check the end of your statement.` : liveStep ? `At least ${formatRatio(liveStep.toLocaleString('en-AU'), STATEMENT_MAX.toLocaleString('en-AU'))}` : ''
-  const statementHint = used >= STATEMENT_MAX ? `${ratio}. That's the limit, so check the end of your statement.` : used >= STATEMENT_MAX * 0.9 ? ratio : ''
+  const limitHint = `${ratio}. That's the limit, so check the end of your statement.`
+  const liveHint = used >= STATEMENT_MAX ? limitHint : liveStep ? `At least ${formatRatio(liveStep.toLocaleString('en-AU'), STATEMENT_MAX.toLocaleString('en-AU'))}` : ''
+  const statementHint = used >= STATEMENT_MAX ? limitHint : used >= STATEMENT_MAX * 0.9 ? ratio : ''
 
   const dialogCopy = (() => {
     if (!pendingAction) return { title: '', message: null as ReactNode, confirmLabel: '', variant: 'default' as const }
