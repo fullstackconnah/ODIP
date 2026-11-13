@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Rostering;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Rostering;
@@ -18,7 +18,7 @@ public partial class GroupActivitiesController
     private const int ApproveBatchMax = 100;
     private static readonly TimeSpan MaxShift = TimeSpan.FromHours(24);
 
-    private Guid CurrentUserId => Guid.TryParse(User?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : Guid.Empty;
+    private Guid CurrentUserId => User.TryGetUserId() ?? Guid.Empty;
 
     /// <summary>
     /// After the board and participant locks: <see cref="ShiftRowLock"/> on each attached shift, ascending (as the agreement approval does), then the shifts read fresh. The

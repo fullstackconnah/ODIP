@@ -1,9 +1,9 @@
 using System.Globalization;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -98,7 +98,7 @@ public class RestrictivePracticeReportsController : ControllerBase
             : dto.Note is { Length: > 2000 } ? "Keep the note under 2,000 characters." : null;
         if (error != null) return BadRequest(ApiResponse<RestrictivePracticeReportLineDto>.Fail(error));
 
-        Guid? userId = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+        Guid? userId = User.TryGetUserId();
         var name = userId == null ? null : await _db.Users.Where(u => u.Id == userId).Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct);
         var varied = dto.ReportType == RestrictivePracticeReportType.VariedUse;
         _db.RestrictivePracticeMonthlyReports.Add(new RestrictivePracticeMonthlyReport

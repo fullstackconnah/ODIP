@@ -290,7 +290,7 @@ export function useGenerateShiftClaim() {
       qc.invalidateQueries({ queryKey: ['participant-claims', participantId] })
       qc.invalidateQueries({ queryKey: ['claims'] })
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
-      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       refreshLedgers(qc, [participantId])
@@ -310,7 +310,7 @@ export function usePreviewShiftClaimRun() {
 export function useRunShiftClaims() {
   const qc = useQueryClient()
   const refreshLists = () => {
-    for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+    for (const key of ['claims', 'trip-claims', 'participant-claims', QK.rosteringCompletions, QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
   }
   return useMutation({
     mutationFn: (data: ShiftClaimRunRequestDto) => apiPost<ShiftClaimRunDto>('/claims/from-shifts', data),
