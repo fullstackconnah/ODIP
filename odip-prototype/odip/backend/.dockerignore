@@ -1,0 +1,5 @@
+# Build context for backend/Dockerfile (publishes Odip.Api only). Odip.Tests keeps its csproj: the solution restore needs it.
+**/bin
+**/obj
+Odip.Tests/**
+!Odip.Tests/Odip.Tests.csproj
