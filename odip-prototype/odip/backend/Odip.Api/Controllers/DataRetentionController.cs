@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -91,7 +92,7 @@ public class DataRetentionController : ControllerBase
         var status = await RetentionClock.StatusAsync(_db, tenantId, participantId, _clock, ct);
         if (p.IsActive || p.IsDraft || status is not { Due: true }) return Conflict(ApiResponse<PurgeRecordDto>.Fail(NotDue));
 
-        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId);
+        var userId = User.TryGetUserId() ?? Guid.Empty;
         var name = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name) ?? "Unknown";
         var outcome = await ParticipantPurger.PurgeAsync(_db, tenantId, participantId, userId, name, reason, _clock, ct);
         return outcome.Result switch

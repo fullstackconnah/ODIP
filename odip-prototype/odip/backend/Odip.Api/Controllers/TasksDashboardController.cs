@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Api.Rostering;
 using Odip.Application.DTOs;
@@ -178,7 +179,7 @@ public class TasksController : ControllerBase
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
         if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null && status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
-            && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
+            && User.TryGetUserId() is { } reviewer)
             t.OwnerId = reviewer;
         t.Status = status;
         // A Done sent with no date (the quick actions) is the provider's today, as Update stamps it.
@@ -268,7 +269,7 @@ public class TasksController : ControllerBase
         // Whoever completes the review owns it, unless the request names an owner: that is how the shift panel can say who reviewed the emergency.
         var ownerId = dto.OwnerId;
         if (t.TaskType == TaskType.BudgetEmergencyReview && ownerId == null && dto.Status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
-            && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
+            && User.TryGetUserId() is { } reviewer)
             ownerId = reviewer;
 
         if (!await IsValidOwnerRefAsync(ownerId, ct))
@@ -310,7 +311,7 @@ public class TasksController : ControllerBase
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
         if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null
-            && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
+            && User.TryGetUserId() is { } reviewer)
             t.OwnerId = reviewer;
         t.Status = TaskItemStatus.Completed; t.CompletedDate = dto.CompletedDate ?? await ProviderTimeZoneResolver.TodayAsync(_db, t.TenantId, _clock, ct); t.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);

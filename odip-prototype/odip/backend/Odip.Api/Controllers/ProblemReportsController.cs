@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Application.Interfaces;
@@ -59,7 +60,7 @@ public class ProblemReportsController : ControllerBase
         if (text.Length == 0) return BadRequest(ApiResponse<object>.Fail("Write a few words about what went wrong."));
         if (text.Length > MaxText) return BadRequest(ApiResponse<object>.Fail("Keep it under 2,000 characters."));
 
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return Unauthorized();
+        if (User.TryGetUserId() is not { } userId) return Unauthorized();
 
         var now = DateTime.UtcNow;
         var since = now - Window;

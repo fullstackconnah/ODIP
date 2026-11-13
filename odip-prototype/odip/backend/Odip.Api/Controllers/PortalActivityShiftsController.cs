@@ -1,8 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Rostering;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
@@ -51,8 +51,7 @@ public class PortalActivityShiftsController : ControllerBase
 
     private async Task<Guid?> StaffIdAsync(CancellationToken ct)
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        Guid? own = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        Guid? own = User.TryGetUserId();
         var userId = _tenant.ViewAsUserId ?? own;
         return userId is { } id && await _db.Users.AnyAsync(u => u.Id == id && u.IsActive, ct) ? id : null;
     }

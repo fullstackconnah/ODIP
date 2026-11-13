@@ -61,7 +61,7 @@ function offlineQueryOptions<T>(queryKey: readonly unknown[], part: string | und
   }
 }
 
-const detailQuery = (id: string) => offlineQueryOptions(['portal-shift-detail', id], `detail:${id}`, () => apiGet<PortalShiftDetailDto>(`/portal/shifts/${id}`))
+const detailQuery = (id: string) => offlineQueryOptions([QK.portalShiftDetail, id], `detail:${id}`, () => apiGet<PortalShiftDetailDto>(`/portal/shifts/${id}`))
 const notesQuery = (id: string) => offlineQueryOptions(['portal-shift-notes', id], `notes:${id}`, () => apiGet<ShiftNoteDto[]>(`/portal/shifts/${id}/notes`))
 
 /** Today's shifts, and any in progress, are saved in full as soon as the list loads, so they open with no signal. */
@@ -101,7 +101,7 @@ export function usePortalShiftDetail(id: string | undefined) {
 // SHIFT COMPLETION (design spec §2/§4) — Start/Finish on the worker's own shift.
 // ══════════════════════════════════════════════════════════════
 
-const detailOf = (qc: QueryClient, id: string) => qc.getQueryData<PortalShiftDetailDto>(['portal-shift-detail', id])
+const detailOf = (qc: QueryClient, id: string) => qc.getQueryData<PortalShiftDetailDto>([QK.portalShiftDetail, id])
 
 /**
  * Sends a shift write now, or keeps it on the phone to send later. A queued write resolves to `undefined` (nothing for the
@@ -127,7 +127,7 @@ function useQueuedWrite<TVars extends { id: string }, TData>(
 }
 
 const refreshShift = (qc: QueryClient, id: string) => {
-  qc.invalidateQueries({ queryKey: ['portal-shift-detail', id] })
+  qc.invalidateQueries({ queryKey: [QK.portalShiftDetail, id] })
   qc.invalidateQueries({ queryKey: ['portal-shift-notes', id] })
   qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
 }
@@ -179,16 +179,16 @@ function useShiftDetailWrite<TVars extends { id: string }>(mutationFn: (vars: TV
   return useMutation({
     mutationFn,
     onSuccess: (detail, vars) => {
-      qc.setQueryData(['portal-shift-detail', vars.id], detail)
-      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
+      qc.setQueryData([QK.portalShiftDetail, vars.id], detail)
+      qc.invalidateQueries({ queryKey: [QK.portalShiftDetail, vars.id] })
     },
   })
 }
 
 /** The server's answer replaces the cached detail in one step, then it refetches. A queued write leaves the cache to the overlay. */
 const takeDetail = (qc: QueryClient, detail: PortalShiftDetailDto, vars: { id: string }) => {
-  qc.setQueryData(['portal-shift-detail', vars.id], detail)
-  qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
+  qc.setQueryData([QK.portalShiftDetail, vars.id], detail)
+  qc.invalidateQueries({ queryKey: [QK.portalShiftDetail, vars.id] })
 }
 
 /**
@@ -276,13 +276,13 @@ export function useRecordShiftDose() {
     mutationFn: ({ shiftId, medicationId, data }: { shiftId: string; medicationId: string; data: CreateAdministrationDto }) =>
       apiPost<AdministrationDto>(`/portal/shifts/${shiftId}/medications/${medicationId}/administrations`, data),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: [QK.portalShiftDetail, vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['mar'] })
       qc.invalidateQueries({ queryKey: ['participant-administrations'] })
     },
     // 409 ADMINISTRATION_ALREADY_RECORDED / SLOT_BUSY: someone else changed the slot, so the shift detail on screen is stale.
     onError: (_err, vars) => {
-      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: [QK.portalShiftDetail, vars.shiftId] })
     },
   })
 }

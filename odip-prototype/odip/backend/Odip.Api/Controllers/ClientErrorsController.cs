@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
@@ -39,7 +39,7 @@ public class ClientErrorsController : ControllerBase
         var kind = (request.Kind ?? string.Empty).Trim().ToLowerInvariant();
         if (!Kinds.Contains(kind)) return BadRequest(ApiResponse<object>.Fail("Unknown kind."));
 
-        var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : (Guid?)null;
+        var userId = User.TryGetUserId();
         // Values sit in the template (the default console formatter prints no scopes); Flat keeps a stack on one line so it cannot forge a log line.
         _logger.LogWarning("Client error {Kind} at {Path}: {Message} (user {UserId}, org {TenantId}) stack {Stack} component {ComponentStack}",
             kind, Line(request.Path, 200), message, userId, _tenant.TenantId, Flat(request.Stack, 4000), Flat(request.ComponentStack, 4000));
