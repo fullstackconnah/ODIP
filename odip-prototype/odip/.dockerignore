@@ -1,0 +1,10 @@
+# Build context "." for frontend/Dockerfile: it COPYs only frontend/ and nginx/.
+backend
+e2e
+docs
+mock-api
+local-test
+.impeccable
+.env
+**/node_modules
+**/dist
