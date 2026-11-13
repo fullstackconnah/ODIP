@@ -4,6 +4,7 @@ import { useCompleteTask, useTasks } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskDto } from '@/api/types'
 import { formatDayMonth } from '@/lib/dateRange'
 import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
+import { QK } from '@/api/queryKeys'
 
 const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
 const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancelled'
@@ -77,9 +78,9 @@ export function useTasksGroup(enabled: boolean, { mayCloseBudgetReview }: { mayC
         return [...(o.data?.items ?? []), ...(d.data?.items ?? []).filter(isOpen)].map((t) => t.id)
       } finally {
         // A Done with no reply never ran its onSuccess, and may have committed: refresh what it would have (useCompleteTask).
-        void qc.invalidateQueries({ queryKey: ['tasks'] })
+        void qc.invalidateQueries({ queryKey: [QK.tasks] })
         void qc.invalidateQueries({ queryKey: ['trip-tasks'] })
-        void qc.invalidateQueries({ queryKey: ['dashboard'] })
+        void qc.invalidateQueries({ queryKey: [QK.dashboard] })
       }
     },
     // shortcut: overdue past the server cap are added from its total; due-today past the cap is not (closed rows can't be dropped client-side), upgrade = an open filter on dueToday.

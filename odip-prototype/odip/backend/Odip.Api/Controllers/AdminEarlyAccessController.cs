@@ -56,7 +56,7 @@ public class AdminEarlyAccessController : ControllerBase
                 }).ToList(),
             });
         return Ok(ApiResponse<PagedResult<EarlyAccessSignupDto>>.Ok(
-            await PagedResult<EarlyAccessSignupDto>.CreateAsync(query, page, pageSize, ct)));
+            await PagedResults.CreateAsync(query, page, pageSize, ct)));
     }
 
     // POST api/v1/admin/early-access/{id}/followed-up — a person has read the over-limit repeats and followed up, so the "Follow up needed" marker goes.

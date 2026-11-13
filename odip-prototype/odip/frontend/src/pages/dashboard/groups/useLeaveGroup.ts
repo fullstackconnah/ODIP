@@ -9,6 +9,7 @@ import { plural } from '@/lib/format'
 import { rosterLink } from '@/lib/rosterLinks'
 import { formatShiftTime } from '@/lib/utils'
 import { groupPhase, type ActionOutcome, type GroupModel, type QuickForm, type QuickRow } from '../quickGroupModel'
+import { QK } from '@/api/queryKeys'
 
 const firstName = (name: string) => name.split(' ')[0]
 
@@ -128,10 +129,10 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
         return [...(l.data ?? []).map((r) => `leave:${r.id}`), ...(u.data ?? []).map((r) => `unavailability:${r.id}`)]
       } finally {
         // An approval with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveLeave).
-        void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        void qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
         void qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
-        void qc.invalidateQueries({ queryKey: ['tasks'] })
-        void qc.invalidateQueries({ queryKey: ['dashboard'] })
+        void qc.invalidateQueries({ queryKey: [QK.tasks] })
+        void qc.invalidateQueries({ queryKey: [QK.dashboard] })
       }
     },
     count: (leave.data?.length ?? 0) + (unavailability.data?.length ?? 0),

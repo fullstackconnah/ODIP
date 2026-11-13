@@ -23,6 +23,7 @@ import type {
   InvoiceSummaryDto,
   InvoiceRegisterRowDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /** PP-61: `options.enabled` lets a caller (e.g. a tab that only needs this once visited) defer
  * the fetch — additive, so existing callers passing nothing keep fetching as soon as `tripId` is
@@ -290,7 +291,7 @@ export function useGenerateShiftClaim() {
       qc.invalidateQueries({ queryKey: ['claims'] })
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       refreshLedgers(qc, [participantId])
       refreshBudgetWarnings(qc)
@@ -309,7 +310,7 @@ export function usePreviewShiftClaimRun() {
 export function useRunShiftClaims() {
   const qc = useQueryClient()
   const refreshLists = () => {
-    for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', 'roster-board', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+    for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
   }
   return useMutation({
     mutationFn: (data: ShiftClaimRunRequestDto) => apiPost<ShiftClaimRunDto>('/claims/from-shifts', data),

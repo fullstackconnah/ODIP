@@ -1921,6 +1921,8 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ApprovedByName).HasMaxLength(300).IsRequired();
             entity.Property(e => e.AgreedByName).HasMaxLength(200);
+            entity.Property(e => e.ApprovedByRoles).HasMaxLength(200);
+            entity.Property(e => e.ApproverRolesInForce).HasMaxLength(200);
             entity.HasOne(e => e.Draft).WithMany().HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.DraftId).IsUnique();

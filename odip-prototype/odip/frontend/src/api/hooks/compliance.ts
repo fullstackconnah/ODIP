@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDeleteRaw, apiGet, apiPostRaw, apiPutRaw } from '../client'
 import type { ComplianceItemDto, SaveComplianceItemDto } from '../types/compliance'
+import { QK } from '@/api/queryKeys'
 
 const KEY = ['compliance-items']
 
@@ -12,7 +13,7 @@ export function useComplianceItems(enabled = true) {
 /** A save or delete also opens, retitles or closes the date's Admin task, so the task lists reload too. */
 function useRefresh() {
   const qc = useQueryClient()
-  return () => Promise.all([qc.invalidateQueries({ queryKey: KEY }), qc.invalidateQueries({ queryKey: ['tasks'] })])
+  return () => Promise.all([qc.invalidateQueries({ queryKey: KEY }), qc.invalidateQueries({ queryKey: [QK.tasks] })])
 }
 
 export function useCreateComplianceItem() {

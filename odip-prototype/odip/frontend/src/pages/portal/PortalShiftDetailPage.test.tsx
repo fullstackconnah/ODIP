@@ -16,8 +16,6 @@ const h = vi.hoisted(() => ({
   ackMutateAsync: vi.fn(),
   startBreakMutateAsync: vi.fn(),
   endBreakMutateAsync: vi.fn(),
-  editBreakMutateAsync: vi.fn(),
-  deleteBreakMutateAsync: vi.fn(),
   checkRoutineMutateAsync: vi.fn(),
   uncheckRoutineMutateAsync: vi.fn(),
   recordMutateAsync: vi.fn(),
@@ -26,7 +24,7 @@ const h = vi.hoisted(() => ({
 }))
 const {
   mockUsePortalShiftDetail, mockUseShiftNotes, startMutateAsync, finishMutateAsync, saveDetailsMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync,
-  editBreakMutateAsync, deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync,
+  checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync,
 } = h
 
 vi.mock('@/api/hooks', () => ({
@@ -38,8 +36,6 @@ vi.mock('@/api/hooks', () => ({
   useAcknowledgeHandover: h.mutation(h.ackMutateAsync),
   useStartBreak: h.mutation(h.startBreakMutateAsync),
   useEndBreak: h.mutation(h.endBreakMutateAsync),
-  useEditBreak: h.mutation(h.editBreakMutateAsync),
-  useDeleteBreak: h.mutation(h.deleteBreakMutateAsync),
   useCheckRoutine: h.mutation(h.checkRoutineMutateAsync),
   useUncheckRoutine: h.mutation(h.uncheckRoutineMutateAsync),
   useRecordShiftDose: h.mutation(h.recordMutateAsync),
@@ -202,8 +198,8 @@ function makeCompletion(overrides: Partial<NonNullable<PortalShiftDetailDto['com
 }
 
 beforeEach(() => {
-  for (const fn of [startMutateAsync, finishMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync, editBreakMutateAsync,
-    deleteBreakMutateAsync, checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync]) fn.mockReset().mockResolvedValue(undefined)
+  for (const fn of [startMutateAsync, finishMutateAsync, ackMutateAsync, startBreakMutateAsync, endBreakMutateAsync,
+    checkRoutineMutateAsync, uncheckRoutineMutateAsync, recordMutateAsync, saveReasonMutateAsync]) fn.mockReset().mockResolvedValue(undefined)
   saveDetailsMutateAsync.mockReset().mockResolvedValue({})   // a sent PUT answers with the shift; undefined means it was queued
   Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
   mockUsePortalShiftDetail.mockReset()
