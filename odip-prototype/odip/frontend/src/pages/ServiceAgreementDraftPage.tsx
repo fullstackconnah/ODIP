@@ -18,6 +18,7 @@ import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type W
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { agreementIssues, type AgreementIssue } from '@/lib/agreementIssues'
 import { endingWords } from '@/lib/agreementEnding'
+import { approvalRolesLine } from '@/lib/approvalRoles'
 import { approvalHistory } from '@/lib/agreementHistory'
 import { blocksToShifts, chargeHolidaysByDefault, engineLimits, shiftIdsOfBlock, type Shift } from '@/lib/agreementShifts'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -579,6 +580,7 @@ function DraftPage() {
               downloading={download.isPending} downloadFailed={download.isError}
               populate={populatable && onScreen?.approval ? {
                 approvedLine: `Approved for rostering by ${onScreen.approval.approvedByName} on ${formatWithTimeZone(onScreen.approval.approvedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.`,
+                rolesLine: approvalRolesLine(onScreen.approval.approverRolesInForce, onScreen.approval.approvedByRoles),
                 onOpen: () => { setPopulated(null); setPopulating(true) },
                 result: populated?.draftId === onScreen.id ? populated.text : null,
               } : undefined}

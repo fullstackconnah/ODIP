@@ -29,7 +29,7 @@ type SaveStepProps = {
   /** For a role that may approve, on the newest unapproved save with nothing unsaved: the send button and the line saying where it went (SendToContact, ShareStatus). */
   send?: ReactNode
   /** Once the newest save is approved (S11): who and when, the way into Populate roster, and what the last populate said. Undefined when it cannot be populated from here. */
-  populate?: { approvedLine: string; onOpen: () => void; result: string | null }
+  populate?: { approvedLine: string; rolesLine: string | null; onOpen: () => void; result: string | null }
 }
 
 const SECTION = 'flex flex-col gap-2'
@@ -97,6 +97,7 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
         <section aria-labelledby="save-populate" className={SECTION}>
           <h3 id="save-populate" className="text-sm font-semibold">Rostering</h3>
           <p className="text-sm">{populate.approvedLine}</p>
+          {populate.rolesLine && <p className="text-[13px] text-[var(--color-muted-foreground)]">{populate.rolesLine}</p>}
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={populate.onOpen}>Populate roster</Button>
             <p className="text-[13px] text-[var(--color-muted-foreground)]">Adds the open shifts of this schedule to a week that has been started, one week at a time. Safe to repeat.</p>
