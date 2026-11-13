@@ -115,23 +115,23 @@ const rowsInFrame = async (page, vp, ctx) => {
   const m = await page.evaluate(() => {
     const section = [...document.querySelectorAll('main section')].find((s) => s.querySelector('h2')?.textContent === 'Settings history')
     const right = section.getBoundingClientRect().right
-    const rows = [...section.querySelectorAll('div.flex.items-start')].filter((d) => d.textContent.includes('→'))
+    const rows = [...section.querySelectorAll('div.\\@container > div')].filter((d) => d.textContent.includes('→'))
     return { n: rows.length, over: rows.map((r) => r.getBoundingClientRect().right - right).filter((o) => o > 1) }
   })
   check(`${ctx}: every field row ends inside the section (${m.n} rows)`, m.n > 0 && m.over.length === 0, m)
 }
 
-// Every row (FieldDiff) starts its first value at the same x (+-1 px), and that value sits at least 4 px right of its label, so a long label wraps inside its 140 px column instead of pushing the values out of line.
+// Every row (FieldDiff) starts its first value at the same x (+-1 px), and that value sits at least 4 px right of its label (or, under the 35rem container width where FieldDiff stacks the label above its values, below it), so a long label wraps inside its 140 px column instead of pushing the values out of line.
 const valuesAligned = async (page, ctx) => {
   const m = await page.evaluate(() => {
     const section = [...document.querySelectorAll('main section')].find((s) => s.querySelector('h2')?.textContent === 'Settings history')
-    const rows = [...section.querySelectorAll('div.flex.items-start')].filter((d) => d.textContent.includes('→'))
-    const cells = rows.map((r) => ({ label: r.children[0].getBoundingClientRect().right, value: r.children[1].getBoundingClientRect().left }))
-    return { n: cells.length, xs: cells.map((c) => Math.round(c.value * 10) / 10), gaps: cells.map((c) => Math.round((c.value - c.label) * 10) / 10) }
+    const rows = [...section.querySelectorAll('div.\\@container > div')].filter((d) => d.textContent.includes('→'))
+    const cells = rows.map((r) => { const l = r.children[0].getBoundingClientRect(), v = r.children[1].getBoundingClientRect(); return { label: l.right, value: v.left, stacked: v.top >= l.bottom } })
+    return { n: cells.length, xs: cells.map((c) => Math.round(c.value * 10) / 10), gaps: cells.map((c) => (c.stacked ? 'stacked' : Math.round((c.value - c.label) * 10) / 10)) }
   })
   const spread = Math.max(...m.xs) - Math.min(...m.xs)
   check(`${ctx}: every row's first value starts at the same x (+-1 px, ${m.n} rows)`, m.n > 0 && spread <= 1, m.xs)
-  check(`${ctx}: every value starts at least 4 px right of its label`, m.n > 0 && m.gaps.every((g) => g >= 4), m.gaps)
+  check(`${ctx}: every value starts at least 4 px right of its label`, m.n > 0 && m.gaps.every((g) => g === 'stacked' || g >= 4), m.gaps)
 }
 
 // Numeric checks 1 to 6 (SHAPE section 4), measured on the live page against the invoice note field and the house tokens.
