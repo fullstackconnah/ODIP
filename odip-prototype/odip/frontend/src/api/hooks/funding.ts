@@ -18,7 +18,7 @@ export const fundingKey = (participantId: string | undefined) => ['participant-f
  */
 function refreshOnboarding(queryClient: QueryClient, participantId: string) {
   void queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
-  void queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+  void queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
 }
 
 /** The NDIS support categories (01 to 21). Reference data that does not change under a session, so it is fetched once. */

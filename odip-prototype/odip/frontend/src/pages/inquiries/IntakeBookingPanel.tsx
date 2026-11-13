@@ -16,6 +16,7 @@ import {
 import { fullName } from '@/lib/inquiryDetails'
 import { BookingFields } from './BookingFields'
 import { useBookingStaff } from './useBookingStaff'
+import { QK } from '@/api/queryKeys'
 
 export type IntakeBookingPanelProps = {
   /** The enquiry being booked; null while the panel is closed. */
@@ -59,7 +60,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   // `stale`: the refusal is "someone else changed this", which Reload answers.
   const [refusal, setRefusal] = useState<{ title: string; text: string; stale: boolean } | null>(null)
   // The write that was refused refetches the lists; Reload waits for that, so it never adopts the row it is replacing.
-  const refetching = useIsFetching({ queryKey: ['participant-inquiries'] }) > 0
+  const refetching = useIsFetching({ queryKey: [QK.participantInquiries] }) > 0
   const [announcement, setAnnouncement] = useState('')
   const [busy, setBusy] = useState<'save' | 'resend' | 'confirm' | 'reload' | null>(null)
   const [reloadError, setReloadError] = useState<string | null>(null)

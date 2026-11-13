@@ -59,7 +59,7 @@ export function useMakeCancellationClaim() {
   return useMutation({
     mutationFn: ({ shiftId, cancellationReason }: { shiftId: string; cancellationReason: string }) => apiPost<ShiftClaimGeneratedDto>('/claims/cancellations', { shiftId, cancellationReason }),
     onSettled: (created) => {
-      for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      for (const key of ['claims', 'trip-claims', 'participant-claims', QK.rosteringCompletions, QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
       refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
       refreshBudgetWarnings(qc)
     },
