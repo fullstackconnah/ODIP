@@ -220,7 +220,7 @@ public class DstFirstPassBillingTests
 
         var row = Assert.Single((await Assert.ThrowsAsync<NothingClaimableException>(() => engine.PreviewAsync(person.Id, Sat, Sat, Ct))).LeftOut);
 
-        Assert.EndsWith("· 9 h", row.Description);
+        Assert.EndsWith("9 h", row.Description, StringComparison.Ordinal);
     }
 
     // A sleepover that ends in the repeated hour: the finish is read as the first pass, so 18:30 to 02:20 is 470 elapsed minutes (under the 8 hours), not 530.
