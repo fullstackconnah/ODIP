@@ -4,6 +4,7 @@ import { refreshBudgetFigures } from './funding-ledger'
 import { AGREEMENTS_ENDING_KEY, AGREEMENTS_KEY } from './service-agreement-drafts'
 import { CHUNK, runInChunks, type ChunkRun } from '../../lib/runInChunks'
 import type { AgreementApproveResult, AgreementBulkRequest, AgreementBulkResult, AgreementDraftRef, AgreementList, PriceList } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export const seriesKey = (r: { participantId: string; agreementId: string }) => `${r.participantId}:${r.agreementId}`
 
@@ -34,13 +35,13 @@ export function useApproveAgreements(onProgress?: (done: number) => void) {
         queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
         queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts'] }),
         queryClient.invalidateQueries({ queryKey: ['service-agreement-draft'] }),
-        queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+        queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
         queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
         refreshBudgetFigures(queryClient, ids),
         // With the organisation's setting on, an approval may have moved someone to Active: the lists, their header and their checklist.
-        queryClient.invalidateQueries({ queryKey: ['participants'] }),
+        queryClient.invalidateQueries({ queryKey: [QK.participants] }),
         queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
-        ...ids.flatMap(id => [queryClient.invalidateQueries({ queryKey: ['participant', id] }), queryClient.invalidateQueries({ queryKey: ['onboarding', id] })]),
+        ...ids.flatMap(id => [queryClient.invalidateQueries({ queryKey: [QK.participant, id] }), queryClient.invalidateQueries({ queryKey: ['onboarding', id] })]),
       ])
     },
   })

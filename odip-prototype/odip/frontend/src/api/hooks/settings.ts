@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiGetWithDefault, apiPut, apiPutRaw, apiClient } from '../client'
 import type { AppSettingsDto, UpdateAppSettingsDto, UpdateSecuritySettingsDto, MyProfileDto, UpdateMyProfileDto, ApiResponse, TenantUserDto, ModuleVisibilityDto } from '../types'
 import { getViewAs } from '@/lib/viewAs'
+import { QK } from '@/api/queryKeys'
 
 export function useSettings() {
   return useQuery({
@@ -93,7 +94,7 @@ export function useUpdateModuleVisibility() {
     onSuccess: response => {
       qc.setQueryData(key, response.data)
       // The group activities switch also changes what the dashboard (settings) and the roster board read.
-      return Promise.all([key, ['settings'], ['roster-board']].map(queryKey => qc.invalidateQueries({ queryKey })))
+      return Promise.all([key, ['settings'], [QK.rosterBoard]].map(queryKey => qc.invalidateQueries({ queryKey })))
     },
   })
 }

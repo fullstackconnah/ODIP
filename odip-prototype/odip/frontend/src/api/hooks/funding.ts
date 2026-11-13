@@ -4,6 +4,7 @@ import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import type {
   ApplyPlanDatesResult, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, SetMyProviderDto, UpdateBudgetSettingsDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 // A participant's NDIS plan budget (budget feature, phase 1). The plan record is saved through these endpoints and never through the participant's patch groups. Every plan write
 // refreshes ['participant-funding', participantId], so a saved plan updates the tab and the intake card at once.
@@ -84,7 +85,7 @@ export function useApplyPlanDatesToProfile(participantId: string) {
     mutationFn: (planId: string) => apiPost<ApplyPlanDatesResult>(`/participants/${participantId}/funding/plans/${planId}/apply-dates-to-profile`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
-      void queryClient.invalidateQueries({ queryKey: ['participant', participantId] })
+      void queryClient.invalidateQueries({ queryKey: [QK.participant, participantId] })
       refreshOnboarding(queryClient, participantId)
     },
   })

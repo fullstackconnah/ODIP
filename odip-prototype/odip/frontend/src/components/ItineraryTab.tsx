@@ -127,7 +127,7 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
           <div className="absolute left-6 top-0 bottom-0 w-1 bg-[var(--color-secondary-container)] rounded-full hidden md:block" />
 
           <div className="space-y-6">
-            {itinerary.days.map((day: any) => (
+            {itinerary.days.map((day) => (
               <div key={day.dayNumber} className="relative md:pl-16">
                 {/* Day number badge on timeline */}
                 <div className="hidden md:flex absolute left-0 top-5 w-12 h-12 rounded-full bg-[var(--color-on-accessible-container)] items-center justify-center text-[var(--color-card)] font-bold text-sm z-10 shadow-lg">
@@ -149,7 +149,7 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
 
                   <div className="p-5 space-y-3">
                     {/* Accommodation events */}
-                    {day.accommodationEvents?.map((ae: any, i: number) => (
+                    {day.accommodationEvents?.map((ae, i) => (
                       <div key={`ae-${i}`} className="flex items-center gap-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)]">
                         <Building2 className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
                         <div>
@@ -178,7 +178,7 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
                     {/* Activities */}
                     {day.activities?.length > 0 ? (
                       <div className="space-y-2">
-                        {day.activities.map((activity: any, i: number) => {
+                        {day.activities.map((activity, i) => {
                           const cat = getCategoryStyle(activity.category)
                           const CatIcon = cat.icon
                           return (

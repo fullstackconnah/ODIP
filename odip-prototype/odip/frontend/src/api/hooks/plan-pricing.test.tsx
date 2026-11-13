@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { PlanBlock, PlanQuote } from '../types'
 import { emptyBlock } from '@/lib/planBlocks'
-import { MAX_BUSY_RETRIES, busyDelay, retryWhenBusy, usePlanBlockQuote, usePlanBudget, usePlanPricingSettings, useUpdatePlanPricingSettings } from './plan-pricing'
+import { MAX_BUSY_RETRIES, busyDelay, retryWhenBusy, usePlanBudget, usePlanPricingSettings, useUpdatePlanPricingSettings } from './plan-pricing'
 
 const { post, apiGet, apiPut } = vi.hoisted(() => ({ post: vi.fn(), apiGet: vi.fn(), apiPut: vi.fn() }))
 
@@ -72,8 +72,6 @@ describe('usePlanBudget', () => {
     renderHook(() => usePlanBudget([block], '2026-10-01', '20271-06-30'), { wrapper: wrapper(client) })
     renderHook(() => usePlanBudget([block], '2026-10-01', '2027-02-30'), { wrapper: wrapper(client) })
     renderHook(() => usePlanBudget([block], '1999-10-01', '2026-12-31'), { wrapper: wrapper(client) })
-    renderHook(() => usePlanBlockQuote(block, '2026-10-01', '20271-06-30'), { wrapper: wrapper(client) })
-    renderHook(() => usePlanBlockQuote(block, '2026-10-01', '2101-06-30'), { wrapper: wrapper(client) })
 
     expect(post).not.toHaveBeenCalled()
   })
@@ -93,7 +91,7 @@ describe('usePlanBudget', () => {
 
   it('gives up after a few tries and reports that it is busy', async () => {
     post.mockRejectedValue({ response: { status: 429, headers: { 'retry-after': '0' }, data: {} } })
-    const { result } = renderHook(() => usePlanBlockQuote(block, '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
+    const { result } = renderHook(() => usePlanBudget([block], '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
 
     await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 6000 })
 
@@ -129,23 +127,6 @@ describe('usePlanBudget', () => {
   })
 })
 
-describe('usePlanBlockQuote', () => {
-  it('prices one block alone over the agreement and asks for its lines', async () => {
-    post.mockResolvedValueOnce(reply(quote()))
-    const { result } = renderHook(() => usePlanBlockQuote(block, '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    expect(post.mock.calls[0][1]).toEqual({ blocks: [block], periodFrom: '2026-10-01', periodTo: '2026-12-31', includeLines: true })
-  })
-
-  it('waits for a block and a period', () => {
-    renderHook(() => usePlanBlockQuote(null, '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
-    renderHook(() => usePlanBlockQuote(block, '', ''), { wrapper: wrapper(new QueryClient()) })
-    expect(post).not.toHaveBeenCalled()
-  })
-})
-
 describe('the pricing settings', () => {
   it('reads them from the settings route', async () => {
     apiGet.mockResolvedValue({ registrationGroupsHeld: ['0125'], isDefault: false })
@@ -160,7 +141,6 @@ describe('the pricing settings', () => {
     apiPut.mockResolvedValue({ registrationGroupsHeld: ['0125'], registrationGroupsConfirmed: true, isDefault: false })
     const client = new QueryClient()
     client.setQueryData(['plan-budget', 'k'], { stale: true })
-    client.setQueryData(['plan-block-quote', 'k'], { stale: true })
     const { result } = renderHook(() => useUpdatePlanPricingSettings(), { wrapper: wrapper(client) })
 
     result.current.mutate({ registrationGroupsHeld: ['0125'], registrationGroupsConfirmed: true })
@@ -169,6 +149,5 @@ describe('the pricing settings', () => {
     expect(apiPut).toHaveBeenCalledWith('/plan-pricing/settings', { registrationGroupsHeld: ['0125'], registrationGroupsConfirmed: true })
     expect(client.getQueryData(['plan-pricing-settings'])).toMatchObject({ registrationGroupsConfirmed: true })
     expect(client.getQueryState(['plan-budget', 'k'])?.isInvalidated).toBe(true)
-    expect(client.getQueryState(['plan-block-quote', 'k'])?.isInvalidated).toBe(true)
   })
 })

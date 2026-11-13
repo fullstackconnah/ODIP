@@ -68,6 +68,38 @@ public class MultipleAgreementsPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(2, latest[(participantId, participantId)].Current!.Version);
     }
 
+    private static OdipDbContext GatedContext(string connectionString, Guid tenantId, InsertGate gate) =>
+        new(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(connectionString).AddInterceptors(new InsertGateInterceptor(gate)).Options, TenantOf(tenantId));
+
+    /// <summary>Opens once every one of <paramref name="parties"/> has arrived; a party that waits over 30 s fails the test instead of hanging it.</summary>
+    private sealed class InsertGate(int parties)
+    {
+        private readonly TaskCompletionSource _open = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _arrived;
+
+        public Task ArriveAsync()
+        {
+            if (Interlocked.Increment(ref _arrived) == parties) _open.SetResult();
+            return _open.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
+
+    private sealed class InsertGateInterceptor(InsertGate gate) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        private bool _arrived;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!_arrived && eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraft>().Any(e => e.State == EntityState.Added))
+            {
+                _arrived = true;
+                await gate.ArriveAsync();
+            }
+            return result;
+        }
+    }
+
     [SkippableFact]
     public async Task Race_TwoFirstSavesOfNewAgreements_IsOneRevisionAndOne409_NeverA500()
     {
@@ -90,8 +122,11 @@ public class MultipleAgreementsPostgresTests : IClassFixture<PostgresFixture>
             NewAgreement = true, AgreementKind = AgreementKind.Core,
             Blocks = [new DraftBlockDto { Block = Block("b1", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13)), Requirements = new DraftBlockRequirementsDto() }],
         };
-        await using var first = PostgresFixture.NewContext(connectionString, TenantOf(tenantId));
-        await using var second = PostgresFixture.NewContext(connectionString, TenantOf(tenantId));
+        // Task.WhenAll alone does not make the two saves overlap: a save that commits before the other resolves its agreement id makes the other a legitimate second agreement (new id, no conflict).
+        // The gate holds both after they have resolved the id and before either inserts, so both are the first agreement.
+        var gate = new InsertGate(2);
+        await using var first = GatedContext(connectionString, tenantId, gate);
+        await using var second = GatedContext(connectionString, tenantId, gate);
 
         var results = await Task.WhenAll(
             new ServiceAgreementDraftService(first).SaveAsync(tenantId, participantId, request, "one", CancellationToken.None),
