@@ -118,4 +118,18 @@ public static class ProviderLocalTime
         var end = endDate.ToDateTime(shift.EndTime, DateTimeKind.Unspecified);
         return (start, end);
     }
+
+    /// <summary>
+    /// The shift's real rostered length in <paramref name="zone"/>: elapsed time between the two edges of <see cref="RosteredWindowLocal"/>, so a night the clocks change is an hour
+    /// long or short (22:00 to 06:00 is 9h when daylight saving ends, 7h when it starts). Payroll, billing and the roster's hours all read it; the wall-clock
+    /// <see cref="Shift.DurationHours"/> stays for rules on bare times.
+    /// </summary>
+    public static TimeSpan RosteredElapsed(Shift shift, TimeZoneInfo zone)
+    {
+        var (start, end) = RosteredWindowLocal(shift);
+        return LocalToUtc(end, zone) - LocalToUtc(start, zone);
+    }
+
+    /// <summary><see cref="RosteredElapsed"/> in hours, unrounded like <see cref="Shift.HoursBetween"/>.</summary>
+    public static decimal RosteredHours(Shift shift, TimeZoneInfo zone) => (decimal)RosteredElapsed(shift, zone).TotalHours;
 }
