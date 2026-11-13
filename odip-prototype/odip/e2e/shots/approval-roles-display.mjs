@@ -51,8 +51,18 @@ try {
     const page = await context.newPage()
     const opts = { touch: vp.touch }
     const shot = async (locator, name) => {
-      const result = await cropElement(page, locator, path.join(OUT_DIR, `${vp.name}-${name}.png`), { ...opts, hideChrome: true })
+      // natural: the viewport grows to the page height, so the sticky budget bar and bottom nav sit in their natural place, not over the section (cropElement scrolls to the top itself, so scrollIntoView would be undone).
+      // during: at capture time, no visible fixed or sticky element may intersect the cropped element.
+      const during = () => locator.evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        const hit = [...document.body.querySelectorAll('*')].map((e) => ({ e, s: getComputedStyle(e), b: e.getBoundingClientRect() })).find(({ e, s, b }) =>
+          (s.position === 'fixed' || s.position === 'sticky') && b.width > 0 && b.height > 0 && s.visibility !== 'hidden' && Number(s.opacity) > 0 &&
+          !e.contains(el) && !el.contains(e) && b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top)
+        return hit ? `${hit.e.tagName} .${String(hit.e.className).slice(0, 60)} rect ${Math.round(hit.b.left)},${Math.round(hit.b.top)} ${Math.round(hit.b.width)}x${Math.round(hit.b.height)}` : ''
+      })
+      const result = await cropElement(page, locator, path.join(OUT_DIR, `${vp.name}-${name}.png`), { ...opts, hideChrome: true, natural: vp.touch, during })
       checks.push(checkCropHolds(result))
+      check(vp.name, `${name}-clear-of-chrome`, result.measured === '', result.measured)
       return result
     }
     await page.route('**/api/v1/auth/dev-users', (route) => route.fulfill({ json: devUsers }))
