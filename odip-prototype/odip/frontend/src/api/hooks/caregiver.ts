@@ -5,6 +5,7 @@ import type {
   CaregiverFormDto, CaregiverDraftDto, CaregiverLinkDto,
   CaregiverSubmissionListItemDto, CaregiverSubmissionDetailDto, CaregiverSubmissionStatus,
 } from '../types/caregiver'
+import { QK } from '@/api/queryKeys'
 
 // ── Public (token) — no session, no cache sharing with the app ──
 
@@ -52,7 +53,7 @@ export function useGenerateCaregiverLink() {
       apiPostRaw<CaregiverLinkDto>(`/participants/${participantId}/caregiver-link`, {}),
     // Settled: a 409 (a form already waiting) must also reload the participant and the list.
     onSettled: (_, __, vars) => {
-      qc.invalidateQueries({ queryKey: ['participant', vars.participantId] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.participantId] })
       qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
     },
   })
@@ -65,7 +66,7 @@ export function useRevokeCaregiverLink() {
       apiDeleteRaw(`/participants/${participantId}/caregiver-link`),
     // Settled, not only success: a refusal (another coordinator revoked it first) must still reload the chip and the Revoke button.
     onSettled: (_, __, vars) => {
-      qc.invalidateQueries({ queryKey: ['participant', vars.participantId] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.participantId] })
       qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
     },
   })
@@ -96,8 +97,8 @@ export function useAcceptCaregiverSubmission() {
   return useMutation({
     mutationFn: ({ id }: { id: string; participantId: string }) => apiPostRaw(`/caregiver-submissions/${id}/accept`, {}),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participant', vars.participantId] })
-      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.participantId] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
     },
     // A refused review (409: someone reviewed it first) still reloads the list and the record, so neither stays stale.
     onSettled: (_, __, vars) => {

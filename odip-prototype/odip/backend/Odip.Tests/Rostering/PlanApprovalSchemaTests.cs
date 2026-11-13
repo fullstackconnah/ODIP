@@ -115,6 +115,35 @@ public class PlanApprovalSchemaTests
     }
 
     [Fact]
+    public void The_roles_columns_are_nullable_and_200_long()
+    {
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, new Mock<ICurrentTenant>().Object);
+        var entity = db.Model.FindEntityType(typeof(ServiceAgreementDraftApproval))!;
+
+        foreach (var name in new[] { "ApprovedByRoles", "ApproverRolesInForce" })
+        {
+            var property = entity.FindProperty(name)!;
+            Assert.True(property.IsNullable, name);
+            Assert.Equal(200, property.GetMaxLength());
+        }
+    }
+
+    [Fact]
+    public void The_roles_migration_only_adds_two_nullable_columns()
+    {
+        var type = typeof(OdipDbContext).Assembly.GetTypes().Single(t => t.Name == "AddApprovalRolesProvenance" && typeof(Migration).IsAssignableFrom(t));
+        var migration = (Migration)Activator.CreateInstance(type)!;
+
+        Assert.All(migration.UpOperations, op => Assert.IsType<AddColumnOperation>(op));
+        var columns = migration.UpOperations.OfType<AddColumnOperation>().ToList();
+        Assert.All(columns, c => Assert.Equal("ServiceAgreementDraftApprovals", c.Table));
+        Assert.Equal(new[] { "ApprovedByRoles", "ApproverRolesInForce" }, columns.Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.All(columns, c => Assert.True(c.IsNullable && c.MaxLength == 200, c.Name));
+        Assert.Equal(2, migration.DownOperations.OfType<DropColumnOperation>().Count());
+        Assert.Equal(2, migration.DownOperations.Count);
+    }
+
+    [Fact]
     public void The_migration_is_additive_one_new_table_and_nullable_columns_so_nothing_that_exists_changes()
     {
         var type = typeof(OdipDbContext).Assembly.GetTypes().Single(t => t.Name == "AddServiceAgreementApprovalAndPatternSource" && typeof(Migration).IsAssignableFrom(t));

@@ -16,6 +16,7 @@ import type {
   RecurringUnavailabilityApprovalResultDto,
   LeaveStatus,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 // ══════════════════════════════════════════════════════════════
 // PORTAL (self-service) — mirrors PortalController's leave/unavailability actions
@@ -37,7 +38,7 @@ export function useCreateLeaveRequest() {
       // canRequestLeave is true for Admin/Coordinator/SuperAdmin too, so a coordinator's own
       // request needs the coordinator-side views (sidebar badge, roster board) refreshed as well.
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -49,7 +50,7 @@ export function useCancelMyLeave() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['portal-my-leave'] })
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -140,7 +141,7 @@ export function useCreateLeaveOnBehalf() {
     mutationFn: (data: CreateLeaveRequestDto) => apiPost<LeaveRequestDto>('/leave', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -151,9 +152,9 @@ export function useApproveLeave() {
     mutationFn: (id: string) => apiPost<ApproveLeaveResultDto>(`/leave/${id}/approve`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
-      qc.invalidateQueries({ queryKey: ['tasks'] })   // approving leave raises a LeaveCoverage task per overlapped shift: the task lists must not be served stale
-      qc.invalidateQueries({ queryKey: ['dashboard'] })   // and the dashboard header counts outstanding tasks
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
+      qc.invalidateQueries({ queryKey: [QK.tasks] })   // approving leave raises a LeaveCoverage task per overlapped shift: the task lists must not be served stale
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })   // and the dashboard header counts outstanding tasks
     },
   })
 }
@@ -177,7 +178,7 @@ export function useUpdateLeave() {
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
       qc.invalidateQueries({ queryKey: ['schedule-overview'] })
       qc.invalidateQueries({ queryKey: ['schedule'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -191,7 +192,7 @@ export function useDeclineLeave() {
       // A Pending leave request is already on the roster board (StaffUnavailabilityQuery unions
       // Approved and Pending), so declining removes a window from it just like approving/cancelling
       // does — the board is exactly as stale after a decline as after an approve.
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -202,7 +203,7 @@ export function useCancelLeave() {
     mutationFn: (id: string) => apiPost<LeaveRequestDto>(`/leave/${id}/cancel`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -213,7 +214,7 @@ export function useCreateUnavailabilityOnBehalf() {
     mutationFn: (data: CreateRecurringUnavailabilityDto) => apiPost<RecurringUnavailabilityDto>('/leave/unavailability', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -224,7 +225,7 @@ export function useApproveUnavailability() {
     mutationFn: (id: string) => apiPost<ApproveRecurringUnavailabilityResultDto>(`/leave/unavailability/${id}/approve`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -242,7 +243,7 @@ export function useUpdateUnavailability() {
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
       qc.invalidateQueries({ queryKey: ['schedule-overview'] })
       qc.invalidateQueries({ queryKey: ['schedule'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -263,7 +264,7 @@ export function useCancelUnavailability() {
     mutationFn: (id: string) => apiPost<RecurringUnavailabilityDto>(`/leave/unavailability/${id}/cancel`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }

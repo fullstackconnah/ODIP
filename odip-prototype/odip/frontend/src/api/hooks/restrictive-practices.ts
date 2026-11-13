@@ -4,6 +4,7 @@ import type {
   RestrictivePracticeDto, UpdateRestrictivePracticeDto,
   BulkCreateRestrictivePracticeDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export function useRestrictivePractices(participantId: string | undefined, includeInactive?: boolean) {
   return useQuery({
@@ -24,8 +25,8 @@ export function useBulkCreateRestrictivePractices() {
       apiPostRaw<RestrictivePracticeDto[]>(`/participants/${participantId}/restrictive-practices/bulk`, data),
     onSuccess: (_res, variables) => {
       qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
-      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
-      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: [QK.participant, variables.participantId] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
       qc.invalidateQueries({ queryKey: ['medications'] })
       qc.invalidateQueries({ queryKey: ['medication'] })
     },
@@ -43,8 +44,8 @@ export function useUpdateRestrictivePractice() {
         const saved = res.data
         qc.setQueriesData<RestrictivePracticeDto[]>({ queryKey: ['restrictive-practices', saved.participantId] }, (rows) => rows?.map((r) => (r.id === saved.id ? saved : r)))
         qc.invalidateQueries({ queryKey: ['restrictive-practices', res.data.participantId] })
-        qc.invalidateQueries({ queryKey: ['participant', res.data.participantId] })
-        qc.invalidateQueries({ queryKey: ['participants'] })
+        qc.invalidateQueries({ queryKey: [QK.participant, res.data.participantId] })
+        qc.invalidateQueries({ queryKey: [QK.participants] })
         qc.invalidateQueries({ queryKey: ['medications'] })
         qc.invalidateQueries({ queryKey: ['medication'] })
       }
@@ -60,8 +61,8 @@ export function useDeleteRestrictivePractice() {
       apiDeleteRaw<boolean>(`/participants/restrictive-practices/${id}${expectedUpdatedAt ? `?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}` : ''}`),
     onSuccess: (_res, variables) => {
       qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
-      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
-      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: [QK.participant, variables.participantId] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
       qc.invalidateQueries({ queryKey: ['medications'] })
       qc.invalidateQueries({ queryKey: ['medication'] })
     },

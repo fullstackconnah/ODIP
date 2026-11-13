@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut } from '../client'
 import type { AddGroupStaffDto, GroupActivityDto, GroupActivityFormDto, GroupActivityScope, PagedResult, ShiftStatus, SupportRatio } from '../types'
+import { QK } from '@/api/queryKeys'
 
 const BASE = '/rostering/group-activities'
 
@@ -19,7 +20,7 @@ function useActivityWrite<V, R = unknown>(send: (v: V) => Promise<R>) {
   return useMutation({
     mutationFn: send,
     // onSettled: a refused write refetches too, so the board never keeps a stale card.
-    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ['roster-board'] }), qc.invalidateQueries({ queryKey: ['group-activity'] }), qc.invalidateQueries({ queryKey: ['group-activities'] })]),
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: [QK.rosterBoard] }), qc.invalidateQueries({ queryKey: ['group-activity'] }), qc.invalidateQueries({ queryKey: ['group-activities'] })]),
   })
 }
 

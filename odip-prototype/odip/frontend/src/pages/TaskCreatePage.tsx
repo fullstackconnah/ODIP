@@ -196,7 +196,7 @@ export default function TaskCreatePage() {
                     disabled={tripLocked}
                     items={[
                       { value: '', label: 'No trip' },
-                      ...trips.map((t: any) => ({ value: t.id, label: t.tripName })),
+                      ...trips.map((t) => ({ value: t.id, label: t.tripName })),
                     ]}
                   />
                 )}
@@ -232,7 +232,7 @@ export default function TaskCreatePage() {
                     onBlur={field.onBlur}
                     items={[
                       { value: '', label: 'Unassigned' },
-                      ...staff.map((s: any) => ({ value: s.id, label: s.fullName })),
+                      ...staff.map((s) => ({ value: s.id, label: s.fullName })),
                     ]}
                   />
                 )}

@@ -3,9 +3,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
 import type { RosterBoardDto, ShiftDto } from '@/api/types'
 import { allBoardShifts } from '../lib/roster'
+import { QK } from '@/api/queryKeys'
 
 // The fill chart shares the roster-board prefix so board writes refresh it, but it is not a board: leave it out of what is refreshed and re-read.
-const boardQueries = { queryKey: ['roster-board'], type: 'active' as const, predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== 'fill' }
+const boardQueries = { queryKey: [QK.rosterBoard], type: 'active' as const, predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== 'fill' }
 
 const FAILED = "Couldn't refresh the board. Try again."
 
@@ -41,7 +42,7 @@ export function RefreshBoardAction({ onRefreshed, announce }: RefreshBoardAction
       // No board on screen means nothing was fetched: that is a failure to report, not "up to date".
       if (queryClient.getQueryCache().findAll(boardQueries).length === 0) throw new Error('no board on screen')
       await queryClient.refetchQueries(boardQueries, { throwOnError: true })
-      void queryClient.invalidateQueries({ queryKey: ['roster-board', 'fill'] })
+      void queryClient.invalidateQueries({ queryKey: [QK.rosterBoard, 'fill'] })
       pending.current = false
       // The notice went while this ran (a newer write cleared it, or the panel was saved): what it was about is gone, so say nothing and take no focus.
       if (!mounted.current) return

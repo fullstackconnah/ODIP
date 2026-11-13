@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetWarnings } from './funding-ledger'
 import type { ImportBatchDto, ImportInviteCountDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportShiftShape } from '../types'
+import { QK } from '@/api/queryKeys'
 
 const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } }
 
@@ -29,7 +30,7 @@ export function usePreviewImport() {
 
 /** The lists an import or an undo changes. A funding plans import also changes each participant's Funding tab, the onboarding "Funding recorded" gate and the Budgets list. */
 function refreshAfterImport(qc: ReturnType<typeof useQueryClient>) {
-  for (const key of ['imports', 'participants', 'staff', 'roster-board', 'participant-funding', 'onboarding', 'participant-onboarding-worklist', 'dashboard']) qc.invalidateQueries({ queryKey: [key] })
+  for (const key of ['imports', QK.participants, 'staff', QK.rosterBoard, 'participant-funding', 'onboarding', 'participant-onboarding-worklist', QK.dashboard]) qc.invalidateQueries({ queryKey: [key] })
   refreshBudgetWarnings(qc)
 }
 

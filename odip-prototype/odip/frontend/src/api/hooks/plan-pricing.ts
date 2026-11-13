@@ -51,7 +51,6 @@ export function useUpdatePlanPricingSettings() {
       queryClient.setQueryData(SETTINGS_KEY, saved)
       // Every price on screen was worked out with the old settings.
       queryClient.invalidateQueries({ queryKey: ['plan-budget'] })
-      queryClient.invalidateQueries({ queryKey: ['plan-block-quote'] })
       queryClient.invalidateQueries({ queryKey: ['plan-period-quote'] })
     },
   })
@@ -84,20 +83,6 @@ export function usePlanBudget(blocks: readonly PlanBlock[], from: string, to: st
       const weekly = week ? await postQuote({ blocks: [...blocks], periodFrom: week.from, periodTo: week.to, includeLines: false }, signal) : null
       return { period, weekly, week }
     },
-  })
-}
-
-/** One block priced alone over the agreement, with its lines: the Review step's table, holiday exposure and why. */
-export function usePlanBlockQuote(block: PlanBlock | null, from: string, to: string, enabled = true) {
-  const ready = enabled && block !== null && periodProblem(from, to) === null
-  return useQuery({
-    queryKey: ['plan-block-quote', JSON.stringify({ block, from, to })],
-    enabled: ready,
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    retry: retryWhenBusy,
-    retryDelay: busyDelay,
-    queryFn: ({ signal }) => postQuote({ blocks: [block as PlanBlock], periodFrom: from, periodTo: to, includeLines: true }, signal),
   })
 }
 

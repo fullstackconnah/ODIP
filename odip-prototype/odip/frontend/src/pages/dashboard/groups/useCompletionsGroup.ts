@@ -7,6 +7,7 @@ import type { Tone } from '@/lib/tone'
 import { formatWithTimeZone } from '@/lib/utils'
 import { formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
+import { QK } from '@/api/queryKeys'
 
 /** A queue row's review flags, in SHAPE's order (the first two are drawn). */
 export function completionFlags(item: CompletionQueueItemDto): Array<{ label: string; tone: Tone }> {
@@ -91,7 +92,7 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
       } finally {
         // A batch with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveCompletionsBatch).
         void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
-        void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        void qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
         // The nav badge's own entry (the group's "all" read was just refetched).
         void qc.invalidateQueries({ queryKey: ['rostering-completions'], predicate: (q) => q.queryKey[2] !== 'all' })
         refreshBudgetFigures(qc)
