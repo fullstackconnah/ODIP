@@ -242,6 +242,8 @@ function approve(store, participantId, draftId, body, caller) {
   // S11: approving makes the patterns only; Populate roster (below) makes the shifts, one started week at a time.
   draft.approval = {
     approvedAt: new Date().toISOString(), approvedByName: (caller && caller.name) || 'Demo Coordinator', patternsCreated: made.length, patternsEnded: planned.toEnd.length, shiftsCreated: 0,
+    // As the server records them: the roles that could approve then, and the role the approver acted in.
+    approverRolesInForce: 'Admin,Coordinator', approvedByRoles: 'Coordinator',
   }
   return { draft, oldShiftsRemaining: planned.oldShifts || { open: 0, assigned: 0, removed: 0, shifts: [] } }
 }

@@ -389,7 +389,7 @@ export function DataTable<T>({
     if (selectAll) { selectAllRef.current.indeterminate = selectAll.indeterminate; return }
     if (!sortedData.length) return
     const selectedCount = sortedData.filter(row =>
-      selectedRows?.has(String((row as any)[keyField]))
+      selectedRows?.has(String(row[keyField]))
     ).length
     selectAllRef.current.indeterminate = selectedCount > 0 && selectedCount < sortedData.length
   }, [selectedRows, sortedData, keyField, selectable, selectAll])
@@ -522,7 +522,7 @@ export function DataTable<T>({
                   checked={selectAll ? selectAll.checked :
                     tickable.length > 0 &&
                     tickable.every(row =>
-                      selectedRows?.has(String((row as any)[keyField]))
+                      selectedRows?.has(String(row[keyField]))
                     )
                   }
                   onChange={e => {
@@ -602,7 +602,7 @@ export function DataTable<T>({
             </tr>
           )}
           {(limit ? sortedData.slice(0, limit) : sortedData).map((row, rowIndex) => {
-            const rowKey = String((row as any)[keyField])
+            const rowKey = String(row[keyField])
             const isEditing = (editingRow != null && rowKey === String(editingRow)) || (editingRows?.has(rowKey) ?? false)
             const extraClass = rowClassName?.(row) ?? ''
             const isClickable = onRowClick && !loading

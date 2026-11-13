@@ -162,3 +162,14 @@ export function formatServiceDate(iso: string | null | undefined): string {
   const date = new Date(day * 86_400_000)
   return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }
+
+const ROLE_LABELS: Record<string, string> = {
+  SuperAdmin: 'Super Admin',
+  Admin: 'Admin',
+  Coordinator: 'Coordinator',
+  SupportWorker: 'Support Worker',
+  ReadOnly: 'Read Only',
+}
+
+/** A role as people read it ("SupportWorker" becomes "Support Worker"); a name nobody has labelled is shown as stored. */
+export const roleLabel = (role: string) => ROLE_LABELS[role] ?? role

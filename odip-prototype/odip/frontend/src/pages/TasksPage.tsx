@@ -1,5 +1,5 @@
 import { useTasks, useSetTaskStatus, useDeleteTask } from '@/api/hooks'
-import { TASK_TYPE_LABELS, type TaskItemStatus } from '@/api/types'
+import { TASK_TYPE_LABELS, type TaskDto, type TaskItemStatus } from '@/api/types'
 import { CellText, DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -45,7 +45,7 @@ export default function TasksPage() {
   const setStatus = useSetTaskStatus()
   const deleteTask = useDeleteTask()
 
-  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<TaskDto>({
     deleteMutation: deleteTask,
     // Restore posts the status alone, so it cannot revert an edit made since the list loaded (an update rewrites the whole row).
     restoreMutation: { mutate: ({ id }, options) => setStatus.mutate({ id, status: 'NotStarted' }, options), isPending: setStatus.isPending },
@@ -65,7 +65,7 @@ export default function TasksPage() {
   // The server sends the 500 soonest due and the true total; the table sorts only the rows it holds.
   const tasks = data?.items ?? []
   const total = data?.totalCount ?? 0
-  const markComplete = (e: React.MouseEvent, task: any) => {
+  const markComplete = (e: React.MouseEvent, task: TaskDto) => {
     e.stopPropagation()
     setStatus.mutate({ id: task.id, status: 'Completed' }, {
       onError: () => setFailedRowId(task.id),
@@ -74,7 +74,7 @@ export default function TasksPage() {
   }
 
   // The menu a row offers, once: icon buttons on a mouse, one ⋯ on the phone card. Archive is undoable (a confirm, then Archived), so it is never red.
-  const rowItems = (t: { id: string; taskType?: string }): RowMenuItem[] => mayChange(t)
+  const rowItems = (t: TaskDto): RowMenuItem[] => mayChange(t)
     ? [
         { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/tasks/${t.id}/edit` },
         showArchived
@@ -83,7 +83,7 @@ export default function TasksPage() {
       ]
     : isReadOnly && !isBudgetReview(t) && !isRetentionPurge(t) ? [{ label: 'View', icon: <Eye className="w-4 h-4" />, to: `/tasks/${t.id}/edit` }] : []
 
-  const taskColumns: Column<any>[] = [
+  const taskColumns: Column<TaskDto>[] = [
     {
       key: 'checkbox',
       header: '',
