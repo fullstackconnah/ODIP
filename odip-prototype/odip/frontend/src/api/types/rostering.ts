@@ -797,6 +797,8 @@ export interface AutoRosterChangeDto {
   serviceDate: string
   startTime: string
   endTime: string
+  /** The shift's real rostered hours: 9 for 22:00 to 06:00 the night daylight saving ends. */
+  hours: number
   staffId: string
   staffName: string
   pick: AutoRosterPick
@@ -846,6 +848,9 @@ export interface AutoRosterSplitDto {
   startTime: string
   endTime: string
   cutAt: string
+  /** Each part's real rostered hours; they sum to the whole shift's. */
+  firstHours: number
+  secondHours: number
   first: { staffId: string; staffName: string }
   second: { staffId: string; staffName: string }
   /** Either part is past the reach; absent when false. */

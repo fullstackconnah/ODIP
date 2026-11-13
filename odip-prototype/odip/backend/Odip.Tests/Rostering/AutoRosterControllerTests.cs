@@ -114,7 +114,7 @@ public class AutoRosterControllerTests
     }
 
     // Golden body captured on origin/main ffd9307c BEFORE the reach change: the default reach (3) must leave the draft byte-identical (compat PR 1b, check 14).
-    private const string DefaultReachGolden = "{\"WeekStart\":\"2026-11-02\",\"GeneratedAt\":\"2026-11-01T02:00:00Z\",\"Changes\":[{\"ShiftId\":\"00000000-0000-0000-0000-0000000000c1\",\"ParticipantId\":\"00000000-0000-0000-0000-0000000000b1\",\"ParticipantName\":\"Mia Test\",\"ServiceDate\":\"2026-11-03\",\"StartTime\":\"09:00:00\",\"EndTime\":\"13:00:00\",\"StaffId\":\"00000000-0000-0000-0000-0000000000a1\",\"StaffName\":\"Pat Test\",\"Pick\":\"Preferred\",\"Rank\":1,\"UnderGoal\":true,\"Warnings\":[],\"Alternates\":[{\"StaffId\":\"00000000-0000-0000-0000-0000000000a2\",\"StaffName\":\"Quinn Test\",\"Pick\":\"Allowed\"}]}],\"Hours\":[{\"StaffId\":\"00000000-0000-0000-0000-0000000000a1\",\"StaffName\":\"Pat Test\",\"GoalHours\":19,\"GoalIsDefault\":true,\"RosteredHours\":0,\"DraftHours\":4},{\"StaffId\":\"00000000-0000-0000-0000-0000000000a2\",\"StaffName\":\"Quinn Test\",\"GoalHours\":19,\"GoalIsDefault\":true,\"RosteredHours\":0,\"DraftHours\":0}],\"Uncovered\":[],\"Splits\":[]}";
+    private const string DefaultReachGolden = "{\"WeekStart\":\"2026-11-02\",\"GeneratedAt\":\"2026-11-01T02:00:00Z\",\"Changes\":[{\"ShiftId\":\"00000000-0000-0000-0000-0000000000c1\",\"ParticipantId\":\"00000000-0000-0000-0000-0000000000b1\",\"ParticipantName\":\"Mia Test\",\"ServiceDate\":\"2026-11-03\",\"StartTime\":\"09:00:00\",\"EndTime\":\"13:00:00\",\"Hours\":4,\"StaffId\":\"00000000-0000-0000-0000-0000000000a1\",\"StaffName\":\"Pat Test\",\"Pick\":\"Preferred\",\"Rank\":1,\"UnderGoal\":true,\"Warnings\":[],\"Alternates\":[{\"StaffId\":\"00000000-0000-0000-0000-0000000000a2\",\"StaffName\":\"Quinn Test\",\"Pick\":\"Allowed\"}]}],\"Hours\":[{\"StaffId\":\"00000000-0000-0000-0000-0000000000a1\",\"StaffName\":\"Pat Test\",\"GoalHours\":19,\"GoalIsDefault\":true,\"RosteredHours\":0,\"DraftHours\":4},{\"StaffId\":\"00000000-0000-0000-0000-0000000000a2\",\"StaffName\":\"Quinn Test\",\"GoalHours\":19,\"GoalIsDefault\":true,\"RosteredHours\":0,\"DraftHours\":0}],\"Uncovered\":[],\"Splits\":[]}";
 
     private static User Fixed(Guid id, string name) => new()
     {
@@ -143,6 +143,49 @@ public class AutoRosterControllerTests
         var body = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<ApiResponse<AutoRosterDraftDto>>(ok.Value).Data, options);
 
         Assert.Equal(DefaultReachGolden, body);
+    }
+
+    private static Shift ClockChangeShift(OdipDbContext db, Guid participantId, DateOnly date, TimeOnly start, TimeOnly end, bool endsNextDay) => db.Shifts.Add(new Shift
+    {
+        Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = participantId, ServiceDate = date, StartTime = start, EndTime = end, EndsNextDay = endsNextDay,
+        Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft, ShiftPatternId = Guid.NewGuid(),
+    }).Entity;
+
+    [Fact]
+    public async Task AutoRoster_ADraftRowOnTheNightDaylightSavingEnds_CarriesItsRealNineHours()   // Sydney, Sat 3 Apr 2027: 22:00 to 06:00 is 9h, the wall clock says 8h
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var mia = db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+        ClockChangeShift(db, mia.Id, new DateOnly(2027, 4, 3), new TimeOnly(22, 0), new TimeOnly(6, 0), true);
+        await db.SaveChangesAsync();
+
+        var ok = Assert.IsType<OkObjectResult>((await Controller(db, TenantA).AutoRoster(new DateOnly(2027, 3, 29), default)).Result);
+        var draft = Assert.IsType<ApiResponse<AutoRosterDraftDto>>(ok.Value).Data!;
+
+        var change = Assert.Single(draft.Changes);
+        Assert.Equal((pat.Id, 9m), (change.StaffId, change.Hours));
+        Assert.Equal(9m, draft.Hours.Single(h => h.StaffId == pat.Id).DraftHours);
+    }
+
+    [Fact]
+    public async Task AutoRoster_ASplitAcrossTheSkippedHour_CarriesEachHalfsRealHours_SummingToTheShifts()   // Sydney, Sun 3 Oct 2027: 00:00 to 08:00 is 7h; cut at 04:00 gives 3h and 4h
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var mia = db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+        var day = new DateOnly(2027, 10, 3);
+        var shift = ClockChangeShift(db, mia.Id, day, new TimeOnly(0, 0), new TimeOnly(8, 0), false);
+        db.StaffAvailabilities.Add(new StaffAvailability { Id = Guid.NewGuid(), UserId = pat.Id, AvailabilityType = AvailabilityType.Unavailable, StartDateTime = day.ToDateTime(new TimeOnly(4, 0)), EndDateTime = day.ToDateTime(new TimeOnly(8, 0)) });
+        db.StaffAvailabilities.Add(new StaffAvailability { Id = Guid.NewGuid(), UserId = quinn.Id, AvailabilityType = AvailabilityType.Unavailable, StartDateTime = day.ToDateTime(TimeOnly.MinValue), EndDateTime = day.ToDateTime(new TimeOnly(4, 0)) });
+        await db.SaveChangesAsync();
+
+        var ok = Assert.IsType<OkObjectResult>((await Controller(db, TenantA).AutoRoster(new DateOnly(2027, 9, 27), default)).Result);
+        var split = Assert.Single(Assert.IsType<ApiResponse<AutoRosterDraftDto>>(ok.Value).Data!.Splits);
+
+        Assert.Equal((new TimeOnly(4, 0), 3m, 4m), (split.CutAt, split.FirstHours, split.SecondHours));
+        Assert.Equal(ProviderLocalTime.RosteredHours(shift, ProviderLocalTime.ResolveZone("Australia/Sydney")), split.FirstHours + split.SecondHours);
     }
 
     [Fact]

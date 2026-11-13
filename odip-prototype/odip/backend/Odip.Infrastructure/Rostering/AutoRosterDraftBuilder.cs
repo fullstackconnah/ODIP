@@ -56,10 +56,11 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
         var names = workers.ToDictionary(w => w.Id, w => w.Name);
         string PersonName(Shift s) => participants.TryGetValue(s.ParticipantId, out var p) ? p.FullName : "Participant";
         int? RankOf(int rank) => rank > 0 ? rank : null;
-        // A split's two parts count towards each person's draft hours (the Hours tab counts each half's own hours).
+        // A split's two parts count towards each person's draft hours (the Hours tab counts each half's own hours). Each part is measured as the shift it becomes on apply: its own times on the service date.
+        decimal PartHours(Shift s, TimeOnly from, TimeOnly to) => ProviderLocalTime.RosteredHours(new Shift { ServiceDate = s.ServiceDate, StartTime = from, EndTime = to, EndsNextDay = to <= from }, zone);
         var draftHours = plan.Placements.Select(p => (Staff: p.StaffId, Hours: ProviderLocalTime.RosteredHours(shiftsById[p.ShiftId], zone)))
-            .Concat(plan.Splits.Select(x => (Staff: x.FirstStaffId, Hours: Shift.HoursBetween(shiftsById[x.ShiftId].StartTime, x.CutAt, false))))
-            .Concat(plan.Splits.Select(x => (Staff: x.SecondStaffId, Hours: Shift.HoursBetween(x.CutAt, shiftsById[x.ShiftId].EndTime, false))))
+            .Concat(plan.Splits.Select(x => (Staff: x.FirstStaffId, Hours: PartHours(shiftsById[x.ShiftId], shiftsById[x.ShiftId].StartTime, x.CutAt))))
+            .Concat(plan.Splits.Select(x => (Staff: x.SecondStaffId, Hours: PartHours(shiftsById[x.ShiftId], x.CutAt, shiftsById[x.ShiftId].EndTime))))
             .GroupBy(x => x.Staff).ToDictionary(g => g.Key, g => g.Sum(x => x.Hours));
         var byId = staff.ToDictionary(u => u.Id);
 
@@ -71,7 +72,7 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
                 var s = shiftsById[p.ShiftId];
                 return new AutoRosterChangeDto
                 {
-                    ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime,
+                    ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, Hours = ProviderLocalTime.RosteredHours(s, zone),
                     StaffId = p.StaffId, StaffName = names[p.StaffId], Pick = p.Pick, Rank = RankOf(p.Rank), UnderGoal = p.UnderGoal, RegularAway = p.RegularAway, NeedsLook = p.NeedsLook,
                     Warnings = p.Warnings.Select(RosterGate.ToFindingDto).ToList(),
                     Alternates = p.Alternates.Select(a => new AutoRosterAlternateDto { StaffId = a.StaffId, StaffName = names[a.StaffId], Pick = a.Pick, Rank = RankOf(a.Rank), NeedsLook = a.NeedsLook }).ToList(),
@@ -88,6 +89,7 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
                 return new AutoRosterSplitDto
                 {
                     ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, CutAt = x.CutAt, NeedsLook = x.NeedsLook,
+                    FirstHours = PartHours(s, s.StartTime, x.CutAt), SecondHours = PartHours(s, x.CutAt, s.EndTime),
                     First = new AutoRosterSegmentDto { StaffId = x.FirstStaffId, StaffName = names[x.FirstStaffId] },
                     Second = new AutoRosterSegmentDto { StaffId = x.SecondStaffId, StaffName = names[x.SecondStaffId] },
                 };

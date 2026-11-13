@@ -6,16 +6,16 @@ import type { AutoRosterChangeDto, AutoRosterDraftDto } from '@/api/types'
 
 // Monday: Ava on Mia 9-3 and Sam on Dan 10-2 (they overlap, so Sam is no choice for Ava's row). Tuesday: Jo on Dan 7pm-7am.
 const change = (o: Partial<AutoRosterChangeDto>): AutoRosterChangeDto => ({
-  shiftId: 's1', participantId: 'p1', participantName: 'Mia Chen', serviceDate: '2026-09-07', startTime: '09:00:00', endTime: '15:00:00',
+  shiftId: 's1', participantId: 'p1', participantName: 'Mia Chen', serviceDate: '2026-09-07', startTime: '09:00:00', endTime: '15:00:00', hours: 6,
   staffId: 'ava', staffName: 'Ava Nguyen', pick: 'Regular', rank: null, underGoal: false, regularAway: null, warnings: [], alternates: [], ...o,
 })
 const DRAFT: AutoRosterDraftDto = {
   weekStart: '2026-09-07', generatedAt: '2026-09-04T00:00:00Z', splits: [],
   changes: [
     change({ shiftId: 's1', alternates: [{ staffId: 'sam', staffName: 'Sam Lee', pick: 'Preferred', rank: 1 }, { staffId: 'jo', staffName: 'Jo Park', pick: 'Backup' }] }),
-    change({ shiftId: 's2', participantId: 'p2', participantName: 'Dan Osei', staffId: 'sam', staffName: 'Sam Lee', pick: 'Preferred', rank: 2, underGoal: true, startTime: '10:00:00', endTime: '14:00:00',
+    change({ shiftId: 's2', participantId: 'p2', participantName: 'Dan Osei', staffId: 'sam', staffName: 'Sam Lee', pick: 'Preferred', rank: 2, underGoal: true, startTime: '10:00:00', endTime: '14:00:00', hours: 4,
       regularAway: 'Pat Kim is away: on approved leave', warnings: [{ code: 'PUBLIC_HOLIDAY', severity: 'Warning', message: 'Public holiday', requiresReason: false }] }),
-    change({ shiftId: 's3', serviceDate: '2026-09-08', participantName: 'Dan Osei', staffId: 'jo', staffName: 'Jo Park', pick: 'Allowed', startTime: '19:00:00', endTime: '07:00:00' }),
+    change({ shiftId: 's3', serviceDate: '2026-09-08', participantName: 'Dan Osei', staffId: 'jo', staffName: 'Jo Park', pick: 'Allowed', startTime: '19:00:00', endTime: '07:00:00', hours: 12 }),
   ],
   hours: [
     { staffId: 'ava', staffName: 'Ava Nguyen', employmentType: 'FullTime', goalHours: 38, goalIsDefault: true, rosteredHours: 10, draftHours: 6 },
@@ -41,7 +41,7 @@ const applyButton = () => screen.getByRole('button', { name: /^Apply/ })
 
 // Wednesday: Dan Osei 9am-5pm split at 1pm, Eli Brooks until 1pm, Jo Park after.
 const SPLIT = {
-  shiftId: 'x1', participantId: 'p2', participantName: 'Dan Osei', serviceDate: '2026-09-09', startTime: '09:00:00', endTime: '17:00:00', cutAt: '13:00:00',
+  shiftId: 'x1', participantId: 'p2', participantName: 'Dan Osei', serviceDate: '2026-09-09', startTime: '09:00:00', endTime: '17:00:00', cutAt: '13:00:00', firstHours: 4, secondHours: 4,
   first: { staffId: 'eli', staffName: 'Eli Brooks' }, second: { staffId: 'jo', staffName: 'Jo Park' },
 }
 const WITH_SPLIT: AutoRosterDraftDto = { ...DRAFT, splits: [SPLIT] }
@@ -73,7 +73,7 @@ describe('a split in the draft roster panel', () => {
   })
 
   it('never offers a person who has a half at an overlapping time, and counts each half’s own hours', async () => {
-    const row = change({ shiftId: 's9', serviceDate: '2026-09-09', startTime: '10:00:00', endTime: '12:00:00', alternates: [{ staffId: 'eli', staffName: 'Eli Brooks', pick: 'Backup' }, { staffId: 'zed', staffName: 'Zed Unused', pick: 'Allowed' }] })
+    const row = change({ shiftId: 's9', serviceDate: '2026-09-09', startTime: '10:00:00', endTime: '12:00:00', hours: 2, alternates: [{ staffId: 'eli', staffName: 'Eli Brooks', pick: 'Backup' }, { staffId: 'zed', staffName: 'Zed Unused', pick: 'Allowed' }] })
     const { user } = setup({}, { ...WITH_SPLIT, changes: [row] })
     await user.click(screen.getByRole('button', { name: 'Change' }))
     expect(await screen.findByRole('option', { name: /Zed Unused/ })).toBeInTheDocument()
@@ -137,6 +137,18 @@ describe('the draft roster panel', () => {
     expect(screen.getByText('0 + 12 h')).toBeInTheDocument()   // Jo's overnight shift runs past midnight
     await user.click(screen.getByRole('tab', { name: /Changes/ }))
     await user.click(screen.getByRole('button', { name: /^Leave Mia Chen 9am–3pm open$/ }))
+    await user.click(screen.getByRole('tab', { name: 'Hours' }))
+    expect(screen.getByText('10 + 0 h')).toBeInTheDocument()
+  })
+
+  it('draft hours add the server’s real hours for a kept row, not the wall clock: 9 on the night daylight saving ends', async () => {
+    const night = change({ shiftId: 'n1', serviceDate: '2027-04-03', startTime: '22:00:00', endTime: '06:00:00', hours: 9 })   // 22:00 to 06:00 reads 8h on the clock
+    const { user } = setup({}, { ...DRAFT, changes: [night] })
+    await user.click(screen.getByRole('tab', { name: 'Hours' }))
+    expect(screen.getByText('10 + 9 h')).toBeInTheDocument()
+    expect(screen.queryByText('10 + 8 h')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /Changes/ }))
+    await user.click(screen.getByRole('button', { name: /^Leave Mia Chen/ }))
     await user.click(screen.getByRole('tab', { name: 'Hours' }))
     expect(screen.getByText('10 + 0 h')).toBeInTheDocument()
   })

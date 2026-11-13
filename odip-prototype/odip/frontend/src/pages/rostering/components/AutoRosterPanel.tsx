@@ -46,14 +46,11 @@ const pickLabel = (c: { pick: AutoRosterPick; rank?: number | null }) => (c.pick
 // "Tue 8 Sep" for a day heading; the range keeps its en dash with a word joiner so it never breaks.
 const dayLabel = (iso: string) => format(parseISO(iso), 'EEE d MMM')
 const range = (c: { startTime: string; endTime: string }) => formatShiftTimeRange(c.startTime, c.endTime).replace('–', '–⁠')
-const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
-/** A shift's length in hours: an end at or before its start runs past midnight. */
-const durationHours = (c: { startTime: string; endTime: string }) => ((minutes(c.endTime) - minutes(c.startTime) + 1440) % 1440 || 1440) / 60
 const hours = (n: number) => String(Math.round(n * 100) / 100)
 /** A split's two halves as plain shifts for one person each: the first from the start to the cut, the second from the cut to the end. */
 const halvesOf = (s: AutoRosterSplitDto) => [
-  { staffId: s.first.staffId, staffName: s.first.staffName, serviceDate: s.serviceDate, startTime: s.startTime, endTime: s.cutAt },
-  { staffId: s.second.staffId, staffName: s.second.staffName, serviceDate: s.serviceDate, startTime: s.cutAt, endTime: s.endTime },
+  { staffId: s.first.staffId, staffName: s.first.staffName, serviceDate: s.serviceDate, startTime: s.startTime, endTime: s.cutAt, hours: s.firstHours },
+  { staffId: s.second.staffId, staffName: s.second.staffName, serviceDate: s.serviceDate, startTime: s.cutAt, endTime: s.endTime, hours: s.secondHours },
 ]
 const byTime = (a: { serviceDate: string; startTime: string; participantName: string; shiftId: string }, b: typeof a) =>
   a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime) || a.participantName.localeCompare(b.participantName) || a.shiftId.localeCompare(b.shiftId)
@@ -145,8 +142,8 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
 
   const hoursRows = useMemo(() => {
     const added = new Map<string, number>()
-    for (const r of kept) added.set(r.staffId, (added.get(r.staffId) ?? 0) + durationHours(r))
-    for (const s of keptSplits) for (const h of halvesOf(s)) added.set(h.staffId, (added.get(h.staffId) ?? 0) + durationHours(h))   // each half counts its own hours
+    for (const r of kept) added.set(r.staffId, (added.get(r.staffId) ?? 0) + r.hours)
+    for (const s of keptSplits) for (const h of halvesOf(s)) added.set(h.staffId, (added.get(h.staffId) ?? 0) + h.hours)   // each half counts its own real hours
     const listed = new Set((draft?.hours ?? []).map(h => h.staffId))
     const missing: AutoRosterHoursDto[] = []   // a person on a row but not in the pool list still gets a row
     for (const r of [...rows, ...splits.flatMap(halvesOf)]) if (!listed.has(r.staffId)) { listed.add(r.staffId); missing.push({ staffId: r.staffId, staffName: r.staffName, goalHours: 0, goalIsDefault: false, rosteredHours: 0, draftHours: 0 }) }
