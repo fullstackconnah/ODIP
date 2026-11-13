@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw } from '../client'
+import { apiGet, apiPostRaw, apiPutRaw } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
 import { toTruncatableList } from './pagedList'
 import type {
@@ -7,7 +7,6 @@ import type {
   TripDetailDto,
   CreateTripDto,
   UpdateTripDto,
-  PatchTripDto,
   PagedResult,
 } from '../types'
 
@@ -58,19 +57,6 @@ export function useUpdateTrip() {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trip', vars.id] })
       refreshBudgetFigures(qc)   // its status and dates decide whether, when and for how much each of its bookings is in a budget
-    },
-  })
-}
-
-export function usePatchTrip() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: PatchTripDto }) =>
-      apiPatchRaw<TripDetailDto>(`/trips/${id}`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['trips'] })
-      qc.invalidateQueries({ queryKey: ['trip', vars.id] })
-      refreshBudgetFigures(qc)   // a status change (cancelled, in progress, completed) moves every booking of the trip in or out of its budget
     },
   })
 }

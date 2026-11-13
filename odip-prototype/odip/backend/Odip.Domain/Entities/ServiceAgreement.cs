@@ -90,6 +90,10 @@ public class ServiceAgreementDraftApproval : ITenantEntity
     /// <summary>The contact (Person) who agreed; null for the participant or a typed name.</summary>
     public Guid? AgreedByPersonId { get; set; }
     public Enums.AgreementAgreedHow? AgreedHow { get; set; }
+    /// <summary>The roles the approver acted in, distinct, ordinal-sorted, comma-joined; null before it was recorded.</summary>
+    public string? ApprovedByRoles { get; set; }
+    /// <summary>The organisation's approver roles when the permission check ran, comma-joined in the policy's order; null for approvals made before it was recorded.</summary>
+    public string? ApproverRolesInForce { get; set; }
 }
 
 /// <summary>
