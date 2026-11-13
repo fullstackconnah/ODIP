@@ -354,7 +354,9 @@ public class MedicationAdministrationIdempotencyTests
     {
         var dir = AppContext.BaseDirectory;
         while (dir is not null && !File.Exists(Path.Combine(dir, "Odip.sln"))) dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
-        foreach (var relative in new[] { "Odip.Infrastructure/Data/OdipDbContext.cs", "Odip.Infrastructure/Services/MedicationAdministrationRecorder.cs" })
+        var files = Directory.GetFiles(Path.Combine(dir!, "Odip.Infrastructure/Data"), "OdipDbContext*.cs") // the model is split across parts
+            .Select(part => Path.GetRelativePath(dir!, part)).Append("Odip.Infrastructure/Services/MedicationAdministrationRecorder.cs");
+        foreach (var relative in files)
             Assert.DoesNotContain($"\"{MedicationAdministration.IdempotencyIndexName}\"", File.ReadAllText(Path.Combine(dir!, relative)));
     }
 }

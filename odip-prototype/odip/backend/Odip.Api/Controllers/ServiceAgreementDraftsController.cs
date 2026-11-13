@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.RateLimiting;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
@@ -417,7 +418,7 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     /// <summary>The caller as the approval records and checks them: the user id, the name shown, and the roles.</summary>
     private ApprovalCaller Caller() => new(
-        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null,
+        User.TryGetUserId(),
         User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name) ?? "Unknown",
         User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList());
 
@@ -430,6 +431,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         PatternsCreated = approval.PatternsCreated, PatternsEnded = approval.PatternsEnded, ShiftsCreated = approval.ShiftsCreated,
         HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
         AgreedByName = approval.AgreedByName, AgreedHow = approval.AgreedHow,
+        ApproverRolesInForce = approval.ApproverRolesInForce, ApprovedByRoles = approval.ApprovedByRoles,
     };
 
     /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>

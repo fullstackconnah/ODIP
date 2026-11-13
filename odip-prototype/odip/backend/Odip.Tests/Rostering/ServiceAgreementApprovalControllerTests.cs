@@ -139,6 +139,39 @@ public class ServiceAgreementApprovalControllerTests
     }
 
     [Fact]
+    public async Task The_approval_carries_the_roles_that_could_approve_and_the_roles_the_approver_acted_in()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var result = await Controller(f).Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None);
+
+        var row = await f.Db.ServiceAgreementDraftApprovals.SingleAsync();
+        var approval = Value(result).Approval!;
+        Assert.False(string.IsNullOrEmpty(row.ApprovedByRoles));
+        Assert.Equal((row.ApproverRolesInForce, row.ApprovedByRoles), (approval.ApproverRolesInForce, approval.ApprovedByRoles));
+        var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
+        Assert.Contains($"\"approvedByRoles\":\"{row.ApprovedByRoles}\"", json);
+        Assert.Contains("\"approverRolesInForce\":", json);
+    }
+
+    [Fact]
+    public async Task An_approval_made_before_the_roles_were_recorded_gives_null_for_both()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        var controller = Controller(f);
+        await controller.Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None);
+        var row = await f.Db.ServiceAgreementDraftApprovals.SingleAsync();
+        (row.ApproverRolesInForce, row.ApprovedByRoles) = (null, null);
+        await f.Db.SaveChangesAsync();
+
+        var approval = Value(await controller.Get(f.ParticipantId, draft.Id, CancellationToken.None)).Approval!;
+
+        Assert.Equal(((string?)null, (string?)null), (approval.ApproverRolesInForce, approval.ApprovedByRoles));
+    }
+
+    [Fact]
     public async Task Approving_again_is_a_200_with_the_existing_approval_unchanged_whoever_asks()
     {
         await using var f = await SetUpAsync();

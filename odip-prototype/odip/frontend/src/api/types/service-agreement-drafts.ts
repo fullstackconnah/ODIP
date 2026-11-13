@@ -69,6 +69,10 @@ export interface DraftApprovalDto {
   /** An instant (UTC, with a Z). */
   approvedAt: string
   approvedByName: string
+  /** Comma-joined role names that could approve at the time ('' when none); absent on an approval made before this was recorded. */
+  approverRolesInForce?: string | null
+  /** Comma-joined role names the approver acted in; absent on an approval made before this was recorded. */
+  approvedByRoles?: string | null
   patternsCreated: number
   patternsEnded: number
   /** Always 0 for a new approval: approving makes the patterns only, and Populate roster makes the shifts (S11). Older approvals keep what they made. */
