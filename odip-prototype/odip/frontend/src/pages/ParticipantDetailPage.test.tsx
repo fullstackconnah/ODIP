@@ -1669,9 +1669,24 @@ describe('ParticipantDetailPage — Back returns to where the user came from, el
   const back = () => screen.getByRole('link', { name: /^Back to / })
 
   it('falls back to Enquiries for a draft whose intake is not complete', () => {
+    setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false }), isLoading: false })
     renderAt('participant-1')
     expect(back()).toHaveAttribute('href', '/participants?tab=enquiries')
+  })
+
+  // The Enquiries tab is absent for a role that cannot manage the lifecycle (ParticipantsHubPage), so Back must not name it.
+  it('falls back to Participants, not Enquiries, for a draft when the role cannot manage the lifecycle', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false }), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants')
+    expect(back()).toHaveAccessibleName('Back to participants')
+  })
+
+  it('keeps Onboarding for a draft with intake complete even when the role cannot manage the lifecycle (that tab is not gated)', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false, intakeCompletedAt: '2026-10-01T00:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants?tab=onboarding')
   })
 
   it('falls back to Onboarding for a draft whose intake is complete', () => {

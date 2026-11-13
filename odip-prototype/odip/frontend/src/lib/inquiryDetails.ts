@@ -116,7 +116,7 @@ export function startIntakeReason(row: { id: string; hasAddress?: boolean; conta
 
 export type NextStep = { kind: 'resume' | 'fix' | 'book' | 'start'; label: string; reason?: NonNullable<ReturnType<typeof startIntakeReason>> }
 
-/** The one thing to do next on an open enquiry's row, first match wins;. */
+/** The one thing to do next on an open enquiry's row, first match wins. */
 export function nextStep(row: { id: string; participantId?: string | null; hasAddress?: boolean; contactNeedsName?: boolean; intakeStartsAt?: string | null }): NextStep {
   if (row.participantId) return { kind: 'resume', label: 'Resume intake' }
   const reason = startIntakeReason(row)
