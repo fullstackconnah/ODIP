@@ -440,6 +440,12 @@ public sealed class ServiceAgreementDraftService
         if (draft == null) return (null, "Draft not found.");
         // Who it is from: the organisation's own settings, named by tenant (a SuperAdmin's context has no query filter, so it could hand back another organisation's).
         var provider = AgreementProvider.From(await _db.ProviderSettings.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, ct));
+        // A signed revision prints the wording it was signed with, not the organisation's current wording (an Admin may have changed it since). Tenant matched explicitly: the filter is off.
+        var signatures = _db.ElectronicSigningEvidence.IgnoreQueryFilters([TenantFilter.Name]);
+        var signed = await _db.ElectronicSigningSnapshots.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking()
+            .Where(s => s.DraftId == draft.Id && s.DraftVersion == draft.Version && s.TenantId == tenantId && signatures.Any(e => e.SnapshotId == s.Id && e.TenantId == tenantId))
+            .Select(s => s.DocumentJson).FirstOrDefaultAsync(ct);
+        if (signed != null) { var (responsibilities, complaints) = ElectronicSigningEvidenceService.WordingIn(signed); provider = provider with { ResponsibilitiesTerms = responsibilities, ComplaintsTerms = complaints }; }
         return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft, provider, await CategoriesAsync(draft, ct)), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
     }
 

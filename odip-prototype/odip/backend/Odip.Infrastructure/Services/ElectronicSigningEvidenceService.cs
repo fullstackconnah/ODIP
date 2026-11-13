@@ -82,11 +82,14 @@ public sealed class ElectronicSigningEvidenceService
     }
 
     /// <summary>True when the document holds exactly this wording. A document made before the wording existed holds none, so it matches only the standard text.</summary>
-    public static bool WordingMatches(string documentJson, string? responsibilities, string? complaints)
+    public static bool WordingMatches(string documentJson, string? responsibilities, string? complaints) => WordingIn(documentJson) == (responsibilities, complaints);
+
+    /// <summary>The wording a document was made with. A missing or null property is the standard text (null).</summary>
+    public static (string? Responsibilities, string? Complaints) WordingIn(string documentJson)
     {
         using var document = JsonDocument.Parse(documentJson);
         string? Held(string name) => document.RootElement.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-        return Held("ResponsibilitiesTerms") == responsibilities && Held("ComplaintsTerms") == complaints;
+        return (Held("ResponsibilitiesTerms"), Held("ComplaintsTerms"));
     }
 
     private static string? BlocksHash(ServiceAgreementDraft draft) => draft.Blocks.Count == 0 ? null : Hash(string.Join('\n', draft.Blocks.OrderBy(b => b.Position).Select(b =>
