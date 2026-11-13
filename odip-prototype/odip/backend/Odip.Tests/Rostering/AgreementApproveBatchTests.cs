@@ -37,6 +37,24 @@ public class AgreementApproveBatchTests
     private static Task<int> ApprovalRowsAsync(Fixture f) => f.Db.ServiceAgreementDraftApprovals.CountAsync();
 
     [Fact]
+    public async Task Every_row_a_batch_approves_records_the_roles_in_force_and_the_callers_roles()
+    {
+        await using var f = await SetUpAsync();
+        var p1 = f.ParticipantId;
+        var d1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p1);
+        var p2 = await ParticipantAsync(f, "Ben");
+        var d2 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p2);
+
+        var (status, data) = await PostAsync(Controller(f.Db, f, role: "Admin"), Batch((p1, d1.Id), (p2, d2.Id)));
+
+        Assert.Equal(200, status);
+        Assert.All(data!, r => Assert.Equal("Approved", r.Outcome));
+        var rows = await f.Db.ServiceAgreementDraftApprovals.AsNoTracking().ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, a => Assert.Equal(("Admin,Coordinator", "Admin"), (a.ApproverRolesInForce, a.ApprovedByRoles)));
+    }
+
+    [Fact]
     public async Task A_mixed_batch_answers_every_item_in_order_and_one_refusal_never_stops_the_rest()
     {
         await using var f = await SetUpAsync();

@@ -96,6 +96,8 @@ internal static class OlderSchemaSeeds
         ("Users", "EmploymentType", "integer"),
         ("Users", "GoalWeeklyHours", "numeric"),
         ("Users", "IsCprQualified", "boolean NOT NULL DEFAULT false"),
+        ("ServiceAgreementDraftApprovals", "ApprovedByRoles", "character varying(200)"),
+        ("ServiceAgreementDraftApprovals", "ApproverRolesInForce", "character varying(200)"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)
