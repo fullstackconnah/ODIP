@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -41,13 +41,15 @@ import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
 import { blockedOnlyByDoubleBooking } from './lib/rosterGate'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, formatWeekRange, allBoardShifts } from './lib/roster'
 import { useBoardViewMode, type BoardViewMode } from './lib/useBoardViewMode'
+import { useBoardDeepLink } from './useBoardDeepLink'
+import { usePublishSelection } from './usePublishSelection'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekLabel, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, tripsFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
   firstName, joinedSentence,
 } from './lib/rosterDrag'
 import {
-  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, regularConfirm, regularDone, bannerBlockedLine, bannerTitle, isBlocked, selectionTitle, startBudgetWarnings, startResultBody, startResultTitle,
+  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, regularConfirm, regularDone, bannerBlockedLine, bannerTitle, selectionTitle, startBudgetWarnings, startResultBody, startResultTitle,
 } from './lib/rosterWeek'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
@@ -171,27 +173,7 @@ export default function RosterBoardPage() {
   const [activityTarget, setActivityTarget] = useState<ActivityModalTarget | null>(null)
   const [addShiftTarget, setAddShiftTarget] = useState<ShiftDto | null>(null)
   const [busyActivityIds, setBusyActivityIds] = useState<ReadonlySet<string>>(new Set())
-  // `?shift=<id>` (a shift clicked on a person's roster week, spec 2026-10-28) opens that shift's editor once its week has loaded. Read once, then dropped from the address with replace.
-  const [pendingShiftId, setPendingShiftId] = useState(() => searchParams.get('shift'))
-  useEffect(() => {
-    if (searchParams.has('shift')) setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('shift'); return p }, { replace: true })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- once, on mount
-  // Render-time, like the ?date= block above: no effect for state.
-  if (pendingShiftId && board && board.weekStart === weekStart) {
-    setPendingShiftId(null)
-    const shift = allBoardShifts(board).find(s => s.id === pendingShiftId)
-    if (shift) setSlideOverTarget({ mode: 'edit', shift })
-  }
-  // `?activity=<id>` (a row on the Group activities list) opens that activity's modal once its week has loaded. An id that is not on the loaded board (cancelled, another week, Staff view) opens the board plain.
-  // The param stays while the modal is open and is dropped once nothing is open or pending.
-  const [pendingActivityId, setPendingActivityId] = useState(() => searchParams.get('activity'))
-  if (pendingActivityId && board && board.weekStart === weekStart) {
-    setPendingActivityId(null)
-    if (groupActivities?.some(a => a.id === pendingActivityId)) setActivityTarget({ mode: 'edit', id: pendingActivityId })
-  }
-  useEffect(() => {
-    if (pendingActivityId === null && activityTarget === null && searchParams.has('activity')) setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('activity'); return p }, { replace: true })
-  }, [pendingActivityId, activityTarget, searchParams, setSearchParams])
+  useBoardDeepLink({ searchParams, setSearchParams, board, weekStart, setSlideOverTarget, groupActivities, activityTarget, setActivityTarget })
   // A refetch that fails (Refresh the board, a refocus) keeps the week on screen with the data it has: only a week that never loaded is the load-error page.
   const loadFailed = isError && !board
   // INTAKE-08: the board's participant filter/assignment picker excludes drafts (the board
@@ -285,46 +267,7 @@ export default function RosterBoardPage() {
   const [publishOpen, setPublishOpen] = useState(false)
   // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows. Only staffed Drafts: Publish week holds a shift nobody is on until someone is (owner, 2026-10-28).
   // Group activities publish with the week: their participant shifts have no worker, so they are not drafts or held shifts here; the Draft activities count instead (both views carry them while the switch is on).
-  const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && !s.groupActivityId && !isUnfilledShift(s)), [boardShifts])
-  const heldDrafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && !s.groupActivityId && isUnfilledShift(s)).length, [boardShifts])
-  const draftActivities = useMemo(() => (board?.groupActivitiesEnabled === true ? (board.groupActivities ?? []).filter(a => a.status === 'Draft') : []), [board])
-  // Only an explicit false is unstarted: a board without the field (old fixtures) reads as started.
-  const unstarted = board?.weekStarted === false
-  const blocked = useMemo(() => drafts.filter(isBlocked), [drafts])
-  const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
-  // What Publish week would send: select mode picks shifts only, so this is for the whole-week button, banner and leave guard.
-  const weekPublishable = publishable.length + draftActivities.length
-  // Select mode (R3, publish several): a writer ticks Drafts on the board and publishes just those. Keyed to the toolbar (week, view, filters), so any toolbar change leaves the mode with the selection; a render-time reset, as the pickers above.
-  const toolbarKey = [weekStart, groupBy, participantFilter, regionFilter, unfilledOnly].join('|')
-  const [selection, setSelection] = useState<{ key: string; ids: ReadonlySet<string> } | null>(null)
-  if (selection && (selection.key !== toolbarKey || !canWrite || publishable.length === 0)) setSelection(null)
-  const selecting = selection !== null
-  const publishableIds = useMemo(() => new Set(publishable.map(s => s.id)), [publishable])
-  // A draft someone else published, deleted or blocked drops out of the selection on the next render, and the count follows.
-  const chosen = useMemo(() => (selection ? publishable.filter(s => selection.ids.has(s.id)) : []), [selection, publishable])
-  const chosenIds = useMemo(() => new Set(chosen.map(s => s.id)), [chosen])
-  const toggleChosen = useCallback((shift: ShiftDto) => setSelection(prev => {
-    if (!prev) return prev
-    const ids = new Set(prev.ids)
-    if (!ids.delete(shift.id)) ids.add(shift.id)
-    return { ...prev, ids }
-  }), [])
-  // Focus: the count when the mode opens (it mounts then), Select shifts when Cancel or Escape closes it (it mounts then).
-  const returnFocusToSelect = useRef(false)
-  const focusCount = useCallback((el: HTMLElement | null) => el?.focus(), [])
-  const focusSelectButton = useCallback((el: HTMLButtonElement | null) => { if (el && returnFocusToSelect.current) { returnFocusToSelect.current = false; el.focus() } }, [])
-  const leaveSelecting = () => { returnFocusToSelect.current = true; setSelection(null) }
-  // Escape closes the topmost layer only: a capture listener sees a dialog, listbox or menu that Escape is about to close, so it leaves the mode alone.
-  useEffect(() => {
-    if (!selecting) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role=alertdialog], [role=dialog], [role=listbox], [role=menu]')) return
-      returnFocusToSelect.current = true
-      setSelection(null)
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [selecting])
+  const { drafts, heldDrafts, draftActivities, unstarted, blocked, publishable, weekPublishable, toolbarKey, setSelection, selecting, publishableIds, chosen, chosenIds, toggleChosen, focusCount, focusSelectButton, leaveSelecting } = usePublishSelection({ board, boardShifts, weekStart, groupBy, participantFilter, regionFilter, unfilledOnly, canWrite })
   // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
   const showBanner = !unstarted && drafts.length + draftActivities.length > 0
 
