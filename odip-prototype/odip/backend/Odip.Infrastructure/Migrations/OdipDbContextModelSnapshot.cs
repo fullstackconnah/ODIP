@@ -4879,8 +4879,16 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<string>("ApprovedByRoles")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid?>("ApprovedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ApproverRolesInForce")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<Guid>("DraftId")
                         .HasColumnType("uuid");

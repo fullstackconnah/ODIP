@@ -3,6 +3,7 @@ import { apiClient, apiDelete, apiGet, apiPost } from '../client'
 import { caregiverGet } from '../caregiverClient'
 import { refreshBudgetFigures } from './funding-ledger'
 import type { AgreementEndingDto,AgreementSharingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, PopulateDraftDto, PopulatePreviewDto, PopulateResultDto, SendAgreementDto, SendAgreementResultDto, ServiceAgreementDraftDto, SharedAgreementDto } from '../types'
+import { QK } from '@/api/queryKeys'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -126,7 +127,7 @@ export function useEndAgreementEarly() {
       apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/end-early`, { lastDay }),
     onSuccess: (_, { participantId }) => Promise.all([
       ...refreshAgreements(queryClient, participantId),
-      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       refreshBudgetFigures(queryClient, [participantId]),
@@ -174,11 +175,11 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
       // Approval revokes the links of that revision.
       queryClient.invalidateQueries({ queryKey: ['agreement-sharing', participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['participants'] }),
-      queryClient.invalidateQueries({ queryKey: ['participant', participantId] }),
+      queryClient.invalidateQueries({ queryKey: [QK.participants] }),
+      queryClient.invalidateQueries({ queryKey: [QK.participant, participantId] }),
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
       // An approved renewal ends the "ending" flag; the alerts are refreshed with the budget figures below.
@@ -241,7 +242,7 @@ export function usePopulateRoster() {
     mutationFn: ({ participantId, draftId, weekStart }: { participantId: string; draftId: string } & PopulateDraftDto) =>
       apiPost<PopulateResultDto>(`${path(participantId)}/${draftId}/populate`, { weekStart }, { timeout: APPROVE_TIMEOUT_MS }),
     onSuccess: (_, { participantId }) => Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       refreshBudgetFigures(queryClient, [participantId]),

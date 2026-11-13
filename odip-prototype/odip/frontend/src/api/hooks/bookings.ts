@@ -9,6 +9,7 @@ import type {
   UpdateBookingDto,
   PatchBookingDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /**
  * BookingsController.GetAll now returns PagedResult<BookingListDto> (real server-side paging —
@@ -52,7 +53,7 @@ export function useCreateBooking() {
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -68,7 +69,7 @@ export function useUpdateBooking() {
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
       qc.invalidateQueries({ queryKey: ['participant-bookings'] })
     },
   })
@@ -84,7 +85,7 @@ export function usePatchBooking() {
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['bookings'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -99,7 +100,7 @@ export function useDeleteBooking() {
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
