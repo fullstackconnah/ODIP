@@ -40,13 +40,14 @@ import type {
   ApproveBatchResultDto,
   PagedResult,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 // ══════════════════════════════════════════════════════════════
 // ROSTER BOARD
 // ══════════════════════════════════════════════════════════════
 
 /** Under the 'roster-board' prefix so every board write refreshes it; the board-only readers skip it by the 'fill' second key (RefreshBoardAction). */
-export const ROSTER_FILL_KEY = ['roster-board', 'fill'] as const
+export const ROSTER_FILL_KEY = [QK.rosterBoard, 'fill'] as const
 
 /** How full the next 8 weeks are (spec 2026-10-31): shifts filled and open by week. SuperAdmin, Admin and Coordinator only. */
 export function useRosterFill() {
@@ -58,7 +59,7 @@ export function useRosterFill() {
 
 export function useRosterBoard(weekStart: string | undefined, groupBy: 'participant' | 'staff' = 'participant') {
   return useQuery({
-    queryKey: ['roster-board', weekStart, groupBy],
+    queryKey: [QK.rosterBoard, weekStart, groupBy],
     queryFn: () => apiGet<RosterBoardDto>('/rostering/board', { weekStart, groupBy }),
     enabled: !!weekStart,
   })
@@ -67,7 +68,7 @@ export function useRosterBoard(weekStart: string | undefined, groupBy: 'particip
 /** One person's roster week (spec 2026-10-28): the board, narrowed server-side to one staff or participant row. Shares the 'roster-board' prefix, so every board write refreshes it. */
 export function useRosterPersonWeek(kind: 'staff' | 'participant', personId: string | undefined, weekStart: string) {
   return useQuery({
-    queryKey: ['roster-board', weekStart, kind, personId],
+    queryKey: [QK.rosterBoard, weekStart, kind, personId],
     queryFn: () => apiGet<RosterBoardDto>('/rostering/board', kind === 'staff'
       ? { weekStart, groupBy: 'staff', staffId: personId }
       : { weekStart, groupBy: 'participant', participantId: personId }),
@@ -114,10 +115,10 @@ export function useCreateShift() {
     mutationFn: (data: CreateShiftDto) => apiPost<ShiftDto>('/rostering/shifts', data),
     onSuccess: (_, data) => {
       refreshBudgetFigures(qc, [data.participantId])   // a new shift is booked ahead in its participant's budget
-      qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write: the Tasks list must not be served stale
+      qc.invalidateQueries({ queryKey: [QK.tasks] })   // an emergency save raises the Admin's review task in the same write: the Tasks list must not be served stale
     },
     // onSettled, as assign, move and publish: a refused save (an empty-day move whose source changed, 409; findings, 422) refetches the board too.
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
   })
 }
 
@@ -128,10 +129,10 @@ export function useUpdateShift() {
       apiPut<ShiftDto>(`/rostering/shifts/${id}`, data),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // its times, status or day changed what it costs, and where; the update names no participant, so every ledger held is refreshed
-      qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write
+      qc.invalidateQueries({ queryKey: [QK.tasks] })   // an emergency save raises the Admin's review task in the same write
     },
     // onSettled: a refused PUT (busy, locked or findings) refetches the board too, so the panel and the board show the server's truth.
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
   })
 }
 
@@ -141,7 +142,7 @@ export function useDeleteShift() {
     mutationFn: (id: string) => apiDelete(`/rostering/shifts/${id}`),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // a cancelled shift costs nothing
-      return qc.invalidateQueries({ queryKey: ['roster-board'] })
+      return qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -153,7 +154,7 @@ export function useAssignShift() {
     mutationFn: ({ id, data }: { id: string; data: AssignShiftDto }) =>
       apiPost<ShiftDto>(`/rostering/shifts/${id}/assign`, data),
     // onSettled: a refused drop (409, 422) refetches too, so the board shows the server's truth rather than the stale puck that caused it.
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
   })
 }
 
@@ -162,7 +163,7 @@ export function useMoveStaff() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: MoveStaffDto) => apiPost<ShiftDto>('/rostering/shifts/move-staff', data),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
   })
 }
 
@@ -173,8 +174,8 @@ export function usePublishWeek() {
     mutationFn: (v: string | PublishShiftsRequest & { weekStart: string }) =>
       typeof v === 'string' ? apiPost<PublishWeekResultDto>(`/rostering/weeks/${v}/publish`) : apiPost<PublishWeekResultDto>(`/rostering/weeks/${v.weekStart}/publish`, { shiftIds: v.shiftIds }),
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
-      qc.invalidateQueries({ queryKey: ['dashboard', 'setup'] })   // the first published week finishes the setup card
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard, 'setup'] })   // the first published week finishes the setup card
     },
   })
 }
@@ -185,7 +186,7 @@ export function useStartWeek() {
   return useMutation({
     mutationFn: (weekStart: string) => apiPost<StartWeekResultDto>(`/rostering/weeks/${weekStart}/start`),
     onSuccess: () => refreshBudgetFigures(qc),   // the shifts it makes are booked ahead
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
   })
 }
 
@@ -203,7 +204,7 @@ export function useApplyAutoRoster() {
     mutationFn: ({ weekStart, ...body }: AutoRosterApplyDto & { weekStart: string }) =>
       apiPost<AutoRosterApplyResultDto>(`/rostering/weeks/${weekStart}/auto-roster/apply`, body),
     onSuccess: () => refreshBudgetFigures(qc),   // the shifts it staffs are booked ahead
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
   })
 }
 
@@ -214,7 +215,7 @@ export function useSetRegular() {
     mutationFn: ({ patternId, ...body }: { patternId: string; shiftId: string; staffId: string | null; expectedRegularId: string }) =>
       apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, body),
     onSuccess: () => Promise.all([
-      qc.invalidateQueries({ queryKey: ['roster-board'] }),
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
       qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
     ]),
   })
@@ -339,7 +340,7 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // an approved completion is a completed shift the claim run can now take
       refreshBudgetFigures(qc)   // an approved completion is a completed shift: booked ahead becomes pending
     },
@@ -404,7 +405,7 @@ export function useReturnCompletion() {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -420,7 +421,7 @@ export function useApproveCompletionsBatch({ cleanOnly = false }: { cleanOnly?: 
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
       qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       refreshBudgetFigures(qc)   // each approved completion moves its shift from booked ahead to pending
     },
@@ -497,7 +498,7 @@ export function useGeneratePattern() {
     mutationFn: ({ id, from, to }: { id: string; from: string; to: string }) =>
       apiPost<GeneratePatternResultDto>(`/rostering/patterns/${id}/generate?${new URLSearchParams({ from, to })}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: ['roster-patterns'] })
       refreshBudgetFigures(qc)   // the shifts it makes are booked ahead
     },

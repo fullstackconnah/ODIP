@@ -12,6 +12,7 @@ import { offlineQueue, type NewRecord } from '@/lib/offline/queue'
 import { readSaved, readSession, writeSaved } from '@/lib/offline/store'
 import { applyQueued, applyQueuedList, applyQueuedNotes } from '@/lib/offline/overlay'
 import { shiftLabel } from '@/lib/offline/label'
+import { QK } from '@/api/queryKeys'
 
 // ══════════════════════════════════════════════════════════════
 // OFFLINE: the portal reads fall back to the copy saved on this phone, and the worker's writes go through the
@@ -420,6 +421,6 @@ export function useSetActivityAttendance() {
       apiPost<PortalActivityShiftDto>(`/portal/activity-staff/${id}/attendance`, { participantId, attended }),
     // A mark changes what the board, the activity and the staff review show, so all of them refetch, a refusal included.
     onSettled: () =>
-      Promise.all(['portal-my-shifts', 'group-activity', 'group-activities', 'roster-board', 'rostering-group-staff-reviews'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
+      Promise.all(['portal-my-shifts', 'group-activity', 'group-activities', QK.rosterBoard, 'rostering-group-staff-reviews'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   })
 }

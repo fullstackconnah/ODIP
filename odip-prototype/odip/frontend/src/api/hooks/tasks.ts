@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import type { PagedResult, TaskDto, CreateTaskDto, UpdateTaskDto, TaskItemStatus } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export function useTasks(params?: Record<string, string>, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ['tasks', params],
+    queryKey: [QK.tasks, params],
     queryFn: () => apiGet<PagedResult<TaskDto>>('/tasks', params),
     enabled: options?.enabled ?? true,
   })
@@ -32,7 +33,7 @@ export function useCreateTask() {
   return useMutation({
     mutationFn: (data: CreateTaskDto) => apiPostRaw<TaskDto>('/tasks', data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: [QK.tasks] })
       qc.invalidateQueries({ queryKey: ['trip-tasks'] })
     },
   })
@@ -44,10 +45,10 @@ export function useUpdateTask() {
     mutationFn: ({ id, data }: { id: string; data: UpdateTaskDto }) =>
       apiPutRaw<TaskDto>(`/tasks/${id}`, data),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: [QK.tasks] })
       qc.invalidateQueries({ queryKey: ['task', vars.id] })
       qc.invalidateQueries({ queryKey: ['trip-tasks'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }
@@ -59,10 +60,10 @@ export function useCompleteTask() {
     mutationFn: ({ id, completedDate }: { id: string; completedDate?: string }) =>
       apiPostRaw<boolean>(`/tasks/${id}/complete`, completedDate === undefined ? {} : { completedDate }),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: [QK.tasks] })
       qc.invalidateQueries({ queryKey: ['task', vars.id] })
       qc.invalidateQueries({ queryKey: ['trip-tasks'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }
@@ -74,10 +75,10 @@ export function useSetTaskStatus() {
     mutationFn: ({ id, status, completedDate }: { id: string; status: TaskItemStatus; completedDate?: string }) =>
       apiPostRaw<TaskDto>(`/tasks/${id}/status`, { status, completedDate }),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: [QK.tasks] })
       qc.invalidateQueries({ queryKey: ['task', vars.id] })
       qc.invalidateQueries({ queryKey: ['trip-tasks'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }
@@ -87,7 +88,7 @@ export function useDeleteTask() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/tasks/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: [QK.tasks] })
       qc.invalidateQueries({ queryKey: ['trip-tasks'] })
     },
   })
