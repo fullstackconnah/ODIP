@@ -116,13 +116,14 @@ public sealed class ServiceAgreementApprovalService
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
         if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: false, ct);
-        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
+        var (may, inForce) = await ApproverCheckAsync(tenantId, caller, ct);
+        if (!may) return NotAnApprover();
         var (agreedBy, refusal) = await ResolveAgreedAsync(tenantId, participantId, agreed, ct);
         if (refusal is not null) return new ApprovalOutcome(ApprovalStatus.Refused, Errors: new[] { refusal });
 
         try
         {
-            return await ApproveCoreAsync(tenantId, found.Value.Draft, found.Value.Participant, acknowledgeOverlaps, caller, ct, agreedBy);
+            return await ApproveCoreAsync(tenantId, found.Value.Draft, found.Value.Participant, acknowledgeOverlaps, caller, inForce, ct, agreedBy);
         }
         // Another change to the participant's roster held the lock for too long: nothing was changed.
         catch (RosterBusyException busy)
@@ -317,7 +318,7 @@ public sealed class ServiceAgreementApprovalService
         return (agreed with { Name = name }, null);
     }
 
-    private async Task<ApprovalOutcome> ApproveCoreAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct, ApprovalAgreed? agreed = null)
+    private async Task<ApprovalOutcome> ApproveCoreAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool acknowledgeOverlaps, ApprovalCaller caller, string approverRolesInForce, CancellationToken ct, ApprovalAgreed? agreed = null)
     {
         // Approved already: the same answer again, nothing written.
         if (await _db.ServiceAgreementDraftApprovals.AsNoTracking().AnyAsync(a => a.DraftId == draft.Id, ct))
@@ -344,6 +345,7 @@ public sealed class ServiceAgreementApprovalService
             ApprovedAt = _clock.GetUtcNow().UtcDateTime, ApprovedByUserId = caller.UserId, ApprovedByName = caller.Name,
             PatternsCreated = plan.NewPatterns.Count, PatternsEnded = plan.ToEnd.Count,
             AgreedByName = agreed?.Name, AgreedByPersonId = agreed?.PersonId, AgreedHow = agreed?.How,
+            ApprovedByRoles = Cut(string.Join(",", caller.Roles.Distinct(StringComparer.Ordinal).OrderBy(r => r, StringComparer.Ordinal))), ApproverRolesInForce = Cut(approverRolesInForce),
         };
 
         _db.ShiftPatterns.AddRange(plan.NewPatterns);
@@ -795,8 +797,19 @@ public sealed class ServiceAgreementApprovalService
     {
         if (caller.IsSuperAdmin) return true;
         var allowed = PlanPricingPolicy.From(await pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
-        return caller.Roles.Any(role => allowed.Contains(role, StringComparer.OrdinalIgnoreCase));
+        return Holds(allowed, caller);
     }
+
+    // ApproveAsync's check: the same answer as MayApproveAsync from one settings read, also for a SuperAdmin, so the list it was decided against is the one recorded on the row.
+    private async Task<(bool May, string InForce)> ApproverCheckAsync(Guid tenantId, ApprovalCaller caller, CancellationToken ct)
+    {
+        var allowed = PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
+        return (caller.IsSuperAdmin || Holds(allowed, caller), string.Join(",", allowed));
+    }
+
+    private static bool Holds(IReadOnlyList<string> allowed, ApprovalCaller caller) => caller.Roles.Any(role => allowed.Contains(role, StringComparer.OrdinalIgnoreCase));
+    private const int RolesMax = 200; // the two columns' max length (OdipDbContext)
+    private static string Cut(string s) => s.Length <= RolesMax ? s : s[..RolesMax];
 
     public const string NotAnApproverMessage = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing.";
     private static ApprovalOutcome NotAnApprover() => new(ApprovalStatus.NotAnApprover, Errors: new[] { NotAnApproverMessage });
