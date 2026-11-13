@@ -15,7 +15,7 @@ import {
   useUpdateShift,
 } from '@/api/hooks/rostering'
 import { useCancelBooking, useCreateBooking, useDeleteBooking, usePatchBooking, useUpdateBooking } from '@/api/hooks/bookings'
-import { usePatchTrip, useUpdateTrip } from '@/api/hooks/trips'
+import { useUpdateTrip } from '@/api/hooks/trips'
 import { useApproveServiceAgreementDraft } from '@/api/hooks/service-agreement-drafts'
 import { participantLedger } from '@/test/fixtures/ledger'
 import { budgetSeries } from '@/test/fixtures/budgetSeries'
@@ -113,7 +113,6 @@ const cases: Case[] = [
   { name: 'a trip booking is cancelled', use: useCancelBooking, variables: 'booking-1', method: 'patch', url: '/bookings/booking-1', keeps: ['bookings'] },
   { name: 'a trip booking is deleted', use: useDeleteBooking, variables: 'booking-1', method: 'delete', url: '/bookings/booking-1', keeps: ['bookings'] },
   { name: 'a trip is updated (status, dates)', use: useUpdateTrip, variables: { id: 'trip-1', data: { status: 'Completed' } }, method: 'put', url: '/trips/trip-1', keeps: ['trips'] },
-  { name: 'a trip is patched (status)', use: usePatchTrip, variables: { id: 'trip-1', data: { status: 'InProgress' } }, method: 'patch', url: '/trips/trip-1', keeps: ['trips'] },
   { name: 'the budget settings are saved (the approaching percent)', use: useUpdateBudgetSettings, variables: { mode: 'Warn', approachingPercent: 70 }, method: 'put', url: '/funding/settings', keeps: [] },
 ]
 

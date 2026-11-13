@@ -34,7 +34,6 @@ import type {
   FlaggedShiftNoteDto,
   ShiftStatus,
   ShiftCompletionDto,
-  ShiftCompletionReviewDto,
   EditCompletionTravelDto,
   CompletionQueueItemDto,
   ReturnCompletionDto,
@@ -310,19 +309,6 @@ export function useAllCompletions(filters: CompletionFilters, options?: { enable
     },
     refetchInterval: 60_000,
     enabled: options?.enabled ?? true,
-  })
-}
-
-/**
- * The coordinator's one-call review of a submitted shift — GET /rostering/shifts/{id}/completion/review: the completion (breaks,
- * net worked minutes, handover, nothing-to-note), every scheduled dose in the rostered window with its outcome, PRN doses given
- * during the shift, and the shift notes. Read-only; Approve / Return are the existing mutations.
- */
-export function useShiftCompletionReview(shiftId: string | undefined) {
-  return useQuery({
-    queryKey: ['rostering-completion-review', shiftId],
-    queryFn: () => apiGet<ShiftCompletionReviewDto>(`/rostering/shifts/${shiftId}/completion/review`),
-    enabled: !!shiftId,
   })
 }
 
