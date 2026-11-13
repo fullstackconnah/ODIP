@@ -102,7 +102,7 @@ public class TripsController : ControllerBase
                 LeadCoordinatorName = t.LeadCoordinator != null ? (t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName).Trim() : null
             });
 
-        var result = await PagedResult<TripListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        var result = await PagedResults.CreateAsync(projectedQuery, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<TripListDto>>.Ok(result));
     }
 

@@ -12,6 +12,7 @@ import type {
   UpdateScheduledActivityDto,
   ScheduledActivityDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 export function useActivities() {
   return useQuery({
@@ -62,7 +63,7 @@ export function useCreateScheduledActivity() {
       apiPostRaw<ScheduledActivityDto>(`/trip-days/${tripDayId}/activities`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-schedule'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -74,7 +75,7 @@ export function useUpdateScheduledActivity() {
       apiPutRaw<ScheduledActivityDto>(`/scheduled-activities/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-schedule'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }
@@ -85,7 +86,7 @@ export function useDeleteScheduledActivity() {
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/scheduled-activities/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-schedule'] })
-      qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
+      qc.invalidateQueries({ queryKey: [QK.tripItinerary] })
     },
   })
 }

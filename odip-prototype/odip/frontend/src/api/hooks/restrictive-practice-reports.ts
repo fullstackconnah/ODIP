@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiDeleteRaw } from '../client'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import type { RpReportLine, LodgeRpReportDto } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /** `participantId` narrows to one participant (the register's chips); without it, every month the organisation owes. */
 export function useRpMonthlyReportLines(participantId: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {
@@ -17,7 +18,7 @@ function useInvalidateRpReports() {
   const qc = useQueryClient()
   return () => {
     qc.invalidateQueries({ queryKey: ['rp-report-lines'] })
-    qc.invalidateQueries({ queryKey: ['dashboard'] })
+    qc.invalidateQueries({ queryKey: [QK.dashboard] })
     qc.invalidateQueries({ queryKey: ['participant-alerts'] })
     qc.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] })
   }
