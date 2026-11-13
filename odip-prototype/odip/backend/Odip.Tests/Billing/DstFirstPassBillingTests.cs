@@ -209,6 +209,20 @@ public class DstFirstPassBillingTests
     public void AHeadcountCutInTheRepeatedHour_OfAShiftThatEndsInTheSecondPass_StaysTheSecondPass() =>
         Assert.Equal(new[] { 70, 20 }, PartMinutes(new TimeOnly(2, 10), new TimeOnly(2, 40), new TimeOnly(2, 20), true, false));
 
+    // The claim run reads the same hours as the board: the April night is 9 h, not its 8 wall-clock hours.
+    [Fact]
+    public async Task ALeftOutRow_OfTheClockChangeNight_SaysItsRosteredHours()
+    {
+        var (kit, engine, person) = NewKit();
+        using var _ = kit;
+        person.NdisNumber = "";
+        Seed(kit, person, Sat, new TimeOnly(22, 0), new TimeOnly(6, 0), null, null);
+
+        var row = Assert.Single((await Assert.ThrowsAsync<NothingClaimableException>(() => engine.PreviewAsync(person.Id, Sat, Sat, Ct))).LeftOut);
+
+        Assert.EndsWith("9 h", row.Description, StringComparison.Ordinal);
+    }
+
     // A sleepover that ends in the repeated hour: the finish is read as the first pass, so 18:30 to 02:20 is 470 elapsed minutes (under the 8 hours), not 530.
     private static ShiftBandSplit SleepoverSplit(DateOnly date, TimeOnly start, TimeOnly end, bool startFirstPass, bool endFirstPass) =>
         ShiftBands.Split(date, start, end, true, new HashSet<DateOnly>(), Sydney, startFirstPass, endFirstPass);

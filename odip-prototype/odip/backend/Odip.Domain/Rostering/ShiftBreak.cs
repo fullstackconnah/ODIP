@@ -171,8 +171,7 @@ public static class ShiftBreakRules
         Shift shift, ShiftCompletion completion, DateTime nowUtc, IEnumerable<ShiftBreak> breaks, TimeZoneInfo zone)
     {
         // Elapsed minutes in the shift's zone, as UnclaimedSpans: a night the clocks change is an hour short or long.
-        var rostered = Math.Max(0, WholeMinutes(ProviderLocalTime.LocalToUtc(shift.ServiceDate.AddDays(shift.EndsNextDay ? 1 : 0).ToDateTime(shift.EndTime), zone)
-            - ProviderLocalTime.LocalToUtc(shift.ServiceDate.ToDateTime(shift.StartTime), zone)));
+        var rostered = Math.Max(0, WholeMinutes(ProviderLocalTime.RosteredElapsed(shift, zone)));
         var (_, breakMinutes, net) = NetWorked(completion.ActualStart, completion.ActualEnd, nowUtc, breaks);
         return (rostered, breakMinutes, shift.NightType == SleepoverType.Sleepover ? rostered : net);
     }

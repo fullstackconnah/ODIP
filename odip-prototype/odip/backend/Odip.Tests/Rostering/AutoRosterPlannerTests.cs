@@ -53,14 +53,14 @@ public class AutoRosterPlannerTests
             return shift;
         }
 
-        public async Task<AutoRosterPlan> PlanAsync(bool reversePool = false, Func<IAutoRosterOracle, IAutoRosterOracle>? wrap = null, int reach = 3)
+        public async Task<AutoRosterPlan> PlanAsync(bool reversePool = false, Func<IAutoRosterOracle, IAutoRosterOracle>? wrap = null, int reach = 3, TimeZoneInfo? zone = null)
         {
             await Db.SaveChangesAsync();
             var availability = new RosterAvailability(Db, new StaffUnavailabilityQuery(Db));
             var snapshot = await availability.LoadAsync(Pool.Select(w => w.Id).ToList(), [Mia.Id], Monday, Monday.AddDays(6), default);
             var pool = reversePool ? Enumerable.Reverse(Pool).ToList() : Pool;
             var open = reversePool ? Enumerable.Reverse(Open).ToList() : Open;
-            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady, reach), (wrap ?? (o => o))(new SnapshotAutoRosterOracle(snapshot)));
+            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady, reach, zone), (wrap ?? (o => o))(new SnapshotAutoRosterOracle(snapshot)));
         }
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
@@ -288,6 +288,23 @@ public class AutoRosterPlannerTests
         var uncovered = Assert.Single(plan.Uncovered);
         Assert.Equal(AutoRosterRecommendationKind.Soft, uncovered.Recommendations[0].Kind);
         Assert.Equal(pat.Id, uncovered.Recommendations[0].StaffId);
+    }
+
+    [Fact]
+    public async Task TheGoalCountsTheRealNineHoursOfTheNightDaylightSavingEnds()
+    {
+        await using var w = new World();
+        w.Worker("Pat", 8.5m, level: CompatibilityLevel.Preferred);
+        var shift = w.Shift(0, 22, 6);
+        shift.ServiceDate = new DateOnly(2027, 4, 3);
+        shift.EndsNextDay = true;
+
+        var plan = await w.PlanAsync(zone: ProviderLocalTime.ResolveZone("Australia/Sydney"));
+
+        // 9h really (8h by the wall clock, which would fit the 8.5h goal): placed, but over goal.
+        var placement = Assert.Single(plan.Placements);
+        Assert.NotEqual(Guid.Empty, placement.StaffId);
+        Assert.False(placement.UnderGoal);
     }
 
     [Fact]

@@ -315,22 +315,22 @@ public partial class ShiftClaimGenerationService
             var zone = ProviderTimeZoneResolver.ZoneOf(shift, placeZones, orgZone);
             if (noNdisNumber is not null)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = noNdisNumber });
                 continue;
             }
             if (heldBy.TryGetValue(shift.Id, out var heldClaim))
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"It is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = $"It is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
                 continue;
             }
             if (cancelToday is { } today && NotClaimableCancellation(shift, today, zone) is { } notYet)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = notYet });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = notYet });
                 continue;
             }
             if (headcount.IsOpen(shift.GroupActivityId))
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = GroupHeadcount.NotFinished });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = GroupHeadcount.NotFinished });
                 continue;
             }
             var catalogueItems = RowsOf(shift);
@@ -350,7 +350,7 @@ public partial class ShiftClaimGenerationService
                 // A shift that cannot be priced is not claimed, and it is not dropped silently either: it is listed with the reason, and it stays completed and unclaimed.
                 leftOut.Add(new ShiftClaimLeftOutDto
                 {
-                    ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = outcome.NotPricedSentence!,
+                    ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = outcome.NotPricedSentence!,
                 });
                 continue;
             }
@@ -358,7 +358,7 @@ public partial class ShiftClaimGenerationService
             // The item must allow a short-notice cancellation: the whole shift is left out when any of its lines does not.
             if (cancelToday is not null && outcome.Lines.FirstOrDefault(l => !ShortNoticeCancellationRule.Allows(l.CatalogueItem, BprCsvService.CancellationTwin(twins, l.CatalogueItem.ItemNumber, l.Date))) is { } notAllowed)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = ShortNoticeCancellationRule.NotAllowedSentence(notAllowed.CatalogueItem.ItemNumber) });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = ShortNoticeCancellationRule.NotAllowedSentence(notAllowed.CatalogueItem.ItemNumber) });
                 continue;
             }
 
@@ -368,7 +368,7 @@ public partial class ShiftClaimGenerationService
             {
                 // The row already shows the shift's date, so a clash on that day does not repeat it; the after-midnight day is news.
                 var which = clash.Date == shift.ServiceDate ? "It" : FormattableString.Invariant($"{clash.Date:dd/MM/yyyy}");
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{which} is already on trip claim {tripClaimByDay[clash.Date]}. Reject or cancel that claim to claim this shift." });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = $"{which} is already on trip claim {tripClaimByDay[clash.Date]}. Reject or cancel that claim to claim this shift." });
                 continue;
             }
 
@@ -378,7 +378,7 @@ public partial class ShiftClaimGenerationService
                 && SupportTypeCheck.IsAmbiguousForDay(catalogueItems.Contains(l.CatalogueItem) ? catalogueItems : personalCareRows, l.DayType, participant.IsIntensiveSupport, l.Date));
             if (ambiguous is not null)
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"More than one rate matches this support type on {ambiguous.Date:dd/MM/yyyy}.") });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift, zone), Reason = FormattableString.Invariant($"More than one rate matches this support type on {ambiguous.Date:dd/MM/yyyy}.") });
                 continue;
             }
 
@@ -386,7 +386,7 @@ public partial class ShiftClaimGenerationService
             if (cancelToday is null) outcome = ShiftTravelPricer.Apply(outcome, travelOf[shift.Id], shift.ServiceDate, state, travelPolicy.KmRate, catalogueItems.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
 
             if (extraReason is not null)
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = window.ExtraText ?? $"Extra time on {Describe(shift)}", Reason = extraReason, ExtraTimeOnly = true });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = window.ExtraText ?? $"Extra time on {Describe(shift, zone)}", Reason = extraReason, ExtraTimeOnly = true });
             lineItems.AddRange(outcome.Lines.Select((price, part) => new ShiftLineCalc
             {
                 Shift = shift,
@@ -477,8 +477,8 @@ public partial class ShiftClaimGenerationService
     private static readonly string NoCatalogueRateSentence = ShiftPriceOutcome.Unpriced(ShiftPriceEstimator.NoCatalogueRateBecause).NotPricedSentence!;
 
     /// <summary>The shift as the budget ledger describes it ("Shift 22:00–06:00 · 8 h"), so the same shift reads the same on every screen.</summary>
-    private static string Describe(Shift shift) =>
-        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Shift {shift.StartTime:HH:mm}–{shift.EndTime:HH:mm} · {shift.DurationHours:0.##} h");
+    private static string Describe(Shift shift, TimeZoneInfo? zone = null) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Shift {shift.StartTime:HH:mm}–{shift.EndTime:HH:mm} · {(zone is null ? shift.DurationHours : ProviderLocalTime.RosteredHours(shift, zone)):0.##} h");
 
     /// <summary>
     /// The refusal when shifts were found but none could be claimed: how many were left out and why, grouped by reason. "No completed, unclaimed shifts found" would be untrue here

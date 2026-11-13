@@ -133,7 +133,7 @@ public class PortalController : ControllerBase
         var shiftDtos = shifts.Concat(outOfWindow.Where(s => MissingFor(s).Count > 0))
             .Where(s => Participant.ServicesBegun(s.Participant!))
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
-            .Select(s => ToSummaryDto(s, MissingFor(s))).ToList();
+            .Select(s => ToSummaryDto(s, MissingFor(s), provider.Zone)).ToList();
 
         // Trip staffing is optional per the brief — included here since it's a single cheap
         // query against the already-resolved staffId, scoped the same way the shifts are.
@@ -254,7 +254,7 @@ public class PortalController : ControllerBase
             : null;
 
         return new PortalShiftDetailDto(
-            shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
+            shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, ProviderLocalTime.RosteredHours(shift, provider.Zone),
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
             ToParticipantSummaryDto(participant),
             routines.Select(ToRoutineDto).ToList(),
@@ -1797,9 +1797,9 @@ public class PortalController : ControllerBase
 
     private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    private static PortalShiftSummaryDto ToSummaryDto(Shift s, IReadOnlyList<string> missingDetails) => new(
+    private static PortalShiftSummaryDto ToSummaryDto(Shift s, IReadOnlyList<string> missingDetails, TimeZoneInfo zone) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,
-        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location, missingDetails);
+        s.EndsNextDay, ProviderLocalTime.RosteredHours(s, zone), s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location, missingDetails);
 
     // These duplicate LeaveController's own ToDto overloads rather than sharing them — matches
     // the codebase's existing precedent of small per-controller mapping/validation helpers (e.g.
