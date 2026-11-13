@@ -11,6 +11,7 @@ import type {
   RecordIncidentReviewDto,
   IncidentStatusChangeDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /**
  * IncidentsController.GetAll now returns PagedResult<IncidentListDto> (real server-side paging —
@@ -74,7 +75,7 @@ export function useCreateIncident() {
     mutationFn: (data: CreateIncidentDto) => apiPostRaw<IncidentDetailDto>('/incidents', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
       // Connection map seam follow-up: filing an incident can be the "File incident" hand-off
       // from a flagged shift note (IncidentsPage's queue) or from a MAR/administration-history
       // row (MarTab/participant-detail MedicationsTab) — invalidate all three so "Incident
@@ -96,7 +97,7 @@ export function useUpdateIncident() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
       qc.invalidateQueries({ queryKey: ['incident', vars.id] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }
@@ -110,7 +111,7 @@ export function useRecordIncidentReview() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
       qc.invalidateQueries({ queryKey: ['incident', vars.id] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }
@@ -129,7 +130,7 @@ export function useRestoreIncident() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
       qc.invalidateQueries({ queryKey: ['incident', vars.id] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }
@@ -140,7 +141,7 @@ export function useDeleteIncident() {
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/incidents/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: [QK.dashboard] })
     },
   })
 }

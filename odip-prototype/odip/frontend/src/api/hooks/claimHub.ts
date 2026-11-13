@@ -6,6 +6,7 @@ import { fetchPagedList } from './pagedList'
 import { awaitsData } from '@/lib/queryPhase'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
 import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, ManualClaimPreviewDto, ManualClaimRequestDto, ManagedClaimDto, MarkPaidRequestDto, PaidResultDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
+import { QK } from '@/api/queryKeys'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
@@ -58,7 +59,7 @@ export function useMakeCancellationClaim() {
   return useMutation({
     mutationFn: ({ shiftId, cancellationReason }: { shiftId: string; cancellationReason: string }) => apiPost<ShiftClaimGeneratedDto>('/claims/cancellations', { shiftId, cancellationReason }),
     onSettled: (created) => {
-      for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', 'roster-board', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
       refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
       refreshBudgetWarnings(qc)
     },

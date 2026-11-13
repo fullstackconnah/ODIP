@@ -20,6 +20,7 @@ import type {
   ParticipantRosteringDto,
   ParticipantIntakeSnapshotDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /**
  * ParticipantsController clamps `pageSize` to a ceiling of 200 (`Math.Clamp(pageSize, 1, 200)`).
@@ -33,7 +34,7 @@ const PARTICIPANTS_MAX_PAGE_SIZE = 200
 
 export function useParticipants(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['participants', params],
+    queryKey: [QK.participants, params],
     queryFn: async () => {
       const result = await apiGet<PagedResult<ParticipantListDto>>('/participants', {
         pageSize: String(PARTICIPANTS_MAX_PAGE_SIZE),
@@ -46,7 +47,7 @@ export function useParticipants(params?: Record<string, string>) {
 
 export function useParticipant(id: string | undefined) {
   return useQuery({
-    queryKey: ['participant', id],
+    queryKey: [QK.participant, id],
     queryFn: () => apiGet<ParticipantDetailDto>(`/participants/${id}`),
     enabled: !!id,
   })
@@ -126,7 +127,7 @@ export function useCreateParticipant() {
   return useMutation({
     mutationFn: (data: CreateParticipantDto) => apiPostRaw<ParticipantDetailDto>('/participants', data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
       // Completing intake on create puts the participant on the onboarding worklist.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       // A draft saved with its intake open is a direct-intake row in the enquiries feed.
@@ -146,8 +147,8 @@ export function useSaveParticipantIntake() {
     mutationFn: ({ id, data }: { id: string; data: SaveParticipantIntakeDto }) =>
       apiPutRaw<ParticipantDetailDto>(`/participants/${id}/intake`, data),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // Completing intake puts the participant on the onboarding worklist, new contacts and risks now exist, and the enquiry the
       // participant came from keeps its name and contact details in step.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
@@ -171,13 +172,13 @@ function useLifecycleAction(action: 'begin-services' | 'make-active') {
   return useMutation({
     mutationFn: ({ id }: { id: string }) => apiPostRaw<ParticipantDetailDto>(`/participants/${id}/${action}`, {}),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
       // The board lists who can receive services and tags a services-started row.
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -240,11 +241,11 @@ export function usePatchParticipant() {
         while (ledger.has(`${id}/${k}/${n}`)) n = ledger.get(`${id}/${k}/${n}`)!
         sent[k] = n
       }
-      const before = qc.getQueryData<ParticipantDetailDto>(['participant', id]) as Record<string, unknown> | undefined
+      const before = qc.getQueryData<ParticipantDetailDto>([QK.participant, id]) as Record<string, unknown> | undefined
       const res = await apiPatchRaw<ParticipantDetailDto>(`/participants/${id}`, { ...data, expectedRevisions: sent })
       // The save is only done once the cache holds it: the next card rebuilds its group from the cache.
-      await qc.invalidateQueries({ queryKey: ['participant', id] })
-      const cached = qc.getQueryData<ParticipantDetailDto>(['participant', id])?.groupRevisions
+      await qc.invalidateQueries({ queryKey: [QK.participant, id] })
+      const cached = qc.getQueryData<ParticipantDetailDto>([QK.participant, id])?.groupRevisions
       for (const [k, n] of Object.entries(sent) as [ScalarGroupKey, number][]) {
         // shortcut: client-side compare; server-normalised values (flag order, fundingOrganisation) can over-report a change, compare normalised values if this race matters.
         // Exactly n + 1 AND a field of this group changed: the server bumps a group just for a changed column, so a group this request carried unchanged (its n + 1 is someone else's save landing mid-request), or a jump by more than one, is not ours.
@@ -254,16 +255,16 @@ export function usePatchParticipant() {
       return res
     },
     onError: (err, vars) => {
-      if (isSectionChanged(err)) qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      if (isSectionChanged(err)) qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
     },
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
       // A save with expected revisions already awaited this refetch.
-      if (!vars.data.expectedRevisions) qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      if (!vars.data.expectedRevisions) qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // The checklist's "Profile details" item and the worklist are derived from these fields.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: ['participant-rostering', vars.id] })
       // The funding source decides whether the NDIS ledger counts this participant.
       refreshBudgetFigures(qc, [vars.id])
@@ -276,8 +277,8 @@ export function useDeleteParticipant() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/participants/${id}`),
     onSuccess: (_, id) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', id] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
+      qc.invalidateQueries({ queryKey: [QK.participant, id] })
     },
   })
 }
@@ -294,11 +295,11 @@ export function useUpdateParticipantStatus() {
     mutationFn: ({ id, isActive, reason }: { id: string; isActive: boolean; reason?: string | null }) =>
       apiPostRaw<ParticipantStatusResultDto>(`/participants/${id}/status`, { isActive, ...(reason ? { reason } : {}) }),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // Archiving or reactivating changes who the onboarding worklist lists.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
-      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
 }
@@ -312,8 +313,8 @@ export function useRestoreParticipant() {
   return useMutation({
     mutationFn: ({ id }: { id: string }) => apiPostRaw<ParticipantStatusResultDto>(`/participants/${id}/restore`, {}),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      qc.invalidateQueries({ queryKey: [QK.participants] })
+      qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
     },
   })
