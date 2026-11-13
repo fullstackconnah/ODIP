@@ -69,7 +69,7 @@ export default function AccommodationPage() {
       ) : (
         // Cards in a row stretch to one height (a wrapped title made one taller), so the action rows line up: the card pattern Vehicles shares.
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] gap-[var(--section-gap)]">
-          {filtered.map((a: any) => (
+          {filtered.map((a) => (
             <div key={a.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] hover:border-[var(--color-primary)]/30 transition-colors flex flex-col">
               <div className="mb-2">
                 <Link to={`/accommodation/${a.id}`} className={`${TAP_FLOOR} font-semibold hover:underline`}>{a.propertyName}</Link>

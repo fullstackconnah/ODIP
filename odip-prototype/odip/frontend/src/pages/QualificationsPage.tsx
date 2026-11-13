@@ -151,7 +151,7 @@ export default function QualificationsPage() {
 
   async function handleSave(row: QualRow) {
     if (badInput) return
-    const cached = allStaff.find((m: any) => m.id === row.staffId)
+    const cached = allStaff.find((m) => m.id === row.staffId)
     if (!cached) return
 
     // The PUT rewrites the whole record and this page has no Active control, so it is read at save: a deactivation made since the list loaded is
