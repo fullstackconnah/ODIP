@@ -241,7 +241,7 @@ public class ServiceAgreementsController : ControllerBase
     };
 
     private ApprovalCaller Caller() => new(
-        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null,
+        User.TryGetUserId(),
         User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name) ?? "Unknown",
         User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList());
 }

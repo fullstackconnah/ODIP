@@ -26,7 +26,7 @@ public static class SessionRecheck
     /// <summary>Why the token is no longer good, or null if it still is. One primary-key read.</summary>
     public static async Task<string?> RefusalAsync(OdipDbContext db, IConfiguration config, ClaimsPrincipal user, CancellationToken ct)
     {
-        if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id)) return "The token names no user.";
+        if (user.TryGetUserId() is not { } id) return "The token names no user.";
 
         // By id alone: the id is a global key, and a SuperAdmin viewing as another organisation carries that organisation's tenant_id, not their own.
         var row = await db.Users.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking()

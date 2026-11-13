@@ -1,9 +1,9 @@
 using System.Globalization;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Application.Interfaces;
@@ -438,7 +438,7 @@ public class LeaveController : ControllerBase
     // ══════════════════════════════════════════════════════════════
 
     private Guid? ResolveCallerId() =>
-        Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+        User.TryGetUserId();
 
     /// <summary>Shared by ApproveLeave/DeclineLeave — recipient is leave.UserId, never RequestedByUserId.</summary>
     private async Task RaiseLeaveDecidedAsync(LeaveRequest leave, bool approved, CancellationToken ct)

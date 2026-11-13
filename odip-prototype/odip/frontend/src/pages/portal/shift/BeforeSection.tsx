@@ -15,6 +15,7 @@ import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
 import { apiErrorMessages, hasApiErrorCode, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import { Chip, Fact, Section, WaitingToSend } from './ui'
 import type { PortalAtAGlanceDto, PortalEmergencyContactDto, PortalShiftDetailDto } from '@/api/types'
+import { QK } from '@/api/queryKeys'
 
 /** The HIDPA flags that are set, in their fixed order. */
 const hidpaFlags = (g: PortalAtAGlanceDto) => [g.hidpa.epilepsy && 'Epilepsy', g.hidpa.enteralFeeding && 'Enteral feeding', g.hidpa.dysphagia && 'Dysphagia'].filter(Boolean) as string[]
@@ -34,7 +35,7 @@ function Handover({ shift, canAct }: { shift: PortalShiftDetailDto; canAct: bool
     } catch (err) {
       if (hasApiErrorCode(err, SHIFT_PACKAGE_ERROR_CODES.handoverChanged)) {
         const fresh = shiftDetailFromError(err)
-        if (fresh) qc.setQueryData(['portal-shift-detail', shift.id], fresh)
+        if (fresh) qc.setQueryData([QK.portalShiftDetail, shift.id], fresh)
         setError('A newer handover arrived. Read it, then mark it as read.')
       } else {
         setError(apiErrorMessages(err)[0] ?? "Couldn't mark the handover as read. Try again.")

@@ -20,6 +20,7 @@ import { joinList, plural } from '@/lib/format'
 import { formatWithTimeZone } from '@/lib/utils'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
+import { QK } from '@/api/queryKeys'
 
 /** The element to focus for a refused field whose id is not `finish-<field>`. */
 const FOCUS_ID: Partial<Record<TimesField, string>> = {
@@ -187,7 +188,7 @@ export function FinishFlow({ shift, online, canAct, ending, onRecord, onClose, o
       const blockers = finishBlockersFromError(err)
       if (blockers.length) {
         const fresh = shiftDetailFromError(err)
-        if (fresh) qc.setQueryData(['portal-shift-detail', shift.id], fresh)
+        if (fresh) qc.setQueryData([QK.portalShiftDetail, shift.id], fresh)
         setRefusals(blockers.map(b => ({ message: b.message })))
       } else if (apiErrorStatus(err) !== undefined) {
         setRefusals([{ message: apiErrorMessages(err)[0] ?? "Couldn't save this shift. Your entries are kept. Try again." }])

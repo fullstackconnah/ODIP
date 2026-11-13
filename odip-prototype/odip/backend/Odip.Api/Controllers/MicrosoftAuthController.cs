@@ -103,7 +103,7 @@ public class MicrosoftAuthController : ControllerBase
         if (intent is MicrosoftIntent.LinkTenant or MicrosoftIntent.LinkAccount)
         {
             if (User.Identity?.IsAuthenticated != true
-                || !Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid)
+                || User.TryGetUserId() is not { } uid
                 || !Guid.TryParse(User.FindFirstValue("tenant_id"), out var oid))
                 return Refuse(MicrosoftRefusal.SignInRequired, path, "Microsoft start - {Intent} needs a signed-in user", intent);
             (userId, orgId) = (uid, oid);
@@ -541,7 +541,7 @@ public class MicrosoftAuthController : ControllerBase
     }
 
     private Task<User?> CurrentUserAsync(CancellationToken ct) =>
-        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? _db.Users.FirstOrDefaultAsync(u => u.Id == id, ct) : Task.FromResult<User?>(null);
+        User.TryGetUserId() is { } id ? _db.Users.FirstOrDefaultAsync(u => u.Id == id, ct) : Task.FromResult<User?>(null);
 
     // ── Helpers ──────────────────────────────────────────────────────────
 

@@ -65,11 +65,13 @@ public class ShiftErrorCodesTests
     }
 
     [Theory]
-    [InlineData("Odip.Api/Controllers/PortalController.cs")]
+    [InlineData("Odip.Api/Controllers/PortalController*.cs")]
     [InlineData("Odip.Api/Controllers/RosteringController.cs")]
     public void NoRawShiftCodeLiteralsRemain(string relativePath)
     {
-        var source = File.ReadAllText(Path.Combine(BackendRoot, relativePath));
+        var files = Directory.GetFiles(Path.Combine(BackendRoot, Path.GetDirectoryName(relativePath)!), Path.GetFileName(relativePath));
+        Assert.NotEmpty(files);
+        var source = string.Concat(files.Select(File.ReadAllText));
 
         var literalCodes = Regex.Matches(source, "\"(SHIFT_[A-Z_]+)\"")
             .Select(m => m.Groups[1].Value)
@@ -103,11 +105,12 @@ public class ShiftErrorCodesTests
             "Odip.Infrastructure/Migrations/20260908113607_AddShiftCompletion.cs"));
         Assert.Contains($"\"{ShiftCompletion.ActiveIndexName}\"", migrationSource);
 
-        foreach (var relativePath in new[]
-                 {
-                     "Odip.Api/Controllers/PortalController.cs",
-                     "Odip.Infrastructure/Data/OdipDbContext.cs",
-                 })
+        // OnModelCreating is split across OdipDbContext*.cs; scan every part.
+        var contextParts = Directory.GetFiles(Path.Combine(BackendRoot, "Odip.Infrastructure/Data"), "OdipDbContext*.cs")
+            .Select(part => Path.GetRelativePath(BackendRoot, part));
+        var portalParts = Directory.GetFiles(Path.Combine(BackendRoot, "Odip.Api/Controllers"), "PortalController*.cs")
+            .Select(part => Path.GetRelativePath(BackendRoot, part));
+        foreach (var relativePath in contextParts.Concat(portalParts))
         {
             var source = File.ReadAllText(Path.Combine(BackendRoot, relativePath));
             var occurrences = Regex.Matches(source, Regex.Escape($"\"{ShiftCompletion.ActiveIndexName}\"")).Count;
