@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing;
@@ -734,7 +735,7 @@ public class ClaimsController : ControllerBase
             OrganisationName = x.I.SellerOrganisationName,
             PaymentStatus = x.Pay,
         });
-        return Ok(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Ok(await PagedResult<InvoiceRegisterRowDto>.CreateAsync(rows, page, pageSize, ct)));
+        return Ok(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Ok(await PagedResults.CreateAsync(rows, page, pageSize, ct)));
     }
 
     // POST /api/v1/invoices/{invoiceId}/void — an invoice with no payment recorded; its number is kept and never used again.
@@ -789,7 +790,7 @@ public class ClaimsController : ControllerBase
             if (paid) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail("A payment is recorded, so issue a credit note instead."));
             invoice.Status = InvoiceStatus.Voided;
             invoice.VoidedAt = now;
-            invoice.VoidedById = Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var actorId) ? actorId : null;
+            invoice.VoidedById = User.TryGetUserId();
             invoice.VoidReason = reason;
             result = InvoiceService.Summary(invoice, null, false, null);
             change = $"Void: {reason}";

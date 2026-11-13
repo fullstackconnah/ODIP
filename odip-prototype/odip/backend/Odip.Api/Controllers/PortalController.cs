@@ -1782,8 +1782,7 @@ public class PortalController : ControllerBase
     /// </summary>
     private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        Guid? ownUserId = User.TryGetUserId();
         var userId = _currentTenant.ViewAsUserId ?? ownUserId;
         if (userId is null) return null;
 

@@ -79,7 +79,7 @@ export default function StaffPage() {
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: string; name: string; data: UpdateStaffDto } | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
 
-  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<StaffListDto>({
     deleteMutation: deleteStaff,
     restoreMutation: updateStaff,
     restoreData: (s: StaffListDto) => toUpdateStaffDto(s, { isActive: true }),
@@ -140,7 +140,7 @@ export default function StaffPage() {
 
   // Order: who, status, what they hold, then Position and Region; the whole table fits a 1280 window. Position leaves while nobody has one. On the
   // phone card the name and status make the title line, the meta line is Position, Region, Qualifications, and the row menu ends the card.
-  const staffColumns: Column<any>[] = [
+  const staffColumns: Column<StaffListDto>[] = [
     {
       key: 'fullName',
       header: 'Name',

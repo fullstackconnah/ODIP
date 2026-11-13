@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -426,7 +425,7 @@ public class IncidentsController : ControllerBase
         var projectedQuery = query.OrderByDescending(i => i.IncidentDateTime).ThenBy(i => i.Id)
             .Select(IncidentProjections.ToListDto(DateTime.UtcNow));
 
-        var result = await PagedResult<IncidentListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+        var result = await PagedResults.CreateAsync(projectedQuery, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<IncidentListDto>>.Ok(result));
     }
 
@@ -592,7 +591,7 @@ public class IncidentsController : ControllerBase
         if (User?.IsInRole("SupportWorker") == true
             && !User.IsInRole("Admin") && !User.IsInRole("Coordinator") && !User.IsInRole("SuperAdmin"))
         {
-            if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId)
+            if (User.TryGetUserId() is not { } callerId
                 || !await _db.Users.AnyAsync(u => u.Id == callerId, ct))
                 return BadRequest(ApiResponse<IncidentListDto>.Fail("Your user account could not be found."));
             dto = dto with { ReportedByStaffId = callerId };
@@ -1033,7 +1032,7 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Add review notes (up to 4000 characters)."));
         if (!Enum.IsDefined(dto.Status))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Status is not valid."));
-        if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId)
+        if (User.TryGetUserId() is not { } callerId
             // A SuperAdmin has no organisation, so the Tenant filter would hide their own account while viewing as a tenant.
             || !await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == callerId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Your user account could not be found."));

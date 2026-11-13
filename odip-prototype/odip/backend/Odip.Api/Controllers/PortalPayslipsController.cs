@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
@@ -127,7 +127,7 @@ public class PortalPayslipsController : ControllerBase
     /// </summary>
     private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
-        if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId)) return null;
+        if (User.TryGetUserId() is not { } userId) return null;
         return await _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct) ? userId : null;
     }
 

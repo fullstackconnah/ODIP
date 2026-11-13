@@ -192,7 +192,7 @@ public class MedicationsController : ControllerBase
         // deterministic and safe to paginate. Mirrors IncidentsController.GetAll's identical fix.
         // ToListDto/FullName below are plain C# methods (not translatable to SQL), so — same as
         // this controller's sibling GetAdministrationReport — the page is materialised first and
-        // mapped to DTOs client-side, rather than using PagedResult<T>.CreateAsync's
+        // mapped to DTOs client-side, rather than using PagedResults.CreateAsync's
         // IQueryable<T>-of-DTO idiom.
         var ordered = query.OrderBy(m => m.Participant!.LastName).ThenBy(m => m.Name).ThenBy(m => m.Id);
 
@@ -605,8 +605,7 @@ public class MedicationsController : ControllerBase
     /// </summary>
     private async Task<(Guid? Id, bool Inactive)> ResolveCurrentStaffAsync(CancellationToken ct)
     {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        Guid? ownUserId = User.TryGetUserId();
         var userId = _currentTenant.ViewAsUserId ?? ownUserId;
         if (userId is null) return (null, false);
 

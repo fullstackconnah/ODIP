@@ -51,7 +51,7 @@ export default function TripCreatePage() {
 
   const onTemplateChange = (templateId: string) => {
     if (!templateId) return
-    const tpl = templates.find((t: any) => String(t.id) === templateId)
+    const tpl = templates.find((t) => String(t.id) === templateId)
     if (tpl) {
       if (tpl.defaultDestination) setValue('destination', tpl.defaultDestination)
       if (tpl.defaultRegion) setValue('region', tpl.defaultRegion)
@@ -125,7 +125,7 @@ export default function TripCreatePage() {
                     label="None"
                     items={[
                       { value: '', label: 'None' },
-                      ...templates.map((t: any) => ({ value: String(t.id), label: t.eventName })),
+                      ...templates.map((t) => ({ value: String(t.id), label: t.eventName })),
                     ]}
                   />
                 )}
@@ -177,7 +177,7 @@ export default function TripCreatePage() {
                     label="None"
                     items={[
                       { value: '', label: 'None' },
-                      ...staffList.map((s: any) => ({ value: String(s.id), label: s.fullName })),
+                      ...staffList.map((s) => ({ value: String(s.id), label: s.fullName })),
                     ]}
                   />
                 )}
