@@ -10,6 +10,7 @@ import { FactList } from '@/components/FactList'
 import { FormField } from '@/components/FormField'
 import { PageState } from '@/components/PageState'
 import { formGrid, span } from '@/lib/formGrid'
+import { roleLabel } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { canSendSetPasswordEmail, sendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -37,7 +38,7 @@ export default function ProfileSection(frame: SectionFrame) {
   if (viewingAs) {
     return (
       <SettingsSection {...frame}>
-        <FactList items={[{ label: 'Name', value: fullName }, { label: 'Role', value: role === 'SuperAdmin' ? 'Super admin' : role }]} />
+        <FactList items={[{ label: 'Name', value: fullName }, { label: 'Role', value: role && roleLabel(role) }]} />
         <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">You're viewing as someone else. Stop viewing as them to change your own details.</p>
       </SettingsSection>
     )
@@ -112,7 +113,7 @@ function ProfileForm({ frame, username, role, tenantName, isSuperAdmin }: { fram
               items={[
                 { label: 'Email', value: profile?.email ?? '' },
                 { label: 'Signed in as', value: username },
-                { label: 'Role', value: role === 'SuperAdmin' ? 'Super admin' : role },
+                { label: 'Role', value: role && roleLabel(role) },
                 // A SuperAdmin's sign-in organisation is not the one they view (or they view none), so the row would mislead them.
                 ...(tenantName && !isSuperAdmin ? [{ label: 'Organisation', value: tenantName }] : []),
               ]}
