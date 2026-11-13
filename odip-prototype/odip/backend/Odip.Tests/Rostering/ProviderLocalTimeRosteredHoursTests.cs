@@ -46,4 +46,21 @@ public class ProviderLocalTimeRosteredHoursTests
         Assert.Equal(ordinary.DurationHours, ProviderLocalTime.RosteredHours(ordinary, Sydney));
         Assert.Equal(sameDay.DurationHours, ProviderLocalTime.RosteredHours(sameDay, Sydney));
     }
+
+    private static Shift SameDay(DateOnly date, TimeOnly start, TimeOnly end) => new() { ServiceDate = date, StartTime = start, EndTime = end, EndsNextDay = false };
+
+    [Theory]
+    [InlineData(2, 30, 3, 0, 0)]   // starts inside the skipped hour: never negative
+    [InlineData(2, 0, 3, 0, 0)]    // that hour does not exist
+    [InlineData(2, 30, 4, 0, 0.5)] // 03:30 to 04:00, as before
+    public void TheSpringForwardGap_NeverGivesANegativeLength(int sh, int sm, int eh, int em, double expected)
+    {
+        var shift = SameDay(new DateOnly(2027, 10, 3), new TimeOnly(sh, sm), new TimeOnly(eh, em));
+
+        Assert.Equal((decimal)expected, ProviderLocalTime.RosteredHours(shift, Sydney));
+    }
+
+    [Fact]
+    public void AZoneWithNoDaylightSaving_KeepsThirtyMinutesInTheSameWindow() =>
+        Assert.Equal(0.5m, ProviderLocalTime.RosteredHours(SameDay(new DateOnly(2027, 10, 3), new TimeOnly(2, 30), new TimeOnly(3, 0)), Brisbane));
 }
