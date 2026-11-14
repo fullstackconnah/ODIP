@@ -13,7 +13,7 @@ import ClaimsHubPage from './ClaimsHubPage'
 const m = vi.hoisted(() => ({
   lines: vi.fn(), batches: vi.fn(), batch: vi.fn(), fetchClaimFile: vi.fn(), preview: vi.fn(),
   uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(), pipeline: vi.fn(),
-  unclaimed: vi.fn(), managed: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn(),
+  settings: vi.fn(), unclaimed: vi.fn(), managed: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn(),
 }))
 vi.mock('@/api/hooks/claimHub', async () => {
   const actual = await vi.importActual<typeof import('@/api/hooks/claimHub')>('@/api/hooks/claimHub')
@@ -26,6 +26,7 @@ vi.mock('@/api/hooks/claimHub', async () => {
     useCancellationCandidates: m.cancellations, usePreviewCancellationClaim: m.previewCancellation, useMakeCancellationClaim: m.makeCancellation,
   }
 })
+vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useProviderSettings: m.settings }))
 vi.mock('@/api/hooks/claims', () => ({ useSubmitPreviewChunks: m.preview }))
 vi.mock('@/api/hooks/trips', () => ({ useTrips: m.trips, useTrip: m.trip }))
 // The two modals the hub launches are stood in for by the real Modal, so their focus return (what the New claim button gets back) is the real behaviour. Their own
@@ -90,6 +91,7 @@ function renderPage(entry = '/claims') {
 }
 
 beforeEach(() => {
+  m.settings.mockReturnValue({ data: undefined })
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   m.lines.mockReturnValue(query(hub()))
   m.batches.mockReturnValue(query([]))
@@ -414,6 +416,13 @@ describe('ClaimsHubPage: finish round 2', () => {
     m.lines.mockReturnValue(query(hub({ ready: [line({ from: '2026-07-31', to: '2026-08-02' })], rejected: [rejected({ from: '2026-08-12', to: '2026-08-12' })] })))
     renderPage()
     expect(screen.getByText('31 Jul – 2 Aug 2026')).toBeInTheDocument()
+  })
+
+  it("names the Built date on the provider's day, whatever zone the device is in", () => {
+    m.settings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney' } })
+    m.batches.mockReturnValue(query([batch({ createdAt: '2026-03-01T13:30:00Z' })]))
+    renderPage('/claims?tab=files')
+    expect(within(screen.getByTestId('claims-panel-files')).getByText(/2 Mar 2026/)).toBeInTheDocument()
   })
 
   it('names the Built date in the Files table with a month name', () => {

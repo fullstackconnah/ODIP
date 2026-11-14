@@ -4,7 +4,7 @@ import { Download, Loader2 } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { DATA_EXPORT_KEY, useDataExport, useDataExportLast } from '@/api/hooks'
+import { DATA_EXPORT_KEY, useDataExport, useDataExportLast, useProviderSettings } from '@/api/hooks'
 import type { DataExportFailure, DataExportSaved } from '@/api/types'
 import { formatBytes, formatDateTimeAu } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
@@ -31,6 +31,7 @@ export default function DataExportTab() {
 }
 
 function FullExportSection() {
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const last = useDataExportLast()
   const exportData = useDataExport()
   const running = useIsMutating({ mutationKey: DATA_EXPORT_KEY }) > 0
@@ -57,7 +58,7 @@ function FullExportSection() {
     : phase === 'resumed' ? "Still downloading. Keep this page open until it's saved."
     : null
   // No claim before the answer is in: nothing while the last export is loading. The date and time wrap as one, so "04:04" keeps its "pm".
-  const when = last.data && <span className="whitespace-nowrap">{formatDateTimeAu(last.data.exportedAt)}</span>
+  const when = last.data && <span className="whitespace-nowrap">{formatDateTimeAu(last.data.exportedAt, zone)}</span>
   const lastLine =
     last.isPending ? null
     : last.isError ? "Couldn't check the last export."
