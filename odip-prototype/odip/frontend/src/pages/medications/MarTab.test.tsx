@@ -14,6 +14,7 @@ const { mockUseMar, mockUseParticipants, mockUseRecordPrnOutcome, mockNavigate, 
 
 vi.mock('@/api/hooks', () => ({
   useMar: mockUseMar,
+  useProviderTodayQuery: () => ({ data: undefined }),
   useParticipants: mockUseParticipants,
   useRecordPrnOutcome: mockUseRecordPrnOutcome,
 }))

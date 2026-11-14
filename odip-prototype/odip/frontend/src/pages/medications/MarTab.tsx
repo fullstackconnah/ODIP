@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ParticipantListDto } from '@/api/types/participants'
@@ -49,11 +50,6 @@ function IncidentLinkOrAction({
   )
 }
 
-function todayIso(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d + days)
@@ -87,7 +83,10 @@ function describeOutcomeRefusal(err: unknown): { message: string; final: boolean
 
 export default function MarTab() {
   const { canRecordAdministrations, canManageMedications, canCreateIncidents } = usePermissions()
-  const [date, setDate] = useState(todayIso())
+  // The provider's day (the device's while it loads or fails) until the user picks one; a picked day is never overridden.
+  const providerToday = useProviderToday()
+  const [picked, setPicked] = useState<string>()
+  const date = picked ?? providerToday
   const [participantId, setParticipantId] = useState('')
   const pageQuery = useMar(date, participantId || undefined)
   const { data: mar, isLoading, isError, refetch } = pageQuery
@@ -153,18 +152,18 @@ export default function MarTab() {
       {/* Date navigation + participant filter */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="md" className="w-[var(--control-h)] px-0!" onClick={() => setDate(d => addDays(d, -1))} aria-label="Previous day">
+          <Button variant="secondary" size="md" className="w-[var(--control-h)] px-0!" onClick={() => setPicked(addDays(date, -1))} aria-label="Previous day">
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button variant="secondary" size="md" className="whitespace-nowrap" onClick={() => setDate(todayIso())}>Today</Button>
-          <Button variant="secondary" size="md" className="w-[var(--control-h)] px-0!" onClick={() => setDate(d => addDays(d, 1))} aria-label="Next day">
+          <Button variant="secondary" size="md" className="whitespace-nowrap" onClick={() => setPicked(undefined)}>Today</Button>
+          <Button variant="secondary" size="md" className="w-[var(--control-h)] px-0!" onClick={() => setPicked(addDays(date, 1))} aria-label="Next day">
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
         <input
           type="date"
           value={date}
-          onChange={e => setDate(e.target.value)}
+          onChange={e => setPicked(e.target.value)}
           className={`h-[var(--control-h)] text-sm ${fieldSurface}`}
           aria-label="Select date"
         />

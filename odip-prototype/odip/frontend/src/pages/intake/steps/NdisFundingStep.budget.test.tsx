@@ -12,6 +12,7 @@ import { PACE_CATEGORIES, plan } from '@/test/fixtures/funding'
 const { useFundingPlans, create, update } = vi.hoisted(() => ({ useFundingPlans: vi.fn(), create: vi.fn(), update: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
+  useProviderTodayQuery: () => ({ data: undefined }),
   useFundingPlans,
   useFundingLedger: () => ({ data: undefined, isLoading: false, isError: false }),
   useCreateFundingPlan: () => ({ mutate: create, isPending: false }),

@@ -15,6 +15,7 @@ const { mockUseAdminUsers, mockEnsure, mockRecord, sendPasswordResetEmail, fireb
 
 vi.mock('@/api/hooks', () => ({
   useAdminUsers: mockUseAdminUsers,
+  useProviderZone: () => undefined,
   useAdminTenantsSummary: () => ({ data: [] }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: mockEnsure }),
   useRecordInvitesSent: () => ({ mutate: mockRecord }),

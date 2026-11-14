@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Pencil, Mail, Plus } from 'lucide-react'
-import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount, useRecordInvitesSent } from '@/api/hooks'
+import { useAdminUsers, useProviderZone, useAdminTenantsSummary, useEnsureUserSignInAccount, useRecordInvitesSent } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { SearchInput } from '@/components/SearchInput'
@@ -8,7 +8,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { DataTable, RowActions } from '@/components/DataTable'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { useNotices, type Notice } from '@/hooks/useNotices'
-import { formatRelative, roleLabel } from '@/lib/format'
+import { formatInstantDateAu, formatRelative, roleLabel } from '@/lib/format'
 import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
@@ -50,10 +50,10 @@ const PAGE_SIZE = 20
 const MONTH_MS = 30 * 86_400_000
 
 /** "Never", "Just now", "5m ago", "3d ago", then the date itself once the login is a month old or more. */
-function formatRelativeTime(dateStr: string | null): string {
+function formatRelativeTime(dateStr: string | null, zone?: string): string {
   if (!dateStr) return 'Never'
   const date = parseApiDate(dateStr) // an instant: UTC, never the viewer's local time
-  if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString('en-AU')
+  if (Date.now() - date.getTime() >= MONTH_MS) return formatInstantDateAu(date.toISOString(), zone)
   return formatRelative(date, { style: 'compact' })
 }
 
@@ -62,6 +62,7 @@ function formatRelativeTime(dateStr: string | null): string {
 // ---------------------------------------------------------------------------
 
 export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: UsersTabProps) {
+  const zone = useProviderZone()   // the provider's zone for a month-old login's date; undefined (loading, failed, offline) = the viewer's
   const [tenantId, setTenantId] = useState('')
   const [role, setRole] = useState('')
   const [status, setStatus] = useState('')
@@ -222,7 +223,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
             key: 'lastLoginAt',
             header: 'Last sign-in',
             className: 'text-[var(--color-muted-foreground)]',
-            render: (user: AdminUserDto) => formatRelativeTime(user.lastLoginAt),
+            render: (user: AdminUserDto) => formatRelativeTime(user.lastLoginAt, zone),
           },
           {
             key: 'actions',

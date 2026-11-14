@@ -1,17 +1,19 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import UsersTab from './UsersTab'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseAdminUsers } = vi.hoisted(() => ({ mockUseAdminUsers: vi.fn() }))
+const { mockUseAdminUsers, mockZone } = vi.hoisted(() => ({ mockUseAdminUsers: vi.fn(), mockZone: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
   useAdminUsers: mockUseAdminUsers,
+  useProviderZone: () => mockZone(),
   useAdminTenantsSummary: () => ({ data: [] }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
   useRecordInvitesSent: () => ({ mutate: vi.fn() }),
 }))
 
+beforeEach(() => { mockZone.mockReturnValue(undefined) })
 afterEach(() => {
   vi.useRealTimers()
   restoreZone()
@@ -55,5 +57,21 @@ describe('UsersTab Last login a month back', () => {
     })
     render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
     expect(screen.getByText('03/08/2026')).toBeInTheDocument()
+  })
+})
+
+// OD-ZONE2 (H110-4). The date a month-old login prints is the provider's zone, not the device's: 40 days back at 15:30 UTC is 01:30 next day in Sydney, still the same day in Perth.
+describe('UsersTab Last login a month back in the provider zone', () => {
+  it('prints the day in the provider zone under another device zone', () => {
+    if (!setZone('Australia/Sydney')) return
+    mockZone.mockReturnValue('Australia/Perth')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-03T05:10:30Z'))
+    mockUseAdminUsers.mockReturnValue({
+      data: { items: [user('2026-08-24T15:30:00Z')], totalCount: 1, page: 1, pageSize: 20, totalPages: 1, hasNext: false, hasPrevious: false },
+      isLoading: false,
+    })
+    render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
+    expect(screen.getByText('24/08/2026')).toBeInTheDocument() // Sydney would say 25/08/2026
   })
 })
