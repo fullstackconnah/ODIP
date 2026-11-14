@@ -60,7 +60,7 @@ export default function TripCreatePage() {
   }
 
   const onSubmit = async (data: TripFormData) => {
-    const payload: any = { ...data }
+    const payload: Record<string, unknown> = { ...data }
     // Convert empty strings to null for optional fields
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
@@ -70,7 +70,7 @@ export default function TripCreatePage() {
       if (!payload[key]) payload[key] = null
     }
     try {
-      const res = await createTrip.mutateAsync(payload)
+      const res = await createTrip.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
         flushSync(() => reset(data))
         navigate(`/trips/${res.data.id}`, { replace: true })
