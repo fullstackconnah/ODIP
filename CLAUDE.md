@@ -108,15 +108,18 @@ npm run lint
   deployed stale prebuilt images.
 - Pre-deploy database dumps: before `up -d`, `deploy/predeploy-dump.sh` writes a verified `pg_dump -Fc` (mode 600) to
   `/mnt/docker/stacks/odip/backups/predeploy/odip-<UTC time>-<sha8>.dump` (the Sync step's rsync `--delete` excludes `/backups/`; so does `.dockerignore`)
+  (the sha is the deploy that came AFTER the dump; the code matching a dump is the commit live before that deploy, i.e. the previous deploy sha in `git log` on main or the Actions deploy history)
   and keeps the newest 5; a failed dump stops the deploy and re-tags `:rollback` back to `:local`. Rollback only re-tags images and never restores data.
   The dumps sit on the same disk as the database: they protect against a bad deploy, not a lost disk.
   Manual restore, owner-run only, in `/mnt/docker/stacks/odip` (commands as text, never run by an agent):
   1. `docker compose stop api`
-  2. Dump the current state first: `docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > backups/before-restore.dump`
-  3. `docker compose exec -T db dropdb -U postgres odip`, then `createdb -U postgres odip`, then
+  2. Dump the current state first, private and checked: `umask 077`, then
+     `docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > backups/before-restore-$(date -u +%Y%m%dT%H%M%SZ).dump`, then
+     `docker compose exec -T db pg_restore -l < backups/before-restore-<that time>.dump` must succeed. Stop here if this fails.
+  3. `docker compose exec -T db dropdb -U postgres odip`, then `docker compose exec -T db createdb -U postgres odip`, then
      `docker compose exec -T db pg_restore --exit-on-error --single-transaction -U postgres -d odip < backups/predeploy/<chosen>.dump`
-  4. Start the API on the image that matches the dump (re-tag `:rollback` to `:local`, or redeploy the matching commit), then `docker compose up -d`;
-     the newer image would re-apply its migrations.
+  4. Start the API on the image that matches the dump: the commit that was live before the deploy that wrote it (the previous deploy sha, not the sha in the name);
+     re-tag `:rollback` to `:local` or redeploy that commit, then `docker compose up -d`; the newer image would re-apply its migrations.
 
 ## Architecture
 
