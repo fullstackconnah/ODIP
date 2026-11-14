@@ -110,6 +110,8 @@ npm run lint
   `/mnt/docker/stacks/odip/backups/predeploy/odip-<UTC time>-<sha8>.dump` (the Sync step's rsync `--delete` excludes `/backups/`; so does `.dockerignore`)
   and keeps the newest 5; a failed dump stops the deploy and re-tags `:rollback` back to `:local`. Rollback only re-tags images and never restores data.
   The dumps sit on the same disk as the database: they protect against a bad deploy, not a lost disk.
+- Signed-in smoke check: after the Health check, `deploy/smoke-test.sh` mints a SuperAdmin token and GETs `/api/v1/participants` through nginx, printing one `smoke: participants <code>` line (exit 0 only on 200).
+  It is warn-only (`continue-on-error`, no roll back): see the Deploy run's "Signed-in smoke check" step and its Report line.
   Manual restore, owner-run only, in `/mnt/docker/stacks/odip` (commands as text, never run by an agent):
   1. `docker compose stop api`
   2. Dump the current state first: `docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > backups/before-restore.dump`
