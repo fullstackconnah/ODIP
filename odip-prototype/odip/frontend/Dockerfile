@@ -33,7 +33,7 @@ ENV VITE_BUILD_SHA=$VITE_BUILD_SHA
 RUN npm run build
 
 # Production stage
-FROM nginx:1.28-alpine AS final
+FROM nginx:1.29-alpine AS final
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
