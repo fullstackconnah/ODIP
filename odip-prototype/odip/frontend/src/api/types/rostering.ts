@@ -1,9 +1,4 @@
-import type {
-  ShiftBreakDto,
-  PortalDoseSlotDto,
-  PortalDoseOutcomeDto,
-  PortalShiftRoutineDto,
-} from './shift-package'
+import type { ShiftBreakDto } from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, ShiftCancellationReason, EmploymentType, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { LeaveStatus, UnavailabilityKind } from './leave'
 import type { AgreementKind } from './service-agreement-drafts'
@@ -298,39 +293,6 @@ export interface ShiftCompletionDto {
   postTravelNone: boolean
 }
 
-/**
- * GET rostering/shifts/{id}/completion/review — everything a coordinator needs to review one submitted shift in a single
- * call: the completion (times, variance, breaks, net minutes, handover, incidents), every scheduled dose due in the rostered
- * window with its outcome, PRN doses given during the shift, and the shift notes. Approve / Return are unchanged.
- */
-export interface ShiftCompletionReviewDto {
-  completion: ShiftCompletionDto
-  participantName: string
-  staffName: string
-  /** YYYY-MM-DD */
-  serviceDate: string
-  /** The provider's IANA zone; scheduled dose times are wall-clock values in it. */
-  timeZoneId: string
-  /** Scheduled doses in the rostered window, time order. `outcome: null` means nothing was recorded. */
-  doses: PortalDoseSlotDto[]
-  /** "As needed" (PRN) doses the submitting worker administered between the actual start and end. */
-  prnDoses: ReviewPrnDoseDto[]
-  notes: ShiftNoteDto[]
-  /** The routines matched to the rostered window with the worker's tick state on this completion (`isChecked`, `checkedAt`, `checkedByName`):
-   * critical first, then in time order. An unticked routine is one the worker did not tick off. After them come the ticks whose routine no longer
-   * matches the shift (edited out of the window, retired or deleted since the worker ticked it), marked `fromTickSnapshot` and shown as they were
-   * recorded: always `isChecked`, with the title and time of the tick. */
-  routines: PortalShiftRoutineDto[]
-}
-
-export interface ReviewPrnDoseDto {
-  medicationId: string
-  medicationName: string
-  strength: string | null
-  doseDescription: string
-  outcome: PortalDoseOutcomeDto
-}
-
 // ── Shift Completion review queue (design spec §2/§4) ────
 export interface CompletionQueueItemDto {
   shiftId: string
@@ -349,8 +311,7 @@ export interface CompletionQueueItemDto {
   isOutlierVariance: boolean
   varianceReviewMinutes: number
   returnCount: number
-  /** Scheduled doses in the shift's ROSTERED window with no outcome recorded (any outcome counts; a superseded record is history). The review
-   * (`GET rostering/shifts/{id}/completion/review`) lists them. */
+  /** Scheduled doses in the shift's ROSTERED window with no outcome recorded (any outcome counts; a superseded record is history). */
   dosesWithoutOutcome: number
   /** Unpaid break minutes on the completion, breaks on the worker's own (same figure as `ShiftCompletionDto.breakMinutes`). */
   breakMinutes: number

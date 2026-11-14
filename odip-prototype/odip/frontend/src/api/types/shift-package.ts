@@ -9,7 +9,7 @@ import type {
 
 // ══════════════════════════════════════════════════════════════
 // SHIFT PACKAGE (PR 1: backend + API contract). The pieces the portal shift detail
-// (`PortalShiftDetailDto`) and the coordinator's completion review (`ShiftCompletionReviewDto`)
+// (`PortalShiftDetailDto`) and the coordinator's completion (`ShiftCompletionDto`)
 // share. Mirrors backend Odip.Application/DTOs/PortalDTOs.cs and ShiftCompletionDTOs.cs.
 //
 // Conventions:
@@ -38,17 +38,6 @@ export interface ShiftBreakDto {
   createdByUserId: string
   /** Ate with the participant: paid and counted as worked. False = on my own: unpaid and deducted. Old breaks read false. */
   withParticipant: boolean
-}
-
-/**
- * PUT portal/shifts/{id}/breaks/{breakId} body — corrected times as UTC instants. `endedAt: null` keeps a
- * RUNNING break running; an ended break must keep an end. Only while the shift is in progress.
- * `withParticipant` sets the break's kind; omit (or null) to keep it. A kind-only change does not mark the break edited.
- */
-export interface EditShiftBreakDto {
-  startedAt: string
-  endedAt: string | null
-  withParticipant?: boolean | null
 }
 
 // ── At a glance (need-to-know) ──────────────────────────────
@@ -231,7 +220,7 @@ export interface PortalShiftRoutineDto {
   /** Who ticked it; `null` when it is not. */
   checkedByName: string | null
   /**
-   * `true` only on the coordinator's review (`GET rostering/shifts/{id}/completion-review`): this tick's routine no longer matches the shift (it was
+   * `true` only on a coordinator's review row: this tick's routine no longer matches the shift (it was
    * edited out of the window, retired or deleted after the worker ticked it), so the row is listed from what was recorded at the tick - the title and
    * occurrence time as they were. Always `false` on the worker's shift detail and for a routine that still applies.
    */
@@ -319,7 +308,6 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   breakBeforeShiftStart: 'SHIFT_BREAK_BEFORE_SHIFT_START',
   breakInFuture: 'SHIFT_BREAK_IN_FUTURE',
   breakEndNotAfterStart: 'SHIFT_BREAK_END_NOT_AFTER_START',
-  breakEndRequired: 'SHIFT_BREAK_END_REQUIRED',
   breakOverlap: 'SHIFT_BREAK_OVERLAP',
   /** 409 on a package write when the shift is not in progress (also SHIFT_ALREADY_FINISHED / _COMPLETED / SHIFT_CANCELLED). */
   shiftNotInProgress: 'SHIFT_NOT_IN_PROGRESS',
