@@ -27,16 +27,24 @@ case "$*" in
     [ "${FAKE_AGE_FAIL_ON:-0}" = "$n" ] && exit 1
     if [ -n "${FAKE_AGE_BAD:-}" ]; then echo garbage; exit 0; fi
     printf 'age-encryption.org/v1\n-> X25519 x\n'; sha256sum | cut -d' ' -f1 ;;
+  *"compose config"*) echo "name: odip" ;; # main's predeploy-dump.sh reads the project name and volumes when no db container exists
+  "volume ls"*) ;;
   *) exit 99 ;;
 esac
 STUB
 printf '#!/usr/bin/env bash\nexit "${FAKE_FLOCK_RC:-0}"\n' > "$tmp/bin/flock"
-chmod +x "$tmp/bin/docker" "$tmp/bin/flock"
+# Fake sha256sum: FAKE_SHA_RC makes it fail (a set -e exit outside fail); otherwise it hands over to the real one.
+cat > "$tmp/bin/sha256sum" <<'STUB'
+#!/usr/bin/env bash
+[ -n "${FAKE_SHA_RC:-}" ] && exit "$FAKE_SHA_RC"
+PATH="${PATH#*:}"; exec sha256sum "$@"
+STUB
+chmod +x "$tmp/bin/docker" "$tmp/bin/flock" "$tmp/bin/sha256sum"
 
 fail=0
 S="$tmp/o/staged"
 check() { local name=$1; shift; if "$@"; then echo "PASS $name"; else echo "FAIL $name"; fail=1; fi; }
-nostaged() { [ -z "$(ls -A "$S" | grep -v '^last-failure.txt$')" ]; }
+nostaged() { [ -z "$(ls -A "$S")" ]; }
 # run <name> <want exit> [env assignments...]: a fresh OUT with a valid recipient, seeded by $SEED; output in $tmp/out
 run() {
   local name=$1 want=$2; shift 2
@@ -65,9 +73,9 @@ check "no plaintext anywhere" noplain
 check "summary line" grep -q "nightly backup staged: $stem (.*2 tables, 2 rows)" "$tmp/out"
 
 run "missing recipient" 1 RECIPIENT="$tmp/o/none.txt"
-check "missing recipient: no pg_dump, nothing staged, record names the recipient" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nodump && nostaged && grep -q recipient '$S/last-failure.txt'"
+check "missing recipient: no pg_dump, nothing staged, record names the recipient" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nodump && nostaged && grep -q recipient '$tmp/o/last-failure.txt'"
 SEED='printf "# only a comment\nnot-a-key\n" > "$tmp/o/recipient.txt"' run "recipient without an age1 line" 1
-check "no age1 line: no pg_dump, nothing staged, record written" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nodump && nostaged && grep -q 'no age1 line' '$S/last-failure.txt'"
+check "no age1 line: no pg_dump, nothing staged, record written" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nodump && nostaged && grep -q 'no age1 line' '$tmp/o/last-failure.txt'"
 SEED='printf "# k\r\nage1abc123\r\n" > "$tmp/o/recipient.txt"' run "CRLF recipient file" 0
 check "CRLF: a set is staged" test "$(sets)" = 1
 run "KEEP_STAGED not a number" 1 KEEP_STAGED=0
@@ -79,7 +87,7 @@ run "WS not named odip-backup-*" 1 WS="$tmp/o"
 check "bad WS: no pg_dump, the folder is not wiped" bash -c "$(declare -f nodump); tmp='$tmp'; nodump && [ -f '$tmp/o/recipient.txt' ]"
 
 run "db not running" 1 FAKE_ALL= FAKE_PS=
-check "db not running: named, nothing staged, workspace gone" bash -c "$(declare -f nostaged nows); S='$S'; tmp='$tmp'; nostaged && nows && grep -q 'database not running' '$S/last-failure.txt'"
+check "db not running: named, nothing staged, workspace gone" bash -c "$(declare -f nostaged nows); S='$S'; tmp='$tmp'; nostaged && nows && grep -q 'database not running' '$tmp/o/last-failure.txt'"
 
 SEED='printf old > "$S/odip-20200101T000000Z.manifest"' run "pg_dump fails" 1 FAKE_DUMP_RC=1
 check "pg_dump fails: no .part, the old set is untouched" bash -c "[ -z \"\$(ls '$S' | grep '\.part$')\" ] && [ \"\$(cat '$S/odip-20200101T000000Z.manifest')\" = old ]"
@@ -101,7 +109,7 @@ run "image missing is built" 0 FAKE_IMG_RC=1
 check "image built before the dump" bash -c "b=\$(grep -n '^build ' '$tmp/calls.log' | head -1 | cut -d: -f1); d=\$(grep -n pg_dump '$tmp/calls.log' | head -1 | cut -d: -f1); [ -n \"\$b\" ] && [ \"\$b\" -lt \"\$d\" ]"
 
 run "lock held" 75 FAKE_FLOCK_RC=1
-check "lock held: nothing staged, no failure record, no dump" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nostaged && nodump && [ ! -e '$S/last-failure.txt' ]"
+check "lock held: nothing staged, no failure record, no dump" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nostaged && nodump && [ ! -e '$tmp/o/last-failure.txt' ]"
 
 SEED=': > "$tmp/nohold"' run "deploy hold" 0
 check "deploy hold: WARN and a set staged" bash -c "grep -q WARN '$tmp/out' && [ \"\$(ls '$S' | grep -c '\.manifest$')\" = 1 ]"
@@ -111,6 +119,15 @@ echo n > "$S/notes.txt"; : > "$S/odip-x.age"; : > "$S/odip-20200101T000000Z.db.a
 check "prune keeps 7 complete sets including the new one" test "$(sets)" = 7
 check "prune keeps notes.txt, odip-x.age and the incomplete stem" bash -c "[ -f '$S/notes.txt' ] && [ -f '$S/odip-x.age' ] && [ -f '$S/odip-20190101T000000Z.db.age' ]"
 check "prune removes the stray .part and the oldest sets only" bash -c "[ -z \"\$(ls '$S' | grep '\.part$')\" ] && [ ! -e '$S/odip-20200101T000000Z.manifest' ] && [ ! -e '$S/odip-20200103T000000Z.files.age' ] && [ -e '$S/odip-20200104T000000Z.manifest' ]"
+
+run "set -e exit outside fail" 7 FAKE_SHA_RC=7
+check "set -e exit: a record names the exit code, in OUT not staged" bash -c "grep -q 'failed (exit 7)' '$tmp/o/last-failure.txt' && [ ! -e '$S/last-failure.txt' ]"
+check "set -e exit: workspace gone" nows
+SEED='echo old > "$tmp/o/last-failure.txt"' run "good run after a failure" 0
+check "good run clears the stale record" test ! -e "$tmp/o/last-failure.txt"
+run "WS climbs out with .." 1 WS="$tmp/odip-backup-ws/../o"
+check "WS with ..: refused before anything is removed" bash -c "$(declare -f nodump); tmp='$tmp'; nodump && [ -f '$tmp/o/recipient.txt' ] && grep -q 'WS must be' '$tmp/o/last-failure.txt'"
+run "WS named odip-backup-* accepted" 0 WS="$tmp/deep/odip-backup-77"
 
 mkdir -p "$tmp/other"
 run "relative invocation" 0 # SCRIPT stays absolute; the next line starts it by a relative path from another folder

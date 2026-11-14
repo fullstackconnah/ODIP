@@ -15,11 +15,13 @@ HOLD_POLL="${HOLD_POLL:-60}"
 HOLD_MAX="${HOLD_MAX:-3600}"
 
 stem="" # set once the set is named; the trap removes its .part files
+recorded="" # set by fail once it has tried to write the failure record
 say() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1"; }
 fail() {
   say "$1" >&2
-  # The record is for the PC pull; it can only be written once $OUT/staged exists.
-  if [ -d "${OUT:-}/staged" ]; then say "$1" > "$OUT/staged/last-failure.txt"; fi
+  # The record is for the PC pull (it reads $OUT/last-failure.txt); best effort, so a full disk cannot change the exit path.
+  recorded=1
+  if [ -n "${OUT:-}" ]; then { mkdir -p "$OUT" && say "$1" > "$OUT/last-failure.txt"; } 2> /dev/null || true; fi
   exit 1
 }
 
@@ -29,8 +31,8 @@ fail() {
 OUT="${OUT:-$HOME/odip-backup}"
 RECIPIENT="${RECIPIENT:-$OUT/recipient.txt}"
 WS="${WS:-/dev/shm/odip-backup-$(id -u)}"
-# The script wipes $WS at start and exit, so it only accepts a folder named for it.
-[[ "$WS" == */odip-backup-* ]] || fail "WS must be a folder named odip-backup-*, got '$WS'"
+# The script wipes $WS at start and exit, so it only accepts a folder named for it, with no .. to climb out of it.
+[[ "$(basename "$WS")" == odip-backup-* && "$WS" != *..* ]] || fail "WS must be a folder named odip-backup-*, got '$WS'"
 HOLD="${HOLD:-$HOME/odip-test/.deploy-hold}"
 S="$OUT/staged"
 
@@ -41,6 +43,9 @@ flock -n 9 || exit 75
 
 # After the lock, so a run that lost it never wipes the winner's workspace.
 cleanup() {
+  local rc=$?
+  # A set -e exit outside fail leaves no record yet; 75 is the lock skip.
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 75 ] && [ -z "$recorded" ]; then { say "failed (exit $rc)" > "$OUT/last-failure.txt"; } 2> /dev/null || true; fi
   rm -rf "${WS:?}"
   if [ -n "$stem" ]; then rm -f "$S/$stem".*.part; fi
 }
@@ -116,6 +121,7 @@ dbbytes=$(size "$S/$stem.db.age.part"); filesbytes=$(size "$S/$stem.files.age.pa
 mv "$S/$stem.db.age.part" "$S/$stem.db.age"
 mv "$S/$stem.files.age.part" "$S/$stem.files.age"
 mv "$S/$stem.manifest.part" "$S/$stem.manifest" # last: its presence marks the set complete
+rm -f "$OUT/last-failure.txt" # a good run clears the last failure
 rm -rf "${WS:?}"
 
 # Prune only after success, and only names of this exact shape; a name from a glob is re-checked, never trusted.
