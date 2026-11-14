@@ -6,7 +6,7 @@ import ImportDataTab from './ImportDataTab'
 import type { ImportBatchDto } from '@/api/types'
 
 const { history, undoMutate, templateMutate, undoState, invites, providerSettings } = vi.hoisted(() => ({
-  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean; timeZoneId?: string } | undefined },
   invites: vi.fn(),
   history: { current: [] as ImportBatchDto[] },
   undoMutate: vi.fn(),
@@ -33,6 +33,13 @@ const renderTab = () => render(<MemoryRouter><ImportDataTab /></MemoryRouter>)
 
 beforeEach(() => { history.current = [batch()]; undoState.current = { isPending: false, error: null } })
 afterEach(() => { cleanup(); vi.clearAllMocks(); providerSettings.current = undefined })
+
+it("dates a run on the provider's day and time, whatever zone the device is in", () => {
+  providerSettings.current = { timeZoneId: 'Australia/Sydney' }
+  history.current = [batch({ createdAt: '2026-03-01T13:30:00Z' })]
+  renderTab()
+  expect(screen.getAllByText(/^02\/03\/2026, 12:30\sam$/).length).toBeGreaterThan(0)
+})
 
 describe('ImportDataTab', () => {
   it('starts a participant import and downloads its template', async () => {

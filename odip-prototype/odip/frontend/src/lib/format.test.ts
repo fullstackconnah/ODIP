@@ -207,11 +207,27 @@ describe('formatDateTimeAu', () => {
   })
 })
 
+describe('formatDateTimeAu in a given zone', () => {
+  // 13:30Z on 1 March is 00:30 on 2 March in Sydney (AEDT) and 05:30 on 1 March in Los Angeles, whatever zone the device is in.
+  it('prints the instant in the zone it is given', () => {
+    expect(formatDateTimeAu('2026-03-01T13:30:00Z', 'Australia/Sydney')).toMatch(/^02\/03\/2026, 12:30\sam$/)
+    expect(formatDateTimeAu('2026-03-01T13:30:00Z', 'America/Los_Angeles')).toMatch(/^01\/03\/2026, 05:30\sam$/)
+  })
+})
+
 describe('formatNoteTimestamp', () => {
   it('prints the medium date and short time in the viewer zone', () => {
     setZone('UTC')
     // "Sept" or "Sep" depending on the ICU build, like every en-AU medium date.
     expect(formatNoteTimestamp('2026-09-08T19:30:00Z')).toMatch(/^8 Sept? 2026, 7:30\spm$/)
+  })
+})
+
+describe('formatInstantDateAu in a given zone', () => {
+  it('shows the day of the instant in the zone it is given, and a date-only value unchanged', () => {
+    expect(formatInstantDateAu('2026-03-01T13:30:00Z', 'Australia/Sydney')).toBe('02/03/2026')
+    expect(formatInstantDateAu('2026-03-01T13:30:00Z', 'America/Los_Angeles')).toBe('01/03/2026')
+    expect(formatInstantDateAu('2026-03-02', 'America/Los_Angeles')).toBe('02/03/2026')
   })
 })
 

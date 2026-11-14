@@ -47,7 +47,8 @@ export default function ImportDataTab() {
   const history = useImportHistory()
   const undo = useUndoImport()
   const template = useDownloadImportTemplate()
-  const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
+  const settings = useProviderSettings().data
+  const staffFromPayroll = settings?.employmentHeroConnected === true
   const [undoing, setUndoing] = useState<ImportBatchDto | null>(null)
   const [invited, setInvited] = useState<{ batchId: string; fileName: string; result: InviteResult } | null>(null)
 
@@ -55,7 +56,7 @@ export default function ImportDataTab() {
     { key: 'fileName', header: 'File', mobile: 'primary' },
     { key: 'kind', header: 'Type', mobile: 'meta', render: b => KIND_LABEL[b.kind] },
     { key: 'createdByName', header: 'Run by', mobile: 'meta' },
-    { key: 'createdAt', header: 'When', mobile: 'meta', render: b => formatDateTimeAu(b.createdAt) },
+    { key: 'createdAt', header: 'When', mobile: 'meta', render: b => formatDateTimeAu(b.createdAt, settings?.timeZoneId) },
     // A funding plans batch creates plans from several rows each, and a shifts batch shifts, so their counts name their unit.
     { key: 'createdCount', header: 'Created', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.createdCount, 'plan') : b.kind === 'UpcomingShifts' ? plural(b.createdCount, 'shift') : b.createdCount },
     { key: 'skippedCount', header: 'Skipped', align: 'right', render: b => b.kind === 'FundingPlans' || b.kind === 'UpcomingShifts' ? plural(b.skippedCount, 'row') : b.skippedCount },

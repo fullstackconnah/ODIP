@@ -5,8 +5,8 @@ import AuditHistoryTab, { FieldDiff } from './AuditHistoryTab'
 import { TONE } from '@/lib/tone'
 import type { AuditChange } from '../api/hooks'
 
-const { mockUseAuditHistory } = vi.hoisted(() => ({ mockUseAuditHistory: vi.fn() }))
-vi.mock('../api/hooks', () => ({ useAuditHistory: mockUseAuditHistory }))
+const { mockUseAuditHistory, mockSettings } = vi.hoisted(() => ({ mockUseAuditHistory: vi.fn(), mockSettings: vi.fn(() => ({ data: undefined as { timeZoneId?: string } | undefined })) }))
+vi.mock('../api/hooks', () => ({ useAuditHistory: mockUseAuditHistory, useProviderSettings: mockSettings }))
 
 const NOW = new Date('2026-10-28T02:00:00Z')
 
@@ -19,7 +19,13 @@ function renderTab(entries: ReturnType<typeof entry>[]) {
   return render(<AuditHistoryTab entityType="Trip" entityId="t1" />)
 }
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => { vi.useRealTimers(); mockSettings.mockReturnValue({ data: undefined }) })
+
+it("shows an entry's exact time in the provider's zone, whatever zone the device is in", () => {
+  mockSettings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney' } })
+  renderTab([entry('z', 'Updated', '2026-03-01T13:30:00Z')])
+  expect(screen.getByTitle(/^02\/03\/2026, 12:30\sam$/)).toBeInTheDocument()
+})
 
 it("renders each change as field, old and new", () => {
   renderTab([entry("a", "Updated", "2026-10-28T01:00:00Z", [{ field: "LastName", old: "A", new: "B" }])])

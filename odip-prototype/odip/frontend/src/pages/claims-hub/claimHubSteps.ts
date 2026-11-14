@@ -10,9 +10,9 @@ export const MAX_FILE_LINES = 5000
 /** "12 Aug 2026", or "12–14 Aug 2026" for a span: the house range format, which always keeps the year. */
 export const deliveredText = formatDateRange
 
-/** "30 Oct 2026": the viewer-zone day of an instant, in the same words as the delivery dates (no numeric dates in the hub). */
-export function instantDay(value: string | null | undefined): string {
-  const [d, m, y] = formatInstantDateAu(value).split('/')
+/** "30 Oct 2026": the day of an instant in the given zone (the provider's), else the viewer's, in the same words as the delivery dates (no numeric dates in the hub). */
+export function instantDay(value: string | null | undefined, timeZone?: string | null): string {
+  const [d, m, y] = formatInstantDateAu(value, timeZone).split('/')
   return formatDateRange(`${y}-${m}-${d}`, null) || '—'
 }
 
