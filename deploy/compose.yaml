@@ -22,12 +22,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # The key-ring and documents volumes were created root-owned, and Docker copies image ownership only into an empty volume.
+  # This one-shot re-owns them to the API's uid; it is safe to run on every `up` (it keeps every file and only changes the owner).
+  volume-owner:
+    image: odip-api:local
+    pull_policy: never
+    user: "0:0"
+    restart: "no"
+    network_mode: none
+    mem_limit: 64m
+    entrypoint: ["sh", "-c", "chown -R 1000:1000 /keys /data/documents"]
+    volumes:
+      - odip-dp-keys:/keys
+      - documents:/data/documents
+
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     image: odip-api:local
     container_name: odip-api
+    # uid 1000 owns the mounted credentials file on the host (mode 600), so the API must run as it.
+    user: "1000:1000"
     restart: unless-stopped
     mem_limit: 1g
     logging:
@@ -80,6 +96,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      volume-owner:
+        condition: service_completed_successfully
     volumes:
       - documents:/data/documents
       - odip-dp-keys:/keys
