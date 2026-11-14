@@ -33,11 +33,11 @@ public sealed record ShiftBreakResult(
     ShiftBreakOutcome Outcome, ShiftBreak? Break = null, ShiftBreakViolation Violation = ShiftBreakViolation.None);
 
 /// <summary>
-/// Break start / end / edit / delete against a shift's ACTIVE <see cref="ShiftCompletion"/>. The caller (the portal
+/// Break start / end against a shift's ACTIVE <see cref="ShiftCompletion"/>. The caller (the portal
 /// controller) has already established that the shift is the worker's own and InProgress; this owns the break
 /// rules: at most one running, inside the actual-start-to-now window, no overlaps
 /// (<see cref="ShiftBreakRules"/>). Start and End stamp the server clock unless a phone sends the time it recorded offline
-/// (<see cref="ClientTimeRules"/> bounds it); corrections go through <see cref="EditAsync"/>.
+/// (<see cref="ClientTimeRules"/> bounds it).
 /// </summary>
 public sealed class ShiftBreakService
 {
@@ -146,50 +146,6 @@ public sealed class ShiftBreakService
         if (endedAtUtc is not null) completion.SentFromOffline = true;
         target.EndedAt = end;
         target.UpdatedAt = now;
-        await _db.SaveChangesAsync(ct);
-        await rowLock.CommitAsync(ct);
-        return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);
-    }
-
-    public async Task<ShiftBreakResult> EditAsync(
-        ShiftCompletion completion, Guid breakId, DateTime startedAt, DateTime? endedAt, CancellationToken ct, bool? withParticipant = null)
-    {
-        // Same shift row lock as Start Break and Finish, so an edit cannot land after Finish has read the breaks.
-        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
-        if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
-        var breaks = await LoadAsync(completion.Id, ct);
-        var target = breaks.FirstOrDefault(b => b.Id == breakId);
-        if (target is null) return new ShiftBreakResult(ShiftBreakOutcome.NotFound);
-
-        var start = ShiftBreakRules.ToUtc(startedAt);
-        DateTime? end = endedAt is { } e ? ShiftBreakRules.ToUtc(e) : null;
-
-        // Only a RUNNING break may have no end; an ended break cannot be re-opened by an edit.
-        if (!target.IsRunning && end is null)
-            return new ShiftBreakResult(ShiftBreakOutcome.Invalid, target, ShiftBreakViolation.EndRequired);
-
-        var now = Now;
-        var violation = ShiftBreakRules.Validate(start, end, completion.ActualStart, now, breaks.Where(b => b.Id != breakId));
-        if (violation != ShiftBreakViolation.None) return new ShiftBreakResult(ShiftBreakOutcome.Invalid, target, violation);
-
-        if (target.StartedAt != start || target.EndedAt != end) target.EditedAt = now;   // a kind-only change is not an edit of the times
-        target.StartedAt = start;
-        target.EndedAt = end;
-        if (withParticipant is { } kind) target.WithParticipant = kind;
-        target.UpdatedAt = now;
-        await _db.SaveChangesAsync(ct);
-        await rowLock.CommitAsync(ct);
-        return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);
-    }
-
-    public async Task<ShiftBreakResult> DeleteAsync(ShiftCompletion completion, Guid breakId, CancellationToken ct)
-    {
-        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
-        if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
-        var target = await _db.ShiftBreaks.FirstOrDefaultAsync(b => b.Id == breakId && b.ShiftCompletionId == completion.Id, ct);
-        if (target is null) return new ShiftBreakResult(ShiftBreakOutcome.NotFound);
-
-        _db.ShiftBreaks.Remove(target);
         await _db.SaveChangesAsync(ct);
         await rowLock.CommitAsync(ct);
         return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);
