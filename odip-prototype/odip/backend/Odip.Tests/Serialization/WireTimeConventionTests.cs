@@ -161,10 +161,10 @@ public class WireTimeConventionTests
     [InlineData("2026-10-03T08:00:00")]
     public void AnInstantTheClientSends_IsReadAsUtc(string sent)
     {
-        var dto = JsonSerializer.Deserialize<EditShiftBreakDto>($"{{\"startedAt\":\"{sent}\"}}", Api)!;
+        var dto = JsonSerializer.Deserialize<StartBreakDto>($"{{\"startedAt\":\"{sent}\"}}", Api)!;
 
         Assert.Equal(new DateTime(2026, 10, 3, 8, 0, 0, DateTimeKind.Utc), dto.StartedAt);
-        Assert.Equal(DateTimeKind.Utc, dto.StartedAt.Kind);
+        Assert.Equal(DateTimeKind.Utc, dto.StartedAt!.Value.Kind);
     }
 
     // ── The provider-local values that are NOT DateTimes cannot shift: real DTOs, real options ──

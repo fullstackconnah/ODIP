@@ -795,4 +795,22 @@ describe('ClaimDetailPage: Kind === Manual claim', () => {
     expect(screen.queryByRole('button', { name: 'No Show' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
   })
+
+  // Layout at phone width (jsdom has no layout, so the classes are pinned; e2e/shots/claim-detail-390.mjs measures them).
+  it('keeps the breadcrumb on one line: the current crumb truncates, the root and slashes do not shrink', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([]), isLoading: false })
+    renderPage()
+    const crumbs = screen.getByRole('link', { name: 'Trips' }).parentElement!
+    expect(crumbs).toHaveClass('whitespace-nowrap', 'min-w-0')
+    expect(screen.getByRole('link', { name: 'Trips' })).toHaveClass('shrink-0')
+    expect(crumbs.lastElementChild).toHaveClass('min-w-0', 'truncate')
+  })
+
+  it('lays the total footer out as one flex row on a phone, so it does not split the card list into table columns', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([]), isLoading: false })
+    renderPage()
+    const row = screen.getByText('Total', { selector: 'td' }).parentElement!
+    expect(row).toHaveClass('max-md:flex', 'max-md:justify-end')
+    expect(row.lastElementChild).toHaveClass('max-md:hidden')
+  })
 })

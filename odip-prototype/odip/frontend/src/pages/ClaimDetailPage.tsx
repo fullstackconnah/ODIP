@@ -168,23 +168,23 @@ export default function ClaimDetailPage() {
       {claimedAgainFrom && <Callout tone="success">Claim <span className="whitespace-nowrap font-medium">{claim.claimReference}</span> made. {noBreakRefs(claimedAgainFrom)} was deleted.</Callout>}
       {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
           PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
-      <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/trips" className="hover:text-[var(--color-primary)]">Trips</Link>
-        <span>/</span>
+      <div className="tap-area-links flex min-w-0 items-center gap-2 whitespace-nowrap text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/trips" className="shrink-0 hover:text-[var(--color-primary)]">Trips</Link>
+        <span className="shrink-0">/</span>
         {claim.kind !== 'Trip' ? (
           <>
-            <span>{periodText}</span>
-            <span>/</span>
+            <span className="shrink-0">{periodText}</span>
+            <span className="shrink-0">/</span>
           </>
         ) : (
           claim.tripInstanceId && (
             <>
-              <Link to={`/trips/${claim.tripInstanceId}`} className="hover:text-[var(--color-primary)]">{claim.tripName || 'Trip'}</Link>
-              <span>/</span>
+              <Link to={`/trips/${claim.tripInstanceId}`} className="min-w-0 hover:text-[var(--color-primary)]"><span className="block truncate">{claim.tripName || 'Trip'}</span></Link>
+              <span className="shrink-0">/</span>
             </>
           )
         )}
-        <span className="font-medium">Claim {claim.claimReference}</span>
+        <span className="min-w-0 truncate font-medium">Claim {claim.claimReference}</span>
       </div>
 
       <div className="flex items-start gap-2">
@@ -444,10 +444,11 @@ export default function ClaimDetailPage() {
             },
           ]}
           footer={
-            <tr>
+            // One flex row below md: nine table columns would give the card list above only column 1's share of the width.
+            <tr className="max-md:flex max-md:justify-end">
               <td colSpan={6} className="p-2 text-right font-semibold text-[var(--color-foreground)]">Total</td>
               <td className="p-2 font-bold tabular-nums text-[var(--color-foreground)]">{formatCurrency(totalAmount)}</td>
-              <td colSpan={2} />
+              <td colSpan={2} className="max-md:hidden" />
             </tr>
           }
           className="overflow-x-auto"

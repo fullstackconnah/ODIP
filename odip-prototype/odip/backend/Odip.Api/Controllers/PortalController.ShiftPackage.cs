@@ -218,27 +218,6 @@ public partial class PortalController
         return await ToBreakResponseAsync(shift!, await _breaks.EndAsync(completion!, breakId, ct, dto?.EndedAt), ct);
     }
 
-    /// <summary>Corrects a break's times (UTC) before Finish. `endedAt` null keeps a running break running.</summary>
-    [HttpPut("shifts/{id:guid}/breaks/{breakId:guid}")]
-    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> EditBreak(
-        Guid id, Guid breakId, [FromBody] EditShiftBreakDto dto, CancellationToken ct)
-    {
-        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
-        if (error is not null) return error;
-
-        return await ToBreakResponseAsync(shift!, await _breaks.EditAsync(completion!, breakId, dto.StartedAt, dto.EndedAt, ct, dto.WithParticipant), ct);
-    }
-
-    /// <summary>Removes a break before Finish (the delete is audited).</summary>
-    [HttpDelete("shifts/{id:guid}/breaks/{breakId:guid}")]
-    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> DeleteBreak(Guid id, Guid breakId, CancellationToken ct)
-    {
-        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
-        if (error is not null) return error;
-
-        return await ToBreakResponseAsync(shift!, await _breaks.DeleteAsync(completion!, breakId, ct), ct);
-    }
-
     // ══════════════════════════════════════════════════════════════
     // ROUTINE TICKS (persisted: a tick used to live only in the browser)
     // ══════════════════════════════════════════════════════════════
@@ -373,7 +352,6 @@ public partial class PortalController
                     ShiftBreakViolation.BeforeShiftStart => ("A break can't start before the shift started.", ShiftErrorCodes.ShiftBreakBeforeShiftStart),
                     ShiftBreakViolation.InFuture => ("A break can't be in the future.", ShiftErrorCodes.ShiftBreakInFuture),
                     ShiftBreakViolation.EndNotAfterStart => ("A break must end after it starts.", ShiftErrorCodes.ShiftBreakEndNotAfterStart),
-                    ShiftBreakViolation.EndRequired => ("A finished break needs an end time.", ShiftErrorCodes.ShiftBreakEndRequired),
                     ShiftBreakViolation.ClientTimeTooOld => TooOld,
                     _ => ("This break overlaps another break.", ShiftErrorCodes.ShiftBreakOverlap),
                 };
