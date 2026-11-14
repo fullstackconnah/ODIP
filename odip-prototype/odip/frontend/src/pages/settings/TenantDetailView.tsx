@@ -8,7 +8,7 @@ import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageState, RetryCallout } from '@/components/PageState'
-import { formatInstantDateAu } from '@/lib/format'
+import { formatInstantDateAu, roleLabel } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 // ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ export default function TenantDetailView({
                       ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                     }`}
                   >
-                    {user.role}
+                    {roleLabel(user.role)}
                   </span>
                 ),
               },

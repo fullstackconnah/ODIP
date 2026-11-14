@@ -13,7 +13,7 @@ import { SignInRefused, describeMicrosoftOutcome, describeSignInRefusal, type Re
 import { VERIFICATION_HOLD_MS, holdLeftMs, readVerificationSend, writeVerificationSend, type VerificationSendRecord } from '@/lib/verificationSend'
 import { Eye, EyeOff } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
-import { plural } from '@/lib/format'
+import { plural, roleLabel } from '@/lib/format'
 import { unsentOnDevice } from '@/lib/offline/store'
 
 /** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
@@ -394,7 +394,7 @@ export default function LoginPage() {
                     >
                       {devUsers.data.map(u => (
                         <option key={u.username} value={u.username}>
-                          {u.username} — {u.role}
+                          {u.username} — {roleLabel(u.role)}
                         </option>
                       ))}
                     </select>
