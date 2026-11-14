@@ -2,6 +2,7 @@ import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { apiGet } from '../client'
 import type { BudgetSeries, ParticipantLedgerDto } from '../types'
 import { AGREEMENT_CHECK_KEY, BUDGET_LIST_KEY } from './funding-warnings'
+import { QK } from '@/api/queryKeys'
 
 // The budget ledger (budget feature, phase 2a). The server works every figure out on each read; this only asks for it, under the same ['participant-funding', participantId] prefix the plan
 // record uses, so a plan write refreshes the figures with the record they belong to. Money is on this endpoint and nowhere else, so pass `enabled: false` for any role that must not see it.
@@ -42,7 +43,7 @@ export function refreshLedgers(queryClient: QueryClient, participantIds: readonl
 
 /** The claim pages hold the budget block of a claim as of their last read, so they are read again whenever the ledger they were worked out from may have moved. */
 export function refreshClaimBudgets(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['claim'] })
+  void queryClient.invalidateQueries({ queryKey: [QK.claim] })
 }
 
 /**
@@ -51,8 +52,8 @@ export function refreshClaimBudgets(queryClient: QueryClient) {
  * read again. They are not narrowed to the participants a write names: the aggregate and the list hold everybody, and the keys are few.
  */
 export function refreshBudgetWarnings(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] })
-  void queryClient.invalidateQueries({ queryKey: ['participant-alerts'] })
+  void queryClient.invalidateQueries({ queryKey: [QK.participantAlertsAggregate] })
+  void queryClient.invalidateQueries({ queryKey: [QK.participantAlerts] })
   void queryClient.invalidateQueries({ queryKey: BUDGET_LIST_KEY })
   void queryClient.invalidateQueries({ queryKey: [AGREEMENT_CHECK_KEY] })
 }

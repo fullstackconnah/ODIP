@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from '../client'
 import type { ParticipantAlertsDto } from '../types'
+import { QK } from '@/api/queryKeys'
 
 /**
  * Alerts for a single participant — feeds the alert banner on ParticipantDetailPage's header.
@@ -10,7 +11,7 @@ import type { ParticipantAlertsDto } from '../types'
  */
 export function useParticipantAlerts(participantId: string | undefined, enabled = true) {
   return useQuery({
-    queryKey: ['participant-alerts', participantId],
+    queryKey: [QK.participantAlerts, participantId],
     queryFn: () => apiGet<ParticipantAlertsDto>(`/participants/${participantId}/alerts`),
     enabled: !!participantId && enabled,
   })
@@ -23,7 +24,7 @@ export function useParticipantAlerts(participantId: string | undefined, enabled 
  */
 export function useParticipantAlertsAggregate(enabled = true) {
   return useQuery({
-    queryKey: ['participant-alerts-aggregate'],
+    queryKey: [QK.participantAlertsAggregate],
     queryFn: () => apiGet<ParticipantAlertsDto[]>('/participants/alerts'),
     enabled,
   })

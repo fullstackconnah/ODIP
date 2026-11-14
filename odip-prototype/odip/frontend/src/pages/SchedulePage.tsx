@@ -29,6 +29,7 @@ import type {
   TripPreferenceDto,
   CreateStaffAssignmentDto, CreateVehicleAssignmentDto,
 } from '@/api/types'
+import { QK } from '@/api/queryKeys'
 
 // ── Matrix geometry ──
 //
@@ -78,13 +79,13 @@ export default function SchedulePage() {
   const handleStaffAssign = async (assignData: CreateStaffAssignmentDto) => {
     await staffAssign.mutateAsync(assignData)
     setAssignModal(null)
-    queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+    queryClient.invalidateQueries({ queryKey: [QK.scheduleOverview] })
   }
 
   const handleVehicleAssign = async (assignData: CreateVehicleAssignmentDto) => {
     await vehicleAssign.mutateAsync(assignData)
     setAssignModal(null)
-    queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+    queryClient.invalidateQueries({ queryKey: [QK.scheduleOverview] })
   }
 
   const toggleStaff = (id: string) => {
@@ -437,7 +438,7 @@ export default function SchedulePage() {
           if (!unassigning) return
           staffUnassign.mutate(unassigning.assignmentId, {
             onSuccess: () => {
-              queryClient.invalidateQueries({ queryKey: ['schedule-overview'] })
+              queryClient.invalidateQueries({ queryKey: [QK.scheduleOverview] })
               setUnassigning(null)
             },
           })

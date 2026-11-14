@@ -11,25 +11,25 @@ import { QK } from '@/api/queryKeys'
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
 export function useHubLines() {
-  return useQuery({ queryKey: ['claim-hub', 'lines'], queryFn: () => apiGet<HubLinesDto>('/claim-hub/lines') })
+  return useQuery({ queryKey: [QK.claimHub, 'lines'], queryFn: () => apiGet<HubLinesDto>('/claim-hub/lines') })
 }
 
 /** GET /claim-hub/managed: one server-paged slice of the plan- and self-managed claims, newest first. The previous page stays on screen while the next one loads. Under the claim-hub key, so every hub write refreshes it. */
 export function useManagedClaims(params: Record<string, string>) {
   return useQuery({
-    queryKey: ['claim-hub', 'managed', params],
+    queryKey: [QK.claimHub, 'managed', params],
     queryFn: () => fetchPagedList<ManagedClaimDto>('/claim-hub/managed', params),
     placeholderData: keepPreviousData,
   })
 }
 
-export const CLAIM_PIPELINE_KEY = ['claim-hub', 'pipeline'] as const
+export const CLAIM_PIPELINE_KEY = [QK.claimHub, 'pipeline'] as const
 /** Dollars sent and paid by week (under the claim-hub key, so every hub write refreshes it). */
 export function useClaimPipeline() {
   return useQuery({ queryKey: CLAIM_PIPELINE_KEY, queryFn: () => apiGet<PipelineDto>('/claim-hub/pipeline') })
 }
 
-export const UNCLAIMED_SHIFTS_KEY = ['claim-hub', 'unclaimed-shifts'] as const
+export const UNCLAIMED_SHIFTS_KEY = [QK.claimHub, 'unclaimed-shifts'] as const
 /**
  * The dashboard cue: completed shifts the claim run would look at that no live claim has taken. `loading` is a request in flight or paused (`awaitsData`) and `error` a failed one, so a caller can tell
  * "nothing is waiting" from "we do not know yet" (the count is 0 in both). Under the claim-hub key, so the claim run refreshes it; the writes that release or add shifts do the same by this key.
@@ -43,7 +43,7 @@ export function useUnclaimedShifts(enabled: boolean): { count: number; participa
   }
 }
 
-export const CANCELLATION_CANDIDATES_KEY = ['claim-hub', 'cancellations'] as const
+export const CANCELLATION_CANDIDATES_KEY = [QK.claimHub, 'cancellations'] as const
 /** The cancelled shifts that can be claimed as a short-notice cancellation, and the recent ones that cannot with why. Under the claim-hub key, so a claim made (or a shift reopened) refreshes it. */
 export function useCancellationCandidates(enabled: boolean) {
   return useQuery({ queryKey: CANCELLATION_CANDIDATES_KEY, queryFn: () => apiGet<CancellationCandidatesDto>('/claims/cancellations'), enabled })
@@ -59,7 +59,7 @@ export function useMakeCancellationClaim() {
   return useMutation({
     mutationFn: ({ shiftId, cancellationReason }: { shiftId: string; cancellationReason: string }) => apiPost<ShiftClaimGeneratedDto>('/claims/cancellations', { shiftId, cancellationReason }),
     onSettled: (created) => {
-      for (const key of ['claims', 'trip-claims', 'participant-claims', QK.rosteringCompletions, QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      for (const key of ['claims', 'trip-claims', 'participant-claims', QK.rosteringCompletions, QK.rosterBoard, QK.claimHub, 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
       refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
       refreshBudgetWarnings(qc)
     },
@@ -76,7 +76,7 @@ export function useMakeManualClaim() {
   return useMutation({
     mutationFn: (request: ManualClaimRequestDto) => apiPost<ShiftClaimGeneratedDto>('/claims/manual', request),
     onSettled: (created) => {
-      for (const key of ['claims', 'trip-claims', 'participant-claims', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      for (const key of ['claims', 'trip-claims', 'participant-claims', QK.claimHub, 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
       refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
       refreshBudgetWarnings(qc)
     },
@@ -93,9 +93,9 @@ export function useClaimBatch(batchId: string | undefined) {
 
 /** Every write here moves lines between the hub's lists and changes a file's counts, a claim's own page shows the lines' status, and marking a file uploaded issues invoices. */
 export function refreshClaimHub(qc: QueryClient) {
-  qc.invalidateQueries({ queryKey: ['claim-hub'] })
+  qc.invalidateQueries({ queryKey: [QK.claimHub] })
   qc.invalidateQueries({ queryKey: ['claim-batches'] })
-  qc.invalidateQueries({ queryKey: ['claim'] })
+  qc.invalidateQueries({ queryKey: [QK.claim] })
   qc.invalidateQueries({ queryKey: ['claim-invoices'] })
   qc.invalidateQueries({ queryKey: ['claims'] })
   qc.invalidateQueries({ queryKey: ['invoice-register'] })

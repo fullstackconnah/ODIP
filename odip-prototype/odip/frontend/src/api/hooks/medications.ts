@@ -21,8 +21,8 @@ import { QK } from '@/api/queryKeys'
 function invalidateMedicationCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['medications'] })
   qc.invalidateQueries({ queryKey: ['medication'] })
-  qc.invalidateQueries({ queryKey: ['mar'] })
-  qc.invalidateQueries({ queryKey: ['participant-administrations'] })
+  qc.invalidateQueries({ queryKey: [QK.mar] })
+  qc.invalidateQueries({ queryKey: [QK.participantAdministrations] })
 }
 
 // A save can create, (de)activate or tick the register entry too, so the register and the participant's flag refetch with it.
@@ -67,7 +67,7 @@ export function useMedicationRegister(params?: Record<string, string>) {
 
 export function useMar(date: string, participantId?: string) {
   return useQuery({
-    queryKey: ['mar', date, participantId],
+    queryKey: [QK.mar, date, participantId],
     queryFn: () => apiGet<MarDayDto>('/medications/mar', { date, participantId }),
     enabled: !!date,
   })
@@ -82,7 +82,7 @@ export function useMissedGuidanceContact() {
 
 export function useParticipantAdministrations(participantId: string | undefined, from?: string, to?: string) {
   return useQuery({
-    queryKey: ['participant-administrations', participantId, from, to],
+    queryKey: [QK.participantAdministrations, participantId, from, to],
     queryFn: () => apiGet<AdministrationDto[]>(`/participants/${participantId}/administrations`, { from, to }),
     enabled: !!participantId,
   })

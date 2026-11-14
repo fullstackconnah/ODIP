@@ -4,17 +4,18 @@ import type {
   EmploymentHeroBusinessDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto, EmploymentHeroLeaveCategoriesDto, EmploymentHeroLeaveCategoryDto, EmploymentHeroWorkTypeDto, EmploymentHeroWorkTypesDto,
   LeaveBalancesDto, PayPeriodsDto, PayrollCheckDto, PayrollRangeDto, SendMissingResultDto,
 } from '../types'
+import { QK } from '@/api/queryKeys'
 
 const BASE = '/integrations/employment-hero'
 
 /** GET the Employment Hero card: configured, connected, last sync, counts and the Needs-attention items. Admin, or SuperAdmin viewing as an organisation. */
 export function useEmploymentHeroStatus(enabled = true) {
-  return useQuery({ queryKey: ['employment-hero'], queryFn: () => apiGet<EmploymentHeroStatusDto>(BASE), enabled })
+  return useQuery({ queryKey: [QK.employmentHero], queryFn: () => apiGet<EmploymentHeroStatusDto>(BASE), enabled })
 }
 
 /** The Link picker: EH employees nobody here is linked to, read live from EH. */
 export function useEmploymentHeroEmployees(enabled: boolean) {
-  return useQuery({ queryKey: ['employment-hero', 'employees'], queryFn: () => apiGet<EmploymentHeroEmployeeDto[]>(`${BASE}/employees`), enabled })
+  return useQuery({ queryKey: [QK.employmentHero, 'employees'], queryFn: () => apiGet<EmploymentHeroEmployeeDto[]>(`${BASE}/employees`), enabled })
 }
 
 /** The businesses a pasted key can see. Nothing is stored until Connect. */
@@ -27,7 +28,7 @@ function useEmploymentHeroChange<V, R>(mutationFn: (variables: V) => Promise<R>)
   const qc = useQueryClient()
   return useMutation({
     mutationFn,
-    onSuccess: () => { for (const key of ['employment-hero', 'provider-settings', 'staff', 'module-visibility']) qc.invalidateQueries({ queryKey: [key] }) },
+    onSuccess: () => { for (const key of [QK.employmentHero, 'provider-settings', 'staff', 'module-visibility']) qc.invalidateQueries({ queryKey: [key] }) },
   })
 }
 
@@ -43,14 +44,14 @@ export const useDismissEmploymentHeroItem = () =>
 
 /** The work types ODIP may send hours under, read live from EH for the card's pickers. */
 export function useEmploymentHeroWorkTypes(enabled: boolean) {
-  return useQuery({ queryKey: ['employment-hero', 'work-types'], queryFn: () => apiGet<EmploymentHeroWorkTypeDto[]>(`${BASE}/work-types`), enabled })
+  return useQuery({ queryKey: [QK.employmentHero, 'work-types'], queryFn: () => apiGet<EmploymentHeroWorkTypeDto[]>(`${BASE}/work-types`), enabled })
 }
 export const useSaveEmploymentHeroWorkTypes = () =>
   useEmploymentHeroChange((body: EmploymentHeroWorkTypesDto) => apiPut<EmploymentHeroStatusDto>(`${BASE}/work-types`, body))
 
 /** The leave categories ODIP may send leave under, read live from EH for the card's pickers. */
 export function useEmploymentHeroLeaveCategories(enabled: boolean) {
-  return useQuery({ queryKey: ['employment-hero', 'leave-categories'], queryFn: () => apiGet<EmploymentHeroLeaveCategoryDto[]>(`${BASE}/leave-categories`), enabled })
+  return useQuery({ queryKey: [QK.employmentHero, 'leave-categories'], queryFn: () => apiGet<EmploymentHeroLeaveCategoryDto[]>(`${BASE}/leave-categories`), enabled })
 }
 export const useSaveEmploymentHeroLeaveCategories = () =>
   useEmploymentHeroChange((body: EmploymentHeroLeaveCategoriesDto) => apiPut<EmploymentHeroStatusDto>(`${BASE}/leave-categories`, body))
@@ -70,13 +71,13 @@ const PAYROLL = `${BASE}/payroll`
 
 /** The pay periods EH offers (finalised runs and the next period). Not connected answers an empty list. */
 export function usePayPeriods() {
-  return useQuery({ queryKey: ['employment-hero', 'payroll', 'periods'], queryFn: () => apiGet<PayPeriodsDto>(`${PAYROLL}/periods`) })
+  return useQuery({ queryKey: [QK.employmentHero, 'payroll', 'periods'], queryFn: () => apiGet<PayPeriodsDto>(`${PAYROLL}/periods`) })
 }
 
 /** The Payroll page's check: every approved shift in the range, by worker, with its word. */
 export function usePayrollCheck(range: { from: string; to: string } | null) {
   return useQuery({
-    queryKey: ['employment-hero', 'payroll', 'check', range?.from, range?.to],
+    queryKey: [QK.employmentHero, 'payroll', 'check', range?.from, range?.to],
     queryFn: () => apiGet<PayrollCheckDto>(PAYROLL, { from: range!.from, to: range!.to }),
     enabled: range !== null,
     // Rows still moving (Waiting or Failed) refresh every minute; a settled period only on focus.
@@ -89,6 +90,6 @@ export function useSendMissingTimesheets() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (range: PayrollRangeDto) => apiPost<SendMissingResultDto>(`${PAYROLL}/send-missing`, range),
-    onSuccess: ({ check }) => { qc.setQueryData(['employment-hero', 'payroll', 'check', check.from, check.to], check) },
+    onSuccess: ({ check }) => { qc.setQueryData([QK.employmentHero, 'payroll', 'check', check.from, check.to], check) },
   })
 }

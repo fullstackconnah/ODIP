@@ -17,7 +17,7 @@ export const fundingKey = (participantId: string | undefined) => ['participant-f
  * they would show the old answer for their 30 s of staleness, which reads as the save not having worked when a coordinator goes back to the checklist from the Funding tab.
  */
 function refreshOnboarding(queryClient: QueryClient, participantId: string) {
-  void queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
+  void queryClient.invalidateQueries({ queryKey: [QK.onboarding, participantId] })
   void queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
 }
 
@@ -73,7 +73,7 @@ export function useSetMyProvider(participantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       refreshOnboarding(queryClient, participantId)   // the checklist's "Recorded as my provider" item reads it
-      void queryClient.invalidateQueries({ queryKey: ['claim-hub'] })   // and the claims hub's warning
+      void queryClient.invalidateQueries({ queryKey: [QK.claimHub] })   // and the claims hub's warning
     },
   })
 }

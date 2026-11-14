@@ -15,6 +15,16 @@ describe('QK', () => {
       rosteringCompletions: 'rostering-completions',
       participantInquiries: 'participant-inquiries',
       rosterPatterns: 'roster-patterns',
+      onboarding: 'onboarding',
+      scheduleOverview: 'schedule-overview',
+      participantAlerts: 'participant-alerts',
+      participantAlertsAggregate: 'participant-alerts-aggregate',
+      trip: 'trip',
+      employmentHero: 'employment-hero',
+      claim: 'claim',
+      claimHub: 'claim-hub',
+      mar: 'mar',
+      participantAdministrations: 'participant-administrations',
     })
   })
 })

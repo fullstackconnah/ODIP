@@ -38,7 +38,7 @@ export function useTripClaims(tripId: string | undefined, options?: { enabled?: 
 
 export function useClaim(claimId: string | undefined) {
   return useQuery({
-    queryKey: ['claim', claimId],
+    queryKey: [QK.claim, claimId],
     queryFn: () => apiGet<TripClaimDetailDto>(`/claims/${claimId}`),
     enabled: !!claimId,
   })
@@ -62,7 +62,7 @@ function claimParticipantIds(claim: TripClaimDetailDto | TripClaimListDto | unde
 
 /** The claim detail this client already holds. Read before the claim key is invalidated, since that is the claim as the last read it -- the participants it covers live there and nowhere else in the response (the update and delete writes answer `true`/`void`). */
 function cachedClaim(queryClient: QueryClient, claimId: string): TripClaimDetailDto | undefined {
-  return queryClient.getQueryData<TripClaimDetailDto>(['claim', claimId])
+  return queryClient.getQueryData<TripClaimDetailDto>([QK.claim, claimId])
 }
 
 export function useGenerateClaim() {
@@ -76,7 +76,7 @@ export function useGenerateClaim() {
     onSuccess: (created, { tripId }) => {
       qc.invalidateQueries({ queryKey: ['trip-claims', tripId] })
       // The hub is made from lines like these, and a claim made from its New claim button must show there.
-      qc.invalidateQueries({ queryKey: ['claim-hub'] })
+      qc.invalidateQueries({ queryKey: [QK.claimHub] })
       // Generating a claim spends the participants it books, but that summary names none of them
       // for a Trip-kind claim (no participantId, no line items), so this lands on the fallback:
       // refresh the ledger keys this client actually holds open.
@@ -102,7 +102,7 @@ export function useUpdateClaim() {
       // Authorising, approving or paying a claim moves every participant it covers, and the claim
       // detail we already hold is where their ids come from. Read it before the invalidation below.
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
-      qc.invalidateQueries({ queryKey: ['claim', claimId] })
+      qc.invalidateQueries({ queryKey: [QK.claim, claimId] })
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       // Submitting issues the claim's invoices.
       qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
@@ -114,7 +114,7 @@ export function useUpdateClaim() {
     },
     // A refusal means the page was stale (somebody else moved the claim): reload it, so the buttons that no longer apply go.
     onError: (_, { claimId }) => {
-      qc.invalidateQueries({ queryKey: ['claim', claimId] })
+      qc.invalidateQueries({ queryKey: [QK.claim, claimId] })
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
     },
   })
@@ -131,13 +131,13 @@ export function useUpdateClaimLineItem() {
       const claim = cachedClaim(qc, claimId)
       const item = (claim?.lineItems ?? []).find((line) => line.id === itemId)
       const participants = item?.participantId ? [item.participantId] : claimParticipantIds(claim)
-      qc.invalidateQueries({ queryKey: ['claim', claimId] })
+      qc.invalidateQueries({ queryKey: [QK.claim, claimId] })
       qc.invalidateQueries({ queryKey: CLAIM_PIPELINE_KEY }) // a line moved into or out of Paid changes the chart
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY }) // a rejected line frees its shift
       refreshLedgers(qc, participants)
       refreshBudgetWarnings(qc)
     },
-    onError: (_, { claimId }) => qc.invalidateQueries({ queryKey: ['claim', claimId] }),
+    onError: (_, { claimId }) => qc.invalidateQueries({ queryKey: [QK.claim, claimId] }),
   })
 }
 
@@ -178,7 +178,7 @@ export function useClaimAgain() {
     mutationFn: (claimId: string) => apiPost<ShiftClaimGeneratedDto>(`/claims/${claimId}/claim-again`, {}),
     onSuccess: (made, claimId) => {
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
-      qc.removeQueries({ queryKey: ['claim', claimId] })   // the old claim is gone: a refetch would only 404
+      qc.removeQueries({ queryKey: [QK.claim, claimId] })   // the old claim is gone: a refetch would only 404
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       qc.invalidateQueries({ queryKey: CLAIM_PIPELINE_KEY })
@@ -310,7 +310,7 @@ export function usePreviewShiftClaimRun() {
 export function useRunShiftClaims() {
   const qc = useQueryClient()
   const refreshLists = () => {
-    for (const key of ['claims', 'trip-claims', 'participant-claims', QK.rosteringCompletions, QK.rosterBoard, 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+    for (const key of ['claims', 'trip-claims', 'participant-claims', QK.rosteringCompletions, QK.rosterBoard, QK.claimHub, 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
   }
   return useMutation({
     mutationFn: (data: ShiftClaimRunRequestDto) => apiPost<ShiftClaimRunDto>('/claims/from-shifts', data),

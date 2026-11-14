@@ -176,7 +176,7 @@ export function useUpdateLeave() {
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
-      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: [QK.scheduleOverview] })
       qc.invalidateQueries({ queryKey: ['schedule'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
@@ -241,7 +241,7 @@ export function useUpdateUnavailability() {
       qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
       qc.invalidateQueries({ queryKey: ['staff-availability'] })
-      qc.invalidateQueries({ queryKey: ['schedule-overview'] })
+      qc.invalidateQueries({ queryKey: [QK.scheduleOverview] })
       qc.invalidateQueries({ queryKey: ['schedule'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },

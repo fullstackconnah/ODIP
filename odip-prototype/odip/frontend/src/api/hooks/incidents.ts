@@ -83,8 +83,8 @@ export function useCreateIncident() {
       // keys mirrored from rostering.ts's useFlaggedShiftNotes and medications.ts's
       // invalidateMedicationCaches.
       qc.invalidateQueries({ queryKey: ['flagged-shift-notes'] })
-      qc.invalidateQueries({ queryKey: ['mar'] })
-      qc.invalidateQueries({ queryKey: ['participant-administrations'] })
+      qc.invalidateQueries({ queryKey: [QK.mar] })
+      qc.invalidateQueries({ queryKey: [QK.participantAdministrations] })
     },
   })
 }
