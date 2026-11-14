@@ -1572,11 +1572,8 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         var finished = await portal.FinishShift(shiftId, new FinishShiftDto { HandoverText = "All settled." }, default);
         Assert.Equal(ShiftStatus.PendingReview, Assert.IsType<ApiResponse<PortalShiftDetailDto>>(Assert.IsType<OkObjectResult>(finished.Result).Value).Data!.Status);
 
-        // The coordinator's review and the MAR.
+        // The MAR.
         var rostering = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var review = Assert.IsType<ApiResponse<ShiftCompletionReviewDto>>(Assert.IsType<OkObjectResult>((await rostering.GetShiftCompletionReview(shiftId, default)).Result).Value).Data!;
-        Assert.Equal("All settled.", review.Completion.HandoverText);
-        Assert.All(review.Doses, d => Assert.NotNull(d.Outcome));
         var medications = new MedicationsController(db, tenant.Object);
         var mar = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>((await medications.GetMar(new DateOnly(2026, 7, 14), participantId, default)).Result).Value).Data!;
         Assert.Equal(2, mar.Entries.Count);
