@@ -285,6 +285,48 @@ public class PortalRoutineChecksTests
     }
 
     [Fact]
+    public async Task EditingTheRoutinesTime_AfterItWasTicked_DoesNotHideTheTick_AndTickingAgainMakesNoSecondRow()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        var firstCheckedAt = (await f.Db.ShiftRoutineChecks.SingleAsync()).CheckedAt;
+        f.Advance(TimeSpan.FromMinutes(20));
+
+        // Moved to 12:30 (still inside the shift): the stored occurrence (12:00) no longer equals the recomputed one (12:30).
+        lunch.StartTime = new TimeOnly(12, 30);
+        lunch.EndTime = new TimeOnly(13, 30);
+        f.Db.SaveChanges();
+
+        var detail = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        var again = Detail(await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default));
+
+        var routine = Assert.Single(detail.ShiftRoutines);
+        Assert.True(routine.IsChecked);
+        Assert.Equal(new DateTime(2026, 7, 14, 12, 30, 0), routine.OccursAt);
+        Assert.True(Assert.Single(again.ShiftRoutines).IsChecked);
+        var row = Assert.Single(await f.Db.ShiftRoutineChecks.ToListAsync());   // still ONE row, with the first when
+        Assert.Equal(firstCheckedAt, row.CheckedAt);
+        Assert.Equal(LunchAt, row.ScheduledAt);
+    }
+
+    [Fact]
+    public async Task ARoutineMovedOutOfTheWindow_AfterItWasTicked_LeavesTheWorkersList_ButTheTickRowStays()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00", critical: true);
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        lunch.StartTime = new TimeOnly(20, 0);   // after the shift ends
+        lunch.EndTime = new TimeOnly(21, 0);
+        f.Db.SaveChanges();
+
+        var detail = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+
+        Assert.Empty(detail.ShiftRoutines);   // the worker's list is the live definitions only
+        Assert.Equal(LunchAt, (await f.Db.ShiftRoutineChecks.SingleAsync()).ScheduledAt);
+    }
+
+    [Fact]
     public async Task UntickingAfterTheRoutinesTimeWasEdited_StillRemovesTheTick()
     {
         var f = Create();
