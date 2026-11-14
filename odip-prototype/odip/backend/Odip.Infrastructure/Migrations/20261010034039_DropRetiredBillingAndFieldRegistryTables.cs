@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 
@@ -13,6 +15,8 @@ namespace Odip.Infrastructure.Migrations
     /// seed rows, so no user data is lost. Down() recreates the empty tables.
     /// </summary>
     /// <inheritdoc />
+    [DbContext(typeof(OdipDbContext))]
+    [Migration("20261010034039_DropRetiredBillingAndFieldRegistryTables")]
     public partial class DropRetiredBillingAndFieldRegistryTables : Migration
     {
         /// <inheritdoc />

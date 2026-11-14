@@ -112,6 +112,7 @@ jobs:
           set -euo pipefail
           # --delete keeps the stack tree honest, but .env holds the generated
           # Postgres password / JWT secret and must survive every deploy.
+          # Removing the /backups/ exclude deletes the pre-deploy dumps (deploy/predeploy-dump.sh).
           rsync -a --delete \
             --exclude='.env' \
             --exclude='.git' \
@@ -119,6 +120,7 @@ jobs:
             --exclude='bin' \
             --exclude='obj' \
             --exclude='dist' \
+            --exclude='/backups/' \
             "$SRC_DIR"/ "$STACK_DIR"/
           cp deploy/compose.yaml "$STACK_DIR"/compose.yaml
 
@@ -132,6 +134,32 @@ jobs:
           set -euo pipefail
           cd "$STACK_DIR"
           bash "$GITHUB_WORKSPACE/deploy/build-with-retry.sh"
+
+      - name: Dump database before deploy
+        # No continue-on-error: a failed dump stops the deploy before `up -d` and the old stack stays up.
+        # Its id is not in the rollback step's condition (deploy or health failing), so a dump failure never triggers it.
+        # Dumps land in $STACK_DIR/backups/predeploy (excluded from the rsync --delete above); the newest 5 are kept.
+        id: dump
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd "$STACK_DIR"
+          bash "$GITHUB_WORKSPACE/deploy/predeploy-dump.sh"
+
+      - name: Restore image tags after a failed dump
+        # The Build step ran before the dump, so :local points at images that never went live; put the previous ones back.
+        if: failure() && steps.dump.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          for img in odip-api odip-frontend; do
+            if docker image inspect "$img:rollback" >/dev/null 2>&1; then
+              docker tag "$img:rollback" "$img:local"
+              echo "Restored $img:local from $img:rollback"
+            else
+              echo "No $img:rollback — first deploy, nothing to restore"
+            fi
+          done
 
       - name: Deploy
         id: deploy
@@ -158,15 +186,21 @@ jobs:
             # Liveness through the frontend's nginx proxy — proves the API
             # process is up and being routed to correctly.
             API=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/api/health/live" || echo 000)
-            echo "attempt $i: frontend=$FE api=$API"
-            if [ "$FE" = "200" ] && [ "$API" = "200" ]; then
+            # Readiness (database reachable) through the same proxy, not only liveness.
+            READY=$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL/api/health/ready" || echo 000)
+            echo "attempt $i: frontend=$FE api=$API ready=$READY"
+            if [ "$FE" = "200" ] && [ "$API" = "200" ] && [ "$READY" = "200" ]; then
               echo "Healthy."
               exit 0
             fi
             sleep 5
           done
-          echo "::error::Health check failed after 150s (frontend=$FE api=$API)"
+          echo "::error::Health check failed after 150s (frontend=$FE api=$API ready=$READY)"
           exit 1
+
+      - name: Prune dangling images
+        # Success path only (default if: success()). Dangling images only; the :local and :rollback tags are tagged, so they stay.
+        run: docker image prune -f || true
 
       - name: Roll back on failed deploy or health check
         if: failure() && (steps.deploy.outcome == 'failure' || steps.health.outcome == 'failure')
