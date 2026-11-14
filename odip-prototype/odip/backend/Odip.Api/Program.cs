@@ -12,6 +12,7 @@ using Odip.Api.Middleware;
 using Odip.Infrastructure.Integrations;
 using Odip.Api.RateLimiting;
 using Odip.Api.Services;
+using Odip.Api.Telemetry;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.DemoData;
@@ -195,6 +196,7 @@ builder.Services.AddSingleton<Odip.Api.RateLimiting.AddressLookupRateLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.AddressLookupRateLimitFilter>();
 builder.Services.AddGooglePlacesClient();
 builder.Logging.QuietGooglePlacesClient();
+builder.AddOdipTelemetry();
 // The data export: one at a time per organisation. The same limiter with one permit, keyed so the quote keeps its two.
 // shortcut: process-local, correct for the single api container in deploy/compose.yaml; move to a DB advisory lock if the API is ever scaled out.
 builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation));
