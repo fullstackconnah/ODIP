@@ -1,0 +1,35 @@
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+
+namespace Odip.Api.Telemetry;
+
+public static class TelemetrySetup
+{
+    /// <summary>
+    /// Metrics and scrubbed Error logs over OTLP. Switched off by default: the exporters are registered only when
+    /// OTEL_EXPORTER_OTLP_ENDPOINT is set, so with no endpoint nothing leaves the process. The endpoint, protocol and
+    /// resource come from the standard OTEL_* variables, never from code.
+    /// </summary>
+    public static WebApplicationBuilder AddOdipTelemetry(this WebApplicationBuilder builder)
+    {
+        var export = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
+
+        builder.Services.AddOpenTelemetry().WithMetrics(m =>
+        {
+            m.AddMeter("Microsoft.AspNetCore.Hosting", "System.Runtime", OdipMetrics.MeterName);
+            if (export) m.AddOtlpExporter();
+        });
+
+        builder.Logging.AddOpenTelemetry(o =>
+        {
+            o.IncludeScopes = false; // scopes carry the raw request path
+            o.IncludeFormattedMessage = false;
+            if (export) o.AddOtlpExporter();
+        });
+        builder.Logging.AddFilter<OpenTelemetryLoggerProvider>(null, LogLevel.Error);
+
+        builder.Services.AddSingleton<IHealthCheckPublisher, HealthStatusPublisher>();
+        return builder;
+    }
+}
