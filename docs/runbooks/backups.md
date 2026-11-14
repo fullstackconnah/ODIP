@@ -49,7 +49,7 @@ ssh connah@192.168.4.70 'grep -c "^age1" ~/odip-backup/recipient.txt'    # print
 ssh connah@192.168.4.70 '(crontab -l 2>/dev/null | grep -v odip-backup/bin/backup-nightly.sh; echo "15 3 * * * bash \$HOME/odip-backup/bin/backup-nightly.sh >> \$HOME/odip-backup/nightly.log 2>&1") | crontab -'
 ssh connah@192.168.4.70 'bash ~/odip-backup/bin/backup-nightly.sh'
 ```
-The second command prints `nightly backup staged: odip-<time> (db N bytes, files N bytes, T tables, R rows)`. A failure prints the reason and is also written to `~/odip-backup/staged/last-failure.txt`. Exit 75 means another run holds the lock.
+The second command prints `nightly backup staged: odip-<time> (db N bytes, files N bytes, T tables, R rows)`. A failure prints the reason and is also written to `~/odip-backup/last-failure.txt`. Exit 75 means another run holds the lock.
 
 **After the PC pull merges**, create the pull task (PowerShell, current user, no admin):
 ```
@@ -83,9 +83,9 @@ Make a new pair (the key steps above, with a new file name), replace `~/odip-bac
 Plaintext is streamed over ssh and never written to disk. Run in Git Bash with `K="$USERPROFILE/.odip-backup/odip-backup.key"`, `AGE="$LOCALAPPDATA/Programs/age/age.exe"`, `S=F:/Backups/ODIP/sets/<stem>`, `H=connah@192.168.4.70`:
 
 1. Pick the stem: `status.json` `lastGood`, or the newest set whose drill passed.
-2. Safety dump of the current state: `ssh $H 'cd /mnt/docker/stacks/odip && DUMP_DIR=$HOME/odip-backup/pre-restore KEEP=3 GIT_SHA=prerestore bash ~/odip-backup/bin/predeploy-dump.sh'`.
+2. Safety dump of the current state: `ssh $H 'cd /mnt/docker/stacks/odip && DUMP_DIR=$HOME/odip-backup/pre-restore KEEP=3 GIT_SHA=prerestore bash ~/odip-backup/bin/predeploy-dump.sh'`. This dump is unencrypted: delete it once the restore is verified.
 3. Stop the API: `ssh $H 'cd /mnt/docker/stacks/odip && docker compose stop api'`.
 4. Fresh database: `ssh $H 'docker exec odip-db sh -c "dropdb -U \$POSTGRES_USER \$POSTGRES_DB && createdb -U \$POSTGRES_USER \$POSTGRES_DB"'`.
 5. Restore: `"$AGE" -d -i "$K" "$S.db.age" | ssh $H 'docker exec -i odip-db sh -c "pg_restore --no-owner --exit-on-error -U \$POSTGRES_USER -d \$POSTGRES_DB"'`.
 6. Files, only if the volumes are lost or damaged: `"$AGE" -d -i "$K" "$S.files.age" | ssh $H 'docker run --rm -i --volumes-from odip-api postgres:16-alpine tar -C / -xf -'`.
-7. Start the API: `ssh $H 'cd /mnt/docker/stacks/odip && docker compose start api'`, then check the deploy health URL. Spot-check two `rows` lines from `$S.manifest` with `docker exec odip-db psql -U postgres -d odip -Atc 'select count(*) from public."<Table>"'`.
+7. Start the API: `ssh $H 'cd /mnt/docker/stacks/odip && docker compose start api'`, then check the deploy health URL. Spot-check two `rows` lines from `$S.manifest` with `ssh $H 'docker exec odip-db sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -Atc \"select count(*) from \\\"<Table>\\\"\""'`.

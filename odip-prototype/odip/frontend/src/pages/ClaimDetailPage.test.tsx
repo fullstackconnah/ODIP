@@ -7,11 +7,12 @@ import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockFetchClaimFile, mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices, mockUseSubmitPreview } = vi.hoisted(() => ({
+const { mockFetchClaimFile, mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices, mockUseSubmitPreview, mockSettings } = vi.hoisted(() => ({
   mockFetchClaimFile: vi.fn(),
   mockUseSubmitPreview: vi.fn(),
   mockUseClaim: vi.fn(),
   mockUseClaimInvoices: vi.fn(),
+  mockSettings: vi.fn(() => ({ data: undefined as { timeZoneId?: string } | undefined })),
   mockUpdateClaim: vi.fn(),
   mockUpdateLineItem: vi.fn(),
 }))
@@ -22,6 +23,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateClaimLineItem: () => ({ mutate: mockUpdateLineItem, isPending: false }),
   // The Invoices section (Xero PR1): its own query; InvoicesSection.test.tsx covers what it shows.
   useClaimInvoices: mockUseClaimInvoices,
+  useProviderSettings: mockSettings,
   useVoidInvoice: () => ({ mutate: vi.fn(), isPending: false }),
   useIssueCreditNote: () => ({ mutate: vi.fn(), isPending: false }),
   // The submit confirm (SubmitClaimDialog.test.tsx covers its words): one invoice to issue by default, so Confirm is not held.
@@ -158,7 +160,15 @@ beforeEach(() => {
 // Landing-spotted: the page mapped 'NdiaManaged', a value the API never sends, so every line item printed the raw enum "AgencyManaged".
 // VA follow-up: the claim's dates are UTC instants. Near midnight UTC they fall on the next day in Sydney, and one sent without a zone is UTC.
 describe('ClaimDetailPage — instants near midnight', () => {
-  afterEach(restoreZone)
+  afterEach(() => { restoreZone(); mockSettings.mockReturnValue({ data: undefined }) })
+
+  it("shows Created and Submitted on the provider's day, whatever zone the device is in", () => {
+    mockSettings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney' } })
+    mockUseClaim.mockReturnValue({ data: { ...baseClaim([baseLineItem()]), createdAt: '2026-03-01T13:30:00Z', submittedDate: '2026-03-01T13:30:00Z' }, isLoading: false })
+    renderPage()
+
+    expect(screen.getAllByText('02/03/2026').length).toBeGreaterThanOrEqual(2)
+  })
 
   it("shows Created, Submitted and Rejected on the viewer's day", () => {
     if (!setZone('Australia/Sydney')) return
@@ -784,5 +794,23 @@ describe('ClaimDetailPage: Kind === Manual claim', () => {
     expect(screen.queryByText('2026-02-03 – 2026-02-03')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'No Show' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
+  })
+
+  // Layout at phone width (jsdom has no layout, so the classes are pinned; e2e/shots/claim-detail-390.mjs measures them).
+  it('keeps the breadcrumb on one line: the current crumb truncates, the root and slashes do not shrink', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([]), isLoading: false })
+    renderPage()
+    const crumbs = screen.getByRole('link', { name: 'Trips' }).parentElement!
+    expect(crumbs).toHaveClass('whitespace-nowrap', 'min-w-0')
+    expect(screen.getByRole('link', { name: 'Trips' })).toHaveClass('shrink-0')
+    expect(crumbs.lastElementChild).toHaveClass('min-w-0', 'truncate')
+  })
+
+  it('lays the total footer out as one flex row on a phone, so it does not split the card list into table columns', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([]), isLoading: false })
+    renderPage()
+    const row = screen.getByText('Total', { selector: 'td' }).parentElement!
+    expect(row).toHaveClass('max-md:flex', 'max-md:justify-end')
+    expect(row.lastElementChild).toHaveClass('max-md:hidden')
   })
 })

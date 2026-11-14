@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
-import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
+import { useClaim, useProviderSettings, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Download, Check, DollarSign, RotateCcw, XCircle } from 'lucide-react'
@@ -50,6 +50,7 @@ export default function ClaimDetailPage() {
   // Set by Claim again on the old claim's page: this claim replaced a rejected one.
   const claimedAgainFrom = (useLocation().state as { claimedAgainFrom?: string } | null)?.claimedAgainFrom
   const buildFile = useBuildClaimFile()
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
   // Claim again lands here: a screen-reader and keyboard user starts at the new claim's title, next to the success notice.
@@ -167,23 +168,23 @@ export default function ClaimDetailPage() {
       {claimedAgainFrom && <Callout tone="success">Claim <span className="whitespace-nowrap font-medium">{claim.claimReference}</span> made. {noBreakRefs(claimedAgainFrom)} was deleted.</Callout>}
       {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
           PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
-      <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/trips" className="hover:text-[var(--color-primary)]">Trips</Link>
-        <span>/</span>
+      <div className="tap-area-links flex min-w-0 items-center gap-2 whitespace-nowrap text-sm text-[var(--color-muted-foreground)]">
+        <Link to="/trips" className="shrink-0 hover:text-[var(--color-primary)]">Trips</Link>
+        <span className="shrink-0">/</span>
         {claim.kind !== 'Trip' ? (
           <>
-            <span>{periodText}</span>
-            <span>/</span>
+            <span className="shrink-0">{periodText}</span>
+            <span className="shrink-0">/</span>
           </>
         ) : (
           claim.tripInstanceId && (
             <>
-              <Link to={`/trips/${claim.tripInstanceId}`} className="hover:text-[var(--color-primary)]">{claim.tripName || 'Trip'}</Link>
-              <span>/</span>
+              <Link to={`/trips/${claim.tripInstanceId}`} className="min-w-0 hover:text-[var(--color-primary)]"><span className="block truncate">{claim.tripName || 'Trip'}</span></Link>
+              <span className="shrink-0">/</span>
             </>
           )
         )}
-        <span className="font-medium">Claim {claim.claimReference}</span>
+        <span className="min-w-0 truncate font-medium">Claim {claim.claimReference}</span>
       </div>
 
       <div className="flex items-start gap-2">
@@ -273,8 +274,8 @@ export default function ClaimDetailPage() {
           claim.kind !== 'Trip'
             ? { label: 'Period', value: <span className="tabular-nums">{periodText}</span> }
             : { label: 'Trip', value: claim.tripName || '—' },
-          { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt)}</span> },
-          { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate)}</span> },
+          { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt, zone)}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate, zone)}</span> },
           // What the NDIA said, once it has refused the claim: when, and the code it gave (V17, V18, V27 and V28 say the funds ran out). Nothing is said of a claim that is not rejected.
           ...(claim.status === 'Rejected'
             ? [{
@@ -282,7 +283,7 @@ export default function ClaimDetailPage() {
               value: (
                 <>
                   <span className="tabular-nums">
-                    {formatInstantDateAu(claim.rejectedDate)}
+                    {formatInstantDateAu(claim.rejectedDate, zone)}
                     {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}${ndiaCodeMeaning(claim.rejectionCode) ? ` (${ndiaCodeMeaning(claim.rejectionCode)})` : ''}` : 'no NDIA code recorded'}
                   </span>
                   {/* The code is the one input that switches the budget warning on, and the reason often arrives after the status is set: a claim rejected with none can be given one here. */}
@@ -443,10 +444,11 @@ export default function ClaimDetailPage() {
             },
           ]}
           footer={
-            <tr>
+            // One flex row below md: nine table columns would give the card list above only column 1's share of the width.
+            <tr className="max-md:flex max-md:justify-end">
               <td colSpan={6} className="p-2 text-right font-semibold text-[var(--color-foreground)]">Total</td>
               <td className="p-2 font-bold tabular-nums text-[var(--color-foreground)]">{formatCurrency(totalAmount)}</td>
-              <td colSpan={2} />
+              <td colSpan={2} className="max-md:hidden" />
             </tr>
           }
           className="overflow-x-auto"

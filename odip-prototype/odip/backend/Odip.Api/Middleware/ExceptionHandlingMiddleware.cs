@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Routing;
 using Odip.Application.Common;
 
 namespace Odip.Api.Middleware;
@@ -35,18 +36,36 @@ public class ExceptionHandlingMiddleware
             }
             else
             {
-                _logger.LogError(ex, "An unhandled exception occurred.");
+                // The route template (never the raw path) and status travel with the exported error record.
+                var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(no route)";
+                _logger.LogError(ex, "An unhandled exception occurred on {Method} {Route} ({Status}).",
+                    LoggedMethod(context.Request.Method), route, MapException(ex).StatusCode);
             }
             await HandleExceptionAsync(context, ex);
         }
     }
 
+    // The client picks the method token, so only standard methods are logged; anything else is one bounded value.
+    private static readonly string[] StandardMethods = [HttpMethods.Get, HttpMethods.Head, HttpMethods.Post, HttpMethods.Put, HttpMethods.Patch, HttpMethods.Delete, HttpMethods.Options, HttpMethods.Trace, HttpMethods.Connect];
+    private static string LoggedMethod(string method) =>
+        StandardMethods.FirstOrDefault(m => string.Equals(m, method, StringComparison.OrdinalIgnoreCase)) ?? "_OTHER";
+
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
 
-        // Map exception types to status codes and safe client messages
-        var (statusCode, clientMessage) = exception switch
+        var (statusCode, clientMessage) = MapException(exception);
+
+        context.Response.StatusCode = statusCode;
+
+        var response = ApiResponse<object>.Fail(clientMessage);
+        var json = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await context.Response.WriteAsync(json);
+    }
+
+    // Map exception types to status codes and safe client messages
+    private static (int StatusCode, string ClientMessage) MapException(Exception exception) =>
+        exception switch
         {
             ArgumentException => ((int)HttpStatusCode.BadRequest, "The request was invalid. Please check your input."),
             KeyNotFoundException => ((int)HttpStatusCode.NotFound, "The requested resource was not found."),
@@ -58,11 +77,4 @@ public class ExceptionHandlingMiddleware
             BadHttpRequestException bad => (bad.StatusCode, "The request could not be processed. Please check its size and format."),
             _ => ((int)HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.")
         };
-
-        context.Response.StatusCode = statusCode;
-
-        var response = ApiResponse<object>.Fail(clientMessage);
-        var json = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await context.Response.WriteAsync(json);
-    }
 }

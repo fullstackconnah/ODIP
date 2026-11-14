@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
-import { generatedLine } from './ItineraryPdf'
+import { generatedLine, readProviderToday } from './ItineraryPdf'
 import { formatServiceDate } from '@/lib/format'
 import { formatDayAccessibleName, formatShiftTimeRange, formatWeekSpan, isUnfilledShift } from '@/pages/rostering/lib/roster'
 import type { RosterBoardDto, ShiftStatus } from '@/api/types'
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
   footer: { position: 'absolute' as const, bottom: 25, left: 40, right: 40, flexDirection: 'row', justifyContent: 'space-between' as const, fontSize: 7, color: '#94a3b8', borderTop: '0.5 solid #e2e8f0', paddingTop: 5 },
 })
 
-export function ScheduleWeekDocument({ week }: { week: ScheduleWeek }) {
+export function ScheduleWeekDocument({ week, today }: { week: ScheduleWeek; today?: string }) {
   const dates = week.days.map(d => d.date)
   const hasShifts = week.days.some(d => d.shifts.length > 0)
   return (
@@ -92,7 +92,7 @@ export function ScheduleWeekDocument({ week }: { week: ScheduleWeek }) {
         ))}
 
         <View style={styles.footer} fixed>
-          <Text>{generatedLine(week.organisationName)}</Text>
+          <Text>{generatedLine(week.organisationName, today)}</Text>
           <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
       </Page>
@@ -103,7 +103,7 @@ export function ScheduleWeekDocument({ week }: { week: ScheduleWeek }) {
 // The download is ItineraryPdf's: an <a download> click, revoked after 5 s so iOS has time to take the file.
 // eslint-disable-next-line react-refresh/only-export-components
 export async function generateScheduleWeekPdf(week: ScheduleWeek, fileName: string) {
-  const blob = await pdf(<ScheduleWeekDocument week={week} />).toBlob()
+  const blob = await pdf(<ScheduleWeekDocument week={week} today={await readProviderToday()} />).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

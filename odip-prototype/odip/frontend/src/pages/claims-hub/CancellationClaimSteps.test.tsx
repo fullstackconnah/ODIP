@@ -7,7 +7,8 @@ import { CancellationClaimSteps } from './CancellationClaimSteps'
 
 // The two steps of "A cancellation": choose the shift and the reason, then check the claim and make it. The chooser row that opens them is in NewClaimModal.test.tsx.
 
-const m = vi.hoisted(() => ({ preview: vi.fn(), make: vi.fn() }))
+const m = vi.hoisted(() => ({ preview: vi.fn(), make: vi.fn(), settings: vi.fn() }))
+vi.mock('@/api/hooks', () => ({ useProviderSettings: m.settings }))
 vi.mock('@/api/hooks/claimHub', () => ({ usePreviewCancellationClaim: m.preview, useMakeCancellationClaim: m.make }))
 
 const shift = (over: Partial<CancellationCandidateDto> = {}): CancellationCandidateDto => ({
@@ -39,6 +40,7 @@ async function pick(reason = 'No show – family issues') {
 }
 
 beforeEach(() => {
+  m.settings.mockReturnValue({ data: undefined })
   m.preview.mockReturnValue(mutation())
   m.make.mockReturnValue(mutation())
 })
@@ -89,6 +91,13 @@ describe('CancellationClaimSteps: choose the shift', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it("gives when the shift was cancelled on the provider's day, whatever zone the device is in", async () => {
+    m.settings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney' } })
+    setup(query(data({ shifts: [shift({ cancelledAt: '2026-03-01T13:30:00Z' })] })))
+    await userEvent.click(screen.getByLabelText('Cancelled shift'))
+    expect(await screen.findByRole('option', { name: /Sam Lee/ })).toHaveTextContent(/cancelled 02\/03\/2026, 12:30\sam/)
   })
 
   it('lists the cancelled shifts it does not offer, with why, and does not say the participant twice', () => {

@@ -845,10 +845,8 @@ function portalParticipantSummary(participantId) {
 // superseded, and a not-given outcome never replaces another record.
 // Routine ticks persist for the process (`routineChecks`): POST/DELETE portal/shifts/:id/routines/:id/check, InProgress only, the routine must be
 // in the shift's own list (404 SHIFT_ROUTINE_NOT_FOUND), idempotent; a fixture `checked` pre-ticks a routine of a finished shift (shift-0002 has
-// two of its three ticked, so the review shows a mix). A tick is found by ROUTINE (a routine has one occurrence per shift window), so editing the
-// routine's time afterwards neither hides the tick nor lets it be ticked twice. A tick whose routine was LATER edited out of the window, retired or
-// deleted still shows on the coordinator's review, listed from the title and time recorded when it was ticked (`fromTickSnapshot: true`; shift-0002
-// has one, `packageOrphanTicks`); the worker's shiftRoutines list never carries those.
+// two of its three ticked). A tick is found by ROUTINE (a routine has one occurrence per shift window), so editing the
+// routine's time afterwards neither hides the tick nor lets it be ticked twice.
 // NEED-TO-KNOW BY SHIFT STATUS AND TIME: handover, emergency contacts and address only for an InProgress shift or a Published one within 48 hours of its
 // rostered start. Any other status (the Completed and PendingReview fixtures, and shift-0003 once finished), and a Published shift further out
 // (shift-0004, rostered five days away), gets explicit nulls for them (and an empty handoverTrail) plus `sensitiveInfoWithheldReason`; acknowledging a
@@ -1022,14 +1020,6 @@ const packageRoutines = {
   'shift-0001': [],
 }
 
-// shiftId -> ticks whose routine no longer matches the shift (retired or edited out of the window since): review-only rows from the tick's snapshot.
-const packageOrphanTicks = {
-  'shift-0002': [
-    { id: 'rt-0204', title: 'Supper', description: 'Hot milk and a biscuit if she wants one.', category: 'Meals', isCritical: false, startTime: '20:30:00', endTime: '21:00:00', occursAt: '2026-09-10T20:30:00', afterMidnight: false,
-      isChecked: true, checkedAt: '2026-09-10T10:40:00Z', checkedByName: 'Mei Zhang', fromTickSnapshot: true },
-  ],
-}
-
 // shiftId -> history (completed/pending shifts): breaks already on the completion.
 const packageHistoryBreaks = {
   'shift-0001': [
@@ -1042,7 +1032,6 @@ const packageHistoryBreaks = {
   ],
 }
 
-const SKEW_MS = 5 * 60 * 1000   // breaks: a break cannot be more than 5 minutes in the future
 // Doses: a supplied administeredAt up to 15 minutes ahead is a device clock running fast - the server stores ITS now instead of refusing.
 const DOSE_SKEW_MS = 15 * 60 * 1000
 const wholeMinutes = (ms) => Math.round(ms / 60000)
@@ -1455,35 +1444,6 @@ function routineTarget(shiftId, routineId) {
   return { st: pkgState(shiftId) }
 }
 
-const packageRoutesPut = [
-  ['portal/shifts/:id/breaks/:id', (id, breakId, body) => {
-    const guard = notInProgress(id)
-    if (guard) return guard
-    const st = pkgState(id)
-    st.breaks = breaksFor(id)
-    const b = st.breaks.find((x) => x.id === breakId)
-    if (!b) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
-    const completion = st.completion ? st.completion : null
-    const start = Date.parse(body?.startedAt)
-    const end = body?.endedAt ? Date.parse(body.endedAt) : null
-    const bad = (message, code) => respond(400, failEnvelope(null, [message], code))
-    if (Number.isNaN(start)) return bad('A break needs a start time.', 'SHIFT_BREAK_END_NOT_AFTER_START')
-    if (b.endedAt && end == null) return bad('A finished break needs an end time.', 'SHIFT_BREAK_END_REQUIRED')
-    if (completion && start < Date.parse(completion.actualStart)) return bad("A break can't start before the shift started.", 'SHIFT_BREAK_BEFORE_SHIFT_START')
-    if (start > Date.now() + SKEW_MS || (end != null && end > Date.now() + SKEW_MS)) return bad("A break can't be in the future.", 'SHIFT_BREAK_IN_FUTURE')
-    if (end != null && end <= start) return bad('A break must end after it starts.', 'SHIFT_BREAK_END_NOT_AFTER_START')
-    const overlaps = st.breaks.some((o) => o.id !== b.id && start < (o.endedAt ? Date.parse(o.endedAt) : Infinity) && Date.parse(o.startedAt) < (end ?? Infinity))
-    if (overlaps) return bad('This break overlaps another break.', 'SHIFT_BREAK_OVERLAP')
-    b.startedAt = new Date(start).toISOString()
-    const timesChanged = b.startedAt !== new Date(start).toISOString() || (b.endedAt ?? null) !== (end == null ? null : new Date(end).toISOString())
-    b.startedAt = new Date(start).toISOString()
-    b.endedAt = end == null ? null : new Date(end).toISOString()
-    if (typeof body?.withParticipant === 'boolean') b.withParticipant = body.withParticipant
-    if (timesChanged) b.editedAt = new Date().toISOString()   // a kind-only change does not mark the break edited
-    return buildPortalShiftDetail(id)
-  }],
-]
-
 const packageRoutesDelete = [
   ['portal/shifts/:id/routines/:id/check', (shiftId, routineId) => {
     const { st, error } = routineTarget(shiftId, routineId)
@@ -1491,34 +1451,7 @@ const packageRoutesDelete = [
     st.routineChecks[routineId] = null   // an explicit null overrides a fixture pre-tick
     return buildPortalShiftDetail(shiftId)
   }],
-  ['portal/shifts/:id/breaks/:id', (id, breakId) => {
-    const guard = notInProgress(id)
-    if (guard) return guard
-    const st = pkgState(id)
-    st.breaks = breaksFor(id)
-    if (!st.breaks.some((x) => x.id === breakId)) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
-    st.breaks = st.breaks.filter((x) => x.id !== breakId)
-    return buildPortalShiftDetail(id)
-  }],
 ]
-
-/** GET rostering/shifts/:id/completion/review - the coordinator's one-call review (ShiftCompletionReviewDto). */
-function buildCompletionReview(shiftId) {
-  const base = portalShiftBase[shiftId] || portalShiftBase['shift-0002']
-  const completion = withPackageFields(base.id, pkgState(base.id).completion || shiftCompletions.find((c) => c.shiftId === base.id) || shiftCompletions[0])
-  const participant = participants.find((x) => x.id === base.participantId) || participants[0]
-  const doses = packageDoses[base.id] || { slots: [], prn: [] }
-  return {
-    completion, participantName: participant.fullName, staffName: completion.submittedByName, serviceDate: base.serviceDate,
-    timeZoneId: PACKAGE_TZ, doses: doses.slots.map((def) => doseSlotDto(base.id, def)),
-    prnDoses: pkgState(base.id).prnGiven.map((g) => ({
-      medicationId: g.participantMedicationId, medicationName: g.medicationName, strength: null, doseDescription: g.doseDescription,
-      outcome: { administrationId: g.id, status: g.status, recordedByName: g.recordedByName, administeredAt: g.administeredAt, administeredAtTimeZone: g.administeredAtTimeZone, recordedAt: g.createdAt, reason: g.reason, doseGiven: g.doseGiven, notes: g.notes, recordedWithoutCompetency: !!g.recordedWithoutCompetency },
-    })),
-    notes: shiftNotesByShiftId[base.id] || [],
-    routines: [...(packageRoutines[base.id] || []).map((r) => routineWithCheck(base.id, r)), ...(packageOrphanTicks[base.id] || [])],
-  }
-}
 
 /** Builds a PortalShiftDetailDto for one fixture shift. Status/completion come from the sticky
  * package state (Start/Finish flip them for this process), falling back to the fixture. */
@@ -3172,9 +3105,6 @@ const routes = [
   ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
   ['rostering/completions', (searchParams) => paged(completionQueueItems.filter((i) => i.status === (searchParams.get('status') || 'PendingReview')))],
   ['rostering/shifts/:id/completion', (id) => withPackageFields(id, pkgState(id).completion || shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0])],
-  // The coordinator's one-call review of a submitted shift (ShiftCompletionReviewDto): completion with breaks / net
-  // minutes / handover, every dose in the window with its outcome, PRN doses, notes.
-  ['rostering/shifts/:id/completion/review', (id) => buildCompletionReview(id)],
 
   // Notifications (design spec §6) — GET admin/notifications joins this plain table (query
   // string ignored, same caveat noted on notificationOutbox above); GET notifications/preferences
@@ -3545,7 +3475,6 @@ const putRoutes = [
     incidentDetailExtras[id] = { ...(incidentDetailExtras[id] || {}), reviewedByStaffId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewNotes: body.reviewNotes, correctiveActions: body.correctiveActions ?? null }
     return i
   }],
-  ...packageRoutesPut,
   // PUT rostering/shifts/:id returns the saved shift with its cancellationReason; a value outside the list is refused as the server does.
   ['rostering/group-activities/:id', (id, body) => {
     const a = groupActivityMock(id)

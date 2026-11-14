@@ -13,6 +13,7 @@ import { PageState } from '@/components/PageState'
 import { SlideOver } from '@/components/SlideOver'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA, TAP_ICON_SQUARE } from '@/components/tapArea'
+import { useProviderSettings } from '@/api/hooks'
 import { fetchClaimFile, useClaimBatch, useDiscardBatch, useImportResults, useMarkBatchPaid, useMarkBatchUploaded } from '@/api/hooks/claimHub'
 import { useSubmitPreviewChunks } from '@/api/hooks/claims'
 import { serverSentence } from '@/api/hooks/data-export'
@@ -66,6 +67,7 @@ function copyText(text: string) {
 }
 
 export function FilePanel({ batchId, onClose, announce, onReviewRejected }: Props) {
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const query = useClaimBatch(batchId ?? undefined)
   const batch = query.data
   const notFound = isAxiosError(query.error) && query.error.response?.status === 404
@@ -97,7 +99,7 @@ export function FilePanel({ batchId, onClose, announce, onReviewRejected }: Prop
       onClose={onClose}
       size="lg"
       title={<span data-testid="file-panel-title" className="whitespace-nowrap">{batch?.fileName ?? 'File'}</span>}
-      description={batch ? `Built ${instantDay(batch.createdAt)} by ${batch.createdByName} · ${plural(batch.lineCount, 'line')} · ${formatCurrency(batch.totalAmount)}` : undefined}
+      description={batch ? `Built ${instantDay(batch.createdAt, zone)} by ${batch.createdByName} · ${plural(batch.lineCount, 'line')} · ${formatCurrency(batch.totalAmount)}` : undefined}
       footer={footer}
     >
       <div data-testid="file-panel" className="flex flex-col gap-4">
@@ -136,6 +138,7 @@ function ErrorLine({ error, fallback }: { error: unknown; fallback: string }) {
 }
 
 function StepCard({ batch, step, announce, onReviewRejected }: { batch: BatchDetailDto; step: FileStep; announce: (m: string) => void; onReviewRejected: () => void }) {
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const [summary, setSummary] = useState<ResultsImportDto | null>(null)
   const summaryBlock = summary && <ImportSummary summary={summary} fileName={batch.fileName} onReviewRejected={onReviewRejected} />
   if (step === 'Built') return <UploadStep batch={batch} announce={announce} />
@@ -147,7 +150,7 @@ function StepCard({ batch, step, announce, onReviewRejected }: { batch: BatchDet
   }
   return (
     <Card title="Discarded">
-      <p className="text-sm">Discarded on {instantDay(batch.discardedAt)}. Its lines went back to Ready to send.</p>
+      <p className="text-sm">Discarded on {instantDay(batch.discardedAt, zone)}. Its lines went back to Ready to send.</p>
     </Card>
   )
 }

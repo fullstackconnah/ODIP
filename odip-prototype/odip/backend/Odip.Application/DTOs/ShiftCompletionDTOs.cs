@@ -154,20 +154,6 @@ public record ShiftBreakDto(
     Guid CreatedByUserId,
     bool WithParticipant = false);
 
-/// <summary>
-/// PUT portal/shifts/{id}/breaks/{breakId} body: the corrected times, as UTC instants (ISO 8601 with a Z;
-/// an unsuffixed value is treated as UTC). <see cref="EndedAt"/> null keeps a RUNNING break running; an ended
-/// break must keep an end. Only allowed while the shift is in progress (before Finish).
-/// </summary>
-public record EditShiftBreakDto
-{
-    public DateTime StartedAt { get; init; }
-    public DateTime? EndedAt { get; init; }
-
-    /// <summary>Who the break was with. Null keeps the stored value, so a cached older client never flips it.</summary>
-    public bool? WithParticipant { get; init; }
-}
-
 /// <summary>PUT rostering/shifts/{id}/completion/breaks/{breakId}/kind body: a coordinator sets whether the worker ate with the participant.</summary>
 public record SetShiftBreakKindDto
 {
@@ -261,35 +247,6 @@ public record ShiftCompletionDto(
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
 public record IncidentSummaryDto(Guid Id, string Title, IncidentSeverity Severity, IncidentStatus Status, [property: WallClock] DateTime IncidentDateTime);
 
-/// <summary>
-/// Everything a coordinator needs to review one submitted shift in a single payload: the completion (times, variance,
-/// breaks, net worked minutes, handover, "nothing to note" confirmation, incidents), every scheduled dose in the rostered
-/// window with its outcome, PRN doses given during the shift, and the shift notes. Returned by
-/// <c>GET rostering/shifts/{id}/completion/review</c>; the Approve / Return endpoints are unchanged.
-/// </summary>
-public record ShiftCompletionReviewDto(
-    ShiftCompletionDto Completion,
-    string ParticipantName,
-    string StaffName,
-    DateOnly ServiceDate,
-    /// <summary>The provider's IANA zone; scheduled dose times are wall-clock values in it.</summary>
-    string TimeZoneId,
-    /// <summary>Scheduled doses due in the rostered window, in time order. A slot whose <c>outcome</c> is null had nothing recorded.</summary>
-    IReadOnlyList<PortalDoseSlotDto> Doses,
-    /// <summary>"As needed" (PRN) doses the submitting worker administered between the actual start and end.</summary>
-    IReadOnlyList<ReviewPrnDoseDto> PrnDoses,
-    IReadOnlyList<ShiftNoteDto> Notes,
-    /// <summary>The routines matched to the rostered window, with the worker's tick state on this completion (<c>isChecked</c>, <c>checkedAt</c>,
-    /// <c>checkedByName</c>): critical first, then in time order. An unticked routine is one the worker did not tick off.</summary>
-    IReadOnlyList<PortalShiftRoutineDto> Routines);
-
-public record ReviewPrnDoseDto(
-    Guid MedicationId,
-    string MedicationName,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Strength,
-    string DoseDescription,
-    PortalDoseOutcomeDto Outcome);
-
 /// <summary>One shift's review status, for confirming what became of a row that is no longer in the queue.</summary>
 public record CompletionStatusDto(Guid ShiftId, ShiftStatus Status);
 
@@ -312,7 +269,7 @@ public record CompletionQueueItemDto(
     int ReturnCount,
     /// <summary>How many scheduled doses in the shift's ROSTERED window have no outcome recorded (Administered, Refused, Withheld, Missed and
     /// WrongMedication all count as an outcome; a superseded record is history). Lets the review queue flag "doses without outcome" without
-    /// opening each shift; the review (<c>GET rostering/shifts/{id}/completion/review</c>) lists them.</summary>
+    /// opening each shift.</summary>
     int DosesWithoutOutcome,
     /// <summary>Total minutes of UNPAID breaks on the completion (the same figure as <c>ShiftCompletionDto.breakMinutes</c>).</summary>
     int BreakMinutes,
