@@ -106,12 +106,17 @@ npm run lint
   `odip-prototype/odip/docker-compose.yml` was deleted: rsync copied it into the stack
   root next to `compose.yaml`, and Compose picking the wrong one would have silently
   deployed stale prebuilt images.
-- Pre-deploy database dumps: before `up -d`, `deploy/predeploy-dump.sh` writes a verified `pg_dump -Fc` to
-  `/mnt/docker/stacks/odip-backups/predeploy/odip-<UTC time>-<sha8>.dump` (outside the rsync `--delete` tree) and keeps the newest 5;
-  a failed dump stops the deploy. Rollback only re-tags images and never restores data. Manual restore of the newest dump: in
-  `/mnt/docker/stacks/odip`, `docker compose stop api`, then
-  `f=$(ls /mnt/docker/stacks/odip-backups/predeploy/odip-*.dump | tail -n 1)`,
-  `docker compose exec -T db sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$f"`, then `docker compose start api`.
+- Pre-deploy database dumps: before `up -d`, `deploy/predeploy-dump.sh` writes a verified `pg_dump -Fc` (mode 600) to
+  `/mnt/docker/stacks/odip/backups/predeploy/odip-<UTC time>-<sha8>.dump` (the Sync step's rsync `--delete` excludes `/backups/`; so does `.dockerignore`)
+  and keeps the newest 5; a failed dump stops the deploy and re-tags `:rollback` back to `:local`. Rollback only re-tags images and never restores data.
+  The dumps sit on the same disk as the database: they protect against a bad deploy, not a lost disk.
+  Manual restore, owner-run only, in `/mnt/docker/stacks/odip` (commands as text, never run by an agent):
+  1. `docker compose stop api`
+  2. Dump the current state first: `docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > backups/before-restore.dump`
+  3. `docker compose exec -T db dropdb -U postgres odip`, then `createdb -U postgres odip`, then
+     `docker compose exec -T db pg_restore --exit-on-error --single-transaction -U postgres -d odip < backups/predeploy/<chosen>.dump`
+  4. Start the API on the image that matches the dump (re-tag `:rollback` to `:local`, or redeploy the matching commit), then `docker compose up -d`;
+     the newer image would re-apply its migrations.
 
 ## Architecture
 
