@@ -81,6 +81,8 @@ check "CRLF: a set is staged" test "$(sets)" = 1
 run "KEEP_STAGED not a number" 1 KEEP_STAGED=0
 check "bad KEEP_STAGED: no pg_dump, nothing staged" bash -c "$(declare -f nostaged nodump); S='$S'; tmp='$tmp'; nodump && nostaged"
 run "KEEP_STAGED not a number (text)" 1 KEEP_STAGED=seven
+run "KEEP_STAGED bad with OUT unset" 1 KEEP_STAGED=abc OUT=
+check "bad KEEP_STAGED: failure record in the default OUT" test -f "$tmp/home/odip-backup/last-failure.txt"
 run "HOME empty" 1 HOME=
 check "HOME empty: no pg_dump" nodump
 run "WS not named odip-backup-*" 1 WS="$tmp/o"
@@ -125,7 +127,7 @@ check "set -e exit: a record names the exit code, in OUT not staged" bash -c "gr
 check "set -e exit: workspace gone" nows
 SEED='echo old > "$tmp/o/last-failure.txt"' run "good run after a failure" 0
 check "good run clears the stale record" test ! -e "$tmp/o/last-failure.txt"
-run "WS climbs out with .." 1 WS="$tmp/odip-backup-ws/../o"
+run "WS climbs out with .." 1 WS="$tmp/x/../odip-backup-ws"
 check "WS with ..: refused before anything is removed" bash -c "$(declare -f nodump); tmp='$tmp'; nodump && [ -f '$tmp/o/recipient.txt' ] && grep -q 'WS must be' '$tmp/o/last-failure.txt'"
 run "WS named odip-backup-* accepted" 0 WS="$tmp/deep/odip-backup-77"
 

@@ -318,7 +318,6 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
     await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
     const keys = spy.mock.calls.map(([filters]) => JSON.stringify((filters as { queryKey?: unknown })?.queryKey))
     expect(keys).toContain(JSON.stringify(['roster-board']))
-    expect(keys).toContain(JSON.stringify(['rostering-completion-review']))
     expect(keys.length).toBeGreaterThan(2) // and the budget figures (refreshBudgetFigures)
   })
 

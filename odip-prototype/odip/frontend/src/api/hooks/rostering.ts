@@ -339,7 +339,6 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
       const shiftId = typeof v === 'string' ? v : v.shiftId
       qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // an approved completion is a completed shift the claim run can now take
       refreshBudgetFigures(qc)   // an approved completion is a completed shift: booked ahead becomes pending
@@ -350,7 +349,6 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
       const shiftId = typeof v === 'string' ? v : v.shiftId
       qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
     },
   })
 }
@@ -364,7 +362,6 @@ export function useDecideExtraTime() {
     onSuccess: (_, { shiftId }) => {
       qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: [QK.employmentHero, 'payroll'] })   // the Payroll check shows the paid window
     },
   })
@@ -378,7 +375,6 @@ export function useEditCompletionTravel() {
       apiPut<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/travel`, data),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
     },
   })
 }
@@ -391,7 +387,6 @@ export function useSetBreakKind() {
       apiPut<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/breaks/${breakId}/kind`, { withParticipant }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
     },
   })
 }
@@ -404,7 +399,6 @@ export function useReturnCompletion() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
@@ -420,7 +414,6 @@ export function useApproveCompletionsBatch({ cleanOnly = false }: { cleanOnly?: 
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
-      qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       refreshBudgetFigures(qc)   // each approved completion moves its shift from booked ahead to pending
