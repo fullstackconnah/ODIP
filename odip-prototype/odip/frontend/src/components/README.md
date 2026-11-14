@@ -7,7 +7,7 @@ deliverable: for each primitive below it covers props, visual/interaction states
 accessibility contract, when to reach for it (and when not to), and a short usage
 snippet.
 
-Bracketed pixel values (`h-[44px]`) are budgeted per file by `src/pxBudget.test.ts` (baseline `px-budget.json`): a file may not gain one, so use a token (`--control-h`, `--tap-min`) or the spacing scale, and replace the ones in a file you touch.
+Bracketed pixel values (`h-[44px]`) are budgeted per file by `src/pxBudget.test.ts` (baseline `px-budget.json`): a file may not gain one, so use a token (`--control-h`, `--tap-min`) or the spacing scale, and replace the ones in a file you touch. When you rename or split a file, move its count by hand in `px-budget.json` (the total must not rise); the update run only ever lowers counts.
 
 Anything not listed here (`AddActivityModal`, `AddVehicleModal`, `GenerateClaimModal`,
 `NoShowModal`, `TemplateFormPanel`, `AuditHistoryTab`, `ItineraryTab`, `ItineraryPdf`,
