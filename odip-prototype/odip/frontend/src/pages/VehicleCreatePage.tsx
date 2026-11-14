@@ -85,19 +85,19 @@ export default function VehicleCreatePage() {
   }, !isDirty)
 
   const onSubmit = async (data: VehicleFormData) => {
-    const payload: any = { ...data }
+    const payload: Record<string, unknown> = { ...data }
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
     try {
       if (isEdit) {
-        const res = await updateVehicle.mutateAsync({ id, data: payload })
+        const res = await updateVehicle.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/vehicles', { replace: true })
         }
       } else {
-        const res = await createVehicle.mutateAsync(payload)
+        const res = await createVehicle.mutateAsync(payload as never)
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/vehicles', { replace: true })

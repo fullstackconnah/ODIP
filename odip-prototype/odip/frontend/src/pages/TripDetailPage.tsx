@@ -113,7 +113,7 @@ export default function TripDetailPage() {
     // No count: rooms plus vans sum to nothing meaningful.
     { id: 'stay', label: 'Stay and transport', icon: Building2 },
     { id: 'tasks', label: 'Tasks', icon: ListChecks, badge: tasks.length },
-    { id: 'activities', label: 'Activities', icon: Calendar, badge: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
+    { id: 'activities', label: 'Activities', icon: Calendar, badge: schedule.reduce((sum: number, d) => sum + (d.scheduledActivities?.length || 0), 0) },
     ...(canAccessClaims ? [{ id: 'claims' as string, label: 'Claims', icon: FileText, badge: claims.length }] : []),
     ...(canAccessIncidents ? [{ id: 'incidents' as string, label: 'Incidents', icon: ShieldAlert, badge: incidents.length }] : []),
     ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),

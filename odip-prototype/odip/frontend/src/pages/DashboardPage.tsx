@@ -459,7 +459,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
-              {d.upcomingTrips.slice(0, 5).map((t: any) => {
+              {d.upcomingTrips.slice(0, 5).map((t) => {
                 return (
                   <Link
                     key={t.id}

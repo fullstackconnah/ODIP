@@ -181,22 +181,22 @@ export type DataTableProps<T> = {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function getValue(obj: any, key: string): any {
-  return obj?.[key]
+function getValue(obj: unknown, key: string): unknown {
+  return (obj as Record<string, unknown> | null | undefined)?.[key]
 }
 
 function isEmptyValue(value: unknown): boolean {
   return value == null || value === '' || value === '—' || (Array.isArray(value) && value.length === 0)
 }
 
-function defaultComparator(type: ColumnType | undefined, a: any, b: any): number {
+function defaultComparator(type: ColumnType | undefined, a: unknown, b: unknown): number {
   if (a == null && b == null) return 0
   if (a == null) return 1
   if (b == null) return -1
 
   switch (type) {
     case 'date':
-      return new Date(a).getTime() - new Date(b).getTime()
+      return new Date(a as string | number | Date).getTime() - new Date(b as string | number | Date).getTime()
     case 'currency':
       return Number(a) - Number(b)
     case 'boolean':
@@ -215,9 +215,9 @@ function renderCell<T>(row: T, col: Column<T>, rowIndex: number): ReactNode {
 
   switch (col.type) {
     case 'date':
-      return formatDateAu(value)
+      return formatDateAu(value as string | null | undefined)
     case 'currency':
-      return formatCurrency(value)
+      return formatCurrency(value as number | null | undefined)
     case 'boolean':
       return value ? <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto" /> : null
     case 'badge':

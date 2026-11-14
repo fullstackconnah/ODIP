@@ -177,8 +177,8 @@ export default function TemplateFormPanel({
     try {
       await deactivateMutation.mutateAsync(template.id)
       onClose()
-    } catch (err: any) {
-      setError(err?.response?.data?.errors?.[0] || 'Failed to deactivate template.')
+    } catch (err: unknown) {
+      setError((err as { response?: { data?: { errors?: string[] } } })?.response?.data?.errors?.[0] || 'Failed to deactivate template.')
     }
   }
 
