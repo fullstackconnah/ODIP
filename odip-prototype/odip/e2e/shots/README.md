@@ -6,11 +6,11 @@ Capture scripts run on the server runner: `bash F:/Projects/.claude/tools/odip-s
 
 | Script | Shows |
 |---|---|
-| `role-label-tenant-users.mjs` | newest: crop plus full page of a tenant users list at 1280 and 390 |
-| `role-label-switcher.mjs` | a header switcher crop at both breakpoints |
-| `role-label.mjs` | settings page role label crops |
-| `approval-roles-display.mjs` | approvals role display crops and full page |
-| `polish-batch-102.mjs` | smallest example: one crop and one full page |
+| `role-label-tenant-users.mjs` | newest: role badges in an organisation users table, numeric checks |
+| `role-label-switcher.mjs` | view-as banner and user switcher list, numeric checks only |
+| `role-label.mjs` | Settings > Profile role fact; sign-in and settings stubbed with `page.route` |
+| `approval-roles-display.mjs` | agreement approval line, two states, light theme, 390 touch and 1280 |
+| `polish-batch-102.mjs` | smallest example: one patched response, text and href checks |
 
 ## Self-checks (no app needed)
 
