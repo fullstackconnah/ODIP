@@ -133,6 +133,17 @@ jobs:
           cd "$STACK_DIR"
           bash "$GITHUB_WORKSPACE/deploy/build-with-retry.sh"
 
+      - name: Dump database before deploy
+        # No continue-on-error: a failed dump stops the deploy before `up -d` and the old stack stays up.
+        # It has no id, so the rollback step (which fires on the deploy or health step failing) ignores it.
+        # Dumps land in $STACK_DIR-backups/predeploy, outside the rsync --delete tree; the newest 5 are kept.
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd "$STACK_DIR"
+          bash "$GITHUB_WORKSPACE/deploy/predeploy-dump.sh"
+
       - name: Deploy
         id: deploy
         # `up -d` now waits for the api container's healthcheck (deploy/compose.yaml)
