@@ -4,7 +4,7 @@ import { Download, Loader2 } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { DATA_EXPORT_KEY, useDataExport, useDataExportLast, useProviderSettings } from '@/api/hooks'
+import { DATA_EXPORT_KEY, useDataExport, useDataExportLast, useProviderZone } from '@/api/hooks'
 import type { DataExportFailure, DataExportSaved } from '@/api/types'
 import { formatBytes, formatDateTimeAu } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
@@ -31,7 +31,7 @@ export default function DataExportTab() {
 }
 
 function FullExportSection() {
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const last = useDataExportLast()
   const exportData = useDataExport()
   const running = useIsMutating({ mutationKey: DATA_EXPORT_KEY }) > 0

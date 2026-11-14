@@ -22,16 +22,22 @@ public class ProviderTodayControllerTests
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-0000-0000-0000-00000000000a");
     private static readonly DateTime LateUtc = new(2026, 11, 5, 14, 0, 0, DateTimeKind.Utc); // Nov 6 01:00 in Sydney, Nov 5 23:30 in Darwin, Nov 5 22:00 in Perth
 
-    private static async Task<string?> TodayAsync(string? zone, bool withRow = true)
+    private static async Task<ProviderTodayDto> ReadAsync(string? zone, bool withRow = true, string state = "NSW", string role = "Admin")
     {
         using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), Tenant);
-        if (withRow) db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = Tenant, State = "NSW", TimeZoneId = zone });
+        if (withRow) db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = Tenant, State = state, TimeZoneId = zone });
         await db.SaveChangesAsync();
 
-        var result = await new ProviderTodayController(db, new FixedClock(LateUtc)).Get(CancellationToken.None);
+        var controller = new ProviderTodayController(db, new FixedClock(LateUtc))
+        {
+            ControllerContext = new() { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test")) } },
+        };
+        var result = await controller.Get(CancellationToken.None);
 
-        return Assert.IsType<ApiResponse<ProviderTodayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Date;
+        return Assert.IsType<ApiResponse<ProviderTodayDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
     }
+
+    private static async Task<string?> TodayAsync(string? zone, bool withRow = true) => (await ReadAsync(zone, withRow)).Date;
 
     [Fact]
     public async Task A_Perth_organisation_keeps_the_earlier_date_than_Sydney() =>
@@ -44,6 +50,26 @@ public class ProviderTodayControllerTests
     [Fact]
     public async Task A_Darwin_organisation_keeps_the_earlier_date_than_Sydney() =>
         Assert.Equal("2026-11-05", await TodayAsync("Australia/Darwin"));
+
+    [Fact]
+    public async Task The_stored_zone_is_returned_with_the_date() =>
+        Assert.Equal("Australia/Perth", (await ReadAsync("Australia/Perth")).TimeZoneId);
+
+    [Fact]
+    public async Task With_no_stored_zone_the_States_default_zone_is_returned() =>
+        Assert.Equal("Australia/Perth", (await ReadAsync(null, state: "WA")).TimeZoneId);
+
+    [Fact]
+    public async Task With_no_settings_row_the_Sydney_zone_is_returned() =>
+        Assert.Equal("Australia/Sydney", (await ReadAsync(null, withRow: false)).TimeZoneId);
+
+    [Fact]
+    public async Task A_SupportWorker_gets_both_the_date_and_the_zone()
+    {
+        var dto = await ReadAsync("Australia/Perth", role: "SupportWorker");
+        Assert.Equal("2026-11-05", dto.Date);
+        Assert.Equal("Australia/Perth", dto.TimeZoneId);
+    }
 
     private static bool Allows(string role)
     {

@@ -35,6 +35,9 @@ export function useProviderTodayQuery() {
   })
 }
 
+/** The provider's effective zone for showing dates, readable by every role (provider-settings is not). Undefined while loading, failed or offline: the viewer's zone, as before. */
+export const useProviderZone = (): string | undefined => useProviderTodayQuery().data?.timeZoneId
+
 export function useUpsertProviderSettings() {
   const qc = useQueryClient()
   return useMutation({

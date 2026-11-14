@@ -15,7 +15,7 @@ const { state, calls } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useProviderSettings: () => ({ data: undefined }),
+  useProviderZone: () => undefined,
   useEmploymentHeroStatus: () => ({ data: state.status, isLoading: false, isError: false, refetch: vi.fn() }),
   useEmploymentHeroBusinesses: () => ({ mutateAsync: calls.businesses, isPending: false }),
   useConnectEmploymentHero: () => ({ mutateAsync: calls.connect, isPending: false }),

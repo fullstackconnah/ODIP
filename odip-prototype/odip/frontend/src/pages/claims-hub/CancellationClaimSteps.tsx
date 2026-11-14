@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalendarX } from 'lucide-react'
-import { useProviderSettings } from '@/api/hooks'
+import { useProviderZone } from '@/api/hooks'
 import { useMakeCancellationClaim, usePreviewCancellationClaim } from '@/api/hooks/claimHub'
 import type { CancellationCandidateDto, CancellationCandidatesDto, CancellationLeftOutDto } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -47,7 +47,7 @@ export function CancellationClaimSteps({ candidates, onBack, onClose, onMade }: 
   onClose: () => void
   onMade: (claimId: string) => void
 }) {
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const [step, setStep] = useState<'pick' | 'check'>('pick')
   const [shiftId, setShiftId] = useState('')
   const [reason, setReason] = useState('')

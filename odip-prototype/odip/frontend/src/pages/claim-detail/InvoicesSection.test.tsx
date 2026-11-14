@@ -367,7 +367,7 @@ describe('InvoicesSection', () => {
   })
 
   it("legacy: dates the row on the provider's day, whatever zone the device is in", async () => {
-    serve('get /provider-settings', async config => ok({ timeZoneId: 'Australia/Sydney' }, config))
+    serve('get /provider-today', async config => ok({ date: '2026-03-02', timeZoneId: 'Australia/Sydney' }, config))
     serveInvoices({ invoiceState: 'legacy', invoices: [], groups: [plan], agencyCount: 0 })
     renderSection({ ...claim, submittedDate: '2026-03-01T13:30:00Z' })
 
