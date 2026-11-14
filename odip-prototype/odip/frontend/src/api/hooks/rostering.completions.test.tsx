@@ -116,7 +116,7 @@ describe('useApproveCompletion: a refused approve refreshes what the coordinator
   const refused = (status: number) => new AxiosError('refused', 'ERR_BAD_REQUEST', undefined, undefined, { status, data: {}, statusText: '', headers: {}, config: {} as never })
   const approve = async (error: unknown) => {
     const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
-    const keys = [['rostering-completions'], ['rostering-completion', 's1'], ['rostering-completion-review', 's1'], ['roster-board']]
+    const keys = [['rostering-completions'], ['rostering-completion', 's1'], ['roster-board']]
     keys.forEach(k => qc.setQueryData(k, { stale: true }))
     mockApiPost.mockImplementation(() => (error ? Promise.reject(error) : Promise.resolve({})))
     const { result } = renderHook(() => useApproveCompletion(), { wrapper: wrapper(qc) })
@@ -126,18 +126,18 @@ describe('useApproveCompletion: a refused approve refreshes what the coordinator
     return { invalidated, error: thrown }
   }
 
-  it('on a 409 invalidates the list and this shift\x27s completion and review, not the board, and the error still reaches the caller', async () => {
+  it('on a 409 invalidates the list and this shift\x27s completion, not the board, and the error still reaches the caller', async () => {
     const err = refused(409)
     const { invalidated, error } = await approve(err)
-    expect(invalidated).toEqual([true, true, true, false])
+    expect(invalidated).toEqual([true, true, false])
     expect(error).toBe(err)
   })
 
   it('on a 500 invalidates nothing', async () => {
-    expect((await approve(refused(500))).invalidated).toEqual([false, false, false, false])
+    expect((await approve(refused(500))).invalidated).toEqual([false, false, false])
   })
 
   it('on success still refreshes the list, this shift and the board', async () => {
-    expect((await approve(null)).invalidated).toEqual([true, true, true, true])
+    expect((await approve(null)).invalidated).toEqual([true, true, true])
   })
 })

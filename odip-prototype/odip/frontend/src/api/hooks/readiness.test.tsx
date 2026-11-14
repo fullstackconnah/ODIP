@@ -235,4 +235,21 @@ describe('provider settings hooks — the readiness mode', () => {
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['audit', 'ProviderSettings'] })
   })
+
+  // Every screen reads the provider's zone from provider-today: a saved zone change must reach them without a reload.
+  it('useUpsertProviderSettings re-reads provider-today after a save, and not after a failed one', async () => {
+    const save = { registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise', address: '1 Wattle St', gstRegistered: true, isPaceProvider: false }
+    const run = async (put: () => Promise<unknown>) => {
+      mockApiPut.mockImplementation(put)
+      const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+      queryClient.setQueryData(['provider-today'], { timeZoneId: 'Australia/Perth' })
+      const { result } = renderHook(() => useUpsertProviderSettings(), { wrapper: wrapper(queryClient) })
+      result.current.mutate(save)
+      await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true))
+      return queryClient.getQueryState(['provider-today'])?.isInvalidated
+    }
+
+    expect(await run(() => Promise.resolve('2026-11-10T00:00:00Z'))).toBe(true)
+    expect(await run(() => Promise.reject(new Error('409')))).toBe(false)
+  })
 })
