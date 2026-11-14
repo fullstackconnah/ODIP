@@ -62,3 +62,13 @@ The API container runs as uid 1000:1000 because that uid owns the mounted `/cred
 - `docker exec odip-api sh -c 'touch /keys/.w && rm /keys/.w; touch /data/documents/.w && rm /data/documents/.w'`
 - `docker exec odip-api sh -c 'ls -ln /keys | head; test -r /credentials/firebase.json && echo fb-readable'`
 - `docker logs odip-api --tail 50` has no `UnauthorizedAccess` or `Permission denied`.
+
+### If the first deploy fails
+The automatic rollback will not help: it re-tags the old image but keeps the new compose file, so the API still runs as uid 1000 and the same failure repeats. Recover by reverting this PR on main (`git revert <merge sha>` on a branch, then a normal PR) and letting the deploy run. The old compose file starts the API as root again.
+- Root reads files owned by uid 1000, so nothing is lost, and a half-finished ownership change is harmless for the root image.
+- The exited `volume-owner` container is left over; `docker compose up -d --remove-orphans` removes it.
+- Check `docker exec odip-api id` shows uid=0 and `/api/health/ready` returns 200.
+- Never edit `compose.yaml` on the host: the next deploy overwrites it.
+
+### After restoring these volumes from a backup
+Restored files keep their old owner, so the API may not read or write them. Before relying on the API, run `docker compose run --rm volume-owner` (or `docker compose up -d`) in the stack folder. `docker restart odip-api` alone is not enough.
