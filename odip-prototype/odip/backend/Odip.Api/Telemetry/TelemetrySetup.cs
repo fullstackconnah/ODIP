@@ -25,6 +25,7 @@ public static class TelemetrySetup
         {
             o.IncludeScopes = false; // scopes carry the raw request path
             o.IncludeFormattedMessage = false;
+            o.AddProcessor(new ErrorLogProcessor()); // before the exporter below, so every exporter sees scrubbed records
             if (export) o.AddOtlpExporter();
         });
         builder.Logging.AddFilter<OpenTelemetryLoggerProvider>(null, LogLevel.Error);
