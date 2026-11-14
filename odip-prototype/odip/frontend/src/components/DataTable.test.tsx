@@ -1240,3 +1240,32 @@ describe('DataTable srHeader', () => {
     expect(container.querySelector('th[data-pin="start"]')).toHaveTextContent('Name')
   })
 })
+
+describe('DataTable — default comparator for date and currency columns', () => {
+  type R = { id: string; name: string; when: string | null; price: number | null }
+  const data: R[] = [
+    { id: '1', name: 'B', when: '2026-03-01', price: 20 },
+    { id: '2', name: 'N', when: null, price: null },
+    { id: '3', name: 'A', when: '2026-01-15', price: 5 },
+    { id: '4', name: 'C', when: '2026-02-10', price: 100 },
+  ]
+  const cols: Column<R>[] = [
+    { key: 'name', header: 'Name' },
+    { key: 'when', header: 'When', type: 'date', sortable: true },
+    { key: 'price', header: 'Price', type: 'currency', sortable: true },
+  ]
+  const names = () => screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[0].textContent)
+
+  it.each([
+    ['When', ['A', 'C', 'B', 'N'], ['N', 'B', 'C', 'A']],
+    ['Price', ['A', 'B', 'C', 'N'], ['N', 'C', 'B', 'A']],
+  ])('sorts the %s column ascending then descending (nulls last ascending, first descending)', async (header, asc, desc) => {
+    const user = userEvent.setup()
+    render(<DataTable data={data} columns={cols} keyField="id" sortable />)
+
+    await user.click(screen.getByRole('columnheader', { name: new RegExp(header, 'i') }))
+    expect(names()).toEqual(asc)
+    await user.click(screen.getByRole('columnheader', { name: new RegExp(header, 'i') }))
+    expect(names()).toEqual(desc)
+  })
+})

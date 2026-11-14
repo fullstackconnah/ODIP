@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing;
@@ -789,7 +790,7 @@ public class ClaimsController : ControllerBase
             if (paid) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail("A payment is recorded, so issue a credit note instead."));
             invoice.Status = InvoiceStatus.Voided;
             invoice.VoidedAt = now;
-            invoice.VoidedById = Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var actorId) ? actorId : null;
+            invoice.VoidedById = User.TryGetUserId();
             invoice.VoidReason = reason;
             result = InvoiceService.Summary(invoice, null, false, null);
             change = $"Void: {reason}";

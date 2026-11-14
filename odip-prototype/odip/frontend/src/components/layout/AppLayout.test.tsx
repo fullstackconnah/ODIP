@@ -231,6 +231,14 @@ describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
     sessionStorage.clear()
   })
 
+  it('the view-as banner names the viewed role as people read it', () => {
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
+    sessionStorage.setItem('odip_viewing_profile', JSON.stringify({ id: 'user-support-1', fullName: 'Jamie Support', role: 'SupportWorker' }))
+    renderAt('/trips')
+    expect(screen.getByText('(Support Worker)')).toBeInTheDocument()
+    sessionStorage.clear()
+  })
+
   it('gives the sidebar nav and the mobile bottom nav distinct aria-labels', () => {
     renderAt('/trips')
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()

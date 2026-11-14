@@ -1,10 +1,10 @@
 using System.Net.Mail;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Application.Interfaces;
@@ -342,7 +342,7 @@ public class IntakeBookingsController : ControllerBase
         if (_tenant.TenantId is not Guid tenantId) return Ok(ApiResponse<List<IntakeVisitDto>>.Ok([]));
         if (!(User.IsInRole("Admin") || User.IsInRole("Coordinator") || User.IsInRole("SuperAdmin")))
         {
-            Guid? me = _tenant.ViewAsUserId ?? (Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var own) ? own : (Guid?)null);
+            Guid? me = _tenant.ViewAsUserId ?? User.TryGetUserId();
             if (me is null) return Ok(ApiResponse<List<IntakeVisitDto>>.Ok([]));
             if (staffUserId is Guid other && other != me) return StatusCode(403, ApiResponse<List<IntakeVisitDto>>.Fail("You can only see your own intake visits."));
             staffUserId = me;
@@ -399,7 +399,7 @@ public class IntakeBookingsController : ControllerBase
     // Who the server attributes the booking to: the viewed-as user under a SuperAdmin's "view as", else the signed-in one (as PortalController resolves it).
     private async Task<User?> CallerAsync(CancellationToken ct)
     {
-        Guid? id = _tenant.ViewAsUserId ?? (Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var own) ? own : (Guid?)null);
+        Guid? id = _tenant.ViewAsUserId ?? User.TryGetUserId();
         return id is Guid userId ? await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == _tenant.TenantId, ct) : null; // view-as must name a user of this organisation
     }
 

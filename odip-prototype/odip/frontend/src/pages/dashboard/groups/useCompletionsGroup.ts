@@ -94,7 +94,7 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
         void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
         void qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
         // The nav badge's own entry (the group's "all" read was just refetched).
-        void qc.invalidateQueries({ queryKey: ['rostering-completions'], predicate: (q) => q.queryKey[2] !== 'all' })
+        void qc.invalidateQueries({ queryKey: [QK.rosteringCompletions], predicate: (q) => q.queryKey[2] !== 'all' })
         refreshBudgetFigures(qc)
       }
     },

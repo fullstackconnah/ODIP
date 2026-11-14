@@ -98,10 +98,10 @@ export default function AccommodationCreatePage() {
   }, !isDirty)
 
   const onSubmit = async (data: AccommodationFormData) => {
-    const payload: any = { ...data }
+    const payload: Record<string, unknown> = { ...data }
     // A website typed without a scheme (e.g. "example.com") would otherwise fail the detail
     // page's URL check and silently disappear — prepend https:// so it renders as a link.
-    if (payload.website && !/^[a-z]+:\/\//i.test(payload.website)) {
+    if (payload.website && !/^[a-z]+:\/\//i.test(payload.website as string)) {
       payload.website = `https://${payload.website}`
     }
     // Treat 0 as null for optional numeric fields (coerced from empty input)
@@ -113,13 +113,13 @@ export default function AccommodationCreatePage() {
     }
     try {
       if (isEdit) {
-        const res = await updateAccommodation.mutateAsync({ id, data: payload })
+        const res = await updateAccommodation.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
           navigate(`/accommodation/${id}`, { replace: true })
         }
       } else {
-        const res = await createAccommodation.mutateAsync(payload)
+        const res = await createAccommodation.mutateAsync(payload as never)
         if (res.success && res.data?.id) {
           flushSync(() => reset(data))
           navigate(`/accommodation/${res.data.id}`, { replace: true })

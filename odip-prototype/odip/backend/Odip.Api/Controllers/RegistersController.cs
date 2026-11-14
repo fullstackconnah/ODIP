@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -106,7 +107,7 @@ public class RegistersController : ControllerBase
         _db.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(), EntityType = AuditEntityType, EntityId = tenantId, Action = AuditAction.Exported, ChangedAt = _clock.GetUtcNow(),
-            ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
+            ChangedById = User.TryGetUserId(),
             ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
             Changes = System.Text.Json.JsonSerializer.Serialize(changes),
         });

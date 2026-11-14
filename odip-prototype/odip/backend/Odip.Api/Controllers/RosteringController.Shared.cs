@@ -392,8 +392,7 @@ public partial class RosteringController
     /// </summary>
     private Guid? ResolveCurrentUserId()
     {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(claim, out var id) ? id : null;
+        return User.TryGetUserId();
     }
 
     private static Guid? LiveRegular(Shift shift, Dictionary<Guid, Guid> regulars) =>

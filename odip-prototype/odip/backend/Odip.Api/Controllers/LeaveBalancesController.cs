@@ -1,8 +1,8 @@
 using System.Globalization;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
@@ -87,8 +87,7 @@ public class LeaveBalancesController : ControllerBase
     // Copied from PortalController.ResolveCurrentStaffIdAsync: view-as first, then the token's own subject, and the user must exist in this organisation.
     private async Task<Guid?> ResolveCurrentStaffIdAsync(CancellationToken ct)
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        Guid? ownUserId = User.TryGetUserId();
         var userId = _tenant.ViewAsUserId ?? ownUserId;
         if (userId is null) return null;
 

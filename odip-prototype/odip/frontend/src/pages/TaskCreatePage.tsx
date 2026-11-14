@@ -108,19 +108,19 @@ export default function TaskCreatePage() {
   }, [existingTask, reset])
 
   const onSubmit = async (data: TaskFormData) => {
-    const payload: any = { ...data }
+    const payload: Record<string, unknown> = { ...data }
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
     try {
       if (isEdit) {
-        const res = await updateTask.mutateAsync({ id, data: payload })
+        const res = await updateTask.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/tasks', { replace: true })
         }
       } else {
-        const res = await createTask.mutateAsync(payload)
+        const res = await createTask.mutateAsync(payload as never)
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/tasks', { replace: true })

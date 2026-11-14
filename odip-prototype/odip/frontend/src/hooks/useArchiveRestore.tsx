@@ -10,7 +10,8 @@ type MutateOptions = { onError?: (error: unknown) => void }
 
 type ArchiveRestoreConfig<T> = {
   deleteMutation: { mutate: (id: string, options?: MutateOptions) => void; isPending: boolean }
-  restoreMutation?: { mutate: (args: { id: string; data: any }, options?: MutateOptions) => void; isPending: boolean }
+  // Method syntax on purpose: its parameters are bivariant, so each screen's own `data` type (UpdateStaffDto, ...) is accepted.
+  restoreMutation?: { mutate(args: { id: string; data: unknown }, options?: MutateOptions): void; isPending: boolean }
   entityName: (item: T) => string
   entityId: (item: T) => string
   archiveVia?: 'isActive' | 'status'

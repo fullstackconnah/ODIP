@@ -4,6 +4,7 @@ import { useAdminTenantUsers } from '@/api/hooks'
 import type { TenantUserDto, ApiResponse } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { switchViewAndReload } from '@/lib/viewAsSwitch'
+import { roleLabel } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { getViewAs, setViewAs, clearViewAs } from '@/lib/viewAs'
 import { useMenuKeys } from './useMenuKeys'
@@ -106,7 +107,7 @@ export default function UserSwitcher() {
                 <span className={`text-sm flex-1 ${user.id === viewingUserId ? 'text-[var(--color-foreground)] font-medium' : 'text-[var(--color-muted-foreground)]'}`}>
                   {user.fullName}
                 </span>
-                <span className="text-[13px] text-[var(--color-muted-foreground)]">{user.role}</span>
+                <span className="text-[13px] text-[var(--color-muted-foreground)]">{roleLabel(user.role)}</span>
               </button>
             ))}
           </div>

@@ -35,6 +35,17 @@ beforeEach(() => {
   })
 })
 
+describe('UserSwitcher — role label', () => {
+  it('lists each role as people read it', async () => {
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+    await user.click(screen.getByRole('button', { name: /view as user/i }))
+    expect(screen.getByText('Support Worker')).toBeInTheDocument()
+    expect(screen.queryByText('SupportWorker')).toBeNull()
+  })
+})
+
 describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => {
   it('selectUser overrides id (not just fullName/role) in this tab viewing profile', async () => {
     setSuperAdminSignedIn()

@@ -36,7 +36,7 @@ export function useCreateServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
-      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
 }
@@ -56,7 +56,7 @@ export function usePatternChange() {
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
-      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
 }
@@ -86,7 +86,7 @@ export function useRenewAgreement() {
     onSuccess: (_, { participantId }) => Promise.all([
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
       queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
@@ -100,7 +100,7 @@ const refreshAgreements = (queryClient: ReturnType<typeof useQueryClient>, parti
   queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
   queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
   queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
-  queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
+  queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
   queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
   queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
   queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
@@ -128,7 +128,7 @@ export function useEndAgreementEarly() {
     onSuccess: (_, { participantId }) => Promise.all([
       ...refreshAgreements(queryClient, participantId),
       queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
-      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       refreshBudgetFigures(queryClient, [participantId]),
     ]),
@@ -176,12 +176,12 @@ export function useApproveServiceAgreementDraft() {
       // Approval revokes the links of that revision.
       queryClient.invalidateQueries({ queryKey: ['agreement-sharing', participantId] }),
       queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
-      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       queryClient.invalidateQueries({ queryKey: [QK.participants] }),
       queryClient.invalidateQueries({ queryKey: [QK.participant, participantId] }),
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
-      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] }),
       // An approved renewal ends the "ending" flag; the alerts are refreshed with the budget figures below.
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
@@ -243,7 +243,7 @@ export function usePopulateRoster() {
       apiPost<PopulateResultDto>(`${path(participantId)}/${draftId}/populate`, { weekStart }, { timeout: APPROVE_TIMEOUT_MS }),
     onSuccess: (_, { participantId }) => Promise.all([
       queryClient.invalidateQueries({ queryKey: [QK.rosterBoard] }),
-      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      queryClient.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       refreshBudgetFigures(queryClient, [participantId]),
     ]),
