@@ -8,7 +8,7 @@ import { CancellationClaimSteps } from './CancellationClaimSteps'
 // The two steps of "A cancellation": choose the shift and the reason, then check the claim and make it. The chooser row that opens them is in NewClaimModal.test.tsx.
 
 const m = vi.hoisted(() => ({ preview: vi.fn(), make: vi.fn(), settings: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useProviderSettings: m.settings }))
+vi.mock('@/api/hooks', () => ({ useProviderZone: () => m.settings().data?.timeZoneId }))
 vi.mock('@/api/hooks/claimHub', () => ({ usePreviewCancellationClaim: m.preview, useMakeCancellationClaim: m.make }))
 
 const shift = (over: Partial<CancellationCandidateDto> = {}): CancellationCandidateDto => ({

@@ -26,7 +26,7 @@ vi.mock('@/api/hooks/claimHub', async () => {
     useCancellationCandidates: m.cancellations, usePreviewCancellationClaim: m.previewCancellation, useMakeCancellationClaim: m.makeCancellation,
   }
 })
-vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useProviderSettings: m.settings }))
+vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useProviderZone: () => m.settings().data?.timeZoneId }))
 vi.mock('@/api/hooks/claims', () => ({ useSubmitPreviewChunks: m.preview }))
 vi.mock('@/api/hooks/trips', () => ({ useTrips: m.trips, useTrip: m.trip }))
 // The two modals the hub launches are stood in for by the real Modal, so their focus return (what the New claim button gets back) is the real behaviour. Their own

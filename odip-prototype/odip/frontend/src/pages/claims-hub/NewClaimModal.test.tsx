@@ -15,7 +15,7 @@ vi.mock('@/api/hooks/claimHub', () => ({
   usePreviewManualClaim: m.previewManual,
   useMakeManualClaim: m.makeManual,
 }))
-vi.mock('@/api/hooks', () => ({ useParticipants: m.participants, useParticipant: m.participant, useProviderSettings: m.provider, useSupportCatalogue: m.catalogue }))
+vi.mock('@/api/hooks', () => ({ useParticipants: m.participants, useParticipant: m.participant, useProviderSettings: m.provider, useProviderZone: () => undefined, useSupportCatalogue: m.catalogue }))
 vi.mock('@/api/hooks/trips', () => ({ useTrips: m.trips, useTrip: m.trip }))
 
 const trip = (over: Partial<TripListDto> = {}): TripListDto => ({

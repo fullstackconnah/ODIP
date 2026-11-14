@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
-import { useProviderSettings } from '@/api/hooks'
+import { useProviderZone } from '@/api/hooks'
 import { useManagedClaims } from '@/api/hooks/claimHub'
 import type { BatchDto, ManagedClaimDto } from '@/api/types'
 import { plural } from '@/lib/format'
@@ -25,7 +25,7 @@ const FILTER_PILL = 'bg-[var(--color-input)] border border-[var(--color-border)]
  * upgrade when the server lists paid claims.
  */
 export function PaidPanel({ batches, loading, failed, onRetry, onOpen }: { batches: BatchDto[] | undefined; loading: boolean; failed: boolean; onRetry: () => void; onOpen: (id: string) => void }) {
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const [page, setPage] = useState(1)
   const rows = useMemo(() => (batches ?? []).filter(b => b.paid > 0).sort((a, b) => (b.resultsImportedAt ?? b.createdAt).localeCompare(a.resultsImportedAt ?? a.createdAt)), [batches])
   const columns: Column<BatchDto>[] = [

@@ -6,7 +6,7 @@ import { TONE } from '@/lib/tone'
 import type { AuditChange } from '../api/hooks'
 
 const { mockUseAuditHistory, mockSettings } = vi.hoisted(() => ({ mockUseAuditHistory: vi.fn(), mockSettings: vi.fn(() => ({ data: undefined as { timeZoneId?: string } | undefined })) }))
-vi.mock('../api/hooks', () => ({ useAuditHistory: mockUseAuditHistory, useProviderSettings: mockSettings }))
+vi.mock('../api/hooks', () => ({ useAuditHistory: mockUseAuditHistory, useProviderZone: () => mockSettings().data?.timeZoneId }))
 
 const NOW = new Date('2026-10-28T02:00:00Z')
 

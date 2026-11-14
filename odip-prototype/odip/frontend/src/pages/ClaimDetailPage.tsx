@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
-import { useClaim, useProviderSettings, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
+import { useClaim, useProviderZone, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Download, Check, DollarSign, RotateCcw, XCircle } from 'lucide-react'
@@ -50,7 +50,7 @@ export default function ClaimDetailPage() {
   // Set by Claim again on the old claim's page: this claim replaced a rejected one.
   const claimedAgainFrom = (useLocation().state as { claimedAgainFrom?: string } | null)?.claimedAgainFrom
   const buildFile = useBuildClaimFile()
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
   // Claim again lands here: a screen-reader and keyboard user starts at the new claim's title, next to the success notice.

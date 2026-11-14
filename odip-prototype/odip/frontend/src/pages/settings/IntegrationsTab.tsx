@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
   useEmploymentHeroEmployees, useEmploymentHeroLeaveCategories, useEmploymentHeroStatus, useEmploymentHeroWorkTypes, useLinkEmploymentHeroStaff,
-  useProviderSettings, useRetryEmploymentHeroLeave, useSaveEmploymentHeroLeaveCategories, useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
+  useProviderZone, useRetryEmploymentHeroLeave, useSaveEmploymentHeroLeaveCategories, useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
 } from '@/api/hooks'
 import type {
   EmploymentHeroAttentionDto, EmploymentHeroAttentionKind, EmploymentHeroBusinessDto, EmploymentHeroLeaveCategoriesDto,
@@ -126,7 +126,7 @@ function ConnectForm() {
 }
 
 function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const sync = useSyncEmploymentHero()
   const disconnect = useDisconnectEmploymentHero()
   const [confirming, setConfirming] = useState(false)

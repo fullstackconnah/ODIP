@@ -5,7 +5,7 @@ import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { Button } from '@/components/Button'
 import AuditHistoryTab, { FieldDiff } from '@/components/AuditHistoryTab'
-import { DELETED_RECORDS_PAGE_SIZE, useDeletedRecords, useProviderSettings, type DeletedRecord } from '@/api/hooks'
+import { DELETED_RECORDS_PAGE_SIZE, useDeletedRecords, useProviderZone, type DeletedRecord } from '@/api/hooks'
 import { formatDateTimeAu } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { fieldLabel, recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
@@ -60,7 +60,7 @@ export default function DeletedRecordsTab() {
   const query = useDeletedRecords(type, page)
   const { data, isLoading, isError, refetch } = query
   // The provider's zone, so a deleted time reads as the provider's day; none yet (or none saved) keeps the viewer's.
-  const zone = useProviderSettings().data?.timeZoneId
+  const zone = useProviderZone()
 
   const rows: Row[] = useMemo(() => (data?.items ?? []).map(r => ({ ...r, label: recordLabel(r.entityType, r.fields, zone) })), [data, zone])
 

@@ -5,7 +5,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import type { BatchDto } from '@/api/types'
-import { useProviderSettings } from '@/api/hooks'
+import { useProviderZone } from '@/api/hooks'
 import { formatRelative, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { StepBadge } from './claimHubParts'
@@ -81,7 +81,7 @@ export function FilesStrip({ batches, loading, failed, rejectedCount, onRetry, o
 export function FilesPanel({ batches, loading, failed, onRetry, onOpen, onGoToReady }: {
   batches: BatchDto[] | undefined; loading: boolean; failed: boolean; onRetry: () => void; onOpen: (id: string) => void; onGoToReady: () => void
 }) {
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const [page, setPage] = useState(1)
   // Newest first; a discarded file is history, so it sinks to the end.
   const rows = useMemo(() => [...(batches ?? [])].sort((a, b) => Number(a.status === 'Discarded') - Number(b.status === 'Discarded') || b.createdAt.localeCompare(a.createdAt)), [batches])

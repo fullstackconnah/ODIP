@@ -6,7 +6,7 @@ import DeletedRecordsTab from './DeletedRecordsTab'
 import type { DeletedRecord } from '@/api/hooks'
 
 const { mockUseDeletedRecords, mockSettings } = vi.hoisted(() => ({ mockUseDeletedRecords: vi.fn(), mockSettings: vi.fn() }))
-vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useDeletedRecords: mockUseDeletedRecords, useProviderSettings: mockSettings }))
+vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useDeletedRecords: mockUseDeletedRecords, useProviderZone: () => mockSettings().data?.timeZoneId }))
 
 const row = (o: Partial<DeletedRecord> = {}): DeletedRecord => ({
   id: 'd1', entityType: 'Shift', entityId: 'e1', deletedAt: '2026-11-10T03:15:00Z', deletedByName: 'Sam Lee',
