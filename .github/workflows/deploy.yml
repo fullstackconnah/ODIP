@@ -198,6 +198,14 @@ jobs:
           echo "::error::Health check failed after 150s (frontend=$FE api=$API ready=$READY)"
           exit 1
 
+      - name: Signed-in smoke check
+        # Warn-only for now: it becomes a gate (and joins the roll-back condition) after it has passed on several real deploys.
+        id: smoke
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          bash "$GITHUB_WORKSPACE/deploy/smoke-test.sh" || { echo "::warning::Signed-in smoke check failed"; exit 1; }
+
       - name: Prune dangling images
         # Success path only (default if: success()). Dangling images only; the :local and :rollback tags are tagged, so they stay.
         run: docker image prune -f || true
@@ -241,4 +249,5 @@ jobs:
         if: always()
         run: |
           cd "$STACK_DIR"
+          echo "Signed-in smoke check: ${{ steps.smoke.outcome }}"
           docker compose ps --format '{{.Name}}\t{{.State}}\t{{.Status}}'
