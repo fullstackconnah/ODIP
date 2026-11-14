@@ -310,146 +310,6 @@ public class PortalBreaksTests
         Assert.Equal(12, detail.Completion!.BreakMinutes);
     }
 
-    // ── edit ──
-
-    [Fact]
-    public async Task Edit_CorrectsTheTimes_StampsEditedAt_AndNetMinutesFollow()
-    {
-        var (f, id) = await WithEndedBreakAsync();
-        var newStart = NowUtc.AddMinutes(-50);
-        var newEnd = NowUtc.AddMinutes(-20);
-
-        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = newStart, EndedAt = newEnd }, default));
-
-        var b = Assert.Single(detail.Breaks);
-        Assert.Equal(newStart, b.StartedAt);
-        Assert.Equal(newEnd, b.EndedAt);
-        Assert.Equal(NowUtc, b.EditedAt);
-        Assert.Equal(30, detail.Completion!.BreakMinutes);
-    }
-
-    [Fact]
-    public async Task Edit_WithParticipantNull_KeepsIt_AndTrueFlips_WithoutMarkingTheBreakEdited()   // [D] W9
-    {
-        var (f, id) = await WithEndedBreakAsync();
-        var b = await f.Db.ShiftBreaks.SingleAsync();
-
-        var kept = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = b.StartedAt, EndedAt = b.EndedAt }, default));
-        Assert.False(Assert.Single(kept.Breaks).WithParticipant);
-
-        var flipped = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = true }, default));
-
-        var dto = Assert.Single(flipped.Breaks);
-        Assert.True(dto.WithParticipant);
-        Assert.Null(dto.EditedAt);   // a kind-only change is not "(edited)"
-        Assert.Equal(0, flipped.Completion!.BreakMinutes);
-        Assert.Equal(30, dto.Minutes);   // the real length stays on the row
-
-        var back = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = null }, default));
-        Assert.True(Assert.Single(back.Breaks).WithParticipant);   // null keeps the stored value
-    }
-
-    [Fact]
-    public async Task Edit_ChangingTheTimesAndTheKind_StampsEditedAt()
-    {
-        var (f, id) = await WithEndedBreakAsync();
-
-        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, id,
-            new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-50), EndedAt = NowUtc.AddMinutes(-20), WithParticipant = true }, default));
-
-        Assert.Equal(NowUtc, Assert.Single(detail.Breaks).EditedAt);
-    }
-
-    [Fact]
-    public async Task Edit_RunningWithParticipant_StaysRunning_AndIsNotDeducted()
-    {
-        var f = Create();
-        var started = NowUtc.AddMinutes(-20);
-        f.Db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = f.Completion!.Id, StartedAt = started, CreatedByUserId = f.Worker.Id });
-        await f.Db.SaveChangesAsync();
-        var id = (await f.Db.ShiftBreaks.SingleAsync()).Id;
-
-        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = started, EndedAt = null, WithParticipant = true }, default));
-
-        Assert.True(Assert.Single(detail.Breaks).IsRunning);
-        Assert.Equal(0, detail.Completion!.BreakMinutes);
-    }
-
-    [Fact]
-    public async Task Edit_ARunningBreakWithNoEnd_StaysRunning()
-    {
-        var f = Create();
-        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
-
-        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, started.Id,
-            new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-15), EndedAt = null }, default));
-
-        Assert.True(detail.Breaks.Single().IsRunning);
-        Assert.Equal(NowUtc.AddMinutes(-15), detail.Breaks.Single().StartedAt);
-    }
-
-    [Theory]
-    [InlineData("before-start", ShiftErrorCodes.ShiftBreakBeforeShiftStart)]
-    [InlineData("future", ShiftErrorCodes.ShiftBreakInFuture)]
-    [InlineData("end-not-after-start", ShiftErrorCodes.ShiftBreakEndNotAfterStart)]
-    [InlineData("overlap", ShiftErrorCodes.ShiftBreakOverlap)]
-    [InlineData("no-end", ShiftErrorCodes.ShiftBreakEndRequired)]
-    public async Task Edit_BreakingARule_Is400WithACode_AndTheBreakIsUnchanged(string scenario, string expectedCode)
-    {
-        var (f, id) = await WithEndedBreakAsync();
-        // A second, earlier break to overlap against: 10:00-10:10 local.
-        f.Db.ShiftBreaks.Add(new ShiftBreak
-        {
-            Id = Guid.NewGuid(), ShiftCompletionId = f.Completion!.Id, StartedAt = NowUtc.AddMinutes(-120), EndedAt = NowUtc.AddMinutes(-110),
-            CreatedByUserId = f.Worker.Id,
-        });
-        await f.Db.SaveChangesAsync();
-        var original = await f.Db.ShiftBreaks.AsNoTracking().SingleAsync(b => b.Id == id);
-
-        var dto = scenario switch
-        {
-            "before-start" => new EditShiftBreakDto { StartedAt = ActualStartUtc.AddMinutes(-5), EndedAt = ActualStartUtc.AddMinutes(1) },
-            "future" => new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-5), EndedAt = NowUtc.AddMinutes(30) },
-            "end-not-after-start" => new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-40), EndedAt = NowUtc.AddMinutes(-40) },
-            "overlap" => new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-115), EndedAt = NowUtc.AddMinutes(-90) },
-            _ => new EditShiftBreakDto { StartedAt = original.StartedAt, EndedAt = null },
-        };
-
-        var body = Failure(await f.Controller.EditBreak(f.Shift.Id, id, dto, default), 400);
-
-        Assert.Equal(expectedCode, body.Code);
-        var after = await f.Db.ShiftBreaks.AsNoTracking().SingleAsync(b => b.Id == id);
-        Assert.Equal(original.StartedAt, after.StartedAt);
-        Assert.Equal(original.EndedAt, after.EndedAt);
-        Assert.Null(after.EditedAt);
-    }
-
-    [Fact]
-    public async Task Edit_AnUnsuffixedTimeIsTreatedAsUtc()
-    {
-        var (f, id) = await WithEndedBreakAsync();
-        var unsuffixed = DateTime.SpecifyKind(NowUtc.AddMinutes(-50), DateTimeKind.Unspecified);
-
-        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, id,
-            new EditShiftBreakDto { StartedAt = unsuffixed, EndedAt = unsuffixed.AddMinutes(20) }, default));
-
-        Assert.Equal(NowUtc.AddMinutes(-50), detail.Breaks.Single().StartedAt);
-    }
-
-    // ── delete ──
-
-    [Fact]
-    public async Task Delete_RemovesTheBreak_AndNetMinutesRecover()
-    {
-        var (f, id) = await WithEndedBreakAsync();
-
-        var detail = Detail(await f.Controller.DeleteBreak(f.Shift.Id, id, default));
-
-        Assert.Empty(detail.Breaks);
-        Assert.Equal(0, detail.Completion!.BreakMinutes);
-        Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
-    }
-
     // ── only while InProgress ──
 
     [Theory]
@@ -466,9 +326,6 @@ public class PortalBreaksTests
                  {
                      await f.Controller.StartBreak(f.Shift.Id, null, default),
                      await f.Controller.EndBreak(f.Shift.Id, anyId, null, default),
-                     await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5) }, default),
-                     await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5), WithParticipant = true }, default),   // [D] W9: the kind locks at Finish too
-                     await f.Controller.DeleteBreak(f.Shift.Id, anyId, default),
                  })
         {
             Assert.Equal(code, Failure(result, http).Code);
@@ -486,8 +343,6 @@ public class PortalBreaksTests
                  {
                      await f.Controller.StartBreak(f.Shift.Id, null, default),
                      await f.Controller.EndBreak(f.Shift.Id, anyId, null, default),
-                     await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5) }, default),
-                     await f.Controller.DeleteBreak(f.Shift.Id, anyId, default),
                  })
         {
             Assert.Equal("Shift not found.", Assert.Single(Failure(result, 404).Errors!));
@@ -531,28 +386,6 @@ public class PortalBreaksTests
         Assert.Equal(ShiftBreakOutcome.ShiftNotInProgress, result.Outcome);
         Assert.Null(result.Break);
         Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task ABreakEditOrDeleteThatArrivesAfterFinish_IsRefused_AndChangesNothing(bool edit)
-    {
-        var f = Create();
-        var start = NowUtc.AddMinutes(-60);
-        var brk = new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = f.Completion!.Id, StartedAt = start, EndedAt = start.AddMinutes(10), CreatedByUserId = f.Worker.Id };
-        f.Db.ShiftBreaks.Add(brk);
-        await f.Db.SaveChangesAsync();
-        var stale = await f.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.Id == f.Completion.Id);
-        f.Shift.Status = ShiftStatus.PendingReview;   // another device's Finish committed first
-        f.Completion.SubmittedAt = NowUtc;
-        await f.Db.SaveChangesAsync();
-
-        var service = new ShiftBreakService(f.Db, f.Clock);
-        var result = edit ? await service.EditAsync(stale, brk.Id, start, start.AddMinutes(5), default) : await service.DeleteAsync(stale, brk.Id, default);
-
-        Assert.Equal(ShiftBreakOutcome.ShiftNotInProgress, result.Outcome);
-        Assert.Equal(start.AddMinutes(10), (await f.Db.ShiftBreaks.SingleAsync()).EndedAt);
     }
 
     [Fact]
@@ -618,8 +451,6 @@ public class PortalBreaksTests
 
         Assert.IsType<NotFoundObjectResult>((await stranger.StartBreak(f.Shift.Id, null, default)).Result);
         Assert.IsType<NotFoundObjectResult>((await stranger.EndBreak(f.Shift.Id, id, null, default)).Result);
-        Assert.IsType<NotFoundObjectResult>((await stranger.EditBreak(f.Shift.Id, id, new EditShiftBreakDto(), default)).Result);
-        Assert.IsType<NotFoundObjectResult>((await stranger.DeleteBreak(f.Shift.Id, id, default)).Result);
         Assert.Single(await f.Db.ShiftBreaks.ToListAsync());
     }
 
@@ -644,7 +475,7 @@ public class PortalBreaksTests
         f.Db.ShiftBreaks.Add(foreignBreak);
         await f.Db.SaveChangesAsync();
 
-        var body = Failure(await f.Controller.DeleteBreak(f.Shift.Id, foreignBreak.Id, default), 404);
+        var body = Failure(await f.Controller.EndBreak(f.Shift.Id, foreignBreak.Id, null, default), 404);
 
         Assert.Equal(ShiftErrorCodes.ShiftBreakNotFound, body.Code);
         Assert.Equal(2, (await f.Db.ShiftBreaks.ToListAsync()).Count);
@@ -653,22 +484,18 @@ public class PortalBreaksTests
     // ── audit ──
 
     [Fact]
-    public async Task BreakCreatesEditsAndDeletes_AreAudited()
+    public async Task BreakStartsAndEnds_AreAudited()
     {
         var f = Create(withAuditing: true);
         var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
         f.Advance(TimeSpan.FromMinutes(10));
         Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, null, default));
-        Detail(await f.Controller.EditBreak(f.Shift.Id, started.Id,
-            new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(1), EndedAt = NowUtc.AddMinutes(9) }, default));
-        Detail(await f.Controller.DeleteBreak(f.Shift.Id, started.Id, default));
 
         var actions = await f.Db.AuditLogs.Where(a => a.EntityType == nameof(ShiftBreak) && a.EntityId == started.Id)
             .Select(a => a.Action).ToListAsync();
 
         Assert.Contains(AuditAction.Created, actions);
         Assert.Contains(AuditAction.Updated, actions);
-        Assert.Contains(AuditAction.Deleted, actions);
         Assert.Contains(typeof(ShiftBreak), AuditedEntities.Types);
     }
 

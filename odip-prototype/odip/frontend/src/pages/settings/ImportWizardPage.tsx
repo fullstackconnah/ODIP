@@ -138,7 +138,8 @@ function ShiftsReview({ data, checkCount }: { data: ImportPreviewDto; checkCount
 }
 
 export default function ImportWizardPage() {
-  const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
+  const settings = useProviderSettings().data
+  const staffFromPayroll = settings?.employmentHeroConnected === true
   const { kind: param } = useParams()
   const kind = param && Object.hasOwn(KIND, param) ? (param as ImportKind) : null
   const preview = usePreviewImport()
@@ -426,7 +427,7 @@ export default function ImportWizardPage() {
             {step === 'preview' && data && (
               <div className="flex flex-col gap-4">
                 {data.previouslyImportedAt && (
-                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in Bunya Support can't be imported again" : isShifts ? 'Shifts already on the roster are skipped' : 'Rows already in Bunya Support are skipped'}, but check before importing it again.`}</Callout>
+                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt, settings?.timeZoneId)}. ${kind === 'funding-plans' ? "Plans already in Bunya Support can't be imported again" : isShifts ? 'Shifts already on the roster are skipped' : 'Rows already in Bunya Support are skipped'}, but check before importing it again.`}</Callout>
                 )}
                 {isShifts && data.readinessEnforced && (
                   <Callout tone="info" title="Participants must be fully ready to be rostered" actions={<Button to="/settings?section=safety" variant="secondary" size="sm" className="pointer-coarse:min-h-11">Readiness settings</Button>}>

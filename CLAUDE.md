@@ -208,7 +208,13 @@ npm run lint
 - `Program.cs` contains raw-SQL self-healing logic for `__EFMigrationsHistory` that is tied to
   specific migration IDs. Renaming or reordering existing migrations can break application
   startup silently with no obvious error pointing back to the cause, so migrations must be
-  touched with extreme care.
+  touched with extreme care. A migration's `*.Designer.cs` (the model snapshot, about 230 KB) older than
+  the newest five may be deleted once its `[DbContext]` and `[Migration("id")]` attributes are moved onto
+  the migration class, unless the migration uses `InsertData`/`UpdateData`/`DeleteData` or its script
+  changes without it (check `migrations script` is byte-identical); `MigrationDiscoveryTests` guards the move.
+  Keep the Designer of any migration that uses `AlterColumn` (its script reads the old column from that
+  snapshot). Once a Designer is gone, `migrations remove` and that migration's Down script are no longer
+  reliable: roll forward with a new migration instead.
 
 - Migrations are expand-then-contract: a migration first adds what the new code needs and keeps whatever the old code
   still needs, because a rollback runs the old API on the new schema. Removing a column or table ships in a later release.

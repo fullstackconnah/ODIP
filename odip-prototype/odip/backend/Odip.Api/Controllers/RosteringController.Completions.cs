@@ -216,25 +216,6 @@ public partial class RosteringController
     }
 
     /// <summary>
-    /// Everything a coordinator needs to review one submitted shift in a single call (shift package, PR 3): the active
-    /// completion (times, variance, breaks, net worked minutes, handover, the "nothing to note" confirmation, incidents),
-    /// every scheduled dose due in the rostered window with its outcome, PRN doses given during the shift, and the shift
-    /// notes. Same 404 as <see cref="GetShiftCompletion"/> when the shift has no active completion. Read-only: the Approve and
-    /// Return endpoints are unchanged.
-    /// </summary>
-    [HttpGet("shifts/{id:guid}/completion/review")]
-    public async Task<ActionResult<ApiResponse<ShiftCompletionReviewDto>>> GetShiftCompletionReview(Guid id, CancellationToken ct)
-    {
-        var completion = await _db.ShiftCompletions.Where(c => c.ShiftId == id && c.IsActive).FirstOrDefaultAsync(ct);
-        var shift = completion is null ? null : await _db.Shifts.Include(s => s.Participant).FirstOrDefaultAsync(s => s.Id == id, ct);
-        if (completion is null || shift is null)
-            return NotFound(ApiResponse<ShiftCompletionReviewDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
-
-        var completionDto = await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct, includeIncidents: true);
-        return Ok(ApiResponse<ShiftCompletionReviewDto>.Ok(await _package.BuildReviewAsync(shift, completion, completionDto, ct)));
-    }
-
-    /// <summary>
     /// Every completion for one shift, active and inactive, newest first — the review history
     /// PR2's review page needs (critique P2: "the resubmitting worker sees ReturnCount and nothing
     /// about why" — this is the coordinator-side counterpart). Same 404 rule as

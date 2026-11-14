@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Check } from 'lucide-react'
-import { useAuthConfig, useMicrosoftLink, useSaveMicrosoftRole, useTurnOffMicrosoft } from '@/api/hooks'
+import { useAuthConfig, useMicrosoftLink, useProviderSettings, useSaveMicrosoftRole, useTurnOffMicrosoft } from '@/api/hooks'
 import type { MicrosoftRole } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
@@ -25,6 +25,7 @@ const ROLE_HINT = "Someone who signs in with Microsoft for the first time gets a
 
 /** Settings > Microsoft sign-in (Admin): link the organisation's Microsoft directory, choose the role new people get, or turn it off. */
 export default function MicrosoftSignInSection() {
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const config = useAuthConfig()
   const link = useMicrosoftLink()
   const saveRole = useSaveMicrosoftRole()
@@ -111,7 +112,7 @@ export default function MicrosoftSignInSection() {
           <FactList
             items={[
               { label: 'Microsoft directory ID', value: <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{linked.microsoftTenantId}</span> },
-              { label: 'Linked', value: linked.linkedByName ? `${formatDateTimeAu(linked.linkedAt)} by ${linked.linkedByName}` : formatDateTimeAu(linked.linkedAt) },
+              { label: 'Linked', value: linked.linkedByName ? `${formatDateTimeAu(linked.linkedAt, zone)} by ${linked.linkedByName}` : formatDateTimeAu(linked.linkedAt, zone) },
             ]}
           />
           <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">Only accounts from this directory can sign in with Microsoft. To use a different directory, turn this off and link again.</p>
