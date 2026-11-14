@@ -106,6 +106,12 @@ npm run lint
   `odip-prototype/odip/docker-compose.yml` was deleted: rsync copied it into the stack
   root next to `compose.yaml`, and Compose picking the wrong one would have silently
   deployed stale prebuilt images.
+- Pre-deploy database dumps: before `up -d`, `deploy/predeploy-dump.sh` writes a verified `pg_dump -Fc` to
+  `/mnt/docker/stacks/odip-backups/predeploy/odip-<UTC time>-<sha8>.dump` (outside the rsync `--delete` tree) and keeps the newest 5;
+  a failed dump stops the deploy. Rollback only re-tags images and never restores data. Manual restore of the newest dump: in
+  `/mnt/docker/stacks/odip`, `docker compose stop api`, then
+  `f=$(ls /mnt/docker/stacks/odip-backups/predeploy/odip-*.dump | tail -n 1)`,
+  `docker compose exec -T db sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$f"`, then `docker compose start api`.
 
 ## Architecture
 
@@ -195,6 +201,9 @@ npm run lint
   specific migration IDs. Renaming or reordering existing migrations can break application
   startup silently with no obvious error pointing back to the cause, so migrations must be
   touched with extreme care.
+
+- Migrations are expand-then-contract: a migration first adds what the new code needs and keeps whatever the old code
+  still needs, because a rollback runs the old API on the new schema. Removing a column or table ships in a later release.
 
 - `mock-api/server.js` listens on 5062 (overridable via `MOCK_PORT`); any note that says 5050 is stale.
 
