@@ -37,6 +37,11 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      # Metrics and scrubbed error logs over OTLP. Off while the endpoint is empty; nothing leaves the process then.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_SERVICE_NAME=odip-api
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=live,service.version=${GIT_SHA:-dev}
       - FIREBASE_SERVICE_ACCOUNT_JSON=/credentials/firebase.json
       # Password-less dev login. LAN-only instances ONLY — never set this on an
       # internet-reachable host or one holding real participant data.
