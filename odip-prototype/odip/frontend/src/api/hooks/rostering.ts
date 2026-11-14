@@ -216,7 +216,7 @@ export function useSetRegular() {
       apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, body),
     onSuccess: () => Promise.all([
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] }),
-      qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      qc.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
     ]),
   })
 }
@@ -277,7 +277,7 @@ export type CompletionFilters = { status?: ShiftStatus; from?: string; to?: stri
  */
 export function useCompletions(filters: CompletionFilters = {}, page = 1, pageSize = 50, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ['rostering-completions', filters, page, pageSize],
+    queryKey: [QK.rosteringCompletions, filters, page, pageSize],
     queryFn: () => apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions', { ...filters, page, pageSize }),
     refetchInterval: 60_000,
     enabled: options?.enabled ?? true,
@@ -294,7 +294,7 @@ const MAX_PAGE_SIZE = 200
  */
 export function useAllCompletions(filters: CompletionFilters, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ['rostering-completions', filters, 'all'],
+    queryKey: [QK.rosteringCompletions, filters, 'all'],
     queryFn: async () => {
       // Keyed by shift: a row decided mid-read moves the page edges, and must not come back twice.
       const items = new Map<string, CompletionQueueItemDto>()
@@ -337,7 +337,7 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
     },
     onSuccess: (_, v) => {
       const shiftId = typeof v === 'string' ? v : v.shiftId
-      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
@@ -348,7 +348,7 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
     onError: (err, v) => {
       if (!isAxiosError(err) || err.response?.status !== 409) return
       const shiftId = typeof v === 'string' ? v : v.shiftId
-      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
     },
@@ -362,7 +362,7 @@ export function useDecideExtraTime() {
     mutationFn: ({ shiftId, decision }: { shiftId: string; decision: ExtraTimeChoice }) =>
       apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/extra-time`, { decision }),
     onSuccess: (_, { shiftId }) => {
-      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: ['employment-hero', 'payroll'] })   // the Payroll check shows the paid window
@@ -402,7 +402,7 @@ export function useReturnCompletion() {
     mutationFn: ({ shiftId, data }: { shiftId: string; data: ReturnCompletionDto }) =>
       apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/return`, data),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
@@ -418,7 +418,7 @@ export function useApproveCompletionsBatch({ cleanOnly = false }: { cleanOnly?: 
     mutationFn: (shiftIds: string[]) =>
       apiPost<ApproveBatchResultDto[]>('/rostering/completions/approve-batch', cleanOnly ? { shiftIds, cleanOnly } : { shiftIds }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: [QK.rosteringCompletions] })
       // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
       qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
@@ -457,7 +457,7 @@ export function usePendingCompletionQueue(enabled = true): { count: number; load
 
 export function usePatterns(params?: Record<string, string>) {
   return useQuery({
-    queryKey: ['roster-patterns', params],
+    queryKey: [QK.rosterPatterns, params],
     queryFn: () => apiGet<ShiftPatternDto[]>('/rostering/patterns', params),
   })
 }
@@ -466,7 +466,7 @@ export function useCreatePattern() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateShiftPatternDto) => apiPost<ShiftPatternDto>('/rostering/patterns', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
   })
 }
 
@@ -475,7 +475,7 @@ export function useUpdatePattern() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateShiftPatternDto }) =>
       apiPut<ShiftPatternDto>(`/rostering/patterns/${id}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
   })
 }
 
@@ -483,7 +483,7 @@ export function useDeletePattern() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiDelete(`/rostering/patterns/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [QK.rosterPatterns] }),
   })
 }
 
@@ -499,7 +499,7 @@ export function useGeneratePattern() {
       apiPost<GeneratePatternResultDto>(`/rostering/patterns/${id}/generate?${new URLSearchParams({ from, to })}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
-      qc.invalidateQueries({ queryKey: ['roster-patterns'] })
+      qc.invalidateQueries({ queryKey: [QK.rosterPatterns] })
       refreshBudgetFigures(qc)   // the shifts it makes are booked ahead
     },
   })

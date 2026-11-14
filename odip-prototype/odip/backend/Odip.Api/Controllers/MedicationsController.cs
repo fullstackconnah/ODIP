@@ -605,8 +605,7 @@ public class MedicationsController : ControllerBase
     /// </summary>
     private async Task<(Guid? Id, bool Inactive)> ResolveCurrentStaffAsync(CancellationToken ct)
     {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        Guid? ownUserId = Guid.TryParse(claim, out var parsed) ? parsed : null;
+        Guid? ownUserId = User.TryGetUserId();
         var userId = _currentTenant.ViewAsUserId ?? ownUserId;
         if (userId is null) return (null, false);
 

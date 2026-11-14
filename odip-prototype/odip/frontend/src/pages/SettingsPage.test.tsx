@@ -536,7 +536,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
     const profile = screen.getByRole('region', { name: 'Profile' })
     expect(within(profile).queryByText('Organisation')).not.toBeInTheDocument()
     expect(within(profile).queryByText('ODIP Platform')).not.toBeInTheDocument()
-    expect(within(profile).getByText('Super admin')).toBeInTheDocument()
+    expect(within(profile).getByText('Super Admin')).toBeInTheDocument()
   })
 
   it('shows a SuperAdmin viewing as someone only that person: no sign-in name or organisation of their own', () => {

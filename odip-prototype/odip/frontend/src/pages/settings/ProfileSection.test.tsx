@@ -24,8 +24,8 @@ vi.mock('@/lib/setPasswordEmail', () => ({ canSendSetPasswordEmail: () => can.va
 
 const PROFILE = { firstName: 'Jane', lastName: 'Smith', email: 'jane@acme.example.com', mobile: '0400 000 000', managedByEmploymentHero: false }
 
-function renderProfile() {
-  localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', fullName: 'Jane Smith', username: 'jane@acme.example.com', tenantName: 'Acme' }))
+function renderProfile(role = 'Coordinator') {
+  localStorage.setItem('odip_user', JSON.stringify({ role, fullName: 'Jane Smith', username: 'jane@acme.example.com', tenantName: 'Acme' }))
   const element = <ProfileSection title="Profile" description="Your name and phone, and your password." readOnly={false} focusOnMount={false} />
   render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element }], { initialEntries: ['/settings?section=profile'] })} />)
   return userEvent.setup({ delay: null })
@@ -40,6 +40,11 @@ beforeEach(() => {
 })
 
 describe('Profile: your details', () => {
+  it.each([['SupportWorker', 'Support Worker'], ['SuperAdmin', 'Super Admin']])('reads a %s Role fact as %s', (role, label) => {
+    renderProfile(role)
+    expect(screen.getByText('Role').nextElementSibling).toHaveTextContent(new RegExp(`^${label}$`))
+  })
+
   it('fills the fields from the server and keeps Save off until something changes', () => {
     renderProfile()
     expect(screen.getByLabelText(/First name/)).toHaveValue('Jane')

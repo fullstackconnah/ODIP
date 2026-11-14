@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -117,7 +118,7 @@ public class EmploymentHeroController : ControllerBase
                 var name = (business.Name ?? "").Trim();
                 conn.BusinessName = name.Length > 200 ? name[..200] : name;
                 if (newConnection || conn.ConnectedAt == default) conn.ConnectedAt = firstConnected ?? _clock.GetUtcNow().UtcDateTime;
-                conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
+                conn.ConnectedById = User.TryGetUserId();
                 conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
                 conn.LastSyncError = null;
                 // Never the key itself in AuditLog: only that it changed, and who changed it.
@@ -407,7 +408,7 @@ public class EmploymentHeroController : ControllerBase
         var person = item?.UserId is { } userId ? await _db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, ct) : null;
         if (item is null || person is null) return NotFound(ApiResponse<EmploymentHeroStatusDto>.Fail("That item is no longer waiting. Refresh the page."));
         // My payslips shows a person the payslips of the EH employee they are linked to, so the link needs a second person behind it.
-        if (Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId) && callerId == person.Id)
+        if (User.TryGetUserId() is { } callerId && callerId == person.Id)
             return StatusCode(403, ApiResponse<EmploymentHeroStatusDto>.Fail(LinkOwnAccountMessage));
         if (person.ExternalPayrollId is not null) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail($"{person.FullName} is already linked."));
         var holder = await _db.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct);
