@@ -41,6 +41,8 @@ describe('recordLabel', () => {
   it('names a pattern, an availability and a risk entry from their own fields', () => {
     expect(recordLabel('ShiftPattern', held({ DayOfWeek: 'Monday', StartTime: '09:00:00', EndTime: '15:00:00' }))).toBe(`Every Monday ·${NBSP}9:00am${DASH}3:00pm`)
     expect(recordLabel('StaffAvailability', held({ AvailabilityType: 'Unavailable', StartDateTime: '2026-11-10T04:00:00Z' }))).toBe(`Unavailable ·${NBSP}Tue 10 Nov 2026`)
+    // 13:30Z on 1 March is already 2 March in Sydney, whatever zone the device is in.
+    expect(recordLabel('StaffAvailability', held({ AvailabilityType: 'Unavailable', StartDateTime: '2026-03-01T13:30:00Z' }), 'Australia/Sydney')).toBe(`Unavailable ·${NBSP}Mon 2 Mar 2026`)
     expect(recordLabel('ParticipantRiskEntry', held({ Description: 'Choking risk at mealtimes' }))).toBe('Choking risk at mealtimes')
   })
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
   useEmploymentHeroEmployees, useEmploymentHeroLeaveCategories, useEmploymentHeroStatus, useEmploymentHeroWorkTypes, useLinkEmploymentHeroStaff,
-  useRetryEmploymentHeroLeave, useSaveEmploymentHeroLeaveCategories, useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
+  useProviderSettings, useRetryEmploymentHeroLeave, useSaveEmploymentHeroLeaveCategories, useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
 } from '@/api/hooks'
 import type {
   EmploymentHeroAttentionDto, EmploymentHeroAttentionKind, EmploymentHeroBusinessDto, EmploymentHeroLeaveCategoriesDto,
@@ -126,6 +126,7 @@ function ConnectForm() {
 }
 
 function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const sync = useSyncEmploymentHero()
   const disconnect = useDisconnectEmploymentHero()
   const [confirming, setConfirming] = useState(false)
@@ -133,11 +134,11 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
     <div className="flex flex-col gap-3">
       <FactList items={[
         { label: 'Business', value: eh.businessName },
-        { label: 'Connected', value: `${formatDateTimeAu(eh.connectedAt)} by ${eh.connectedByName}` },
+        { label: 'Connected', value: `${formatDateTimeAu(eh.connectedAt, zone)} by ${eh.connectedByName}` },
         {
           label: 'Last sync',
           value: eh.lastSyncAt
-            ? <>{formatDateTimeAu(eh.lastSyncAt)} <span className="text-[var(--color-muted-foreground)]">· {formatRelative(parseApiDate(eh.lastSyncAt), { style: 'long' })}</span></>
+            ? <>{formatDateTimeAu(eh.lastSyncAt, zone)} <span className="text-[var(--color-muted-foreground)]">· {formatRelative(parseApiDate(eh.lastSyncAt), { style: 'long' })}</span></>
             : 'Not yet. The first sync runs within 30 minutes, or press Sync now.',
         },
         { label: 'Staff', value: `${plural(eh.staffLinked, 'staff member')} linked, ${eh.staffNotLinked} not linked` },
