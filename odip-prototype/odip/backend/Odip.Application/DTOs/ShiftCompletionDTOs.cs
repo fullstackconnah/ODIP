@@ -154,14 +154,6 @@ public record ShiftBreakDto(
     Guid CreatedByUserId,
     bool WithParticipant = false);
 
-/// <summary>
-/// PUT portal/shifts/{id}/breaks/{breakId} body: the corrected times, as UTC instants (ISO 8601 with a Z;
-/// an unsuffixed value is treated as UTC). <see cref="EndedAt"/> null keeps a RUNNING break running; an ended
-/// break must keep an end. Only allowed while the shift is in progress (before Finish).
-/// </summary>
-public record EditShiftBreakDto
-{
-    public DateTime StartedAt { get; init; }
     public DateTime? EndedAt { get; init; }
 
     /// <summary>Who the break was with. Null keeps the stored value, so a cached older client never flips it.</summary>
