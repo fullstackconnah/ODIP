@@ -11,6 +11,9 @@ import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 const perms = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => perms.current }))
 
+// The provider's zone is its own read through the same client; none yet keeps the viewer's, and the last-export call counts below stay the last export's.
+vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useProviderSettings: () => ({ data: undefined }) }))
+
 const { get, getWithDefault } = vi.hoisted(() => ({ get: vi.fn(), getWithDefault: vi.fn() }))
 vi.mock('@/api/client', async () => {
   const actual = await vi.importActual<typeof import('@/api/client')>('@/api/client')
