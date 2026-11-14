@@ -4,11 +4,13 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp/bin"
-# Fake docker: "ps -a" prints $FAKE_ALL and "ps --status running" prints $FAKE_PS (both exit $FAKE_PS_RC); pg_dump prints $FAKE_DUMP
-# (or fails if FAKE_DUMP_RC is set); pg_restore -l exits $FAKE_RESTORE_RC, pg_restore -f (full read) exits $FAKE_FULL_RC.
+# Fake docker: "ps -a" prints $FAKE_ALL and "ps --status running" prints $FAKE_PS (both exit $FAKE_PS_RC);
+# "config" prints the project name; "volume ls" prints $FAKE_VOL (exit $FAKE_VOL_RC); pg_dump prints $FAKE_DUMP (or fails if FAKE_DUMP_RC is set); pg_restore -l exits $FAKE_RESTORE_RC, pg_restore -f (full read) exits $FAKE_FULL_RC.
 cat > "$tmp/bin/docker" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
+  *" config"*) [ -n "${FAKE_CFG_RC:-}" ] && exit "$FAKE_CFG_RC"; echo "name: odip"; echo "services: {}" ;;
+  *"volume ls"*) [ -n "${FAKE_VOL_RC:-}" ] && exit "$FAKE_VOL_RC"; printf %s "${FAKE_VOL-}" ;;
   *" ps -a "*) [ -n "${FAKE_PS_RC:-}" ] && exit "$FAKE_PS_RC"; printf %s "${FAKE_ALL-abc123}" ;;
   *" ps "*) [ -n "${FAKE_PS_RC:-}" ] && exit "$FAKE_PS_RC"; printf '%s' "${FAKE_PS-abc123}" ;;
   *pg_dump*) [ -n "${FAKE_DUMP_RC:-}" ] && exit "$FAKE_DUMP_RC"; printf '%s' "${FAKE_DUMP-PGDMP-fake-bytes}" ;;
@@ -42,6 +44,9 @@ run "pg_restore -l fails"    1 0 FAKE_RESTORE_RC=1
 run "pg_dump fails"          1 0 FAKE_DUMP_RC=1
 run "no database container"  0 0 FAKE_ALL= FAKE_PS=
 grep -q "no database container: skipping" "$tmp/out" || { echo "FAIL skip line"; fail=1; }
+run "no container, volume exists" 1 0 FAKE_ALL= FAKE_PS= FAKE_VOL=odip_pgdata
+grep -q "::error::pre-deploy dump failed: no database container, but its data volume exists" "$tmp/out" || { echo "FAIL volume error line"; fail=1; }
+run "volume listing errors" 1 0 FAKE_ALL= FAKE_PS= FAKE_VOL_RC=1
 run "db exists, not running" 1 0 FAKE_PS=
 run "ps exits 1"             1 0 FAKE_PS_RC=1
 grep -q "::error::pre-deploy dump failed: docker compose ps failed" "$tmp/out" || { echo "FAIL ps error line"; fail=1; }

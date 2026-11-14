@@ -1,11 +1,15 @@
 using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 
 namespace Odip.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(OdipDbContext))]
+    [Migration("20260820092413_AddParticipantMobilityOvernightEquipment")]
     public partial class AddParticipantMobilityOvernightEquipment : Migration
     {
         /// <inheritdoc />

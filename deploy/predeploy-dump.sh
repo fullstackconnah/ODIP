@@ -15,6 +15,11 @@ fail() { echo "::error::pre-deploy dump failed: $1"; exit 1; }
 # Assign first: a command substitution inside [ ] would hide a failed ps and skip the dump.
 all=$(docker compose ps -a -q db) || fail "docker compose ps failed"
 if [ -z "$all" ]; then
+  # Compose down (no -v) removes the container but keeps the data volume: skip only on a true first deploy.
+  # shortcut: volume key "pgdata" (deploy/compose.yaml) is hard-coded; update it if the db volume is renamed.
+  project=$(docker compose config | sed -n "s/^name: //p") || fail "docker compose config failed"
+  vol=$(docker volume ls -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.volume=pgdata") || fail "docker volume ls failed"
+  [ -z "$vol" ] || fail "no database container, but its data volume exists; run \"docker compose up -d db\" and deploy again"
   echo "no database container: skipping the pre-deploy dump"
   exit 0
 fi

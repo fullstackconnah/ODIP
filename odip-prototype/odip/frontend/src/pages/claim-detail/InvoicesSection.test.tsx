@@ -83,10 +83,10 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderSection() {
+function renderSection(forClaim: { id: string; claimReference: string; submittedDate: string } = claim) {
   const onAnnounce = vi.fn()
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  render(<QueryClientProvider client={qc}><InvoicesSection claim={claim} onAnnounce={onAnnounce} /></QueryClientProvider>)
+  render(<QueryClientProvider client={qc}><InvoicesSection claim={forClaim} onAnnounce={onAnnounce} /></QueryClientProvider>)
   return { onAnnounce }
 }
 
@@ -364,6 +364,15 @@ describe('InvoicesSection', () => {
     renderSection()
     expect(await screen.findByText("No invoices. Everyone on this claim is agency managed, so it's claimed in the BPR CSV.")).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it("legacy: dates the row on the provider's day, whatever zone the device is in", async () => {
+    serve('get /provider-settings', async config => ok({ timeZoneId: 'Australia/Sydney' }, config))
+    serveInvoices({ invoiceState: 'legacy', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection({ ...claim, submittedDate: '2026-03-01T13:30:00Z' })
+
+    const r = await waitFor(() => rowOf('Pat Morgan — Harbour Plan Co'))
+    await waitFor(() => expect(within(r).getByText('02/03/2026')).toBeInTheDocument())
   })
 
   it('legacy: says why, dates each payer\'s row by the claim\'s submittedDate (an instant), no pill and no correction', async () => {

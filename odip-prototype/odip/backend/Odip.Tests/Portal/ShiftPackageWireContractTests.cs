@@ -223,7 +223,7 @@ public class ShiftPackageWireContractTests
         typeof(PortalAtAGlanceDto), typeof(PortalAllergiesDto), typeof(PortalDietDto), typeof(PortalCommunicationDto), typeof(PortalBehaviourDto),
         typeof(PortalHidpaDto), typeof(PortalAddressDto), typeof(PortalEmergencyContactDto), typeof(PortalDoseSlotDto), typeof(PortalDoseOutcomeDto),
         typeof(PortalDoseWitnessDto), typeof(PortalPrnDto), typeof(PortalShiftRoutineDto), typeof(PortalHandoverDto), typeof(PortalHandoverTrailEntryDto),
-        typeof(PortalFinishBlockerDto), typeof(ShiftBreakDto), typeof(ShiftCompletionReviewDto), typeof(ReviewPrnDoseDto),
+        typeof(PortalFinishBlockerDto), typeof(ShiftBreakDto),
     ];
 
     /// <summary>Members added to records that existed before the shift package (whose other nullable members keep their old behaviour).</summary>

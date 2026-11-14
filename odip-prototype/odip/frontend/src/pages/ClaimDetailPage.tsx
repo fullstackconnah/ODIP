@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
-import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
+import { useClaim, useProviderSettings, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Download, Check, DollarSign, RotateCcw, XCircle } from 'lucide-react'
@@ -50,6 +50,7 @@ export default function ClaimDetailPage() {
   // Set by Claim again on the old claim's page: this claim replaced a rejected one.
   const claimedAgainFrom = (useLocation().state as { claimedAgainFrom?: string } | null)?.claimedAgainFrom
   const buildFile = useBuildClaimFile()
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
   // Claim again lands here: a screen-reader and keyboard user starts at the new claim's title, next to the success notice.
@@ -273,8 +274,8 @@ export default function ClaimDetailPage() {
           claim.kind !== 'Trip'
             ? { label: 'Period', value: <span className="tabular-nums">{periodText}</span> }
             : { label: 'Trip', value: claim.tripName || '—' },
-          { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt)}</span> },
-          { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate)}</span> },
+          { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt, zone)}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate, zone)}</span> },
           // What the NDIA said, once it has refused the claim: when, and the code it gave (V17, V18, V27 and V28 say the funds ran out). Nothing is said of a claim that is not rejected.
           ...(claim.status === 'Rejected'
             ? [{
@@ -282,7 +283,7 @@ export default function ClaimDetailPage() {
               value: (
                 <>
                   <span className="tabular-nums">
-                    {formatInstantDateAu(claim.rejectedDate)}
+                    {formatInstantDateAu(claim.rejectedDate, zone)}
                     {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}${ndiaCodeMeaning(claim.rejectionCode) ? ` (${ndiaCodeMeaning(claim.rejectionCode)})` : ''}` : 'no NDIA code recorded'}
                   </span>
                   {/* The code is the one input that switches the budget warning on, and the reason often arrives after the status is set: a claim rejected with none can be given one here. */}

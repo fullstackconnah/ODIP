@@ -5,7 +5,7 @@ import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { Button } from '@/components/Button'
 import AuditHistoryTab, { FieldDiff } from '@/components/AuditHistoryTab'
-import { DELETED_RECORDS_PAGE_SIZE, useDeletedRecords, type DeletedRecord } from '@/api/hooks'
+import { DELETED_RECORDS_PAGE_SIZE, useDeletedRecords, useProviderSettings, type DeletedRecord } from '@/api/hooks'
 import { formatDateTimeAu } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { fieldLabel, recordLabel, typeName, TYPE_FILTER_ITEMS } from './deletedRecordLabels'
@@ -59,8 +59,10 @@ export default function DeletedRecordsTab() {
   const [openId, setOpenId] = useState<string | null>(null)
   const query = useDeletedRecords(type, page)
   const { data, isLoading, isError, refetch } = query
+  // The provider's zone, so a deleted time reads as the provider's day; none yet (or none saved) keeps the viewer's.
+  const zone = useProviderSettings().data?.timeZoneId
 
-  const rows: Row[] = useMemo(() => (data?.items ?? []).map(r => ({ ...r, label: recordLabel(r.entityType, r.fields) })), [data])
+  const rows: Row[] = useMemo(() => (data?.items ?? []).map(r => ({ ...r, label: recordLabel(r.entityType, r.fields, zone) })), [data, zone])
 
   const columns: Column<Row>[] = [
     // Two lines at 1280 (then an ellipsis, full label in the tooltip and the detail); it wraps whole in the phone card.
@@ -69,7 +71,7 @@ export default function DeletedRecordsTab() {
     { key: 'deletedByName', header: 'Deleted by', maxWidth: '12rem', mobile: 'meta', render: r => r.deletedByName ?? 'System' },
     {
       key: 'deletedAt', header: 'Deleted', mobile: 'meta',
-      render: r => <span className="tabular-nums" title={formatDateTimeAu(r.deletedAt)}>{formatDateTimeAu(r.deletedAt)}</span>,
+      render: r => <span className="tabular-nums" title={formatDateTimeAu(r.deletedAt, zone)}>{formatDateTimeAu(r.deletedAt, zone)}</span>,
     },
     {
       key: 'actions', header: '', srHeader: 'Details', align: 'right',

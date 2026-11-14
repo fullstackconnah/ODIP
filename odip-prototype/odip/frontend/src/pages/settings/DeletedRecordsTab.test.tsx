@@ -5,8 +5,8 @@ import { MemoryRouter } from 'react-router-dom'
 import DeletedRecordsTab from './DeletedRecordsTab'
 import type { DeletedRecord } from '@/api/hooks'
 
-const { mockUseDeletedRecords } = vi.hoisted(() => ({ mockUseDeletedRecords: vi.fn() }))
-vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useDeletedRecords: mockUseDeletedRecords }))
+const { mockUseDeletedRecords, mockSettings } = vi.hoisted(() => ({ mockUseDeletedRecords: vi.fn(), mockSettings: vi.fn() }))
+vi.mock('@/api/hooks', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/hooks')>()), useDeletedRecords: mockUseDeletedRecords, useProviderSettings: mockSettings }))
 
 const row = (o: Partial<DeletedRecord> = {}): DeletedRecord => ({
   id: 'd1', entityType: 'Shift', entityId: 'e1', deletedAt: '2026-11-10T03:15:00Z', deletedByName: 'Sam Lee',
@@ -20,9 +20,16 @@ vi.mock('@/components/AuditHistoryTab', async importOriginal => ({
   default: ({ entityType, entityId }: { entityType: string; entityId: string }) => <p>History of {entityType} {entityId}</p>,
 }))
 
-beforeEach(() => mockUseDeletedRecords.mockReset())
+beforeEach(() => { mockUseDeletedRecords.mockReset(); mockSettings.mockReturnValue({ data: undefined }) })
 
 describe('DeletedRecordsTab', () => {
+  it("shows the deleted time in the provider's zone, whatever zone the device is in", () => {
+    mockSettings.mockReturnValue({ data: { timeZoneId: 'Australia/Sydney' } })
+    mockUseDeletedRecords.mockReturnValue(result([row({ deletedAt: '2026-03-01T13:30:00Z' })]))
+    show()
+    expect(screen.getAllByText(/^02\/03\/2026, 12:30\sam$/).length).toBeGreaterThan(0)
+  })
+
   it('lists each deletion with its label, type, who and when', () => {
     mockUseDeletedRecords.mockReturnValue(result([row(), row({ id: 'd2', entityType: 'ParticipantRiskEntry', deletedByName: null, fields: [{ field: 'Description', old: 'Choking risk', new: null }] })]))
     show()
