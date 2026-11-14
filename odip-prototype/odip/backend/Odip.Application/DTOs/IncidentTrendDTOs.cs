@@ -20,5 +20,5 @@ public record IncidentTrendMonthDto
     public int OtherIncidents { get; init; }
 }
 
-/// <summary>The provider's calendar date now, "yyyy-MM-dd" (GET provider-today, open to every signed-in role).</summary>
-public record ProviderTodayDto(string Date);
+/// <summary>The provider's calendar date now, "yyyy-MM-dd", and the effective IANA zone it was worked out in (GET provider-today, open to every signed-in role).</summary>
+public record ProviderTodayDto(string Date, string TimeZoneId);

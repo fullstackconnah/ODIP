@@ -26,9 +26,12 @@ const later = (a, b) => (a > b ? a : b)
 const mondayOf = (iso) => addDays(iso, -((weekday(iso) + 6) % 7))
 
 /** The provider's calendar date now. MOCK_TODAY pins it for a screenshot or a test. */
+/** The provider's zone, the one providerToday works in (what GET provider-today reports as timeZoneId). */
+const providerZone = () => ZONE_OF_STATE[PROVIDER_STATE]
+
 function providerToday() {
   if (process.env.MOCK_TODAY) return process.env.MOCK_TODAY
-  return new Intl.DateTimeFormat('en-CA', { timeZone: ZONE_OF_STATE[PROVIDER_STATE], year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  return new Intl.DateTimeFormat('en-CA', { timeZone: providerZone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
 
 // ── Block -> patterns ───────────────────────────────────────────────────────
@@ -341,4 +344,4 @@ function durationOf(pattern) {
   return Math.round(((end - start) / 60) * 100) / 100
 }
 
-module.exports = { preview, approve, populatePreview, populate, generateWeek, mondayOf, providerToday, addDays, weekday, durationOf, DAYS }
+module.exports = { preview, approve, populatePreview, populate, generateWeek, mondayOf, providerToday, providerZone, addDays, weekday, durationOf, DAYS }
