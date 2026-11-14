@@ -125,6 +125,24 @@ public class ExceptionHandlingMiddlewareTests
             LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData("get", "GET")]
+    [InlineData("POST", "POST")]
+    [InlineData("FOO<script>", "_OTHER")]
+    [InlineData("", "_OTHER")]
+    public async Task LoggedMethod_IsBounded(string sent, string logged)
+    {
+        string? method = null;
+        _logger.Setup(l => l.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()))
+            .Callback(new InvocationAction(i => method = ((IEnumerable<KeyValuePair<string, object?>>)i.Arguments[2]).Single(p => p.Key == "Method").Value as string));
+        var (middleware, context) = CreateMiddleware(_ => throw new Exception("boom"));
+        context.Request.Method = sent;
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(logged, method);
+    }
+
     [Fact]
     public async Task ResponseContentType_IsJson()
     {
