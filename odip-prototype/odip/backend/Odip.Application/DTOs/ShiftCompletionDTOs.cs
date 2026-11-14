@@ -154,12 +154,6 @@ public record ShiftBreakDto(
     Guid CreatedByUserId,
     bool WithParticipant = false);
 
-    public DateTime? EndedAt { get; init; }
-
-    /// <summary>Who the break was with. Null keeps the stored value, so a cached older client never flips it.</summary>
-    public bool? WithParticipant { get; init; }
-}
-
 /// <summary>PUT rostering/shifts/{id}/completion/breaks/{breakId}/kind body: a coordinator sets whether the worker ate with the participant.</summary>
 public record SetShiftBreakKindDto
 {
