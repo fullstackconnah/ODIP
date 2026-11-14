@@ -269,7 +269,7 @@ public record CompletionQueueItemDto(
     int ReturnCount,
     /// <summary>How many scheduled doses in the shift's ROSTERED window have no outcome recorded (Administered, Refused, Withheld, Missed and
     /// WrongMedication all count as an outcome; a superseded record is history). Lets the review queue flag "doses without outcome" without
-    /// opening each shift; the review (<c>GET rostering/shifts/{id}/completion/review</c>) lists them.</summary>
+    /// opening each shift.</summary>
     int DosesWithoutOutcome,
     /// <summary>Total minutes of UNPAID breaks on the completion (the same figure as <c>ShiftCompletionDto.breakMinutes</c>).</summary>
     int BreakMinutes,
