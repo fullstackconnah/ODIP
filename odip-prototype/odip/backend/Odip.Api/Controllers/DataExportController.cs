@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.RateLimiting;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -134,7 +135,7 @@ public class DataExportController : ControllerBase
             zipComplete = true;
             // After the last byte, so a download that fails never moves the "last exported" line.
             audit.Id = Guid.NewGuid(); audit.Action = AuditAction.Exported; audit.ChangedAt = _clock.GetUtcNow();
-            audit.ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null;
+            audit.ChangedById = User.TryGetUserId();
             audit.ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name);
             _db.AuditLogs.Add(audit);
             // Its own token, not ct: a client that leaves once it has the last byte still has the whole export, and this row is its only trace.

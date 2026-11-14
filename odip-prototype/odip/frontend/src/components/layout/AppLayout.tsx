@@ -28,7 +28,7 @@ import { endSession } from '@/api/client'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useQueueRecords } from '@/api/hooks/portal'
 import { offlineQueue } from '@/lib/offline/queue'
-import { plural } from '@/lib/format'
+import { plural, roleLabel } from '@/lib/format'
 import { Wordmark } from '@/components/Wordmark'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { RailFlyout } from '@/components/layout/RailFlyout'
@@ -734,7 +734,7 @@ export default function AppLayout() {
             <div className="flex items-center gap-2">
               <span className="text-[var(--color-on-warning-container)] text-xs font-bold uppercase tracking-wide">Viewing as</span>
               <span className="text-[var(--color-on-warning-container)] text-sm font-semibold">{user.fullName}</span>
-              <span className="text-[var(--color-on-warning-container)] text-xs">({user.role})</span>
+              <span className="text-[var(--color-on-warning-container)] text-xs">({roleLabel(user.role ?? '')})</span>
             </div>
             <button
               onClick={() => {

@@ -129,9 +129,9 @@ export function useCreateParticipant() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [QK.participants] })
       // Completing intake on create puts the participant on the onboarding worklist.
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
       // A draft saved with its intake open is a direct-intake row in the enquiries feed.
-      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      qc.invalidateQueries({ queryKey: [QK.participantInquiries] })
     },
   })
 }
@@ -151,10 +151,10 @@ export function useSaveParticipantIntake() {
       qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // Completing intake puts the participant on the onboarding worklist, new contacts and risks now exist, and the enquiry the
       // participant came from keeps its name and contact details in step.
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
       qc.invalidateQueries({ queryKey: ['participant-contact-roles', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-risk-entries', vars.id] })
-      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      qc.invalidateQueries({ queryKey: [QK.participantInquiries] })
       // The funding source decides whether the NDIS ledger counts this participant.
       refreshBudgetFigures(qc, [vars.id])
     },
@@ -175,8 +175,8 @@ function useLifecycleAction(action: 'begin-services' | 'make-active') {
       qc.invalidateQueries({ queryKey: [QK.participants] })
       qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
-      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
+      qc.invalidateQueries({ queryKey: [QK.participantInquiries] })
       // The board lists who can receive services and tags a services-started row.
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
@@ -262,7 +262,7 @@ export function usePatchParticipant() {
       // A save with expected revisions already awaited this refetch.
       if (!vars.data.expectedRevisions) qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // The checklist's "Profile details" item and the worklist are derived from these fields.
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
       qc.invalidateQueries({ queryKey: ['participant-rostering', vars.id] })
@@ -298,7 +298,7 @@ export function useUpdateParticipantStatus() {
       qc.invalidateQueries({ queryKey: [QK.participants] })
       qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
       // Archiving or reactivating changes who the onboarding worklist lists.
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
       qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
     },
   })
@@ -315,7 +315,7 @@ export function useRestoreParticipant() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: [QK.participants] })
       qc.invalidateQueries({ queryKey: [QK.participant, vars.id] })
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: [QK.participantOnboardingWorklist] })
     },
   })
 }

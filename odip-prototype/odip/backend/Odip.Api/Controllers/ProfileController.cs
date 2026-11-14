@@ -1,9 +1,9 @@
-using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -73,7 +73,7 @@ public class ProfileController : ControllerBase
     }
 
     private Task<User?> MeAsync(CancellationToken ct) =>
-        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
+        User.TryGetUserId() is { } id
             ? _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == id && u.IsActive, ct)
             : Task.FromResult<User?>(null);
 
