@@ -55,3 +55,10 @@ This is only for a link they asked for by trying to sign in. A verification emai
 
 Completing **Forgot password?** also proves they own the mailbox, and Firebase normally marks the address verified when a reset link is completed; if the
 page still says "isn't verified yet" after that, use the verification link. If neither email arrives, check the address on their ODIP row first.
+
+## The API runs as uid 1000
+The API container runs as uid 1000:1000 because that uid owns the mounted `/credentials/firebase.json` (mode 600) on the host. The one-shot `volume-owner` service in `deploy/compose.yaml` re-owns `/keys` and `/data/documents` to 1000 on every `up` and keeps every file; if it fails, the API does not start. After a deploy, read back:
+- `docker exec odip-api id` shows uid=1000
+- `docker exec odip-api sh -c 'touch /keys/.w && rm /keys/.w; touch /data/documents/.w && rm /data/documents/.w'`
+- `docker exec odip-api sh -c 'ls -ln /keys | head; test -r /credentials/firebase.json && echo fb-readable'`
+- `docker logs odip-api --tail 50` has no `UnauthorizedAccess` or `Permission denied`.
