@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFundingPlans } from '@/api/hooks'
 import type { PlanType } from '@/api/types/enums'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { StatusBadge } from '@/components/StatusBadge'
-import { localIsoDate } from '@/lib/dateOnly'
+import { useProviderToday } from '@/hooks/useProviderToday'
 import { currentPlanOf, periodLengthLabel, planStatus, planTotal, writtenSpan } from '@/lib/fundingPlan'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
@@ -32,7 +32,7 @@ export function PlanBudgetCard(props: { participantId?: string; planType: PlanTy
 function PlanBudgetCardBody({ participantId, planType }: { participantId?: string; planType: PlanType }) {
   const plansQuery = useFundingPlans(participantId)
   const [editing, setEditing] = useState(false)
-  const today = useMemo(() => localIsoDate(), [])
+  const today = useProviderToday()   // the provider's day, as the Funding tab decides it; the device's while it loads or fails
 
   const current = plansQuery.data ? currentPlanOf(plansQuery.data.plans ?? [], today) : undefined
   const ended = current !== undefined && planStatus(current, today) === 'Ended'

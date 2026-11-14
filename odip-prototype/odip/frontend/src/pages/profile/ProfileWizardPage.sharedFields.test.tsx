@@ -20,6 +20,7 @@ const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockCon
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useProviderTodayQuery: () => ({ data: undefined }),
   useParticipant: mockUseParticipant,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),

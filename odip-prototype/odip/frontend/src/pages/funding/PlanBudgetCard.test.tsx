@@ -3,13 +3,14 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PlanBudgetCard } from './PlanBudgetCard'
 import { plan } from '@/test/fixtures/funding'
+import { restoreZone, setZone } from '@/test/timeZone'
 
 // The "Plan budget" card on Intake's NDIS & Funding step and the Profile wizard (budget phase 1): it summarises the current plan record, opens the same editor, and offers "Plan not shared
 // yet" as the explicit skip. It saves through the funding endpoints (the editor does), never through the participant's patch groups.
 
-const { useFundingPlans, editor } = vi.hoisted(() => ({ useFundingPlans: vi.fn(), editor: vi.fn() }))
+const { useFundingPlans, editor, providerToday } = vi.hoisted(() => ({ useFundingPlans: vi.fn(), editor: vi.fn(), providerToday: { data: undefined as unknown } }))
 
-vi.mock('@/api/hooks', () => ({ useFundingPlans }))
+vi.mock('@/api/hooks', () => ({ useFundingPlans, useProviderTodayQuery: () => providerToday }))
 vi.mock('./FundingPlanEditor', () => ({
   FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; skipLabel?: string; defaultManagement: string; participantId: string }) => {
     editor(props)
@@ -22,12 +23,13 @@ const reply = (plans: ReturnType<typeof plan>[]) => ({ data: { plans, profilePla
 
 beforeEach(() => {
   vi.clearAllMocks()
+  providerToday.data = undefined
   asRole('Coordinator')
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-04T03:00:00Z'))
   useFundingPlans.mockReturnValue(reply([]))
 })
-afterEach(() => { vi.useRealTimers(); localStorage.clear() })
+afterEach(() => { vi.useRealTimers(); restoreZone(); localStorage.clear() })
 
 const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
@@ -68,6 +70,18 @@ describe('Plan budget card', () => {
 
     expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'plan-1')
     expect(screen.getByTestId('editor')).toHaveAttribute('data-skip', 'Cancel')   // an existing plan is changed, not skipped
+  })
+
+  // OD-ZONE2 (H110-1). Which plan is running is the PROVIDER's day, as on the Funding tab: a Sydney device just past midnight (04/10) with a provider still on 03/10.
+  it('counts a plan ending on the provider’s today as current while the device is a day ahead', () => {
+    if (!setZone('Australia/Sydney')) return
+    vi.setSystemTime(new Date('2026-10-03T14:30:00Z'))
+    providerToday.data = { date: '2026-10-03', timeZoneId: 'Australia/Perth' }
+    useFundingPlans.mockReturnValue(reply([plan({ planStart: '2025-10-04', planEnd: '2026-10-03' })]))
+    render(<PlanBudgetCard participantId='participant-1' planType='PlanManaged' />)
+
+    expect(screen.queryByText('Ended')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
   it('summarises the plan running today when a later one is also recorded', () => {

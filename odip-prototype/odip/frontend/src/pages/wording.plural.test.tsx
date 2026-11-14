@@ -10,6 +10,7 @@ const { mockUseAccommodation, mockUseAdminUsers } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useProviderZone: () => undefined,
   useAccommodation: mockUseAccommodation,
   useDeleteAccommodation: () => ({ mutate: vi.fn(), isPending: false }),
   useRestoreAccommodation: () => ({ mutate: vi.fn(), isPending: false }),

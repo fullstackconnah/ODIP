@@ -10,6 +10,7 @@ import type { ParticipantFormData } from '@/lib/participantSchema'
 const { useFundingPlans } = vi.hoisted(() => ({ useFundingPlans: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
+  useProviderTodayQuery: () => ({ data: undefined }),
   useFundingPlans,
   useParticipantContactRoles: () => ({ data: [], isLoading: false }),
 }))

@@ -6,6 +6,7 @@ import MedicationsPage from './MedicationsPage'
 // Only the API layer needs mocking — MarTab is the default active tab, so its hooks must not
 // throw. TabNav/permissions are exercised for real.
 vi.mock('@/api/hooks', () => ({
+  useProviderTodayQuery: () => ({ data: undefined }),
   useMar: () => ({ data: undefined, isLoading: false }),
   useParticipants: () => ({ data: [] }),
   useRecordPrnOutcome: () => ({ mutateAsync: vi.fn(), isPending: false }),
