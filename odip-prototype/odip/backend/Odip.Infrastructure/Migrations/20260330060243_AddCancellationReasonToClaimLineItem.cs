@@ -1,10 +1,14 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 
 namespace Odip.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(OdipDbContext))]
+    [Migration("20260330060243_AddCancellationReasonToClaimLineItem")]
     public partial class AddCancellationReasonToClaimLineItem : Migration
     {
         /// <inheritdoc />

@@ -1,10 +1,14 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 
 namespace Odip.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(OdipDbContext))]
+    [Migration("20261103020500_RelaxClaimLineParentCheck")]
     public partial class RelaxClaimLineParentCheck : Migration
     {
         /// <inheritdoc />

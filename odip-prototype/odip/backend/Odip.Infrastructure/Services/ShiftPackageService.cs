@@ -178,38 +178,6 @@ public sealed class ShiftPackageService
             .ToList();
     }
 
-    /// <summary>
-    /// The ticks that match NO routine currently in the shift window - their routine was edited out of the window, retired or deleted after the worker
-    /// ticked it - as review rows built from the snapshot stored on the tick (the title and occurrence time as they were; the category, critical flag
-    /// and times from the routine row when it still exists, which a retired routine does). Marked <see cref="PortalShiftRoutineDto.FromTickSnapshot"/>.
-    /// </summary>
-    public async Task<List<PortalShiftRoutineDto>> OrphanTickRoutinesAsync(
-        Shift shift, IReadOnlyCollection<PortalShiftRoutineDto> matched, IReadOnlyCollection<RoutineCheckInfo> checks, CancellationToken ct)
-    {
-        var matchedIds = matched.Select(r => r.Id).ToHashSet();
-        var orphans = checks
-            .Where(c => !matchedIds.Contains(c.RoutineId))
-            .GroupBy(c => c.RoutineId)
-            .Select(g => g.OrderBy(c => c.CheckedAt).First())
-            .ToList();
-        if (orphans.Count == 0) return new List<PortalShiftRoutineDto>();
-
-        var ids = orphans.Select(o => o.RoutineId).ToList();
-        var rows = await _db.ParticipantRoutines.Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, ct);   // retired routines included
-        var (windowStart, _) = ProviderLocalTime.RosteredWindowLocal(shift);
-        return orphans
-            .OrderBy(o => o.ScheduledAt is null ? 1 : 0).ThenBy(o => o.ScheduledAt).ThenBy(o => o.RoutineTitle, StringComparer.Ordinal)
-            .Select(o =>
-            {
-                rows.TryGetValue(o.RoutineId, out var routine);
-                return new PortalShiftRoutineDto(
-                    o.RoutineId, o.RoutineTitle ?? routine?.Title ?? string.Empty, routine?.Description ?? string.Empty, routine?.Category ?? default,
-                    routine?.IsCritical ?? false, routine?.StartTime, routine?.EndTime, o.ScheduledAt, o.ScheduledAt is { } at && at.Date > windowStart.Date,
-                    IsChecked: true, CheckedAt: ProviderLocalTime.AsUtc(o.CheckedAt), CheckedByName: o.CheckedByName, FromTickSnapshot: true);
-            })
-            .ToList();
-    }
-
     /// <summary>The ticks on a completion (empty when there is no completion yet).</summary>
     public Task<IReadOnlyList<RoutineCheckInfo>> GetRoutineChecksAsync(Guid? completionId, CancellationToken ct) =>
         completionId is { } id ? _routineChecks.GetChecksAsync(id, ct) : Task.FromResult<IReadOnlyList<RoutineCheckInfo>>(Array.Empty<RoutineCheckInfo>());
@@ -300,76 +268,6 @@ public sealed class ShiftPackageService
                 r.Id, r.Person!.FullName, Clean(r.RelationshipToParticipant), Clean(r.Person.Phone), Clean(r.Person.Mobile),
                 r.IsPrimary, r.PriorityOrder, r.RoleType, r.RoleType == ContactRoleType.NextOfKin ? "Next of kin" : "Emergency contact"))
             .ToList();
-    }
-
-    // ═════════════════════════ Coordinator review ═════════════════════════
-
-    /// <summary>
-    /// The coordinator's one-call review of a submitted shift: the completion DTO, every scheduled dose in the rostered window with
-    /// its outcome, the PRN doses given during the actual shift, and the shift notes.
-    /// </summary>
-    public async Task<ShiftCompletionReviewDto> BuildReviewAsync(
-        Shift shift, ShiftCompletion completion, ShiftCompletionDto completionDto, CancellationToken ct)
-    {
-        var provider = await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct);
-        var doses = await GetDosesAsync(shift, provider, includePrn: false, ct);
-
-        // "As needed" doses this WORKER gave during the actual shift: PRN medications only (an unscheduled record against a Regular
-        // medication is not an as-needed dose) and only the submitting worker's own records - a colleague on an overlapping shift for the
-        // same participant gave theirs on their own completion.
-        // The stamped span as well as the moved one (My shifts redesign): a dose given in minutes the worker trimmed off is still theirs to review.
-        var end = completion.ActualEnd ?? _slots.UtcNow;
-        if (completion.OriginalActualEnd > end) end = completion.OriginalActualEnd.Value;
-        var start = completion.OriginalActualStart < completion.ActualStart ? completion.OriginalActualStart.Value : completion.ActualStart;
-        var prnDoses = await _db.MedicationAdministrations
-            .Include(a => a.ParticipantMedication)
-            .Where(a => a.ParticipantId == shift.ParticipantId
-                && a.ParticipantMedication!.Type == MedicationType.Prn
-                && a.RecordedByUserId == completion.SubmittedByUserId
-                && a.ScheduledAt == null
-                && a.Status == MedicationAdministrationStatus.Administered
-                && a.AdministeredAt != null && a.AdministeredAt >= start && a.AdministeredAt <= end)
-            .OrderBy(a => a.AdministeredAt)
-            .ToListAsync(ct);
-
-        var notes = await _db.ShiftNotes
-            .Where(n => n.ShiftId == shift.Id)
-            .OrderBy(n => n.CreatedAt)
-            .ToListAsync(ct);
-        var noteIds = notes.Select(n => n.Id).ToList();
-        var incidentByNote = noteIds.Count == 0
-            ? new Dictionary<Guid, Guid>()
-            : (await _db.IncidentReports
-                    .Where(i => i.IsActive && i.ShiftNoteId != null && noteIds.Contains(i.ShiftNoteId.Value))
-                    .Select(i => new { NoteId = i.ShiftNoteId!.Value, i.Id, i.CreatedAt })
-                    .ToListAsync(ct))
-                .GroupBy(r => r.NoteId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
-
-        // The routines the worker was asked to do in this window, with what they ticked.
-        var activeRoutines = await _db.ParticipantRoutines.Where(r => r.ParticipantId == shift.ParticipantId && r.IsActive).ToListAsync(ct);
-        var routineChecks = await _routineChecks.GetChecksAsync(completion.Id, ct);
-        var routines = MatchRoutines(shift, activeRoutines, routineChecks);
-        // Ticks whose routine has since been edited out of the window, retired or deleted are still part of what happened on the shift.
-        routines.AddRange(await OrphanTickRoutinesAsync(shift, routines, routineChecks, ct));
-
-        var participantName = shift.Participant?.FullName
-            ?? await _db.Participants.Where(p => p.Id == shift.ParticipantId).Select(p => (p.FirstName + " " + p.LastName).Trim()).FirstOrDefaultAsync(ct)
-            ?? string.Empty;
-        var staffName = await _db.Users.Where(u => u.Id == completion.SubmittedByUserId)
-            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? string.Empty;
-
-        return new ShiftCompletionReviewDto(
-            completionDto, participantName, staffName, shift.ServiceDate, provider.Id,
-            doses.Slots,
-            prnDoses.Select(a => new ReviewPrnDoseDto(
-                a.ParticipantMedicationId, a.ParticipantMedication?.Name ?? string.Empty, Clean(a.ParticipantMedication?.Strength),
-                a.ParticipantMedication?.DoseDescription ?? string.Empty, ToOutcomeDto(a))).ToList(),
-            notes.Select(n => new ShiftNoteDto(
-                n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
-                ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt,
-                incidentByNote.TryGetValue(n.Id, out var incidentId) ? incidentId : null)).ToList(),
-            routines);
     }
 
     /// <summary>Blank or whitespace-only text is "not recorded": null, never an empty string.</summary>
