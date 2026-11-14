@@ -168,6 +168,10 @@ jobs:
           echo "::error::Health check failed after 150s (frontend=$FE api=$API)"
           exit 1
 
+      - name: Prune dangling images
+        # Success path only (default if: success()). Dangling images only; the :local and :rollback tags are tagged, so they stay.
+        run: docker image prune -f || true
+
       - name: Roll back on failed deploy or health check
         if: failure() && (steps.deploy.outcome == 'failure' || steps.health.outcome == 'failure')
         run: |
