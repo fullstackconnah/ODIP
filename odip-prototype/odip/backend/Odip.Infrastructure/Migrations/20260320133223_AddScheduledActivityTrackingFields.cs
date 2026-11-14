@@ -1,10 +1,14 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Odip.Infrastructure.Data;
 
 #nullable disable
 
 namespace Odip.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(OdipDbContext))]
+    [Migration("20260320133223_AddScheduledActivityTrackingFields")]
     public partial class AddScheduledActivityTrackingFields : Migration
     {
         /// <inheritdoc />

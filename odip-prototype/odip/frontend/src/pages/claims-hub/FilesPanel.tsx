@@ -5,6 +5,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import type { BatchDto } from '@/api/types'
+import { useProviderSettings } from '@/api/hooks'
 import { formatRelative, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { StepBadge } from './claimHubParts'
@@ -80,13 +81,14 @@ export function FilesStrip({ batches, loading, failed, rejectedCount, onRetry, o
 export function FilesPanel({ batches, loading, failed, onRetry, onOpen, onGoToReady }: {
   batches: BatchDto[] | undefined; loading: boolean; failed: boolean; onRetry: () => void; onOpen: (id: string) => void; onGoToReady: () => void
 }) {
+  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
   const [page, setPage] = useState(1)
   // Newest first; a discarded file is history, so it sinks to the end.
   const rows = useMemo(() => [...(batches ?? [])].sort((a, b) => Number(a.status === 'Discarded') - Number(b.status === 'Discarded') || b.createdAt.localeCompare(a.createdAt)), [batches])
   const columns: Column<BatchDto>[] = [
     { key: 'file', header: 'File', mobile: 'primary', render: b => <span data-testid="files-file-name" className={`${FILE_NAME} ${b.status === 'Discarded' ? 'text-[var(--color-muted-foreground)]' : ''}`}>{b.fileName}</span> },
     { key: 'step', header: 'Step', mobile: 'status', render: b => <StepBadge batch={b} /> },
-    { key: 'built', header: 'Built', mobile: 'meta', render: b => <span className="whitespace-nowrap"><span className="md:hidden">Built </span>{instantDay(b.createdAt)}<span className="max-md:hidden"> by {b.createdByName}</span></span> },
+    { key: 'built', header: 'Built', mobile: 'meta', render: b => <span className="whitespace-nowrap"><span className="md:hidden">Built </span>{instantDay(b.createdAt, zone)}<span className="max-md:hidden"> by {b.createdByName}</span></span> },
     { key: 'lines', header: 'Lines', align: 'right', mobile: 'meta', render: b => plural(b.lineCount, 'line') },
     { key: 'total', header: 'Total', align: 'right', mobile: 'meta', render: b => formatCurrency(b.totalAmount) },
     { key: 'results', header: 'Results', mobile: 'hidden', render: b => <span className="whitespace-nowrap">{resultsText(b)}</span> },

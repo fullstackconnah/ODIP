@@ -118,25 +118,22 @@ export function formatAge(value: string | Date | null | undefined, { now = new D
 }
 
 /**
- * "27/03/2026, 01:45 pm": an INSTANT as a date and time in the viewer's zone, en-AU; '—' for nothing. Intl-backed, so the space before "pm" follows the
+ * "27/03/2026, 01:45 pm": an INSTANT as a date and time in `timeZone` (the provider's, when the caller has it), else the viewer's zone, en-AU; '—' for nothing. Intl-backed, so the space before "pm" follows the
  * ICU build, exactly as it always did. Read with parseApiDate, so a zone-less instant is UTC (a record
  * created at 3 pm in Sydney printed "05:00 am" when it was read as local time).
  */
-export function formatDateTimeAu(value: string | null | undefined): string {
-  if (!value) return '—'
-  return parseApiDate(value).toLocaleString('en-AU', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+export function formatDateTimeAu(value: string | null | undefined, timeZone?: string | null): string {
+  return formatWithTimeZone(value, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 /**
- * "02/03/2026": the calendar day of an INSTANT (a UTC DateTime: a record's created, submitted or rejected time) in the viewer's zone; '—' for
+ * "02/03/2026": the calendar day of an INSTANT (a UTC DateTime: a record's created, submitted or rejected time) in `timeZone` (the provider's, when the caller has it), else the viewer's zone; '—' for
  * nothing. Read with parseApiDate, so 23:30Z is the next day in Sydney and a zone-less instant is UTC, never local time. A date-only value is a
  * calendar day already and goes through formatDateAu unchanged.
  */
-export function formatInstantDateAu(value: string | null | undefined): string {
+export function formatInstantDateAu(value: string | null | undefined, timeZone?: string | null): string {
   if (!value || isDateOnly(value)) return formatDateAu(value)
-  return parseApiDate(value).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return formatWithTimeZone(value, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 /** "8 Sept 2026, 7:30 pm": the medium date and short time of a shift note, in the viewer's own zone. Intl-backed, like formatDateTimeAu. */
