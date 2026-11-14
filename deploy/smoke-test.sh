@@ -6,7 +6,7 @@ set -uo pipefail
 STACK_DIR=${STACK_DIR:-/mnt/docker/stacks/odip}
 SMOKE_URL=${SMOKE_URL:-http://localhost:8475}
 
-JWT_SECRET=$(grep '^JWT_SECRET=' "$STACK_DIR/.env" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\r')
+JWT_SECRET=$(grep -E '^(export[[:space:]]+)?JWT_SECRET=' "$STACK_DIR/.env" 2>/dev/null | tail -n1 | sed -E "s/^(export[[:space:]]+)?JWT_SECRET=//; s/\r\$//; s/^\"(.*)\"\$/\1/; s/^'(.*)'\$/\1/")
 [ -n "$JWT_SECRET" ] || { echo "smoke: no JWT_SECRET"; exit 1; }
 export JWT_SECRET
 
@@ -29,7 +29,7 @@ console.log(h + '.' + p + '.' + s);
 NODE
 
 # -e JWT_SECRET (name only) takes the value from the environment, so it stays off the command line.
-TOKEN=$(docker run --rm -v "$mint":/m.js -e JWT_SECRET node:20-alpine node /m.js 2>/dev/null) || TOKEN=
+TOKEN=$(timeout 90 docker run --rm -v "$mint":/m.js -e JWT_SECRET node:20-alpine node /m.js 2>/dev/null) || TOKEN=
 [ -n "$TOKEN" ] || { echo "smoke: could not mint a token"; exit 1; }
 
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -H "Authorization: Bearer $TOKEN" "$SMOKE_URL/api/v1/participants") || code=000
