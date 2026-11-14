@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
+import { apiGet } from '@/api/client'
 import { formatDateAu } from '@/lib/utils'
 import { plural } from '@/lib/format'
 import type { ItineraryDto, ItineraryAccommodationDto, ItineraryVehicleDto, ItineraryStaffDto, ItineraryParticipantDto, ItineraryDayDto, ItineraryActivityDto, ItineraryDayAccommodationEventDto } from '@/api/types'
@@ -81,12 +82,12 @@ function formatDayName(date: string) {
   return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long' })
 }
 
-/** The footer's first line: when it was made, and by which organisation. */
-export function generatedLine(organisationName: string | null | undefined) {
-  return `Generated ${new Date().toLocaleDateString('en-AU')}${organisationName ? ` · ${organisationName}` : ''}`
+/** The footer's first line: when it was made (`today`: the provider's day "YYYY-MM-DD"; the device's own day without one), and by which organisation. */
+export function generatedLine(organisationName: string | null | undefined, today?: string) {
+  return `Generated ${(today ? parseLocalDate(today) : new Date()).toLocaleDateString('en-AU')}${organisationName ? ` · ${organisationName}` : ''}`
 }
 
-export function ItineraryDocument({ data, version }: { data: ItineraryDto; version: ExportVersion }) {
+export function ItineraryDocument({ data, version, today }: { data: ItineraryDto; version: ExportVersion; today?: string }) {
   const isStaff = version === 'staff'
 
   return (
@@ -217,7 +218,7 @@ export function ItineraryDocument({ data, version }: { data: ItineraryDto; versi
         )}
 
         <View style={styles.footer}>
-          <Text>{generatedLine(data.organisationName)}</Text>
+          <Text>{generatedLine(data.organisationName, today)}</Text>
           <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
       </Page>
@@ -278,7 +279,7 @@ export function ItineraryDocument({ data, version }: { data: ItineraryDto; versi
           ))}
 
           <View style={styles.footer} fixed>
-            <Text>{generatedLine(data.organisationName)}</Text>
+            <Text>{generatedLine(data.organisationName, today)}</Text>
             <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
           </View>
         </Page>
@@ -287,8 +288,12 @@ export function ItineraryDocument({ data, version }: { data: ItineraryDto; versi
   )
 }
 
+/** The provider's date from the server (every role may read it), for a footer; undefined when the read fails, which keeps the device's own day. */
+// eslint-disable-next-line react-refresh/only-export-components
+export const readProviderToday = () => apiGet<{ date: string }>('/provider-today').then(r => r.date, () => undefined)
+
 export async function generateItineraryPdf(data: ItineraryDto, version: ExportVersion) {
-  const blob = await pdf(<ItineraryDocument data={data} version={version} />).toBlob()
+  const blob = await pdf(<ItineraryDocument data={data} version={version} today={await readProviderToday()} />).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   const safeName = data.tripName.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '-')
