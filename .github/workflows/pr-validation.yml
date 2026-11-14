@@ -143,6 +143,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Compose non-root checks
+        run: bash deploy/compose-nonroot.test.sh
+
       # Same layout as deploy.yml's "Sync source into stack directory": compose.yaml sits beside backend/ and frontend/.
       - name: Build both images with the deploy compose file
         env:
@@ -161,6 +164,27 @@ jobs:
           cp deploy/compose.yaml "$stack"/compose.yaml
           cd "$stack"
           docker compose build
+
+      # Mimics live: root-owned volumes with content, then the real volume-owner service, then a uid 1000 write test.
+      - name: API volumes are writable as the non-root user
+        timeout-minutes: 3
+        env:
+          # Fixed so the volume names below are known; unset variables in compose.yaml only warn on `run`.
+          COMPOSE_PROJECT_NAME: odipnr
+        run: |
+          set -euo pipefail
+          keys=odipnr_odip-dp-keys
+          docs=odipnr_documents
+          cd "$RUNNER_TEMP/odip-stack"
+          docker run --rm -v "$keys":/keys -v "$docs":/data/documents --entrypoint sh odip-api:local \
+            -c 'touch /keys/k.xml /data/documents/d.bin'
+          docker compose run --rm --no-deps volume-owner
+          docker run --rm --user 1000:1000 -v "$keys":/keys -v "$docs":/data/documents --entrypoint sh odip-api:local \
+            -c 'id -u; test -f /keys/k.xml && touch /keys/.w && touch /data/documents/.w && test "$(stat -c %u /keys/k.xml)" = 1000'
+
+      - name: Remove the throwaway volumes
+        if: always()
+        run: docker volume rm -f odipnr_odip-dp-keys odipnr_documents
 
   # Informational (not a required check yet): the real API + PostgreSQL + built frontend, driven by Playwright.
   # DEV_AUTH_ENABLED / VITE_DEV_AUTH are set only inside this job. Production keeps them off (deploy/compose.yaml).

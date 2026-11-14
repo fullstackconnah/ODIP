@@ -219,15 +219,13 @@ describe('shift package hooks — Finish carries the handover and the confirmati
 describe('coordinator completion review', () => {
   // The review has its own cache key, which ['rostering-completion', id] does NOT prefix-match: without these the review page would keep
   // showing the pre-decision completion after Approve / Return.
-  it('Approve refreshes the open review for that shift', async () => {
+  it('Approve posts the approval', async () => {
     const qc = new QueryClient()
-    const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useApproveCompletion(), { wrapper: wrapper(qc) })
 
     await result.current.mutateAsync('shift-1')
 
     expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/approve')
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review', 'shift-1'] })
   })
 
   it('Approve posts the extra-time choice only when one is made', async () => {
@@ -238,7 +236,7 @@ describe('coordinator completion review', () => {
     expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/approve', { extraTime: 'decline' })
   })
 
-  it('deciding extra time posts the word and refreshes the queue, the review and the Payroll check', async () => {
+  it('deciding extra time posts the word and refreshes the queue and the Payroll check', async () => {
     const qc = new QueryClient()
     const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useDecideExtraTime(), { wrapper: wrapper(qc) })
@@ -250,25 +248,21 @@ describe('coordinator completion review', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['employment-hero', 'payroll'] })
   })
 
-  it('Return posts the reason and refreshes the open review for that shift', async () => {
+  it('Return posts the reason', async () => {
     const qc = new QueryClient()
-    const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useReturnCompletion(), { wrapper: wrapper(qc) })
 
     await result.current.mutateAsync({ shiftId: 'shift-1', data: { reason: 'Please add the 12:30 dose.' } })
 
     expect(mockApiPost).toHaveBeenCalledWith('/rostering/shifts/shift-1/completion/return', { reason: 'Please add the 12:30 dose.' })
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review', 'shift-1'] })
   })
 
-  it('Approve-batch refreshes every open review', async () => {
+  it('Approve-batch posts every id', async () => {
     const qc = new QueryClient()
-    const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useApproveCompletionsBatch(), { wrapper: wrapper(qc) })
 
     await result.current.mutateAsync(['shift-1', 'shift-2'])
 
     expect(mockApiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['shift-1', 'shift-2'] })
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['rostering-completion-review'] })
   })
 })

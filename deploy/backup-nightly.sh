@@ -27,8 +27,8 @@ fail() {
 
 # Checked before anything else, so a bad input never reaches a dump.
 [ -n "${HOME:-}" ] || fail "HOME is not set"
-[[ "$KEEP_STAGED" =~ ^[1-9][0-9]*$ ]] || fail "KEEP_STAGED must be a positive integer, got '$KEEP_STAGED'"
 OUT="${OUT:-$HOME/odip-backup}"
+[[ "$KEEP_STAGED" =~ ^[1-9][0-9]*$ ]] || fail "KEEP_STAGED must be a positive integer, got '$KEEP_STAGED'"
 RECIPIENT="${RECIPIENT:-$OUT/recipient.txt}"
 WS="${WS:-/dev/shm/odip-backup-$(id -u)}"
 # The script wipes $WS at start and exit, so it only accepts a folder named for it, with no .. to climb out of it.

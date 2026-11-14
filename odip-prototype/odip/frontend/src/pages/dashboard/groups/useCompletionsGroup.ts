@@ -91,7 +91,6 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
         return [...listed, ...statuses.filter((s) => s.status === 'PendingReview').map((s) => s.shiftId)]
       } finally {
         // A batch with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveCompletionsBatch).
-        void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
         void qc.invalidateQueries({ queryKey: [QK.rosterBoard] })
         // The nav badge's own entry (the group's "all" read was just refetched).
         void qc.invalidateQueries({ queryKey: [QK.rosteringCompletions], predicate: (q) => q.queryKey[2] !== 'all' })

@@ -49,6 +49,7 @@ export function useUpsertProviderSettings() {
       qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent, expectedUpdatedAt: undefined, updatedAt }) as unknown as ProviderSettingsDto)
       qc.invalidateQueries({ queryKey: ['provider-settings'] })
       qc.invalidateQueries({ queryKey: ['missed-guidance-contact'] })
+      qc.invalidateQueries({ queryKey: ['provider-today'] })   // a changed time zone reaches every screen's dates (useProviderZone) without a reload
       // Settings history reads this row's audit rows, so a save shows there at once (the app's 30s staleTime would hide it).
       qc.invalidateQueries({ queryKey: ['audit', 'ProviderSettings'] })
     },
