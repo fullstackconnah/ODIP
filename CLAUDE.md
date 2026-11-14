@@ -120,6 +120,8 @@ npm run lint
      `docker compose exec -T db pg_restore --exit-on-error --single-transaction -U postgres -d odip < backups/predeploy/<chosen>.dump`
   4. Start the API on the image that matches the dump: the commit that was live before the deploy that wrote it (the previous deploy sha, not the sha in the name);
      re-tag `:rollback` to `:local` or redeploy that commit, then `docker compose up -d`; the newer image would re-apply its migrations.
+- Signed-in smoke check: after the Health check, `deploy/smoke-test.sh` mints a SuperAdmin token and GETs `/api/v1/participants` through nginx, printing one `smoke: participants <code>` line (exit 0 only on 200).
+  It is warn-only (`continue-on-error`, no roll back): see the Deploy run's "Signed-in smoke check" step and its Report line.
 
 ## Architecture
 

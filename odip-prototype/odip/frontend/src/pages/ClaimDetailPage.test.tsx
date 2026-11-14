@@ -23,7 +23,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateClaimLineItem: () => ({ mutate: mockUpdateLineItem, isPending: false }),
   // The Invoices section (Xero PR1): its own query; InvoicesSection.test.tsx covers what it shows.
   useClaimInvoices: mockUseClaimInvoices,
-  useProviderSettings: mockSettings,
+  useProviderZone: () => mockSettings().data?.timeZoneId,
   useVoidInvoice: () => ({ mutate: vi.fn(), isPending: false }),
   useIssueCreditNote: () => ({ mutate: vi.fn(), isPending: false }),
   // The submit confirm (SubmitClaimDialog.test.tsx covers its words): one invoice to issue by default, so Confirm is not held.

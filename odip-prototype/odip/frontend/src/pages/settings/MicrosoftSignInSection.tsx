@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Check } from 'lucide-react'
-import { useAuthConfig, useMicrosoftLink, useProviderSettings, useSaveMicrosoftRole, useTurnOffMicrosoft } from '@/api/hooks'
+import { useAuthConfig, useMicrosoftLink, useProviderZone, useSaveMicrosoftRole, useTurnOffMicrosoft } from '@/api/hooks'
 import type { MicrosoftRole } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
@@ -25,7 +25,7 @@ const ROLE_HINT = "Someone who signs in with Microsoft for the first time gets a
 
 /** Settings > Microsoft sign-in (Admin): link the organisation's Microsoft directory, choose the role new people get, or turn it off. */
 export default function MicrosoftSignInSection() {
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const config = useAuthConfig()
   const link = useMicrosoftLink()
   const saveRole = useSaveMicrosoftRole()

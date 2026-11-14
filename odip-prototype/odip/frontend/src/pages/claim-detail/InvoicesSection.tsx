@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { Download } from 'lucide-react'
-import { useClaimInvoices, useProviderSettings } from '@/api/hooks'
+import { useClaimInvoices, useProviderZone } from '@/api/hooks'
 import { INVOICE_PAYMENT_LABELS, type InvoiceSummaryDto, type PayerGroupDto, type TripClaimDetailDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { DataTable, CellText } from '@/components/DataTable'
@@ -43,7 +43,7 @@ type InvoicesSectionProps = {
  */
 export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSectionProps) {
   const query = useClaimInvoices(claim.id)
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   const { canCorrectInvoices } = usePermissions()
   const paymentStacked = useIsMdTo2xl()
   // An Admin's row is too wide to pin anything at 1024: a pinned cell would cover the sign of a credit note's Total. Every column opts out,

@@ -1,4 +1,4 @@
-import { useAuditHistory, useProviderSettings, type AuditEntry, type AuditChange } from '../api/hooks';
+import { useAuditHistory, useProviderZone, type AuditEntry, type AuditChange } from '../api/hooks';
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateTimeAu, formatRelative, plural } from '@/lib/format'
@@ -66,7 +66,7 @@ export function FieldDiff({ field, old: oldVal, new: newVal, words, lines }: Fie
  */
 function AuditEntryRow({ entry, fieldLabels, valueLabels, valueFormat }: { entry: AuditEntry } & Pick<Props, 'fieldLabels' | 'valueLabels' | 'valueFormat'>) {
 
-  const zone = useProviderSettings().data?.timeZoneId // the provider's day; none yet keeps the viewer's
+  const zone = useProviderZone() // the provider's day; none yet keeps the viewer's
   return (
     <div className="flex gap-3 py-2 border-b border-[var(--color-border)] last:border-0 tabular-nums">
       {/* Timeline bullet */}

@@ -25,7 +25,7 @@ public class TelemetryTests
 {
     private const string Pii = "jane@example.com";
 
-    private sealed record Rec(string? Category, string? Body, string? Formatted, Exception? Exception, Dictionary<string, string> Attrs)
+    private sealed record Rec(string? Category, string? Body, string? Formatted, Exception? Exception, Dictionary<string, string> Attrs, string Scopes = "")
     {
         public string All => string.Join("|", Attrs.Select(a => a.Key + "=" + a.Value).Append(Body).Append(Formatted));
     }
@@ -42,7 +42,14 @@ public class TelemetryTests
         {
             lock (logRecords)
                 return logRecords.Select(r => new Rec(r.CategoryName, r.Body, r.FormattedMessage, r.Exception,
-                    (r.Attributes ?? []).ToDictionary(a => a.Key, a => a.Value?.ToString() ?? ""))).ToList();
+                    (r.Attributes ?? []).ToDictionary(a => a.Key, a => a.Value?.ToString() ?? ""), Scopes(r))).ToList();
+        }
+
+        private static string Scopes(LogRecord r)
+        {
+            var sb = new StringBuilder();
+            r.ForEachScope((s, b) => { foreach (var a in s) b.Append(a.Key).Append('=').Append(a.Value).Append('|'); }, sb);
+            return sb.ToString();
         }
 
         public List<Point> Points(string name)
@@ -86,6 +93,13 @@ public class TelemetryTests
         app.MapGet("/api/v1/info", (ILoggerFactory f) => { f.CreateLogger("Odip.Test").LogInformation("hello {Email}", Pii); return "ok"; });
         app.MapPost("/api/v1/boom/{id:int}", () => { throw new Exception(Pii + " row (42)", new InvalidOperationException("inner " + Pii)); });
         app.MapGet("/api/v1/job", (ILoggerFactory f) => { f.CreateLogger("Odip.Jobs.Thing").LogError("Job failed for {Route} {Email}", "x/123", Pii); return "ok"; });
+        app.MapGet("/api/v1/scoped", (ILoggerFactory f) =>
+        {
+            var log = f.CreateLogger("Odip.Jobs.Scoped");
+            using (log.BeginScope(new Dictionary<string, object> { ["Email"] = Pii }))
+                log.LogError(new Exception("failed for " + Pii), "Scoped failure {Email}", Pii);
+            return "ok";
+        });
         app.MapGet("/api/health/live", () => "ok");
         await app.StartAsync();
         return new Host(app, metrics, logRecords);
@@ -174,6 +188,28 @@ public class TelemetryTests
         Assert.DoesNotContain("Email", rec.Attrs.Keys);
         Assert.DoesNotContain("123", rec.All);
         Assert.DoesNotContain("jane", rec.All);
+    }
+
+    [Fact]
+    public async Task Scope_data_and_exception_text_from_other_categories_are_not_exported()
+    {
+        await using var host = await StartAsync();
+        await host.Client.GetAsync("/api/v1/scoped");
+
+        var rec = Assert.Single(host.Logs(), r => r.Category == "Odip.Jobs.Scoped");
+        Assert.DoesNotContain("jane", rec.All + rec.Scopes + rec.Exception);
+        Assert.DoesNotContain("example.com", rec.All + rec.Scopes + rec.Exception);
+        Assert.Equal("", rec.Scopes);
+        Assert.Null(rec.Exception);
+    }
+
+    [Fact]
+    public async Task Health_publisher_runs_only_when_export_is_on()
+    {
+        await using (var off = await StartAsync())
+            Assert.Empty(off.App.Services.GetServices<IHealthCheckPublisher>());
+        await using (var on = await StartAsync("http://127.0.0.1:4317"))
+            Assert.Single(on.App.Services.GetServices<IHealthCheckPublisher>());
     }
 
     [Fact]

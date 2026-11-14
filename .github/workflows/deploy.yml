@@ -198,9 +198,29 @@ jobs:
           echo "::error::Health check failed after 150s (frontend=$FE api=$API ready=$READY)"
           exit 1
 
+      - name: Signed-in smoke check
+        # Warn-only for now: it becomes a gate (and joins the roll-back condition) after it has passed on several real deploys.
+        id: smoke
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          bash "$GITHUB_WORKSPACE/deploy/smoke-test.sh" || { echo "::warning::Signed-in smoke check failed"; exit 1; }
+
       - name: Prune dangling images
         # Success path only (default if: success()). Dangling images only; the :local and :rollback tags are tagged, so they stay.
         run: docker image prune -f || true
+
+      - name: Install backup scripts
+        # After the health check and the prune: the new stack is live and healthy, so this step can never block or roll back a deploy.
+        # Its id is not in the rollback condition (deploy or health failing); continue-on-error keeps a failure here from reddening a good deploy.
+        # The nightly cron line is the owner's to install (docs/runbooks/backups.md); this only places the scripts outside the rsync --delete tree.
+        id: backup-scripts
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/odip-backup/bin"
+          install -m 755 "$GITHUB_WORKSPACE/deploy/predeploy-dump.sh" "$GITHUB_WORKSPACE/deploy/backup-nightly.sh" "$HOME/odip-backup/bin/"
 
       - name: Roll back on failed deploy or health check
         if: failure() && (steps.deploy.outcome == 'failure' || steps.health.outcome == 'failure')
@@ -230,4 +250,5 @@ jobs:
         if: always()
         run: |
           cd "$STACK_DIR"
+          echo "Signed-in smoke check: ${{ steps.smoke.outcome }}"
           docker compose ps --format '{{.Name}}\t{{.State}}\t{{.Status}}'

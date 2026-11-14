@@ -57,6 +57,7 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       # Metrics and scrubbed error logs over OTLP. Off while the endpoint is empty; nothing leaves the process then.
+      # Only this variable switches export on; OTEL_EXPORTER_OTLP_LOGS_ENDPOINT or _METRICS_ENDPOINT alone export nothing.
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
       - OTEL_SERVICE_NAME=odip-api
