@@ -71,7 +71,3 @@ export interface UpdateTripDto extends CreateTripDto {
   /** The `updatedAt` of the trip the editor loaded; the server refuses (409) a save when the row has changed since. */
   expectedUpdatedAt?: string
 }
-
-export interface PatchTripDto {
-  status?: TripStatus
-}

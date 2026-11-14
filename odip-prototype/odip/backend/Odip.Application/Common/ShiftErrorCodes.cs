@@ -51,7 +51,6 @@ public static class ShiftErrorCodes
     public const string ShiftBreakInFuture = "SHIFT_BREAK_IN_FUTURE";
     public const string ShiftBreakEndNotAfterStart = "SHIFT_BREAK_END_NOT_AFTER_START";
     public const string ShiftBreakOverlap = "SHIFT_BREAK_OVERLAP";
-    public const string ShiftBreakEndRequired = "SHIFT_BREAK_END_REQUIRED";
 
     // ── Shift package (finish validation, handover) ──
     public const string ShiftFinishBlocked = "SHIFT_FINISH_BLOCKED";

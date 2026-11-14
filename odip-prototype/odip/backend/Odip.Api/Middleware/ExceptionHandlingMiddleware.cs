@@ -39,11 +39,16 @@ public class ExceptionHandlingMiddleware
                 // The route template (never the raw path) and status travel with the exported error record.
                 var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(no route)";
                 _logger.LogError(ex, "An unhandled exception occurred on {Method} {Route} ({Status}).",
-                    context.Request.Method, route, MapException(ex).StatusCode);
+                    LoggedMethod(context.Request.Method), route, MapException(ex).StatusCode);
             }
             await HandleExceptionAsync(context, ex);
         }
     }
+
+    // The client picks the method token, so only standard methods are logged; anything else is one bounded value.
+    private static readonly string[] StandardMethods = [HttpMethods.Get, HttpMethods.Head, HttpMethods.Post, HttpMethods.Put, HttpMethods.Patch, HttpMethods.Delete, HttpMethods.Options, HttpMethods.Trace, HttpMethods.Connect];
+    private static string LoggedMethod(string method) =>
+        StandardMethods.FirstOrDefault(m => string.Equals(m, method, StringComparison.OrdinalIgnoreCase)) ?? "_OTHER";
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
